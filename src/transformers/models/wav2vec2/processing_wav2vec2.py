@@ -67,8 +67,12 @@ class Wav2Vec2Processor(ProcessorMixin):
                 FutureWarning,
             )
 
-            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -88,11 +92,15 @@ class Wav2Vec2Processor(ProcessorMixin):
         """
 
         if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            warnings.warn(
+                "Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead."
+            )
             audio = kwargs.pop("raw_speech")
 
         if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+            raise ValueError(
+                "You need to specify either an `audio` or `text` input to process."
+            )
 
         output_kwargs = self._merge_kwargs(
             Wav2Vec2ProcessorKwargs,

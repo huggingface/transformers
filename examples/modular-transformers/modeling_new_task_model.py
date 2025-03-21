@@ -13,16 +13,12 @@ from torch import nn
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      replace_return_docstrings)
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_new_task_model import NewTaskModelConfig
-
 
 _CONFIG_FOR_DOC = "NewTaskModelConfig"
 
@@ -70,7 +66,11 @@ class NewTaskModelCausalLMOutputWithPast(ModelOutput):
 class NewTaskModelMultiModalProjector(nn.Module):
     def __init__(self, config: NewTaskModelConfig):
         super().__init__()
-        self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
+        self.linear = nn.Linear(
+            config.vision_config.hidden_size,
+            config.vision_config.projection_dim,
+            bias=True,
+        )
 
     def forward(self, image_features):
         hidden_states = self.linear(image_features)
@@ -219,16 +219,25 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in language_model._tied_weights_keys
+            ]
         self.language_model = language_model
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        )
 
         self.embedding_dim = self.config.embedding_dim
-        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
+        self.custom_text_proj = nn.Linear(
+            self.config.text_config.hidden_size, self.embedding_dim
+        )
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"model.language_model.{k}"
+                for k in self.language_model._tied_weights_keys
+            ]
         self.post_init()
 
     def get_input_embeddings(self):
@@ -282,7 +291,10 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
             return attention_mask
 
         causal_mask = torch.full(
-            (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
+            (sequence_length, target_length),
+            fill_value=min_dtype,
+            dtype=self.dtype,
+            device=cache_position.device,
         )
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
@@ -291,24 +303,32 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
             else:
                 causal_mask[:, :sequence_length] = 0.0
 
-        causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
+        causal_mask *= torch.arange(
+            target_length, device=cache_position.device
+        ) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
         if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            causal_mask = (
+                causal_mask.clone()
+            )  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
 
             # First unmask prefix tokens during training
             if is_training:
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(
                     token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
                 )
 
             # Then apply padding mask (will mask pad tokens)
-            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
+            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                :, None, None, :
+            ].to(causal_mask.device)
             padding_mask = padding_mask == 0
-            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                padding_mask, min_dtype
-            )
+            causal_mask[:, :, :, :mask_length] = causal_mask[
+                :, :, :, :mask_length
+            ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -330,7 +350,9 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(NEW_TASK_MODEL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=NewTaskModelCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=NewTaskModelCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -402,13 +424,21 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
             return_dict=True,
             num_logits_to_keep=num_logits_to_keep,
         )
-        last_hidden_states = vlm_outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
-        proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
+        last_hidden_states = vlm_outputs.hidden_states[
+            -1
+        ]  # (batch_size, sequence_length, hidden_size)
+        proj = self.custom_text_proj(
+            last_hidden_states
+        )  # (batch_size, sequence_length, dim)
 
         # L2 normalization
-        embeddings = proj / proj.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
+        embeddings = proj / proj.norm(
+            dim=-1, keepdim=True
+        )  # (batch_size, sequence_length, dim)
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
+        embeddings = embeddings * attention_mask.unsqueeze(
+            -1
+        )  # (batch_size, sequence_length, dim)
 
         return (embeddings,) + vlm_outputs
 
@@ -452,16 +482,26 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self._update_causal_mask(
-                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
+                attention_mask,
+                token_type_ids,
+                past_key_values,
+                cache_position,
+                input_tensor,
+                is_training,
             )
             model_inputs["attention_mask"] = causal_mask
 
         return model_inputs
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing=True
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of=None,
+        mean_resizing=True,
     ) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        model_embeds = self.language_model.resize_token_embeddings(
+            new_num_tokens, pad_to_multiple_of, mean_resizing
+        )
 
         # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings

@@ -24,16 +24,18 @@ from transformers.image_utils import ChannelDimension
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
 
     if is_vision_available():
         from transformers import Mask2FormerImageProcessor
-        from transformers.models.mask2former.image_processing_mask2former import binary_mask_to_rle
-        from transformers.models.mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentationOutput
+        from transformers.models.mask2former.image_processing_mask2former import \
+            binary_mask_to_rle
+        from transformers.models.mask2former.modeling_mask2former import \
+            Mask2FormerForUniversalSegmentationOutput
 
 if is_vision_available():
     from PIL import Image
@@ -62,7 +64,9 @@ class Mask2FormerImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
+        self.size = (
+            {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
+        )
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -126,15 +130,21 @@ class Mask2FormerImageProcessingTester:
     def get_fake_mask2former_outputs(self):
         return Mask2FormerForUniversalSegmentationOutput(
             # +1 for null class
-            class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
-            masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
+            class_queries_logits=torch.randn(
+                (self.batch_size, self.num_queries, self.num_classes + 1)
+            ),
+            masks_queries_logits=torch.randn(
+                (self.batch_size, self.num_queries, self.height, self.width)
+            ),
         )
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -149,7 +159,11 @@ class Mask2FormerImageProcessingTester:
 @require_torch
 @require_vision
 class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Mask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    image_processing_class = (
+        Mask2FormerImageProcessor
+        if (is_vision_available() and is_torch_available())
+        else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -170,14 +184,20 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertTrue(hasattr(image_processing, "num_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 32, "longest_edge": 1333})
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
+        self.assertEqual(
+            image_processor.size, {"shortest_edge": 32, "longest_edge": 1333}
+        )
         self.assertEqual(image_processor.size_divisor, 0)
 
         image_processor = self.image_processing_class.from_dict(
             self.image_processor_dict, size=42, max_size=84, size_divisibility=8
         )
-        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
+        self.assertEqual(
+            image_processor.size, {"shortest_edge": 42, "longest_edge": 84}
+        )
         self.assertEqual(image_processor.size_divisor, 8)
 
     def comm_get_image_processing_inputs(
@@ -189,25 +209,33 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         numpify=False,
         input_data_format=None,
     ):
-        image_processing = self.image_processing_class(**image_processor_tester.prepare_image_processor_dict())
+        image_processing = self.image_processing_class(
+            **image_processor_tester.prepare_image_processor_dict()
+        )
         # prepare image and target
         num_labels = image_processor_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=numpify)
+        image_inputs = image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, numpify=numpify
+        )
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
                 labels_expanded = list(range(num_labels)) * 2
                 instance_id_to_semantic_id = dict(enumerate(labels_expanded))
             annotations = [
-                np.random.randint(0, high * 2, img.shape[:2] if numpify else (img.size[1], img.size[0])).astype(
-                    np.uint8
-                )
+                np.random.randint(
+                    0,
+                    high * 2,
+                    img.shape[:2] if numpify else (img.size[1], img.size[0]),
+                ).astype(np.uint8)
                 for img in image_inputs
             ]
             if segmentation_type == "pil":
-                annotations = [Image.fromarray(annotation) for annotation in annotations]
+                annotations = [
+                    Image.fromarray(annotation) for annotation in annotations
+                ]
 
         if input_data_format is ChannelDimension.FIRST and numpify:
             image_inputs = [np.moveaxis(img, -1, 0) for img in image_inputs]
@@ -227,10 +255,15 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
         for size_divisor in size_divisors:
-            image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
+            image_processor_dict = {
+                **self.image_processor_dict,
+                **{"size_divisor": size_divisor},
+            }
             image_processing = self.image_processing_class(**image_processor_dict)
             for weird_input_size in weird_input_sizes:
-                inputs = image_processing([np.ones((3, *weird_input_size))], return_tensors="pt")
+                inputs = image_processing(
+                    [np.ones((3, *weird_input_size))], return_tensors="pt"
+                )
                 pixel_values = inputs["pixel_values"]
                 # check if divisible
                 self.assertTrue((pixel_values.shape[-1] % size_divisor) == 0)
@@ -280,29 +313,61 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         common(num_channels=1, numpify=True)
         common(num_channels=1, numpify=True, input_data_format=ChannelDimension.FIRST)
         common(num_channels=2, numpify=True, input_data_format=ChannelDimension.LAST)
-        common(num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST, do_resize=False)
-        common(num_channels=5, numpify=True, input_data_format=ChannelDimension.FIRST, do_resize=False)
+        common(
+            num_channels=5,
+            numpify=True,
+            input_data_format=ChannelDimension.LAST,
+            do_resize=False,
+        )
+        common(
+            num_channels=5,
+            numpify=True,
+            input_data_format=ChannelDimension.FIRST,
+            do_resize=False,
+        )
 
-        with self.assertRaisesRegex(ValueError, expected_regex="Unable to infer channel dimension format"):
+        with self.assertRaisesRegex(
+            ValueError, expected_regex="Unable to infer channel dimension format"
+        ):
             common(num_channels=5, numpify=True, do_resize=False)
 
-        with self.assertRaisesRegex(TypeError, expected_regex=r"Cannot handle this data type: .*"):
-            common(num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST)
+        with self.assertRaisesRegex(
+            TypeError, expected_regex=r"Cannot handle this data type: .*"
+        ):
+            common(
+                num_channels=5, numpify=True, input_data_format=ChannelDimension.LAST
+            )
 
     def test_integration_instance_segmentation(self):
         # load 2 images and corresponding annotations from the hub
         repo_id = "nielsr/image-segmentation-toy-data"
         image1 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_image_1.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="instance_segmentation_image_1.png",
+                repo_type="dataset",
+            )
         )
         image2 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_image_2.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="instance_segmentation_image_2.png",
+                repo_type="dataset",
+            )
         )
         annotation1 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_annotation_1.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="instance_segmentation_annotation_1.png",
+                repo_type="dataset",
+            )
         )
         annotation2 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_annotation_2.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="instance_segmentation_annotation_2.png",
+                repo_type="dataset",
+            )
         )
 
         # get instance segmentations and instance-to-segmentation mappings
@@ -323,7 +388,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        image_processing = Mask2FormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = Mask2FormerImageProcessor(
+            do_reduce_labels=True, ignore_index=255, size=(512, 512)
+        )
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -340,7 +407,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
         torch.testing.assert_close(inputs["class_labels"][0], torch.tensor([30, 55]))
-        torch.testing.assert_close(inputs["class_labels"][1], torch.tensor([4, 4, 23, 55]))
+        torch.testing.assert_close(
+            inputs["class_labels"][1], torch.tensor([4, 4, 23, 55])
+        )
 
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
@@ -353,20 +422,38 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         # load 2 images and corresponding semantic annotations from the hub
         repo_id = "nielsr/image-segmentation-toy-data"
         image1 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="semantic_segmentation_image_1.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="semantic_segmentation_image_1.png",
+                repo_type="dataset",
+            )
         )
         image2 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="semantic_segmentation_image_2.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="semantic_segmentation_image_2.png",
+                repo_type="dataset",
+            )
         )
         annotation1 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="semantic_segmentation_annotation_1.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="semantic_segmentation_annotation_1.png",
+                repo_type="dataset",
+            )
         )
         annotation2 = Image.open(
-            hf_hub_download(repo_id=repo_id, filename="semantic_segmentation_annotation_2.png", repo_type="dataset")
+            hf_hub_download(
+                repo_id=repo_id,
+                filename="semantic_segmentation_annotation_2.png",
+                repo_type="dataset",
+            )
         )
 
         # create a image processor
-        image_processing = Mask2FormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = Mask2FormerImageProcessor(
+            do_reduce_labels=True, ignore_index=255, size=(512, 512)
+        )
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -382,7 +469,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
         torch.testing.assert_close(inputs["class_labels"][0], torch.tensor([2, 4, 60]))
-        torch.testing.assert_close(inputs["class_labels"][1], torch.tensor([0, 3, 7, 8, 15, 28, 30, 143]))
+        torch.testing.assert_close(
+            inputs["class_labels"][1], torch.tensor([0, 3, 7, 8, 15, 28, 30, 143])
+        )
 
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
@@ -405,7 +494,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             if isinstance(color, np.ndarray) and len(color.shape) == 3:
                 if color.dtype == np.uint8:
                     color = color.astype(np.int32)
-                return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+                return (
+                    color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+                )
             return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
         def create_panoptic_map(annotation, segments_info):
@@ -415,7 +506,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             panoptic_map = rgb_to_id(annotation)
 
             # create mapping between segment IDs and semantic classes
-            inst2class = {segment["id"]: segment["category_id"] for segment in segments_info}
+            inst2class = {
+                segment["id"]: segment["category_id"] for segment in segments_info
+            }
 
             return panoptic_map, inst2class
 
@@ -426,7 +519,10 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         image_processing = Mask2FormerImageProcessor(ignore_index=0, do_resize=False)
 
         # prepare the images and annotations
-        pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
+        pixel_values_list = [
+            np.moveaxis(np.array(image1), -1, 0),
+            np.moveaxis(np.array(image2), -1, 0),
+        ]
         inputs = image_processing.encode_inputs(
             pixel_values_list,
             [panoptic_map1, panoptic_map2],
@@ -441,7 +537,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
         expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # fmt: skip
-        torch.testing.assert_close(inputs["class_labels"][0], torch.tensor(expected_class_labels))
+        torch.testing.assert_close(
+            inputs["class_labels"][0], torch.tensor(expected_class_labels)
+        )
         expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # fmt: skip
         torch.testing.assert_close(inputs["class_labels"][1], expected_class_labels)
 
@@ -464,7 +562,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(rle[1], 45)
 
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        fature_extractor = self.image_processing_class(
+            num_labels=self.image_processor_tester.num_classes
+        )
         outputs = self.image_processor_tester.get_fake_mask2former_outputs()
 
         segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
@@ -473,14 +573,20 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(segmentation[0].shape, (384, 384))
 
         target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        segmentation = fature_extractor.post_process_semantic_segmentation(
+            outputs, target_sizes=target_sizes
+        )
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        image_processor = self.image_processing_class(
+            num_labels=self.image_processor_tester.num_classes
+        )
         outputs = self.image_processor_tester.get_fake_mask2former_outputs()
-        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
+        segmentation = image_processor.post_process_instance_segmentation(
+            outputs, threshold=0
+        )
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
         for el in segmentation:
@@ -502,9 +608,13 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertEqual(el["segmentation"].shape[1:], (384, 384))
 
     def test_post_process_panoptic_segmentation(self):
-        image_processing = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        image_processing = self.image_processing_class(
+            num_labels=self.image_processor_tester.num_classes
+        )
         outputs = self.image_processor_tester.get_fake_mask2former_outputs()
-        segmentation = image_processing.post_process_panoptic_segmentation(outputs, threshold=0)
+        segmentation = image_processing.post_process_panoptic_segmentation(
+            outputs, threshold=0
+        )
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
         for el in segmentation:
@@ -514,7 +624,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertEqual(el["segmentation"].shape, (384, 384))
 
     def test_post_process_label_fusing(self):
-        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        image_processor = self.image_processing_class(
+            num_labels=self.image_processor_tester.num_classes
+        )
         outputs = self.image_processor_tester.get_fake_mask2former_outputs()
 
         segmentation = image_processor.post_process_panoptic_segmentation(
@@ -523,7 +635,11 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         unfused_segments = [el["segments_info"] for el in segmentation]
 
         fused_segmentation = image_processor.post_process_panoptic_segmentation(
-            outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0, label_ids_to_fuse={1}
+            outputs,
+            threshold=0,
+            mask_threshold=0,
+            overlap_mask_area_threshold=0,
+            label_ids_to_fuse={1},
         )
         fused_segments = [el["segments_info"] for el in fused_segmentation]
 

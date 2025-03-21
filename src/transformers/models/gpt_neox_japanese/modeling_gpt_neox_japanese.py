@@ -23,18 +23,16 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (add_start_docstrings,
+                           add_start_docstrings_to_model_forward,
+                           replace_return_docstrings)
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import is_torch_flex_attn_available, logging
 from .configuration_gpt_neox_japanese import GPTNeoXJapaneseConfig
-
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
@@ -97,11 +95,15 @@ class GPTNeoXJapaneseAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = math.sqrt(self.head_size)
 
-        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=False)
+        self.query_key_value = nn.Linear(
+            config.hidden_size, 3 * config.hidden_size, bias=False
+        )
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         # Activate bias if the last layer
         self.use_bias = use_bias
-        self.dense_bias = nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
+        self.dense_bias = (
+            nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
+        )
 
     def forward(
         self,
@@ -113,7 +115,9 @@ class GPTNeoXJapaneseAttention(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
     ):
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
@@ -152,10 +156,14 @@ class GPTNeoXJapaneseAttention(nn.Module):
             key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
 
         # Compute attention
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(
+            query, key, value, attention_mask, head_mask
+        )
 
         # Reshape outputs
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
+        attn_output = self._merge_heads(
+            attn_output, self.num_attention_heads, self.head_size
+        )
         attn_output = self.dense(attn_output)
 
         outputs = (attn_output, layer_past)
@@ -185,7 +193,9 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # tensor [bs, num_attention_heads, seq_len, attn_head_size]
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
         # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
+        tensor = tensor.view(
+            tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size
+        )
         # -> [bs, seq_len, hidden_size]
         return tensor
 
@@ -195,7 +205,9 @@ class GPTNeoXJapaneseAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
-        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
+        query = query.view(
+            batch_size * num_attention_heads, query_length, attn_head_size
+        )
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
 
         # [batch_size * num_heads, q_length, kv_length]
@@ -214,7 +226,9 @@ class GPTNeoXJapaneseAttention(nn.Module):
             alpha=1.0 / self.norm_factor,
         )
 
-        attention_scores = attention_scores.view(batch_size, num_attention_heads, query_length, -1)
+        attention_scores = attention_scores.view(
+            batch_size, num_attention_heads, query_length, -1
+        )
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key.shape[-2]]
             attention_scores = attention_scores + causal_mask
@@ -237,7 +251,9 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -258,11 +274,18 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -275,13 +298,21 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -328,7 +359,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def bias_dropout_add(x: Tensor, bias: Tensor, residual: Optional[Tensor], prob: float, training: bool) -> Tensor:
+def bias_dropout_add(
+    x: Tensor, bias: Tensor, residual: Optional[Tensor], prob: float, training: bool
+) -> Tensor:
     """add bias to x, apply dropout and residual connection
 
     Args:
@@ -353,9 +386,13 @@ class GPTNeoXJapaneseMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         intermediate_size = int(config.hidden_size * config.intermediate_multiple_size)
-        self.dense_h_to_4h = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.dense_h_to_4h = nn.Linear(
+            config.hidden_size, intermediate_size, bias=False
+        )
         # Project back to h.
-        self.dense_4h_to_h = nn.Linear(intermediate_size, config.hidden_size, bias=False)
+        self.dense_4h_to_h = nn.Linear(
+            intermediate_size, config.hidden_size, bias=False
+        )
         self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
@@ -369,11 +406,17 @@ class GPTNeoXJapaneseLayer(nn.Module):
     def __init__(self, config, layer_number):
         super().__init__()
         self.layer_number = layer_number
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         # activate bias only last layer
         self.attention = GPTNeoXJapaneseAttention(
-            config=config, use_bias=layer_number == config.num_hidden_layers - 1, layer_idx=layer_number
+            config=config,
+            use_bias=layer_number == config.num_hidden_layers - 1,
+            layer_idx=layer_number,
         )
         self.mlp = GPTNeoXJapaneseMLP(config)
         self.hidden_dropout = config.hidden_dropout
@@ -388,7 +431,9 @@ class GPTNeoXJapaneseLayer(nn.Module):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
     ):
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
@@ -403,7 +448,9 @@ class GPTNeoXJapaneseLayer(nn.Module):
             cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
-        attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
+        attn_output = attention_layer_outputs[
+            0
+        ]  # output_attn: a, present, (attentions)
         outputs = attention_layer_outputs[1:]
 
         # attn_output = (atten_output + bias) + residual
@@ -418,7 +465,11 @@ class GPTNeoXJapaneseLayer(nn.Module):
 
         # attn_output = (mlp_output + mlp_bias) + atten_output
         attn_output = bias_dropout_add(
-            mlp_output, bias=None, residual=attn_output, prob=self.hidden_dropout, training=self.training
+            mlp_output,
+            bias=None,
+            residual=attn_output,
+            prob=self.hidden_dropout,
+            training=self.training,
         )
 
         if use_cache:
@@ -520,9 +571,14 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
-            [GPTNeoXJapaneseLayer(config=config, layer_number=i) for i in range(config.num_hidden_layers)]
+            [
+                GPTNeoXJapaneseLayer(config=config, layer_number=i)
+                for i in range(config.num_hidden_layers)
+            ]
         )
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
@@ -534,8 +590,12 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_JAPANESE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        GPT_NEOX_JAPANESE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=BaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -568,15 +628,25 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         >>> last_hidden_states = outputs.last_hidden_state
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
@@ -597,14 +667,24 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
+            cache_position = torch.arange(
+                past_seen_tokens,
+                past_seen_tokens + seq_length,
+                device=inputs_embeds.device,
+            )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # Prepare head mask if needed
@@ -652,7 +732,11 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_attentions]
+                if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -683,11 +767,17 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -728,7 +818,9 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -772,22 +864,29 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -815,8 +914,12 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_JAPANESE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        GPT_NEOX_JAPANESE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -858,7 +961,9 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         >>> prediction_logits = outputs.logits
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.gpt_neox_japanese(
             input_ids,
@@ -905,7 +1010,10 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past[:2]
+                )
                 + layer_past[2:],
             )
         return reordered_past

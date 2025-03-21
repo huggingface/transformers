@@ -27,17 +27,14 @@ from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
-    VERY_LARGE_INTEGER,
-    BatchEncoding,
-    EncodedInput,
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available, logging
-
+from ...tokenization_utils import (PreTrainedTokenizer, _is_control,
+                                   _is_punctuation, _is_whitespace)
+from ...tokenization_utils_base import (ENCODE_KWARGS_DOCSTRING,
+                                        VERY_LARGE_INTEGER, BatchEncoding,
+                                        EncodedInput, PreTokenizedInput,
+                                        TextInput)
+from ...utils import (ExplicitEnum, PaddingStrategy, TensorType,
+                      add_end_docstrings, is_pandas_available, logging)
 
 if is_pandas_available():
     import pandas as pd
@@ -273,7 +270,9 @@ class TapasTokenizer(PreTrainedTokenizer):
                 " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()]
+        )
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
@@ -282,23 +281,25 @@ class TapasTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+        self.wordpiece_tokenizer = WordpieceTokenizer(
+            vocab=self.vocab, unk_token=str(unk_token)
+        )
 
         # Additional properties
         self.cell_trim_length = cell_trim_length
         self.max_column_id = (
             max_column_id
             if max_column_id is not None
-            else model_max_length
-            if model_max_length is not None
-            else VERY_LARGE_INTEGER
+            else (
+                model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
+            )
         )
         self.max_row_id = (
             max_row_id
             if max_row_id is not None
-            else model_max_length
-            if model_max_length is not None
-            else VERY_LARGE_INTEGER
+            else (
+                model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
+            )
         )
         self.strip_column_names = strip_column_names
         self.update_answer_coordinates = update_answer_coordinates
@@ -346,7 +347,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             return [self.additional_special_tokens[0]]
         split_tokens = []
         if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
+            for token in self.basic_tokenizer.tokenize(
+                text, never_split=self.all_special_tokens
+            ):
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -369,14 +372,20 @@ class TapasTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["vocab_file"],
             )
         else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+            vocab_file = (
+                filename_prefix + "-" if filename_prefix else ""
+            ) + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
@@ -389,7 +398,9 @@ class TapasTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
-    def create_attention_mask_from_sequences(self, query_ids: List[int], table_values: List[TableValue]) -> List[int]:
+    def create_attention_mask_from_sequences(
+        self, query_ids: List[int], table_values: List[TableValue]
+    ) -> List[int]:
         """
         Creates the attention mask according to the query token IDs and a list of table values.
 
@@ -469,12 +480,17 @@ class TapasTokenizer(PreTrainedTokenizer):
             `List[int]`: The model input with special tokens.
         """
         if token_ids_1 is None:
-            raise ValueError("With TAPAS, you must provide both question IDs and table IDs.")
+            raise ValueError(
+                "With TAPAS, you must provide both question IDs and table IDs."
+            )
 
         return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -494,7 +510,9 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is not None:
@@ -621,7 +639,9 @@ class TapasTokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def batch_encode_plus(
         self,
         table: "pd.DataFrame",
@@ -683,13 +703,19 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "set return_token_type_ids to None."
             )
 
-        if (answer_coordinates and not answer_text) or (not answer_coordinates and answer_text):
-            raise ValueError("In case you provide answers, both answer_coordinates and answer_text should be provided")
+        if (answer_coordinates and not answer_text) or (
+            not answer_coordinates and answer_text
+        ):
+            raise ValueError(
+                "In case you provide answers, both answer_coordinates and answer_text should be provided"
+            )
         elif answer_coordinates is None and answer_text is None:
             answer_coordinates = answer_text = [None] * len(queries)
 
         if "is_split_into_words" in kwargs:
-            raise NotImplementedError("Currently TapasTokenizer only supports questions as strings.")
+            raise NotImplementedError(
+                "Currently TapasTokenizer only supports questions as strings."
+            )
 
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -724,11 +750,21 @@ class TapasTokenizer(PreTrainedTokenizer):
         """Tokenizes the query, taking into account the max and min question length."""
 
         query_tokens = self.tokenize(query)
-        if self.max_question_length is not None and len(query_tokens) > self.max_question_length:
-            logger.warning("Skipping query as its tokens are longer than the max question length")
+        if (
+            self.max_question_length is not None
+            and len(query_tokens) > self.max_question_length
+        ):
+            logger.warning(
+                "Skipping query as its tokens are longer than the max question length"
+            )
             return "", []
-        if self.min_question_length is not None and len(query_tokens) < self.min_question_length:
-            logger.warning("Skipping query as its tokens are shorter than the min question length")
+        if (
+            self.min_question_length is not None
+            and len(query_tokens) < self.min_question_length
+        ):
+            logger.warning(
+                "Skipping query as its tokens are shorter than the min question length"
+            )
             return "", []
 
         return query, query_tokens
@@ -822,7 +858,9 @@ class TapasTokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         batch_outputs = {}
 
-        for index, example in enumerate(zip(raw_queries, queries_tokens, answer_coordinates, answer_text)):
+        for index, example in enumerate(
+            zip(raw_queries, queries_tokens, answer_coordinates, answer_text)
+        ):
             raw_query, query_tokens, answer_coords, answer_txt = example
             outputs = self.prepare_for_model(
                 raw_table,
@@ -844,7 +882,9 @@ class TapasTokenizer(PreTrainedTokenizer):
                 return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
-                prev_answer_coordinates=answer_coordinates[index - 1] if index != 0 else None,
+                prev_answer_coordinates=(
+                    answer_coordinates[index - 1] if index != 0 else None
+                ),
                 prev_answer_text=answer_text[index - 1] if index != 0 else None,
             )
 
@@ -909,7 +949,9 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs["input_ids"]
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def encode_plus(
         self,
         table: "pd.DataFrame",
@@ -961,11 +1003,17 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "set return_token_type_ids to None."
             )
 
-        if (answer_coordinates and not answer_text) or (not answer_coordinates and answer_text):
-            raise ValueError("In case you provide answers, both answer_coordinates and answer_text should be provided")
+        if (answer_coordinates and not answer_text) or (
+            not answer_coordinates and answer_text
+        ):
+            raise ValueError(
+                "In case you provide answers, both answer_coordinates and answer_text should be provided"
+            )
 
         if "is_split_into_words" in kwargs:
-            raise NotImplementedError("Currently TapasTokenizer only supports questions as strings.")
+            raise NotImplementedError(
+                "Currently TapasTokenizer only supports questions as strings."
+            )
 
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -1052,7 +1100,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def prepare_for_model(
         self,
         raw_table: "pd.DataFrame",
@@ -1127,22 +1177,38 @@ class TapasTokenizer(PreTrainedTokenizer):
             prev_answer_coordinates = kwargs["prev_answer_coordinates"]
             prev_answer_text = kwargs["prev_answer_text"]
 
-        num_rows = self._get_num_rows(raw_table, truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE)
+        num_rows = self._get_num_rows(
+            raw_table, truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE
+        )
         num_columns = self._get_num_columns(raw_table)
         _, _, num_tokens = self._get_table_boundaries(tokenized_table)
 
         if truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE:
             num_rows, num_tokens = self._get_truncated_table_rows(
-                query_tokens, tokenized_table, num_rows, num_columns, max_length, truncation_strategy=truncation
+                query_tokens,
+                tokenized_table,
+                num_rows,
+                num_columns,
+                max_length,
+                truncation_strategy=truncation,
             )
-        table_data = list(self._get_table_values(tokenized_table, num_columns, num_rows, num_tokens))
+        table_data = list(
+            self._get_table_values(tokenized_table, num_columns, num_rows, num_tokens)
+        )
 
         query_ids = self.convert_tokens_to_ids(query_tokens)
-        table_ids = list(zip(*table_data))[0] if len(table_data) > 0 else list(zip(*table_data))
+        table_ids = (
+            list(zip(*table_data))[0] if len(table_data) > 0 else list(zip(*table_data))
+        )
         table_ids = self.convert_tokens_to_ids(list(table_ids))
 
-        if "return_overflowing_tokens" in kwargs and kwargs["return_overflowing_tokens"]:
-            raise ValueError("TAPAS does not return overflowing tokens as it works on tables.")
+        if (
+            "return_overflowing_tokens" in kwargs
+            and kwargs["return_overflowing_tokens"]
+        ):
+            raise ValueError(
+                "TAPAS does not return overflowing tokens as it works on tables."
+            )
 
         if add_special_tokens:
             input_ids = self.build_inputs_with_special_tokens(query_ids, table_ids)
@@ -1157,15 +1223,25 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         encoded_inputs["input_ids"] = input_ids
 
-        segment_ids = self.create_segment_token_type_ids_from_sequences(query_ids, table_data)
-        column_ids = self.create_column_token_type_ids_from_sequences(query_ids, table_data)
+        segment_ids = self.create_segment_token_type_ids_from_sequences(
+            query_ids, table_data
+        )
+        column_ids = self.create_column_token_type_ids_from_sequences(
+            query_ids, table_data
+        )
         row_ids = self.create_row_token_type_ids_from_sequences(query_ids, table_data)
-        if not is_part_of_batch or (prev_answer_coordinates is None and prev_answer_text is None):
+        if not is_part_of_batch or (
+            prev_answer_coordinates is None and prev_answer_text is None
+        ):
             # simply set the prev_labels to zeros
             prev_labels = [0] * len(row_ids)
         else:
             prev_labels = self.get_answer_ids(
-                column_ids, row_ids, table_data, prev_answer_text, prev_answer_coordinates
+                column_ids,
+                row_ids,
+                table_data,
+                prev_answer_text,
+                prev_answer_coordinates,
             )
 
         # FIRST: parse both the table and question in terms of numeric values
@@ -1175,8 +1251,12 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         # SECOND: add numeric-related features (and not parse them in these functions):
 
-        column_ranks, inv_column_ranks = self._get_numeric_column_ranks(column_ids, row_ids, raw_table)
-        numeric_relations = self._get_numeric_relations(raw_query, column_ids, row_ids, raw_table)
+        column_ranks, inv_column_ranks = self._get_numeric_column_ranks(
+            column_ids, row_ids, raw_table
+        )
+        numeric_relations = self._get_numeric_relations(
+            raw_query, column_ids, row_ids, raw_table
+        )
 
         # Load from model defaults
         if return_token_type_ids is None:
@@ -1185,13 +1265,19 @@ class TapasTokenizer(PreTrainedTokenizer):
             return_attention_mask = "attention_mask" in self.model_input_names
 
         if return_attention_mask:
-            attention_mask = self.create_attention_mask_from_sequences(query_ids, table_data)
+            attention_mask = self.create_attention_mask_from_sequences(
+                query_ids, table_data
+            )
             encoded_inputs["attention_mask"] = attention_mask
 
         if answer_coordinates is not None and answer_text is not None:
-            labels = self.get_answer_ids(column_ids, row_ids, table_data, answer_text, answer_coordinates)
+            labels = self.get_answer_ids(
+                column_ids, row_ids, table_data, answer_text, answer_coordinates
+            )
             numeric_values = self._get_numeric_values(raw_table, column_ids, row_ids)
-            numeric_values_scale = self._get_numeric_values_scale(raw_table, column_ids, row_ids)
+            numeric_values_scale = self._get_numeric_values_scale(
+                raw_table, column_ids, row_ids
+            )
 
             encoded_inputs["labels"] = labels
             encoded_inputs["numeric_values"] = numeric_values
@@ -1213,19 +1299,29 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if return_special_tokens_mask:
             if add_special_tokens:
-                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(query_ids, table_ids)
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(
+                    query_ids, table_ids
+                )
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(input_ids)
 
         # Check lengths
-        if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
-            if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
+        if (
+            max_length is None
+            and len(encoded_inputs["input_ids"]) > self.model_max_length
+            and verbose
+        ):
+            if not self.deprecation_warnings.get(
+                "sequence-length-is-longer-than-the-specified-maximum", False
+            ):
                 logger.warning(
                     "Token indices sequence length is longer than the specified maximum sequence length "
                     f"for this model ({len(encoded_inputs['input_ids'])} > {self.model_max_length}). Running this "
                     "sequence through the model will result in indexing errors."
                 )
-            self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
+            self.deprecation_warnings[
+                "sequence-length-is-longer-than-the-specified-maximum"
+            ] = True
 
         # Padding
         if padding != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -1242,7 +1338,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs,
+            tensor_type=return_tensors,
+            prepend_batch_axis=prepend_batch_axis,
         )
 
         return batch_outputs
@@ -1287,7 +1385,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         if truncation_strategy == TapasTruncationStrategy.DROP_ROWS_TO_FIT:
             while True:
                 num_tokens = self._get_max_num_tokens(
-                    query_tokens, tokenized_table, num_rows=num_rows, num_columns=num_columns, max_length=max_length
+                    query_tokens,
+                    tokenized_table,
+                    num_rows=num_rows,
+                    num_columns=num_columns,
+                    max_length=max_length,
                 )
 
                 if num_tokens is not None:
@@ -1363,11 +1465,13 @@ class TapasTokenizer(PreTrainedTokenizer):
                 List of question tokens. Returns: `int`: the number of tokens left for the table, given the model max
                 length.
         """
-        return (max_length if max_length is not None else self.model_max_length) - self._question_encoding_cost(
-            question_tokens
-        )
+        return (
+            max_length if max_length is not None else self.model_max_length
+        ) - self._question_encoding_cost(question_tokens)
 
-    def _get_table_values(self, table, num_columns, num_rows, num_tokens) -> Generator[TableValue, None, None]:
+    def _get_table_values(
+        self, table, num_columns, num_rows, num_tokens
+    ) -> Generator[TableValue, None, None]:
         """Iterates over partial table and returns token, column and row indexes."""
         for tc in table.selected_tokens:
             # First row is header row.
@@ -1400,9 +1504,13 @@ class TapasTokenizer(PreTrainedTokenizer):
         return max_num_rows, max_num_columns, max_num_tokens
 
     def _get_table_cost(self, table, num_columns, num_rows, num_tokens):
-        return sum(1 for _ in self._get_table_values(table, num_columns, num_rows, num_tokens))
+        return sum(
+            1 for _ in self._get_table_values(table, num_columns, num_rows, num_tokens)
+        )
 
-    def _get_max_num_tokens(self, question_tokens, tokenized_table, num_columns, num_rows, max_length):
+    def _get_max_num_tokens(
+        self, question_tokens, tokenized_table, num_columns, num_rows, max_length
+    ):
         """Computes max number of tokens that can be squeezed into the budget."""
         token_budget = self._get_token_budget(question_tokens, max_length)
         _, _, max_num_tokens = self._get_table_boundaries(tokenized_table)
@@ -1410,7 +1518,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             max_num_tokens = self.cell_trim_length
         num_tokens = 0
         for num_tokens in range(max_num_tokens + 1):
-            cost = self._get_table_cost(tokenized_table, num_columns, num_rows, num_tokens + 1)
+            cost = self._get_table_cost(
+                tokenized_table, num_columns, num_rows, num_tokens + 1
+            )
             if cost > token_budget:
                 break
         if num_tokens < max_num_tokens:
@@ -1474,7 +1584,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         column_ids.append(0)
         row_ids.append(0)
 
-        for token, column_id, row_id in self._get_table_values(table, num_columns, num_rows, num_tokens):
+        for token, column_id, row_id in self._get_table_values(
+            table, num_columns, num_rows, num_tokens
+        ):
             tokens.append(token)
             segment_ids.append(1)
             column_ids.append(column_id)
@@ -1519,7 +1631,10 @@ class TapasTokenizer(PreTrainedTokenizer):
                 except ValueError:
                     continue
 
-                table_numeric_values = {row_index: key_fn(value) for row_index, value in table_numeric_values.items()}
+                table_numeric_values = {
+                    row_index: key_fn(value)
+                    for row_index, value in table_numeric_values.items()
+                }
 
                 table_numeric_values_inv = collections.defaultdict(list)
                 for row_index, value in table_numeric_values.items():
@@ -1529,7 +1644,9 @@ class TapasTokenizer(PreTrainedTokenizer):
 
                 for rank, value in enumerate(unique_values):
                     for row_index in table_numeric_values_inv[value]:
-                        for index in self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index):
+                        for index in self._get_cell_token_indexes(
+                            column_ids, row_ids, col_index, row_index
+                        ):
                             ranks[index] = rank + 1
                             inv_ranks[index] = len(unique_values) - rank
 
@@ -1577,14 +1694,22 @@ class TapasTokenizer(PreTrainedTokenizer):
             for numeric_value_span in question.numeric_spans:
                 for value in numeric_value_span.values:
                     for column_index in range(len(table.columns)):
-                        table_numeric_values = self._get_column_values(table, column_index)
-                        sort_key_fn = self._get_numeric_sort_key_fn(table_numeric_values, value)
+                        table_numeric_values = self._get_column_values(
+                            table, column_index
+                        )
+                        sort_key_fn = self._get_numeric_sort_key_fn(
+                            table_numeric_values, value
+                        )
                         if sort_key_fn is None:
                             continue
                         for row_index, cell_value in table_numeric_values.items():
-                            relation = get_numeric_relation(value, cell_value, sort_key_fn)
+                            relation = get_numeric_relation(
+                                value, cell_value, sort_key_fn
+                            )
                             if relation is not None:
-                                cell_indices_to_relations[column_index, row_index].add(relation)
+                                cell_indices_to_relations[column_index, row_index].add(
+                                    relation
+                                )
 
         # For each cell add a special feature for all its word pieces.
         for (column_index, row_index), relations in cell_indices_to_relations.items():
@@ -1592,7 +1717,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             for relation in relations:
                 assert relation.value >= Relation.EQ.value
                 relation_set_index += 2 ** (relation.value - Relation.EQ.value)
-            for cell_token_index in self._get_cell_token_indexes(column_ids, row_ids, column_index, row_index):
+            for cell_token_index in self._get_cell_token_indexes(
+                column_ids, row_ids, column_index, row_index
+            ):
                 numeric_relations[cell_token_index] = relation_set_index
 
         return numeric_relations
@@ -1615,7 +1742,9 @@ class TapasTokenizer(PreTrainedTokenizer):
                         float_value = numeric_value.float_value
                         if float_value == float("inf"):
                             continue
-                        for index in self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index):
+                        for index in self._get_cell_token_indexes(
+                            column_ids, row_ids, col_index, row_index
+                        ):
                             numeric_values[index] = float_value
 
         return numeric_values
@@ -1633,7 +1762,11 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         for col_index in range(num_columns):
             for row_index in range(num_rows):
-                indices = list(self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index))
+                indices = list(
+                    self._get_cell_token_indexes(
+                        column_ids, row_ids, col_index, row_index
+                    )
+                )
                 num_indices = len(indices)
                 if num_indices > 1:
                     for index in indices:
@@ -1660,7 +1793,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         for answers in answers_list:
             column_index, row_index = answers
             all_answers.add((column_index, row_index))
-            for index in self._get_cell_token_indexes(column_ids, row_ids, column_index, row_index):
+            for index in self._get_cell_token_indexes(
+                column_ids, row_ids, column_index, row_index
+            ):
                 found_answers.add((column_index, row_index))
                 answer_ids[index] = 1
 
@@ -1753,13 +1888,22 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _get_answer_ids(self, column_ids, row_ids, answer_coordinates):
         """Maps answer coordinates of a question to token indexes."""
-        answer_ids, missing_count = self._get_all_answer_ids(column_ids, row_ids, answer_coordinates)
+        answer_ids, missing_count = self._get_all_answer_ids(
+            column_ids, row_ids, answer_coordinates
+        )
 
         if missing_count:
             raise ValueError("Couldn't find all answers")
         return answer_ids
 
-    def get_answer_ids(self, column_ids, row_ids, tokenized_table, answer_texts_question, answer_coordinates_question):
+    def get_answer_ids(
+        self,
+        column_ids,
+        row_ids,
+        tokenized_table,
+        answer_texts_question,
+        answer_coordinates_question,
+    ):
         if self.update_answer_coordinates:
             return self._find_answer_ids_from_answer_texts(
                 column_ids,
@@ -1811,11 +1955,16 @@ class TapasTokenizer(PreTrainedTokenizer):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(encoded_inputs["input_ids"])
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
         needs_to_be_padded = (
-            padding_strategy != PaddingStrategy.DO_NOT_PAD and len(encoded_inputs["input_ids"]) != max_length
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(encoded_inputs["input_ids"]) != max_length
         )
 
         # Initialize attention mask if not present.
@@ -1824,43 +1973,66 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(encoded_inputs["input_ids"])
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [[self.pad_token_type_id] * 7] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [[self.pad_token_type_id] * 7] * difference
                     )
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [0] * difference
+                    encoded_inputs["labels"] = (
+                        encoded_inputs["labels"] + [0] * difference
+                    )
                 if "numeric_values" in encoded_inputs:
-                    encoded_inputs["numeric_values"] = encoded_inputs["numeric_values"] + [float("nan")] * difference
+                    encoded_inputs["numeric_values"] = (
+                        encoded_inputs["numeric_values"] + [float("nan")] * difference
+                    )
                 if "numeric_values_scale" in encoded_inputs:
                     encoded_inputs["numeric_values_scale"] = (
                         encoded_inputs["numeric_values_scale"] + [1.0] * difference
                     )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs["input_ids"] = (
+                    encoded_inputs["input_ids"] + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [[self.pad_token_type_id] * 7] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        [self.pad_token_type_id] * 7
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [0] * difference + encoded_inputs["labels"]
-                if "numeric_values" in encoded_inputs:
-                    encoded_inputs["numeric_values"] = [float("nan")] * difference + encoded_inputs["numeric_values"]
-                if "numeric_values_scale" in encoded_inputs:
-                    encoded_inputs["numeric_values_scale"] = [1.0] * difference + encoded_inputs[
-                        "numeric_values_scale"
+                    encoded_inputs["labels"] = [0] * difference + encoded_inputs[
+                        "labels"
                     ]
+                if "numeric_values" in encoded_inputs:
+                    encoded_inputs["numeric_values"] = [
+                        float("nan")
+                    ] * difference + encoded_inputs["numeric_values"]
+                if "numeric_values_scale" in encoded_inputs:
+                    encoded_inputs["numeric_values_scale"] = [
+                        1.0
+                    ] * difference + encoded_inputs["numeric_values_scale"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs["input_ids"] = [
+                    self.pad_token_id
+                ] * difference + encoded_inputs["input_ids"]
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
@@ -1879,13 +2051,20 @@ class TapasTokenizer(PreTrainedTokenizer):
     def _get_mean_cell_probs(self, probabilities, segment_ids, row_ids, column_ids):
         """Computes average probability per cell, aggregating over tokens."""
         coords_to_probs = collections.defaultdict(list)
-        for i, prob in self._get_cell_token_probs(probabilities, segment_ids, row_ids, column_ids):
+        for i, prob in self._get_cell_token_probs(
+            probabilities, segment_ids, row_ids, column_ids
+        ):
             col = column_ids[i] - 1
             row = row_ids[i] - 1
             coords_to_probs[(col, row)].append(prob)
-        return {coords: np.array(cell_probs).mean() for coords, cell_probs in coords_to_probs.items()}
+        return {
+            coords: np.array(cell_probs).mean()
+            for coords, cell_probs in coords_to_probs.items()
+        }
 
-    def convert_logits_to_predictions(self, data, logits, logits_agg=None, cell_classification_threshold=0.5):
+    def convert_logits_to_predictions(
+        self, data, logits, logits_agg=None, cell_classification_threshold=0.5
+    ):
         """
         Converts logits of [`TapasForQuestionAnswering`] to actual predicted answer coordinates and optional
         aggregation indices.
@@ -1979,7 +2158,10 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if logits_agg is not None:
             predicted_aggregation_indices = logits_agg.argmax(axis=-1)
-            output = (predicted_answer_coordinates, predicted_aggregation_indices.tolist())
+            output = (
+                predicted_answer_coordinates,
+                predicted_aggregation_indices.tolist(),
+            )
 
         return output
 
@@ -2036,7 +2218,11 @@ class BasicTokenizer:
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        never_split = (
+            self.never_split.union(set(never_split))
+            if never_split
+            else self.never_split
+        )
         text = self._clean_text(text)
 
         # This was added on November 1st, 2018 for the multilingual and Chinese
@@ -2077,7 +2263,9 @@ class BasicTokenizer:
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if not self.do_split_on_punc or (never_split is not None and text in never_split):
+        if not self.do_split_on_punc or (
+            never_split is not None and text in never_split
+        ):
             return [text]
         chars = list(text)
         i = 0
@@ -2505,23 +2693,35 @@ def parse_text(text):
 
         number = _parse_number(span_text)
         if number is not None:
-            span_dict[begin_index, end_index].append(_get_numeric_value_from_float(number))
+            span_dict[begin_index, end_index].append(
+                _get_numeric_value_from_float(number)
+            )
         for number, word in enumerate(_NUMBER_WORDS):
             if span_text == word:
-                span_dict[begin_index, end_index].append(_get_numeric_value_from_float(float(number)))
+                span_dict[begin_index, end_index].append(
+                    _get_numeric_value_from_float(float(number))
+                )
                 break
         for number, word in enumerate(_ORDINAL_WORDS):
             if span_text == word:
-                span_dict[begin_index, end_index].append(_get_numeric_value_from_float(float(number)))
+                span_dict[begin_index, end_index].append(
+                    _get_numeric_value_from_float(float(number))
+                )
                 break
 
-    for begin_index, end_index in get_all_spans(text, max_ngram_length=_MAX_DATE_NGRAM_SIZE):
+    for begin_index, end_index in get_all_spans(
+        text, max_ngram_length=_MAX_DATE_NGRAM_SIZE
+    ):
         span_text = text[begin_index:end_index]
         date = _parse_date(span_text)
         if date is not None:
             span_dict[begin_index, end_index].append(date)
 
-    spans = sorted(span_dict.items(), key=lambda span_value: _get_span_length_key(span_value[0]), reverse=True)
+    spans = sorted(
+        span_dict.items(),
+        key=lambda span_value: _get_span_length_key(span_value[0]),
+        reverse=True,
+    )
     selected_spans = []
     for span, value in spans:
         for selected_span, _ in selected_spans:
@@ -2534,7 +2734,9 @@ def parse_text(text):
 
     numeric_value_spans = []
     for span, values in selected_spans:
-        numeric_value_spans.append(NumericValueSpan(begin_index=span[0], end_index=span[1], values=values))
+        numeric_value_spans.append(
+            NumericValueSpan(begin_index=span[0], end_index=span[1], values=values)
+        )
     return numeric_value_spans
 
 
@@ -2544,7 +2746,9 @@ def parse_text(text):
 # - https://github.com/google-research/tapas/blob/master/tapas/utils/text_utils.py
 
 
-_PrimitiveNumericValue = Union[float, Tuple[Optional[float], Optional[float], Optional[float]]]
+_PrimitiveNumericValue = Union[
+    float, Tuple[Optional[float], Optional[float], Optional[float]]
+]
 _SortKeyFn = Callable[[NumericValue], Tuple[float, Ellipsis]]
 
 _DATE_TUPLE_SIZE = 3
@@ -2632,7 +2836,9 @@ def get_numeric_sort_key_fn(numeric_values):
     return _sort_key_fn
 
 
-def _consolidate_numeric_values(row_index_to_values, min_consolidation_fraction, debug_info):
+def _consolidate_numeric_values(
+    row_index_to_values, min_consolidation_fraction, debug_info
+):
     """
     Finds the most common numeric values in a column and returns them
 
@@ -2719,7 +2925,9 @@ def add_numeric_values_to_question(question):
     original_text = question
     question = normalize_for_match(question)
     numeric_spans = parse_text(question)
-    return Question(original_text=original_text, text=question, numeric_spans=numeric_spans)
+    return Question(
+        original_text=original_text, text=question, numeric_spans=numeric_spans
+    )
 
 
 def filter_invalid_unicode(text):
@@ -2750,7 +2958,9 @@ def filter_invalid_unicode_from_table(table):
     for col_index, column in enumerate(table.columns):
         column, is_invalid = filter_invalid_unicode(column)
         if is_invalid:
-            logging.warning(f"Scrub an invalid table header @ table_id: {table.table_id}, col_index: {col_index}")
+            logging.warning(
+                f"Scrub an invalid table header @ table_id: {table.table_id}, col_index: {col_index}"
+            )
 
 
 def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=None):

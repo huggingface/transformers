@@ -20,14 +20,9 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        require_torch_fp16, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -35,12 +30,13 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import PegasusTokenizer, PegasusXConfig, PegasusXForConditionalGeneration, PegasusXModel
-    from transformers.models.pegasus_x.modeling_pegasus_x import PegasusXDecoder, PegasusXEncoder
+    from transformers import (PegasusTokenizer, PegasusXConfig,
+                              PegasusXForConditionalGeneration, PegasusXModel)
+    from transformers.models.pegasus_x.modeling_pegasus_x import (
+        PegasusXDecoder, PegasusXEncoder)
 
 
 def prepare_pegasus_x_inputs_dict(
@@ -103,12 +99,16 @@ class PegasusXModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = PegasusXConfig(
             vocab_size=self.vocab_size,
@@ -127,7 +127,9 @@ class PegasusXModelTester:
             pad_token_id=self.pad_token_id,
             stagger_local_blocks=False,
         )
-        inputs_dict = prepare_pegasus_x_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_pegasus_x_inputs_dict(
+            config, input_ids, decoder_input_ids
+        )
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -152,20 +154,28 @@ class PegasusXModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = PegasusXModel(config=config).to(torch_device).eval()
@@ -179,11 +189,14 @@ class PegasusXModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = PegasusXEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -197,12 +210,20 @@ class PegasusXModelTester:
             encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
-class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
+class PegasusXModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (PegasusXModel, PegasusXForConditionalGeneration)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": PegasusXModel,
@@ -238,12 +259,16 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -286,7 +311,9 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         model = PegasusXForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -295,8 +322,12 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", decoder_seq_length
+        )
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
@@ -310,7 +341,11 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -321,7 +356,11 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
@@ -349,16 +388,24 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(decoder_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        decoder_key_length,
+                    ],
                 )
 
                 # cross attentions
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(cross_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -385,7 +432,11 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -398,7 +449,9 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 ],
             )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
+    def _check_encoder_attention_for_generate(
+        self, attentions, batch_size, config, prompt_length
+    ):
         encoder_expected_shape = (
             batch_size,
             config.num_attention_heads,
@@ -412,8 +465,14 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             [encoder_expected_shape] * len(attentions),
         )
 
-    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, prompt_length):
-        encoder_expected_shape = (batch_size, self.round_up(prompt_length, config.block_size), config.hidden_size)
+    def _check_encoder_hidden_states_for_generate(
+        self, hidden_states, batch_size, config, prompt_length
+    ):
+        encoder_expected_shape = (
+            batch_size,
+            self.round_up(prompt_length, config.block_size),
+            config.hidden_size,
+        )
         self.assertIsInstance(hidden_states, tuple)
         # Only the last layer will have the hidden states truncated back to token level
         self.assertListEqual(
@@ -435,23 +494,35 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                if (
+                    hasattr(self.model_tester, "chunk_length")
+                    and self.model_tester.chunk_length > 1
+                ):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
                 seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.round_up(seq_length, config.block_size), self.model_tester.hidden_size],
+                [
+                    self.round_up(seq_length, config.block_size),
+                    self.model_tester.hidden_size,
+                ],
             )
 
             if config.is_encoder_decoder:
@@ -460,7 +531,9 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+                decoder_seq_length = getattr(
+                    self.model_tester, "decoder_seq_length", seq_len
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -582,39 +655,69 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
 
     def test_inference_no_head(self):
         model = PegasusXModel.from_pretrained("google/pegasus-x-base").to(torch_device)
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
-        inputs_dict = prepare_pegasus_x_inputs_dict(model.config, input_ids, decoder_input_ids)
+        input_ids = _long_tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
+        decoder_input_ids = _long_tensor(
+            [[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]]
+        )
+        inputs_dict = prepare_pegasus_x_inputs_dict(
+            model.config, input_ids, decoder_input_ids
+        )
         with torch.no_grad():
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.0702, -0.1552, 0.1192], [0.0836, -0.1848, 0.1304], [0.0673, -0.1686, 0.1045]], device=torch_device
+            [
+                [0.0702, -0.1552, 0.1192],
+                [0.0836, -0.1848, 0.1304],
+                [0.0673, -0.1686, 0.1045],
+            ],
+            device=torch_device,
         )
 
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_inference_head(self):
-        model = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base").to(torch_device)
+        model = PegasusXForConditionalGeneration.from_pretrained(
+            "google/pegasus-x-base"
+        ).to(torch_device)
 
         # change to intended input
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_pegasus_x_inputs_dict(model.config, input_ids, decoder_input_ids)
+        input_ids = _long_tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
+        decoder_input_ids = _long_tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
+        inputs_dict = prepare_pegasus_x_inputs_dict(
+            model.config, input_ids, decoder_input_ids
+        )
         with torch.no_grad():
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, model.config.vocab_size))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.0, 9.5705185, 1.5897303], [0.0, 9.833374, 1.5828674], [0.0, 10.429961, 1.5643371]], device=torch_device
+            [
+                [0.0, 9.5705185, 1.5897303],
+                [0.0, 9.833374, 1.5828674],
+                [0.0, 10.429961, 1.5643371],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_seq_to_seq_generation(self):
-        hf = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base-arxiv").to(torch_device)
+        hf = PegasusXForConditionalGeneration.from_pretrained(
+            "google/pegasus-x-base-arxiv"
+        ).to(torch_device)
         tok = PegasusTokenizer.from_pretrained("google/pegasus-x-base")
 
         batch_input = [
@@ -654,7 +757,9 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         ]
 
         generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+            hypotheses_batch.tolist(),
+            clean_up_tokenization_spaces=True,
+            skip_special_tokens=True,
         )
         assert generated == EXPECTED
 
@@ -716,15 +821,21 @@ class PegasusXStandaloneDecoderModelTester:
         self.decoder_attention_idx = 1
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         lm_labels = None
         if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            lm_labels = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], self.vocab_size
+            )
 
         config = PegasusXConfig(
             vocab_size=self.vocab_size,
@@ -775,15 +886,21 @@ class PegasusXStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -801,34 +918,49 @@ class PegasusXStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)[
+            "past_key_values"
+        ]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-2
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -856,7 +988,9 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(
         self,
     ):
-        self.model_tester = PegasusXStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = PegasusXStandaloneDecoderModelTester(
+            self, is_training=False
+        )
         self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
 
     def test_config(self):
@@ -868,7 +1002,9 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):

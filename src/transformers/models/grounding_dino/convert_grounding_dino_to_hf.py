@@ -23,15 +23,10 @@ import torch
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import (
-    AutoTokenizer,
-    GroundingDinoConfig,
-    GroundingDinoForObjectDetection,
-    GroundingDinoImageProcessor,
-    GroundingDinoProcessor,
-    SwinConfig,
-)
-
+from transformers import (AutoTokenizer, GroundingDinoConfig,
+                          GroundingDinoForObjectDetection,
+                          GroundingDinoImageProcessor, GroundingDinoProcessor,
+                          SwinConfig)
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -287,8 +282,12 @@ def read_in_q_k_v_encoder(state_dict, config):
         hidden_size = embed_dim * 2**layer
         for block in range(depth):
             # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-            in_proj_weight = state_dict.pop(f"backbone.0.layers.{layer}.blocks.{block}.attn.qkv.weight")
-            in_proj_bias = state_dict.pop(f"backbone.0.layers.{layer}.blocks.{block}.attn.qkv.bias")
+            in_proj_weight = state_dict.pop(
+                f"backbone.0.layers.{layer}.blocks.{block}.attn.qkv.weight"
+            )
+            in_proj_bias = state_dict.pop(
+                f"backbone.0.layers.{layer}.blocks.{block}.attn.qkv.bias"
+            )
             # next, add query, keys and values (in that order) to the state dict
             state_dict[
                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.self.query.weight"
@@ -317,64 +316,96 @@ def read_in_q_k_v_text_enhancer(state_dict, config):
     hidden_size = config.hidden_size
     for idx in range(config.encoder_layers):
         # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.weight"] = in_proj_weight[
-            :hidden_size, :
-        ]
-        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.weight"
+        ] = in_proj_weight[:hidden_size, :]
+        state_dict[
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.bias"
+        ] = in_proj_bias[:hidden_size]
 
-        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.bias"] = in_proj_bias[
-            hidden_size : hidden_size * 2
-        ]
+        state_dict[
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.weight"
+        ] = in_proj_weight[hidden_size : hidden_size * 2, :]
+        state_dict[
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.bias"
+        ] = in_proj_bias[hidden_size : hidden_size * 2]
 
-        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.weight"] = in_proj_weight[
-            -hidden_size:, :
-        ]
-        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.bias"] = in_proj_bias[
-            -hidden_size:
-        ]
+        state_dict[
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.weight"
+        ] = in_proj_weight[-hidden_size:, :]
+        state_dict[
+            f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.bias"
+        ] = in_proj_bias[-hidden_size:]
 
 
 def read_in_q_k_v_decoder(state_dict, config):
     hidden_size = config.hidden_size
     for idx in range(config.decoder_layers):
         # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"model.decoder.layers.{idx}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"model.decoder.layers.{idx}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"model.decoder.layers.{idx}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"model.decoder.layers.{idx}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{idx}.self_attn.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"model.decoder.layers.{idx}.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[f"model.decoder.layers.{idx}.self_attn.query.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"model.decoder.layers.{idx}.self_attn.query.bias"] = in_proj_bias[
+            :hidden_size
+        ]
 
         state_dict[f"model.decoder.layers.{idx}.self_attn.key.weight"] = in_proj_weight[
             hidden_size : hidden_size * 2, :
         ]
-        state_dict[f"model.decoder.layers.{idx}.self_attn.key.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
-
-        state_dict[f"model.decoder.layers.{idx}.self_attn.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"model.decoder.layers.{idx}.self_attn.value.bias"] = in_proj_bias[-hidden_size:]
-
-        # read in weights + bias of cross-attention
-        in_proj_weight = state_dict.pop(f"model.decoder.layers.{idx}.encoder_attn_text.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"model.decoder.layers.{idx}.encoder_attn_text.in_proj_bias")
-
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.query.bias"] = in_proj_bias[:hidden_size]
-
-        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.key.bias"] = in_proj_bias[
+        state_dict[f"model.decoder.layers.{idx}.self_attn.key.bias"] = in_proj_bias[
             hidden_size : hidden_size * 2
         ]
 
-        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"model.decoder.layers.{idx}.self_attn.value.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"model.decoder.layers.{idx}.self_attn.value.bias"] = in_proj_bias[
+            -hidden_size:
+        ]
+
+        # read in weights + bias of cross-attention
+        in_proj_weight = state_dict.pop(
+            f"model.decoder.layers.{idx}.encoder_attn_text.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"model.decoder.layers.{idx}.encoder_attn_text.in_proj_bias"
+        )
+
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.query.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.query.bias"] = (
+            in_proj_bias[:hidden_size]
+        )
+
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.key.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.key.bias"] = (
+            in_proj_bias[hidden_size : hidden_size * 2]
+        )
+
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.value.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.value.bias"] = (
+            in_proj_bias[-hidden_size:]
+        )
 
 
 # We will verify our results on an image of cute cats
@@ -407,8 +438,12 @@ def convert_grounding_dino_checkpoint(args):
 
     # Load original checkpoint
     checkpoint_url = checkpoint_mapping[model_name]
-    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
-    original_state_dict = {k.replace("module.", ""): v for k, v in original_state_dict.items()}
+    original_state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu"
+    )["model"]
+    original_state_dict = {
+        k.replace("module.", ""): v for k, v in original_state_dict.items()
+    }
 
     for name, param in original_state_dict.items():
         print(name, param.shape)
@@ -432,12 +467,20 @@ def convert_grounding_dino_checkpoint(args):
 
     # Load and process test image
     image = prepare_img()
-    transforms = T.Compose([T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
+    transforms = T.Compose(
+        [
+            T.Resize(size=800, max_size=1333),
+            T.ToTensor(),
+            T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+        ]
+    )
     original_pixel_values = transforms(image).unsqueeze(0)
 
     image_processor = GroundingDinoImageProcessor()
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    processor = GroundingDinoProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = GroundingDinoProcessor(
+        image_processor=image_processor, tokenizer=tokenizer
+    )
 
     text = "a cat"
     inputs = processor(images=image, text=preprocess_caption(text), return_tensors="pt")
@@ -452,7 +495,11 @@ def convert_grounding_dino_checkpoint(args):
         print(outputs.logits[0, :3, :3])
 
         expected_slice = torch.tensor(
-            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
+            [
+                [-4.8913, -0.1900, -0.2161],
+                [-4.9653, -0.3719, -0.3950],
+                [-5.9599, -3.3765, -3.3104],
+            ]
         )
 
         assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
@@ -478,13 +525,20 @@ if __name__ == "__main__":
         help="Name of the GroundingDino model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     parser.add_argument(
-        "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
+        "--verify_logits",
+        action="store_false",
+        help="Whether or not to verify logits after conversion.",
     )
 
     args = parser.parse_args()

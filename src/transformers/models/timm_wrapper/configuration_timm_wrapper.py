@@ -20,7 +20,6 @@ from typing import Any, Dict
 from ...configuration_utils import PretrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
 
-
 if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
 
@@ -60,7 +59,9 @@ class TimmWrapperConfig(PretrainedConfig):
 
     model_type = "timm_wrapper"
 
-    def __init__(self, initializer_range: float = 0.02, do_pooling: bool = True, **kwargs):
+    def __init__(
+        self, initializer_range: float = 0.02, do_pooling: bool = True, **kwargs
+    ):
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
         super().__init__(**kwargs)
@@ -100,7 +101,10 @@ class TimmWrapperConfig(PretrainedConfig):
 
         # pop num_classes from "pretrained_cfg",
         # it is not necessary to have it, only root one is used in timm
-        if "pretrained_cfg" in config_dict and "num_classes" in config_dict["pretrained_cfg"]:
+        if (
+            "pretrained_cfg" in config_dict
+            and "num_classes" in config_dict["pretrained_cfg"]
+        ):
             config_dict["pretrained_cfg"].pop("num_classes", None)
 
         return super().from_dict(config_dict, **kwargs)

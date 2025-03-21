@@ -19,29 +19,23 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
-from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          BitsAndBytesConfig, FalconMambaConfig,
+                          is_torch_available)
+from transformers.testing_utils import (require_bitsandbytes, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_multi_gpu, slow,
+                                        torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        FalconMambaForCausalLM,
-        FalconMambaModel,
-    )
+    from transformers import FalconMambaForCausalLM, FalconMambaModel
     from transformers.cache_utils import MambaCache
 
 
@@ -95,7 +89,10 @@ class FalconMambaModelTester:
         return FalconMambaConfig.from_pretrained("tiiuae/falcon-mamba-7b")
 
     def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = ids_tensor([self.batch_size, self.seq_length], 1)
@@ -104,8 +101,12 @@ class FalconMambaModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config(
@@ -124,7 +125,10 @@ class FalconMambaModelTester:
         )
 
     def get_config(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
         return FalconMambaConfig(
             vocab_size=self.vocab_size,
@@ -174,7 +178,10 @@ class FalconMambaModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
     def create_and_check_causal_lm(self, config, input_ids, *args):
@@ -184,7 +191,9 @@ class FalconMambaModelTester:
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_state_equivalency(self, config, input_ids, *args):
         model = FalconMambaModel(config=config)
@@ -206,11 +215,17 @@ class FalconMambaModelTester:
             input_ids[:, -1:],
             use_cache=True,
             cache_params=outputs.cache_params,
-            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+            cache_position=torch.arange(
+                config.conv_kernel, config.conv_kernel + 1, device=input_ids.device
+            ),
         )
         output_two = outputs.last_hidden_state
 
-        self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
+        self.parent.assertTrue(
+            torch.allclose(
+                torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5
+            )
+        )
         # TODO the original mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_falcon_mamba_cached_slow_forward_and_backwards(
@@ -228,12 +243,16 @@ class FalconMambaModelTester:
         # use cache
         token_emb = model.embeddings(input_ids)
         outputs = model.layers[0].mixer.slow_forward(
-            token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
+            token_emb,
+            cache,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
         )
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
-        self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            outputs.shape, (self.batch_size, self.seq_length, self.hidden_size)
+        )
         loss.backward()
 
     def create_and_check_falcon_mamba_lm_head_forward_and_backwards(
@@ -246,7 +265,9 @@ class FalconMambaModelTester:
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         result.loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
@@ -264,8 +285,12 @@ class FalconMambaModelTester:
 
 @require_torch
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
-class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
+class FalconMambaModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
+    )
     has_attentions = False  # FalconMamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
@@ -274,7 +299,10 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     test_pruning = False
     test_head_masking = False  # FalconMamba does not have attention heads
     pipeline_model_mapping = (
-        {"feature-extraction": FalconMambaModel, "text-generation": FalconMambaForCausalLM}
+        {
+            "feature-extraction": FalconMambaModel,
+            "text-generation": FalconMambaForCausalLM,
+        }
         if is_torch_available()
         else {}
     )
@@ -282,7 +310,10 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def setUp(self):
         self.model_tester = FalconMambaModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=FalconMambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
+            self,
+            config_class=FalconMambaConfig,
+            n_embd=37,
+            common_properties=["hidden_size", "num_hidden_layers"],
         )
 
     def assertInterval(self, member, container, msg=None):
@@ -304,7 +335,10 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
 
         if not is_inside_interval:
-            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
+            standardMsg = "%s not found in %s" % (
+                safe_repr(member),
+                safe_repr(container),
+            )
             self.fail(self._formatMessage(msg, standardMsg))
 
     def test_config(self):
@@ -349,11 +383,15 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_falcon_mamba_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_falcon_mamba_cached_slow_forward_and_backwards(*config_and_inputs)
+        self.model_tester.create_and_check_falcon_mamba_cached_slow_forward_and_backwards(
+            *config_and_inputs
+        )
 
     def test_falcon_mamba_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_falcon_mamba_lm_head_forward_and_backwards(*config_and_inputs)
+        self.model_tester.create_and_check_falcon_mamba_lm_head_forward_and_backwards(
+            *config_and_inputs
+        )
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -363,7 +401,11 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             for name, param in model.named_parameters():
                 if "dt_proj.bias" in name:
                     dt = torch.exp(
-                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                        torch.tensor([0, 1])
+                        * (
+                            math.log(config.time_step_max)
+                            - math.log(config.time_step_min)
+                        )
                         + math.log(config.time_step_min)
                     ).clamp(min=config.time_step_floor)
                     inv_dt = dt + torch.log(-torch.expm1(-dt))
@@ -371,13 +413,22 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                         self.assertTrue(param.data.max().item() <= inv_dt[1])
                         self.assertTrue(param.data.min().item() >= inv_dt[0])
                 elif "A_log" in name:
-                    A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
+                    A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[
+                        None, :
+                    ]
                     A = A.expand(config.intermediate_size, -1).contiguous()
-                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
+                    torch.testing.assert_close(
+                        param.data, torch.log(A), rtol=1e-5, atol=1e-5
+                    )
                 elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
+                        torch.testing.assert_close(
+                            param.data,
+                            torch.ones_like(param.data),
+                            rtol=1e-5,
+                            atol=1e-5,
+                        )
 
     @slow
     # Ignore copy
@@ -392,15 +443,23 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
+                        recursive_check(
+                            tuple_object.conv_states, dict_object.conv_states
+                        )
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -431,17 +490,29 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
 
 @require_torch
@@ -454,7 +525,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         self.text = "Hello today"
 
     def test_generation_bf16(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16, device_map="auto"
+        )
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -467,7 +540,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_4bit(self):
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=quantization_config)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, quantization_config=quantization_config
+        )
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -478,7 +553,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         )
 
     def test_generation_torch_compile(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         model = torch.compile(model)
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
@@ -501,8 +578,12 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             "Hello my name is Younes and today I will be talking about the topic of “The importance of the internet in our life”.\n",
         ]
 
-        inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.bfloat16)
+        inputs = tok(
+            texts, return_tensors="pt", padding=True, return_token_type_ids=False
+        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, device_map=0, torch_dtype=torch.bfloat16
+        )
 
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
@@ -524,7 +605,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         model_id = "tiiuae/falcon-mamba-7b"
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, device_map="auto", torch_dtype=torch.bfloat16
+        )
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
         text = "Hello today"

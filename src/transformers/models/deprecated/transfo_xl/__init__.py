@@ -14,8 +14,8 @@
 
 from typing import TYPE_CHECKING
 
-from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
-
+from ....utils import (OptionalDependencyNotAvailable, _LazyModule,
+                       is_tf_available, is_torch_available)
 
 _import_structure = {
     "configuration_transfo_xl": ["TransfoXLConfig"],
@@ -63,14 +63,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_transfo_xl import (
-            AdaptiveEmbedding,
-            TransfoXLForSequenceClassification,
-            TransfoXLLMHeadModel,
-            TransfoXLModel,
-            TransfoXLPreTrainedModel,
-            load_tf_weights_in_transfo_xl,
-        )
+        from .modeling_transfo_xl import (AdaptiveEmbedding,
+                                          TransfoXLForSequenceClassification,
+                                          TransfoXLLMHeadModel, TransfoXLModel,
+                                          TransfoXLPreTrainedModel,
+                                          load_tf_weights_in_transfo_xl)
 
     try:
         if not is_tf_available():
@@ -79,15 +76,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_transfo_xl import (
-            TFAdaptiveEmbedding,
-            TFTransfoXLForSequenceClassification,
-            TFTransfoXLLMHeadModel,
-            TFTransfoXLMainLayer,
-            TFTransfoXLModel,
-            TFTransfoXLPreTrainedModel,
-        )
+            TFAdaptiveEmbedding, TFTransfoXLForSequenceClassification,
+            TFTransfoXLLMHeadModel, TFTransfoXLMainLayer, TFTransfoXLModel,
+            TFTransfoXLPreTrainedModel)
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

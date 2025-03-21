@@ -21,10 +21,10 @@ from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import (ImagesKwargs, ProcessingKwargs,
+                                 ProcessorMixin, TextKwargs, Unpack)
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
-
 
 BboxInput = Union[
     List[Tuple[int, int]],
@@ -88,7 +88,9 @@ class Kosmos2Processor(ProcessorMixin):
     image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
+    def __init__(
+        self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs
+    ):
         tokenizer.return_token_type_ids = False
 
         self.eod_token = "</doc>"
@@ -124,11 +126,16 @@ class Kosmos2Processor(ProcessorMixin):
         ]
 
         self.num_patch_index_tokens = num_patch_index_tokens
-        patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
+        patch_index_tokens = [
+            f"<patch_index_{str(x).zfill(4)}>"
+            for x in range(self.num_patch_index_tokens)
+        ]
 
         tokens_to_add = []
         for token in self.tag_tokens + patch_index_tokens:
-            tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False, normalized=False))
+            tokens_to_add.append(
+                AddedToken(token, lstrip=True, rstrip=False, normalized=False)
+            )
         tokenizer.add_tokens(tokens_to_add)
 
         super().__init__(image_processor, tokenizer)
@@ -172,7 +179,9 @@ class Kosmos2Processor(ProcessorMixin):
 
         bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
         num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
-        first_image_token_id = output_kwargs["images_kwargs"].pop("first_image_token_id", None)
+        first_image_token_id = output_kwargs["images_kwargs"].pop(
+            "first_image_token_id", None
+        )
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
@@ -182,11 +191,15 @@ class Kosmos2Processor(ProcessorMixin):
         encoding = BatchFeature()
 
         if images is not None:
-            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_encoding = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
             encoding.update(image_encoding)
 
         if text is not None:
-            text = self.preprocess_examples(text, images, bboxes, num_image_tokens=num_image_tokens)
+            text = self.preprocess_examples(
+                text, images, bboxes, num_image_tokens=num_image_tokens
+            )
 
             if add_special_tokens and not add_eos_token:
                 if isinstance(text, str):
@@ -196,8 +209,12 @@ class Kosmos2Processor(ProcessorMixin):
             output_kwargs["text_kwargs"]["add_special_tokens"] = (
                 output_kwargs["text_kwargs"]["add_special_tokens"] and add_eos_token
             )
-            output_kwargs["text_kwargs"]["padding"] = padding if images is None else False
-            output_kwargs["text_kwargs"]["return_tensors"] = return_tensors if images is None else None
+            output_kwargs["text_kwargs"]["padding"] = (
+                padding if images is None else False
+            )
+            output_kwargs["text_kwargs"]["return_tensors"] = (
+                return_tensors if images is None else None
+            )
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             encoding.update(text_encoding)
 
@@ -219,7 +236,9 @@ class Kosmos2Processor(ProcessorMixin):
 
             # Add `image_embeds_position_mask`: the leading and trailing `0` are for `boi` and `eoi` tokens. The `1` indicates
             # the places of image tokens.
-            image_token_ids = list(range(first_image_token_id, first_image_token_id + num_image_tokens))
+            image_token_ids = list(
+                range(first_image_token_id, first_image_token_id + num_image_tokens)
+            )
             base_image_embeds_position_mask = [0] + [1] * num_image_tokens + [0]
 
             # loop over `encoding["input_ids"]`
@@ -232,7 +251,11 @@ class Kosmos2Processor(ProcessorMixin):
                 encoding["attention_mask"] = [encoding["attention_mask"]]
             for text_ids in all_input_ids:
                 # change the ids for the fake `<image>` tokens in `input_ids`
-                text_ids = text_ids[:start_index] + image_token_ids + text_ids[start_index + num_image_tokens :]
+                text_ids = (
+                    text_ids[:start_index]
+                    + image_token_ids
+                    + text_ids[start_index + num_image_tokens :]
+                )
                 input_ids.append(text_ids)
 
                 mask = copy.copy(base_image_embeds_position_mask)
@@ -245,7 +268,8 @@ class Kosmos2Processor(ProcessorMixin):
 
             if isinstance(text, list):
                 sorted_length = sorted(
-                    [(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)], key=lambda x: x[-1]
+                    [(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)],
+                    key=lambda x: x[-1],
                 )
                 _, min_len_not_padded = sorted_length[0]
                 idx, _ = sorted_length[-1]
@@ -254,25 +278,39 @@ class Kosmos2Processor(ProcessorMixin):
                 )
                 output_kwargs["text_kwargs"]["return_tensors"] = None
 
-                text_encoding = self.tokenizer(text=[text[idx]], **output_kwargs["text_kwargs"])
+                text_encoding = self.tokenizer(
+                    text=[text[idx]], **output_kwargs["text_kwargs"]
+                )
                 max_len_padded = len(text_encoding.input_ids[0])
 
                 if min_len_not_padded != max_len_padded:
                     if self.tokenizer.padding_side == "right":
-                        input_ids = [x + [self.tokenizer.pad_token_id] * (max_len_padded - len(x)) for x in input_ids]
+                        input_ids = [
+                            x
+                            + [self.tokenizer.pad_token_id] * (max_len_padded - len(x))
+                            for x in input_ids
+                        ]
                         image_embeds_position_mask = [
-                            x + [0] * (max_len_padded - len(x)) for x in image_embeds_position_mask
+                            x + [0] * (max_len_padded - len(x))
+                            for x in image_embeds_position_mask
                         ]
                         encoding["attention_mask"] = [
-                            x + [0] * (max_len_padded - len(x)) for x in encoding["attention_mask"]
+                            x + [0] * (max_len_padded - len(x))
+                            for x in encoding["attention_mask"]
                         ]
                     elif self.tokenizer.padding_side == "left":
-                        input_ids = [[self.tokenizer.pad_token_id] * (max_len_padded - len(x)) + x for x in input_ids]
+                        input_ids = [
+                            [self.tokenizer.pad_token_id] * (max_len_padded - len(x))
+                            + x
+                            for x in input_ids
+                        ]
                         image_embeds_position_mask = [
-                            [0] * (max_len_padded - len(x)) + x for x in image_embeds_position_mask
+                            [0] * (max_len_padded - len(x)) + x
+                            for x in image_embeds_position_mask
                         ]
                         encoding["attention_mask"] = [
-                            [0] * (max_len_padded - len(x)) + x for x in encoding["attention_mask"]
+                            [0] * (max_len_padded - len(x)) + x
+                            for x in encoding["attention_mask"]
                         ]
 
             # un-batch if necessary
@@ -310,7 +348,9 @@ class Kosmos2Processor(ProcessorMixin):
         if bboxes is None:
             return
         elif not isinstance(bboxes, list):
-            raise ValueError("`bboxes` (for a single text example) should be `None` or a list.")
+            raise ValueError(
+                "`bboxes` (for a single text example) should be `None` or a list."
+            )
 
         # `bbox` is the bounding boxes for a single <phrase> </phrase> pair
         for bbox in bboxes:
@@ -321,7 +361,9 @@ class Kosmos2Processor(ProcessorMixin):
             for element in bbox:
                 if not isinstance(element, tuple) or not (
                     (len(element) == 2 and all(isinstance(x, int) for x in element))
-                    or (len(element) == 4 and all(isinstance(x, float) for x in element))
+                    or (
+                        len(element) == 4 and all(isinstance(x, float) for x in element)
+                    )
                 ):
                     raise ValueError(
                         "Each element in `bboxes` (for a single text example) should be either `None`, a tuple containing "
@@ -385,7 +427,9 @@ class Kosmos2Processor(ProcessorMixin):
             bboxes = [bboxes]
         elif bboxes is not None:
             if not isinstance(bboxes, list):
-                raise ValueError("`bboxes` should be `None` or a list (as a batch) when `texts` is passed as a batch.")
+                raise ValueError(
+                    "`bboxes` should be `None` or a list (as a batch) when `texts` is passed as a batch."
+                )
             for x in bboxes:
                 self._check_bboxes_for_single_text(x)
         else:
@@ -428,7 +472,9 @@ class Kosmos2Processor(ProcessorMixin):
             return clean_text_and_extract_entities_with_bboxes(caption)
         return caption
 
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, **kwargs
+    ):
         """
         Post-process the output of the model to decode the text.
 
@@ -444,8 +490,13 @@ class Kosmos2Processor(ProcessorMixin):
         Returns:
             `List[str]`: The decoded text.
         """
-        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-        return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
+        generated_texts = self.batch_decode(
+            generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+        )
+        return [
+            self.post_process_generation(text, cleanup_and_extract=False)
+            for text in generated_texts
+        ]
 
     @property
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
@@ -454,7 +505,9 @@ class Kosmos2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def _insert_patch_index_tokens(self, text: str, bboxes: Union[List[Tuple[int]], List[Tuple[float]]]) -> str:
+    def _insert_patch_index_tokens(
+        self, text: str, bboxes: Union[List[Tuple[int]], List[Tuple[float]]]
+    ) -> str:
         if bboxes is None or len(bboxes) == 0:
             return text
 
@@ -485,7 +538,9 @@ class Kosmos2Processor(ProcessorMixin):
                     "The multiple bounding boxes for a single phrase should not contain any `None` value."
                 )
             for box in bbox:
-                patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(box)
+                patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(
+                    box
+                )
                 patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
             # `bbox` being an empty list
             if len(patch_index_strings) == 0:
@@ -517,7 +572,9 @@ class Kosmos2Processor(ProcessorMixin):
         return token_1, token_2
 
 
-def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patches_per_side: int) -> Tuple[int, int]:
+def coordinate_to_patch_index(
+    bbox: Tuple[float, float, float, float], num_patches_per_side: int
+) -> Tuple[int, int]:
     """Convert a bounding box to a pair of patch indices.
 
     Args:
@@ -532,7 +589,9 @@ def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patch
     (x1, y1, x2, y2) = bbox
 
     if not (x2 > x1 and y2 > y1):
-        raise ValueError("The coordinates in `bbox` should be `(x1, y1, x2, y2)` with `x2 > x1` and `y2 > y1`.")
+        raise ValueError(
+            "The coordinates in `bbox` should be `(x1, y1, x2, y2)` with `x2 > x1` and `y2 > y1`."
+        )
 
     ul_x = math.floor(x1 * num_patches_per_side)
     ul_y = math.floor(y1 * num_patches_per_side)
@@ -704,7 +763,10 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
     for item in entities_with_patch_indices:
         entity, bboxes = item[0:2], item[2]
         adjusted_entity = adjust_entity_positions(entity, text)
-        bboxes_in_coords = [patch_index_to_coordinate(bbox[0], bbox[1], num_patches_per_side) for bbox in bboxes]
+        bboxes_in_coords = [
+            patch_index_to_coordinate(bbox[0], bbox[1], num_patches_per_side)
+            for bbox in bboxes
+        ]
 
         entities.append(adjusted_entity + (bboxes_in_coords,))
 

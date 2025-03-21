@@ -23,9 +23,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
+from transformers import (ViTConfig, ViTForImageClassification,
+                          ViTImageProcessor, ViTModel)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -36,23 +36,67 @@ def create_rename_keys(config, base_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append(
+            (
+                f"blocks.{i}.norm1.weight",
+                f"vit.encoder.layer.{i}.layernorm_before.weight",
+            )
+        )
+        rename_keys.append(
+            (f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias")
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.attn.proj.weight",
+                f"vit.encoder.layer.{i}.attention.output.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.attn.proj.bias",
+                f"vit.encoder.layer.{i}.attention.output.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.norm2.weight",
+                f"vit.encoder.layer.{i}.layernorm_after.weight",
+            )
+        )
+        rename_keys.append(
+            (f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias")
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.mlp.fc1.weight",
+                f"vit.encoder.layer.{i}.intermediate.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.mlp.fc1.bias",
+                f"vit.encoder.layer.{i}.intermediate.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight")
+        )
+        rename_keys.append(
+            (f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias")
+        )
 
     # projection layer + position embeddings
     rename_keys.extend(
         [
             ("cls_token", "vit.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "vit.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"),
+            (
+                "patch_embed.proj.weight",
+                "vit.embeddings.patch_embeddings.projection.weight",
+            ),
+            (
+                "patch_embed.proj.bias",
+                "vit.embeddings.patch_embeddings.projection.bias",
+            ),
             ("pos_embed", "vit.embeddings.position_embeddings"),
         ]
     )
@@ -67,7 +111,10 @@ def create_rename_keys(config, base_model=False):
         )
 
         # if just the base model, we should remove "vit" from all keys that start with "vit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair for pair in rename_keys]
+        rename_keys = [
+            (pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair
+            for pair in rename_keys
+        ]
     else:
         # layernorm + classification head
         rename_keys.extend(
@@ -93,20 +140,24 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[: config.hidden_size]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[config.hidden_size : config.hidden_size * 2]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-config.hidden_size :]
+        )
 
 
 def remove_classification_head_(state_dict):
@@ -143,7 +194,9 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
         config.num_labels = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -182,7 +235,9 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
 
     if base_model:
         final_hidden_state_cls_token = original_model(pixel_values)
-        assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
+        assert torch.allclose(
+            final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1
+        )
     else:
         logits = original_model(pixel_values)
         assert logits.shape == outputs.logits.shape
@@ -205,7 +260,10 @@ if __name__ == "__main__":
         help="Name of the model trained with DINO you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--base_model",
@@ -215,4 +273,6 @@ if __name__ == "__main__":
 
     parser.set_defaults(base_model=True)
     args = parser.parse_args()
-    convert_vit_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.base_model)
+    convert_vit_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.base_model
+    )

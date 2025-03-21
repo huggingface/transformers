@@ -21,16 +21,17 @@ import numpy as np
 
 from transformers import Dinov2Config
 from transformers.testing_utils import require_flax, require_vision, slow
-from transformers.utils import cached_property, is_flax_available, is_vision_available
+from transformers.utils import (cached_property, is_flax_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
-
 if is_flax_available():
     import jax
 
-    from transformers.models.dinov2.modeling_flax_dinov2 import FlaxDinov2ForImageClassification, FlaxDinov2Model
+    from transformers.models.dinov2.modeling_flax_dinov2 import (
+        FlaxDinov2ForImageClassification, FlaxDinov2Model)
 
 if is_vision_available():
     from PIL import Image
@@ -80,7 +81,9 @@ class FlaxDinov2ModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         config = Dinov2Config(
             image_size=self.image_size,
@@ -106,21 +109,30 @@ class FlaxDinov2ModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
 
     # Copied from transformers.models.vit.test_modeling_flax_vit.FlaxViTModelTester.create_and_check_for_image_classification with ViT -> Dinov2
     def create_and_check_for_image_classification(self, config, pixel_values):
         config.num_labels = self.type_sequence_label_size
         model = FlaxDinov2ForImageClassification(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
         model = FlaxDinov2ForImageClassification(config)
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
 
     # Copied from transformers.models.vit.test_modeling_flax_vit.FlaxViTModelTester.prepare_config_and_inputs_for_common
@@ -137,11 +149,17 @@ class FlaxDinov2ModelTester:
 @require_flax
 # Copied from transformers.models.vit.test_modeling_flax_vit.FlaxViTModelTest with google/vit-base-patch16-224 -> facebook/dinov2-base
 class FlaxDionv2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxDinov2Model, FlaxDinov2ForImageClassification) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxDinov2Model, FlaxDinov2ForImageClassification)
+        if is_flax_available()
+        else ()
+    )
 
     def setUp(self) -> None:
         self.model_tester = FlaxDinov2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -210,7 +228,11 @@ def prepare_img():
 class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/dinov2-base") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):
@@ -242,7 +264,11 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        self.assertTrue(np.allclose(outputs.last_hidden_state[:2, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            np.allclose(
+                outputs.last_hidden_state[:2, :3, :3], expected_slice, atol=1e-4
+            )
+        )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
@@ -262,7 +288,9 @@ class FlaxDinov2ModelIntegrationTest(unittest.TestCase):
         expected_shape = (2, 1000)
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = np.array([[-2.1776447, 0.36716992, 0.13870952], [-2.1776447, 0.36716992, 0.13870952]])
+        expected_slice = np.array(
+            [[-2.1776447, 0.36716992, 0.13870952], [-2.1776447, 0.36716992, 0.13870952]]
+        )
 
         self.assertTrue(np.allclose(logits[:2, :3], expected_slice, atol=1e-3))
 

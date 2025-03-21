@@ -29,7 +29,6 @@ import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor, nn
 
-
 try:
     from detectron2.checkpoint import DetectionCheckpointer
     from detectron2.config import get_cfg
@@ -38,17 +37,15 @@ try:
 except ImportError:
     pass
 from transformers import CLIPTokenizer, DinatConfig, SwinConfig
-from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
+from transformers.models.oneformer.image_processing_oneformer import \
+    OneFormerImageProcessor
 from transformers.models.oneformer.modeling_oneformer import (
-    OneFormerConfig,
-    OneFormerForUniversalSegmentation,
-    OneFormerForUniversalSegmentationOutput,
-    OneFormerModel,
-    OneFormerModelOutput,
-)
-from transformers.models.oneformer.processing_oneformer import OneFormerProcessor
+    OneFormerConfig, OneFormerForUniversalSegmentation,
+    OneFormerForUniversalSegmentationOutput, OneFormerModel,
+    OneFormerModelOutput)
+from transformers.models.oneformer.processing_oneformer import \
+    OneFormerProcessor
 from transformers.utils import logging
-
 
 StateDict = Dict[str, Tensor]
 
@@ -139,7 +136,9 @@ class OriginalOneFormerConfigToOursConverter:
                     out_features=["stage1", "stage2", "stage3", "stage4"],
                 )
             else:
-                raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
+                raise ValueError(
+                    f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!"
+                )
         else:
             backbone_config = DinatConfig.from_pretrained(
                 "shi-labs/dinat-large-11x11-in22k-in1k-384",
@@ -242,12 +241,22 @@ class OriginalOneFormerCheckpointToOursConverter:
         self.original_model = original_model
         self.config = config
 
-    def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
+    def pop_all(
+        self,
+        renamed_keys: List[Tuple[str, str]],
+        dst_state_dict: StateDict,
+        src_state_dict: StateDict,
+    ):
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
     # Swin Backbone
-    def replace_swin_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: OneFormerConfig):
+    def replace_swin_backbone(
+        self,
+        dst_state_dict: StateDict,
+        src_state_dict: StateDict,
+        config: OneFormerConfig,
+    ):
         dst_prefix: str = "pixel_level_module.encoder"
         src_prefix: str = "backbone"
 
@@ -256,9 +265,18 @@ class OriginalOneFormerCheckpointToOursConverter:
                 f"{src_prefix}.patch_embed.proj.weight",
                 f"{dst_prefix}.embeddings.patch_embeddings.projection.weight",
             ),
-            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.embeddings.patch_embeddings.projection.bias"),
-            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.embeddings.norm.weight"),
-            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.embeddings.norm.bias"),
+            (
+                f"{src_prefix}.patch_embed.proj.bias",
+                f"{dst_prefix}.embeddings.patch_embeddings.projection.bias",
+            ),
+            (
+                f"{src_prefix}.patch_embed.norm.weight",
+                f"{dst_prefix}.embeddings.norm.weight",
+            ),
+            (
+                f"{src_prefix}.patch_embed.norm.bias",
+                f"{dst_prefix}.embeddings.norm.bias",
+            ),
         ]
         num_layers = len(config.backbone_config.depths)
         for layer_idx in range(num_layers):
@@ -282,8 +300,12 @@ class OriginalOneFormerCheckpointToOursConverter:
                 # now we need to handle the attentions
                 # read in weights + bias of input projection layer of cross-attention
 
-                src_att_weight = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"]
-                src_att_bias = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"]
+                src_att_weight = src_state_dict[
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                ]
+                src_att_bias = src_state_dict[
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                ]
 
                 size = src_att_weight.shape[0]
                 offset = size // 3
@@ -309,8 +331,12 @@ class OriginalOneFormerCheckpointToOursConverter:
                 ] = src_att_bias[-offset:]
 
                 # let's pop them
-                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight")
-                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias")
+                src_state_dict.pop(
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                )
+                src_state_dict.pop(
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                )
                 # proj
                 renamed_keys.extend(
                     [
@@ -406,7 +432,12 @@ class OriginalOneFormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Dinat Backbone
-    def replace_dinat_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: OneFormerConfig):
+    def replace_dinat_backbone(
+        self,
+        dst_state_dict: StateDict,
+        src_state_dict: StateDict,
+        config: OneFormerConfig,
+    ):
         dst_prefix: str = "pixel_level_module.encoder"
         src_prefix: str = "backbone"
 
@@ -416,7 +447,9 @@ class OriginalOneFormerCheckpointToOursConverter:
                 (f"{src_prefix}.bias", f"{dst_prefix}.bias"),
             ]
 
-        renamed_keys = rename_keys_for_weight_bias(f"{src_prefix}.patch_embed.norm", f"{dst_prefix}.embeddings.norm")
+        renamed_keys = rename_keys_for_weight_bias(
+            f"{src_prefix}.patch_embed.norm", f"{dst_prefix}.embeddings.norm"
+        )
 
         for i in range(2):
             renamed_keys.extend(
@@ -454,8 +487,12 @@ class OriginalOneFormerCheckpointToOursConverter:
                 # now we need to handle the attentions
                 # read in weights + bias of input projection layer of cross-attention
 
-                src_att_weight = src_state_dict[f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"]
-                src_att_bias = src_state_dict[f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"]
+                src_att_weight = src_state_dict[
+                    f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                ]
+                src_att_bias = src_state_dict[
+                    f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                ]
 
                 size = src_att_weight.shape[0]
                 offset = size // 3
@@ -481,8 +518,12 @@ class OriginalOneFormerCheckpointToOursConverter:
                 ] = src_att_bias[-offset:]
 
                 # let's pop them
-                src_state_dict.pop(f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.weight")
-                src_state_dict.pop(f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.bias")
+                src_state_dict.pop(
+                    f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                )
+                src_state_dict.pop(
+                    f"{src_prefix}.levels.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                )
                 # proj
 
                 renamed_keys.extend(
@@ -543,7 +584,9 @@ class OriginalOneFormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Backbone + Pixel Decoder
-    def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict, is_swin: bool):
+    def replace_pixel_module(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict, is_swin: bool
+    ):
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
@@ -561,27 +604,55 @@ class OriginalOneFormerCheckpointToOursConverter:
         def rename_keys_for_self_attn(src_prefix: str, dst_prefix: str):
             self_attn_keys = []
             self_attn_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.attention_weights", f"{dst_prefix}.attention_weights")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.attention_weights", f"{dst_prefix}.attention_weights"
+                )
             )
             self_attn_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.output_proj", f"{dst_prefix}.output_proj")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.output_proj", f"{dst_prefix}.output_proj"
+                )
             )
             self_attn_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.sampling_offsets", f"{dst_prefix}.sampling_offsets")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.sampling_offsets", f"{dst_prefix}.sampling_offsets"
+                )
             )
-            self_attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.value_proj", f"{dst_prefix}.value_proj"))
+            self_attn_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.value_proj", f"{dst_prefix}.value_proj"
+                )
+            )
 
             return self_attn_keys
 
         def rename_keys_for_encoder_layer(src_prefix: str, dst_prefix: str):
             encoder_keys = []
-            encoder_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear1", f"{dst_prefix}.fc1"))
-            encoder_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear2", f"{dst_prefix}.fc2"))
             encoder_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.norm1", f"{dst_prefix}.self_attn_layer_norm")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear1", f"{dst_prefix}.fc1"
+                )
             )
-            encoder_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm2", f"{dst_prefix}.final_layer_norm"))
-            encoder_keys.extend(rename_keys_for_self_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"))
+            encoder_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear2", f"{dst_prefix}.fc2"
+                )
+            )
+            encoder_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm1", f"{dst_prefix}.self_attn_layer_norm"
+                )
+            )
+            encoder_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm2", f"{dst_prefix}.final_layer_norm"
+                )
+            )
+            encoder_keys.extend(
+                rename_keys_for_self_attn(
+                    f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"
+                )
+            )
 
             return encoder_keys
 
@@ -605,33 +676,50 @@ class OriginalOneFormerCheckpointToOursConverter:
             for j in range(2):
                 renamed_keys.extend(
                     [
-                        (f"{src_prefix}.input_proj.{i}.{j}.weight", f"{dst_prefix}.input_projections.{i}.{j}.weight"),
-                        (f"{src_prefix}.input_proj.{i}.{j}.bias", f"{dst_prefix}.input_projections.{i}.{j}.bias"),
+                        (
+                            f"{src_prefix}.input_proj.{i}.{j}.weight",
+                            f"{dst_prefix}.input_projections.{i}.{j}.weight",
+                        ),
+                        (
+                            f"{src_prefix}.input_proj.{i}.{j}.bias",
+                            f"{dst_prefix}.input_projections.{i}.{j}.bias",
+                        ),
                     ]
                 )
 
-        renamed_keys.extend([(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")])
+        renamed_keys.extend(
+            [(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")]
+        )
 
         # layers
         for layer_idx in range(self.config.encoder_layers):
             renamed_keys.extend(
                 rename_keys_for_encoder_layer(
-                    f"{src_prefix}.transformer.encoder.layers.{layer_idx}", f"{dst_prefix}.encoder.layers.{layer_idx}"
+                    f"{src_prefix}.transformer.encoder.layers.{layer_idx}",
+                    f"{dst_prefix}.encoder.layers.{layer_idx}",
                 )
             )
 
         # proj
         renamed_keys.extend(
             [
-                (f"{src_prefix}.mask_features.weight", f"{dst_prefix}.mask_projection.weight"),
-                (f"{src_prefix}.mask_features.bias", f"{dst_prefix}.mask_projection.bias"),
+                (
+                    f"{src_prefix}.mask_features.weight",
+                    f"{dst_prefix}.mask_projection.weight",
+                ),
+                (
+                    f"{src_prefix}.mask_features.bias",
+                    f"{dst_prefix}.mask_projection.bias",
+                ),
             ]
         )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Transformer Decoder
-    def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_keys_qkv_transformer_decoder(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "transformer_module.decoder.layers"
         src_prefix: str = "sem_seg_head.predictor"
         for i in range(self.config.decoder_layers - 1):
@@ -643,14 +731,28 @@ class OriginalOneFormerCheckpointToOursConverter:
                 f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias"
             )
             # next, add query, keys and values (in that order) to the state dict
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.bias"] = in_proj_bias[:256]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.weight"] = (
+                in_proj_weight[:256, :]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.q_proj.bias"] = (
+                in_proj_bias[:256]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.weight"] = (
+                in_proj_weight[256:512, :]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.k_proj.bias"] = (
+                in_proj_bias[256:512]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.weight"] = (
+                in_proj_weight[-256:, :]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.self_attn.v_proj.bias"] = (
+                in_proj_bias[-256:]
+            )
 
-    def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_transformer_module(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "transformer_module"
         src_prefix: str = "sem_seg_head.predictor"
 
@@ -665,13 +767,21 @@ class OriginalOneFormerCheckpointToOursConverter:
                 (f"{src_prefix}.in_proj_bias", f"{dst_prefix}.in_proj_bias"),
                 (f"{src_prefix}.in_proj_weight", f"{dst_prefix}.in_proj_weight"),
             ]
-            attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
+            attn_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"
+                )
+            )
 
             return attn_keys
 
         def rename_keys_for_self_attn(src_prefix: str, dst_prefix: str):
             attn_keys = []
-            attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
+            attn_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"
+                )
+            )
 
             return attn_keys
 
@@ -679,27 +789,41 @@ class OriginalOneFormerCheckpointToOursConverter:
             query_transformer_layer_keys = []
 
             query_transformer_layer_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.linear1", f"{dst_prefix}.linear1")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear1", f"{dst_prefix}.linear1"
+                )
             )
             query_transformer_layer_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.linear2", f"{dst_prefix}.linear2")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear2", f"{dst_prefix}.linear2"
+                )
             )
             query_transformer_layer_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.norm1", f"{dst_prefix}.norm1")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm1", f"{dst_prefix}.norm1"
+                )
             )
             query_transformer_layer_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.norm2", f"{dst_prefix}.norm2")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm2", f"{dst_prefix}.norm2"
+                )
             )
             query_transformer_layer_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.norm3", f"{dst_prefix}.norm3")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm3", f"{dst_prefix}.norm3"
+                )
             )
 
             query_transformer_layer_keys.extend(
-                rename_keys_for_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn")
+                rename_keys_for_attn(
+                    f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"
+                )
             )
 
             query_transformer_layer_keys.extend(
-                rename_keys_for_attn(f"{src_prefix}.multihead_attn", f"{dst_prefix}.multihead_attn")
+                rename_keys_for_attn(
+                    f"{src_prefix}.multihead_attn", f"{dst_prefix}.multihead_attn"
+                )
             )
 
             return query_transformer_layer_keys
@@ -707,9 +831,13 @@ class OriginalOneFormerCheckpointToOursConverter:
         def rename_keys_for_cross_attn_layer(src_prefix: str, dst_prefix: str):
             cross_attn_layer_keys = []
 
-            cross_attn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
             cross_attn_layer_keys.extend(
-                rename_keys_for_attn(f"{src_prefix}.multihead_attn", f"{dst_prefix}.multihead_attn")
+                rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm")
+            )
+            cross_attn_layer_keys.extend(
+                rename_keys_for_attn(
+                    f"{src_prefix}.multihead_attn", f"{dst_prefix}.multihead_attn"
+                )
             )
 
             return cross_attn_layer_keys
@@ -717,9 +845,13 @@ class OriginalOneFormerCheckpointToOursConverter:
         def rename_keys_for_self_attn_layer(src_prefix: str, dst_prefix: str):
             self_attn_layer_keys = []
 
-            self_attn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
             self_attn_layer_keys.extend(
-                rename_keys_for_self_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn")
+                rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm")
+            )
+            self_attn_layer_keys.extend(
+                rename_keys_for_self_attn(
+                    f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"
+                )
             )
 
             return self_attn_layer_keys
@@ -727,66 +859,93 @@ class OriginalOneFormerCheckpointToOursConverter:
         def rename_keys_for_ffn_layer(src_prefix: str, dst_prefix: str):
             ffn_layer_keys = []
 
-            ffn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear1", f"{dst_prefix}.linear1"))
-            ffn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear2", f"{dst_prefix}.linear2"))
-            ffn_layer_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm"))
+            ffn_layer_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear1", f"{dst_prefix}.linear1"
+                )
+            )
+            ffn_layer_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear2", f"{dst_prefix}.linear2"
+                )
+            )
+            ffn_layer_keys.extend(
+                rename_keys_for_weight_bias(f"{src_prefix}.norm", f"{dst_prefix}.norm")
+            )
 
             return ffn_layer_keys
 
-        def rename_keys_for_transformer_decoder_layer(src_prefix: str, dst_prefix: str, idx: int):
+        def rename_keys_for_transformer_decoder_layer(
+            src_prefix: str, dst_prefix: str, idx: int
+        ):
             transformer_decoder_layer_keys = []
 
             transformer_decoder_layer_keys.extend(
                 rename_keys_for_cross_attn_layer(
-                    f"{src_prefix}.transformer_cross_attention_layers.{idx}", f"{dst_prefix}.{idx}.cross_attn"
+                    f"{src_prefix}.transformer_cross_attention_layers.{idx}",
+                    f"{dst_prefix}.{idx}.cross_attn",
                 )
             )
 
             transformer_decoder_layer_keys.extend(
                 rename_keys_for_self_attn_layer(
-                    f"{src_prefix}.transformer_self_attention_layers.{idx}", f"{dst_prefix}.{idx}.self_attn"
+                    f"{src_prefix}.transformer_self_attention_layers.{idx}",
+                    f"{dst_prefix}.{idx}.self_attn",
                 )
             )
 
             transformer_decoder_layer_keys.extend(
-                rename_keys_for_ffn_layer(f"{src_prefix}.transformer_ffn_layers.{idx}", f"{dst_prefix}.{idx}.ffn")
+                rename_keys_for_ffn_layer(
+                    f"{src_prefix}.transformer_ffn_layers.{idx}",
+                    f"{dst_prefix}.{idx}.ffn",
+                )
             )
 
             return transformer_decoder_layer_keys
 
         # positional embedding for object queries
         renamed_keys = [
-            (f"{src_prefix}.query_embed.weight", f"{dst_prefix}.queries_embedder.weight"),
+            (
+                f"{src_prefix}.query_embed.weight",
+                f"{dst_prefix}.queries_embedder.weight",
+            ),
             (f"{src_prefix}.level_embed.weight", f"{dst_prefix}.level_embed.weight"),
         ]
 
         # norm
         renamed_keys.extend(
-            rename_keys_for_weight_bias(f"{src_prefix}.decoder_norm", f"{dst_prefix}.decoder.decoder_norm")
+            rename_keys_for_weight_bias(
+                f"{src_prefix}.decoder_norm", f"{dst_prefix}.decoder.decoder_norm"
+            )
         )
 
         # proj
         renamed_keys.extend(
             rename_keys_for_weight_bias(
-                f"{src_prefix}.class_input_proj", f"{dst_prefix}.decoder.query_input_projection"
+                f"{src_prefix}.class_input_proj",
+                f"{dst_prefix}.decoder.query_input_projection",
             )
         )
 
         renamed_keys.extend(
-            rename_keys_for_weight_bias(f"{src_prefix}.class_embed", f"{dst_prefix}.decoder.class_embed")
+            rename_keys_for_weight_bias(
+                f"{src_prefix}.class_embed", f"{dst_prefix}.decoder.class_embed"
+            )
         )
 
         for i in range(3):
             renamed_keys.extend(
                 rename_keys_for_weight_bias(
-                    f"{src_prefix}.mask_embed.layers.{i}", f"{dst_prefix}.decoder.mask_embed.layers.{i}.0"
+                    f"{src_prefix}.mask_embed.layers.{i}",
+                    f"{dst_prefix}.decoder.mask_embed.layers.{i}.0",
                 )
             )
 
         # norm
         renamed_keys.extend(
             rename_keys_for_weight_bias(
-                f"{src_prefix}.class_transformer.decoder.norm", f"{dst_prefix}.decoder.query_transformer.decoder.norm"
+                f"{src_prefix}.class_transformer.decoder.norm",
+                f"{dst_prefix}.decoder.query_transformer.decoder.norm",
             )
         )
 
@@ -826,12 +985,16 @@ class OriginalOneFormerCheckpointToOursConverter:
 
         for i in range(2):
             renamed_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.layers.{i}", f"{dst_prefix}.task_mlp.layers.{i}.0")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.layers.{i}", f"{dst_prefix}.task_mlp.layers.{i}.0"
+                )
             )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def replace_text_projector(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_text_projector(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "text_mapper.text_projector"
         src_prefix: str = "text_projector"
 
@@ -844,7 +1007,11 @@ class OriginalOneFormerCheckpointToOursConverter:
         renamed_keys = []
 
         for i in range(self.config.text_encoder_config["text_encoder_proj_layers"]):
-            renamed_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.layers.{i}", f"{dst_prefix}.{i}.0"))
+            renamed_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.layers.{i}", f"{dst_prefix}.{i}.0"
+                )
+            )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
@@ -865,18 +1032,40 @@ class OriginalOneFormerCheckpointToOursConverter:
                 (f"{src_prefix}.in_proj_bias", f"{dst_prefix}.in_proj_bias"),
                 (f"{src_prefix}.in_proj_weight", f"{dst_prefix}.in_proj_weight"),
             ]
-            attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"))
+            attn_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.out_proj", f"{dst_prefix}.out_proj"
+                )
+            )
 
             return attn_keys
 
         def rename_keys_for_layer(src_prefix: str, dst_prefix: str):
             resblock_keys = []
 
-            resblock_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.mlp.c_fc", f"{dst_prefix}.mlp.fc1"))
-            resblock_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.mlp.c_proj", f"{dst_prefix}.mlp.fc2"))
-            resblock_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.ln_1", f"{dst_prefix}.layer_norm1"))
-            resblock_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.ln_2", f"{dst_prefix}.layer_norm2"))
-            resblock_keys.extend(rename_keys_for_attn(f"{src_prefix}.attn", f"{dst_prefix}.self_attn"))
+            resblock_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.mlp.c_fc", f"{dst_prefix}.mlp.fc1"
+                )
+            )
+            resblock_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.mlp.c_proj", f"{dst_prefix}.mlp.fc2"
+                )
+            )
+            resblock_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.ln_1", f"{dst_prefix}.layer_norm1"
+                )
+            )
+            resblock_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.ln_2", f"{dst_prefix}.layer_norm2"
+                )
+            )
+            resblock_keys.extend(
+                rename_keys_for_attn(f"{src_prefix}.attn", f"{dst_prefix}.self_attn")
+            )
 
             return resblock_keys
 
@@ -886,17 +1075,28 @@ class OriginalOneFormerCheckpointToOursConverter:
 
         renamed_keys.extend(
             [
-                (f"{src_prefix}.positional_embedding", f"{dst_prefix}.positional_embedding"),
-                (f"{src_prefix}.token_embedding.weight", f"{dst_prefix}.token_embedding.weight"),
+                (
+                    f"{src_prefix}.positional_embedding",
+                    f"{dst_prefix}.positional_embedding",
+                ),
+                (
+                    f"{src_prefix}.token_embedding.weight",
+                    f"{dst_prefix}.token_embedding.weight",
+                ),
             ]
         )
 
-        renamed_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.ln_final", f"{dst_prefix}.ln_final"))
+        renamed_keys.extend(
+            rename_keys_for_weight_bias(
+                f"{src_prefix}.ln_final", f"{dst_prefix}.ln_final"
+            )
+        )
 
         for i in range(self.config.text_encoder_config["text_encoder_num_layers"]):
             renamed_keys.extend(
                 rename_keys_for_layer(
-                    f"{src_prefix}.transformer.resblocks.{i}", f"{dst_prefix}.transformer.layers.{i}"
+                    f"{src_prefix}.transformer.resblocks.{i}",
+                    f"{dst_prefix}.transformer.layers.{i}",
                 )
             )
 
@@ -921,7 +1121,9 @@ class OriginalOneFormerCheckpointToOursConverter:
         return oneformer
 
     @staticmethod
-    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[Tuple[object, Path, Path]]:
+    def using_dirs(
+        checkpoints_dir: Path, config_dir: Path
+    ) -> Iterator[Tuple[object, Path, Path]]:
         checkpoints: List[Path] = checkpoints_dir.glob("**/*.pth")
 
         for checkpoint in checkpoints:
@@ -932,7 +1134,9 @@ class OriginalOneFormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def post_process_sem_seg_output(outputs: OneFormerForUniversalSegmentationOutput, target_size: Tuple[int, int]):
+def post_process_sem_seg_output(
+    outputs: OneFormerForUniversalSegmentationOutput, target_size: Tuple[int, int]
+):
     # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
     class_queries_logits = outputs.class_queries_logits
     # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
@@ -968,7 +1172,9 @@ def test(
         if text_list is None:
             raise ValueError("tokens cannot be None.")
 
-        tokens = tokenizer(text_list, padding="max_length", max_length=max_length, truncation=True)
+        tokens = tokenizer(
+            text_list, padding="max_length", max_length=max_length, truncation=True
+        )
 
         attention_masks, input_ids = tokens["attention_mask"], tokens["input_ids"]
 
@@ -1005,16 +1211,21 @@ def test(
 
         original_model_backbone_features = original_model.backbone(x.clone())
 
-        our_model_output: OneFormerModelOutput = our_model.model(x.clone(), task_token, output_hidden_states=True)
+        our_model_output: OneFormerModelOutput = our_model.model(
+            x.clone(), task_token, output_hidden_states=True
+        )
 
         for original_model_feature, our_model_feature in zip(
-            original_model_backbone_features.values(), our_model_output.encoder_hidden_states
+            original_model_backbone_features.values(),
+            our_model_output.encoder_hidden_states,
         ):
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=3e-3
             ), "The backbone features are not the same."
-        mask_features, _, multi_scale_features, _, _ = original_model.sem_seg_head.pixel_decoder.forward_features(
-            original_model_backbone_features
+        mask_features, _, multi_scale_features, _, _ = (
+            original_model.sem_seg_head.pixel_decoder.forward_features(
+                original_model_backbone_features
+            )
         )
 
         original_pixel_decoder_features = []
@@ -1023,7 +1234,8 @@ def test(
             original_pixel_decoder_features.append(multi_scale_features[i])
 
         for original_model_feature, our_model_feature in zip(
-            original_pixel_decoder_features, our_model_output.pixel_decoder_hidden_states
+            original_pixel_decoder_features,
+            our_model_output.pixel_decoder_hidden_states,
         ):
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=3e-4
@@ -1039,7 +1251,9 @@ def test(
         y = (tr_complete(im) * 255.0).to(torch.int).float()
 
         # let's test the full model
-        original_model_out = original_model([{"image": y.clone(), "task": "The task is semantic"}])
+        original_model_out = original_model(
+            [{"image": y.clone(), "task": "The task is semantic"}]
+        )
 
         original_segmentation = original_model_out[0]["sem_seg"]
 
@@ -1047,7 +1261,9 @@ def test(
             x.clone(), task_token, output_hidden_states=True
         )
 
-        our_segmentation = post_process_sem_seg_output(our_model_out, target_size=(640, 640))[0]
+        our_segmentation = post_process_sem_seg_output(
+            our_model_out, target_size=(640, 640)
+        )[0]
 
         assert torch.allclose(
             original_segmentation, our_segmentation, atol=1e-3
@@ -1132,17 +1348,23 @@ if __name__ == "__main__":
     # append the path to the parents to oneformer dir
     sys.path.append(str(oneformer_dir.parent))
     # and import what's needed
-    from OneFormer.oneformer import add_common_config, add_dinat_config, add_oneformer_config, add_swin_config
-    from OneFormer.oneformer.oneformer_model import OneFormer as OriginalOneFormer
+    from OneFormer.oneformer import (add_common_config, add_dinat_config,
+                                     add_oneformer_config, add_swin_config)
+    from OneFormer.oneformer.oneformer_model import \
+        OneFormer as OriginalOneFormer
 
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
 
-    for config_file, checkpoint_file in OriginalOneFormerCheckpointToOursConverter.using_dirs(
+    for (
+        config_file,
+        checkpoint_file,
+    ) in OriginalOneFormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
         processor = OriginalOneFormerConfigToProcessorConverter()(
-            setup_cfg(Args(config_file=config_file)), os.path.join("shi-labs", config_file.stem)
+            setup_cfg(Args(config_file=config_file)),
+            os.path.join("shi-labs", config_file.stem),
         )
 
         original_config = setup_cfg(Args(config_file=config_file))
@@ -1154,7 +1376,9 @@ if __name__ == "__main__":
 
         is_swin = "swin" in config_file.stem
 
-        config: OneFormerConfig = OriginalOneFormerConfigToOursConverter()(original_config, is_swin)
+        config: OneFormerConfig = OriginalOneFormerConfigToOursConverter()(
+            original_config, is_swin
+        )
 
         oneformer = OneFormerModel(config=config).eval()
 
@@ -1162,7 +1386,9 @@ if __name__ == "__main__":
 
         oneformer = converter.convert(oneformer, is_swin)
 
-        oneformer_for_universal_segmentation = OneFormerForUniversalSegmentation(config=config).eval()
+        oneformer_for_universal_segmentation = OneFormerForUniversalSegmentation(
+            config=config
+        ).eval()
 
         oneformer_for_universal_segmentation.model = oneformer
 
@@ -1177,7 +1403,9 @@ if __name__ == "__main__":
         logger.info(f"🪄 Saving {model_name}")
 
         processor.save_pretrained(save_directory / model_name)
-        oneformer_for_universal_segmentation.save_pretrained(save_directory / model_name)
+        oneformer_for_universal_segmentation.save_pretrained(
+            save_directory / model_name
+        )
 
         processor.push_to_hub(
             repo_id=os.path.join("shi-labs", config_file.stem),

@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -192,11 +191,18 @@ class GitConfig(PretrainedConfig):
         num_image_with_embedding=None,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the GitVisionConfig with default values.")
+            logger.info(
+                "vision_config is None. initializing the GitVisionConfig with default values."
+            )
 
         self.vision_config = GitVisionConfig(**vision_config)
         self.vocab_size = vocab_size

@@ -28,28 +28,18 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-    Wav2Vec2BaseModelOutput,
-    XVectorOutput,
-)
+from ...modeling_outputs import (BaseModelOutput, CausalLMOutput,
+                                 SequenceClassifierOutput,
+                                 TokenClassifierOutput,
+                                 Wav2Vec2BaseModelOutput, XVectorOutput)
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-    is_peft_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (ModelOutput, add_code_sample_docstrings,
+                      add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_flash_attn_2_available,
+                      is_flash_attn_greater_or_equal_2_10, is_peft_available,
+                      logging, replace_return_docstrings)
 from .configuration_unispeech_sat import UniSpeechSatConfig
-
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -208,7 +198,11 @@ def _compute_mask_indices(
             dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32)
+                * dummy_mask_idx,
+            ]
         )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
@@ -218,18 +212,22 @@ def _compute_mask_indices(
     spec_aug_mask_idxs = np.broadcast_to(
         spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(
+        batch_size, max_num_masked_span * mask_length
+    )
 
     # add offset to the starting indexes so that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
+    offsets = np.broadcast_to(
+        offsets, (batch_size, max_num_masked_span, mask_length)
+    ).reshape(batch_size, max_num_masked_span * mask_length)
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # ensure that we cannot have indices larger than sequence_length
     if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = (
+            sequence_length - 1
+        )
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -303,7 +301,9 @@ class UniSpeechSatGroupNormConvLayer(nn.Module):
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
+        self.layer_norm = nn.GroupNorm(
+            num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
@@ -384,7 +384,8 @@ class UniSpeechSatFeatureEncoder(nn.Module):
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [
-                UniSpeechSatLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+                UniSpeechSatLayerNormConvLayer(config, layer_id=i)
+                for i in range(config.num_feat_extract_layers)
             ]
         else:
             raise ValueError(
@@ -481,7 +482,11 @@ class UniSpeechSatAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -558,7 +563,10 @@ class UniSpeechSatAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -569,7 +577,9 @@ class UniSpeechSatAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -577,12 +587,18 @@ class UniSpeechSatAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -634,7 +650,9 @@ class UniSpeechSatFlashAttention2(UniSpeechSatAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # UniSpeechSatFlashAttention2 attention does not support output_attentions
         if output_attentions:
-            raise ValueError("UniSpeechSatFlashAttention2 attention does not support output_attentions")
+            raise ValueError(
+                "UniSpeechSatFlashAttention2 attention does not support output_attentions"
+            )
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -664,8 +682,12 @@ class UniSpeechSatFlashAttention2(UniSpeechSatAttention):
             # reuse k, v, self_attention
             key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0].transpose(1, 2), key_states], dim=1)
-            value_states = torch.cat([past_key_value[1].transpose(1, 2), value_states], dim=1)
+            key_states = torch.cat(
+                [past_key_value[0].transpose(1, 2), key_states], dim=1
+            )
+            value_states = torch.cat(
+                [past_key_value[1].transpose(1, 2), value_states], dim=1
+            )
         else:
             # self_attention
             key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
@@ -808,7 +830,9 @@ class UniSpeechSatSdpaAttention(UniSpeechSatAttention):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
-        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+        is_causal = (
+            True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+        )
 
         # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
         # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
@@ -851,7 +875,9 @@ class UniSpeechSatFeedForward(nn.Module):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_dense = nn.Linear(
+            config.hidden_size, config.intermediate_size
+        )
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -884,12 +910,16 @@ class UniSpeechSatEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = UniSpeechSatFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
@@ -945,7 +975,9 @@ class UniSpeechSatEncoderLayerStableLayerNorm(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = UniSpeechSatFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
         if getattr(config, "adapter_attn_dim", None) is not None:
             self.adapter_layer = UniSpeechSatAttnAdapterLayer(config)
@@ -961,11 +993,15 @@ class UniSpeechSatEncoderLayerStableLayerNorm(nn.Module):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+        hidden_states = hidden_states + self.feed_forward(
+            self.final_layer_norm(hidden_states)
+        )
 
         if self.adapter_layer is not None:
             hidden_states = hidden_states + self.adapter_layer(hidden_states)
@@ -986,7 +1022,9 @@ class UniSpeechSatEncoder(nn.Module):
         self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
@@ -1003,17 +1041,28 @@ class UniSpeechSatEncoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(
+                1, 1, hidden_states.shape[2]
+            )
             hidden_states[~expand_attention_mask] = 0
             if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+                attention_mask = (
+                    attention_mask
+                    if (attention_mask is not None and 0 in attention_mask)
+                    else None
+                )
             else:
                 # extend attention_mask
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(
+                    dtype=hidden_states.dtype
+                )
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
                 attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                    attention_mask.shape[0],
+                    1,
+                    attention_mask.shape[-1],
+                    attention_mask.shape[-1],
                 )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -1030,7 +1079,11 @@ class UniSpeechSatEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = (
+                True
+                if self.training and (dropout_probability < self.config.layerdrop)
+                else False
+            )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -1042,7 +1095,9 @@ class UniSpeechSatEncoder(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
 
@@ -1056,7 +1111,11 @@ class UniSpeechSatEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1073,7 +1132,10 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList(
-            [UniSpeechSatEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+            [
+                UniSpeechSatEncoderLayerStableLayerNorm(config)
+                for _ in range(config.num_hidden_layers)
+            ]
         )
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -1091,17 +1153,30 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens are not attended to
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states = hidden_states * expand_attention_mask.to(dtype=hidden_states.dtype)
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(
+                1, 1, hidden_states.shape[2]
+            )
+            hidden_states = hidden_states * expand_attention_mask.to(
+                dtype=hidden_states.dtype
+            )
             if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+                attention_mask = (
+                    attention_mask
+                    if (attention_mask is not None and 0 in attention_mask)
+                    else None
+                )
             else:
                 # extend attention_mask
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(
+                    dtype=hidden_states.dtype
+                )
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
                 attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                    attention_mask.shape[0],
+                    1,
+                    attention_mask.shape[-1],
+                    attention_mask.shape[-1],
                 )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -1117,7 +1192,11 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = (
+                True
+                if self.training and (dropout_probability < self.config.layerdrop)
+                else False
+            )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
@@ -1130,7 +1209,9 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
 
@@ -1146,7 +1227,11 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1173,9 +1258,15 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
 
         # storage for codebook variables (codewords)
         self.codevectors = nn.Parameter(
-            torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
+            torch.FloatTensor(
+                1,
+                self.num_groups * self.num_vars,
+                config.codevector_dim // self.num_groups,
+            )
         )
-        self.weight_proj = nn.Linear(config.hidden_size, self.num_groups * self.num_vars)
+        self.weight_proj = nn.Linear(
+            config.hidden_size, self.num_groups * self.num_vars
+        )
 
         # can be decayed for training
         self.temperature = 2
@@ -1183,7 +1274,9 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
     @staticmethod
     def _compute_perplexity(probs, mask=None):
         marginal_probs = probs.mean(dim=0)
-        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
+        perplexity = torch.exp(
+            -torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)
+        ).sum()
         return perplexity
 
     def forward(self, hidden_states):
@@ -1191,7 +1284,9 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
 
         # project to codevector dim
         hidden_states = self.weight_proj(hidden_states)
-        hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
+        hidden_states = hidden_states.view(
+            batch_size * sequence_length * self.num_groups, -1
+        )
 
         if self.training:
             # sample code vector probs via gumbel in differentiateable way
@@ -1201,7 +1296,10 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
-                hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1
+                hidden_states.view(
+                    batch_size * sequence_length, self.num_groups, -1
+                ).float(),
+                dim=-1,
             )
             perplexity = self._compute_perplexity(codevector_soft_dist)
         else:
@@ -1211,14 +1309,18 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
             codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
             )
-            codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
+            codevector_probs = codevector_probs.view(
+                batch_size * sequence_length, self.num_groups, -1
+            )
 
             perplexity = self._compute_perplexity(codevector_probs)
 
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        codevectors = codevectors_per_group.view(
+            batch_size * sequence_length, self.num_groups, self.num_vars, -1
+        )
         codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
@@ -1248,7 +1350,8 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             nn.init.normal_(
                 module.conv.weight,
                 mean=0,
-                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+                std=2
+                * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
         elif isinstance(module, UniSpeechSatFeatureProjection):
@@ -1267,10 +1370,14 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                k = math.sqrt(
+                    module.groups / (module.in_channels * module.kernel_size[0])
+                )
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int]
+    ):
         """
         Computes the output length of the convolutional layers
         """
@@ -1278,25 +1385,40 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            return (
+                torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            )
 
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+        for kernel_size, stride in zip(
+            self.config.conv_kernel, self.config.conv_stride
+        ):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
         return input_lengths
 
-    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor
+    ):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(
+            torch.long
+        )
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+            (batch_size, feature_vector_length),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask[
+            (
+                torch.arange(attention_mask.shape[0], device=attention_mask.device),
+                output_lengths - 1,
+            )
+        ] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
@@ -1370,7 +1492,9 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         self.feature_extractor = UniSpeechSatFeatureEncoder(config)
         self.feature_projection = UniSpeechSatFeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
+        self.masked_spec_embed = nn.Parameter(
+            torch.Tensor(config.hidden_size).uniform_()
+        )
 
         if config.do_stable_layer_norm:
             self.encoder = UniSpeechSatEncoderStableLayerNorm(config)
@@ -1401,7 +1525,9 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
@@ -1410,8 +1536,12 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            mask_time_indices = torch.tensor(
+                mask_time_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
@@ -1421,8 +1551,12 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(
+                mask_feature_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            mask_feature_indices = mask_feature_indices[:, None].expand(
+                -1, sequence_length, -1
+            )
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
@@ -1444,22 +1578,34 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask
+            )
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
-            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+            hidden_states,
+            mask_time_indices=mask_time_indices,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(
@@ -1483,7 +1629,10 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
         )
 
 
-@add_start_docstrings("""UniSpeechSat Model with a quantizer and `VQ` head on top.""", UNISPEECH_SAT_START_DOCSTRING)
+@add_start_docstrings(
+    """UniSpeechSat Model with a quantizer and `VQ` head on top.""",
+    UNISPEECH_SAT_START_DOCSTRING,
+)
 class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
     def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
@@ -1497,10 +1646,14 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         self.dropout = nn.Dropout(config.final_dropout)
 
         self.speaker_proj = nn.Linear(config.hidden_size, config.codevector_dim)
-        self.label_embeddings_concat = nn.Parameter(torch.FloatTensor(config.num_clusters, config.codevector_dim))
+        self.label_embeddings_concat = nn.Parameter(
+            torch.FloatTensor(config.num_clusters, config.codevector_dim)
+        )
         self.label_embeddings_concat.data.zero_()
 
-        self.layer_norm_for_extract = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm_for_extract = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         if self.config.do_stable_layer_norm:
             self.layer_norm_for_extract.requires_grad = False
 
@@ -1545,7 +1698,9 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1)
+        logits = torch.cosine_similarity(
+            predicted_features.float(), target_features.float(), dim=-1
+        )
         logits = logits.type_as(target_features)
 
         # apply temperature
@@ -1553,7 +1708,9 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         return logits
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=UniSpeechSatForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=UniSpeechSatForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1577,7 +1734,9 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> # TODO: Add full pretraining example
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.unispeech_sat(
             input_values,
@@ -1607,8 +1766,19 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         #        logits = quantized_features
         if not return_dict:
             if loss is not None:
-                return (loss, logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+                return (
+                    loss,
+                    logits,
+                    transformer_features,
+                    quantized_features,
+                    codevector_perplexity,
+                ) + outputs[2:]
+            return (
+                logits,
+                transformer_features,
+                quantized_features,
+                codevector_perplexity,
+            ) + outputs[2:]
 
         return UniSpeechSatForPreTrainingOutput(
             loss=loss,
@@ -1649,7 +1819,9 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
-            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+            config.output_hidden_size
+            if hasattr(config, "add_adapter") and config.add_adapter
+            else config.hidden_size
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
@@ -1670,9 +1842,17 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
         # ok to repurpose this function here.
         target_lang = self.target_lang
 
-        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
-            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
-        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
+        if (
+            target_lang is not None
+            and getattr(self.config, "adapter_attn_dim", None) is None
+        ):
+            raise ValueError(
+                f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined."
+            )
+        elif (
+            target_lang is None
+            and getattr(self.config, "adapter_attn_dim", None) is not None
+        ):
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
@@ -1728,10 +1908,14 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None and labels.max() >= self.config.vocab_size:
-            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+            raise ValueError(
+                f"Label values must be <= vocab_size: {self.config.vocab_size}"
+            )
 
         outputs = self.unispeech_sat(
             input_values,
@@ -1750,9 +1934,13 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
         if labels is not None:
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+                attention_mask
+                if attention_mask is not None
+                else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self._get_feat_extract_output_lengths(
+                attention_mask.sum(-1)
+            ).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -1761,7 +1949,9 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             flattened_targets = labels.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            log_probs = nn.functional.log_softmax(
+                logits, dim=-1, dtype=torch.float32
+            ).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = nn.functional.ctc_loss(
@@ -1779,7 +1969,10 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1799,7 +1992,9 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
                 "Sequence classification does not support the use of UniSpeechSat adapters (config.add_adapter=True)"
             )
         self.unispeech_sat = UniSpeechSatModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        num_layers = (
+            config.num_hidden_layers + 1
+        )  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
@@ -1862,8 +2057,12 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_hidden_states = (
+            True if self.config.use_weighted_layer_sum else output_hidden_states
+        )
 
         outputs = self.unispeech_sat(
             input_values,
@@ -1885,10 +2084,16 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            padding_mask = self._get_feature_vector_attention_mask(
+                hidden_states.shape[1], attention_mask
+            )
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(
+                1, 1, hidden_states.shape[2]
+            )
             hidden_states[~expand_padding_mask] = 0.0
-            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
+            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(
+                -1, 1
+            )
 
         logits = self.classifier(pooled_output)
 
@@ -1925,7 +2130,9 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
                 "Audio frame classification does not support the use of UniSpeechSat adapters (config.add_adapter=True)"
             )
         self.unispeech_sat = UniSpeechSatModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        num_layers = (
+            config.num_hidden_layers + 1
+        )  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
@@ -1984,8 +2191,12 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_hidden_states = (
+            True if self.config.use_weighted_layer_sum else output_hidden_states
+        )
 
         outputs = self.unispeech_sat(
             input_values,
@@ -2008,7 +2219,10 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
+            loss = loss_fct(
+                logits.view(-1, self.num_labels),
+                torch.argmax(labels.view(-1, self.num_labels), axis=1),
+            )
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
@@ -2029,7 +2243,9 @@ class AMSoftmaxLoss(nn.Module):
         self.scale = scale
         self.margin = margin
         self.num_labels = num_labels
-        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.weight = nn.Parameter(
+            torch.randn(input_dim, num_labels), requires_grad=True
+        )
         self.loss = nn.CrossEntropyLoss()
 
     def forward(self, hidden_states, labels):
@@ -2050,7 +2266,9 @@ class AMSoftmaxLoss(nn.Module):
 class TDNNLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
+        self.in_conv_dim = (
+            config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
+        )
         self.out_conv_dim = config.tdnn_dim[layer_id]
         self.kernel_size = config.tdnn_kernel[layer_id]
         self.dilation = config.tdnn_dilation[layer_id]
@@ -2070,8 +2288,12 @@ class TDNNLayer(nn.Module):
 
         # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
         hidden_states = hidden_states.transpose(1, 2)
-        weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
-        hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
+        weight = self.kernel.weight.view(
+            self.out_conv_dim, self.kernel_size, self.in_conv_dim
+        ).transpose(1, 2)
+        hidden_states = nn.functional.conv1d(
+            hidden_states, weight, self.kernel.bias, dilation=self.dilation
+        )
         hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.activation(hidden_states)
@@ -2090,7 +2312,9 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
         super().__init__(config)
 
         self.unispeech_sat = UniSpeechSatModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        num_layers = (
+            config.num_hidden_layers + 1
+        )  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.projector = nn.Linear(config.hidden_size, config.tdnn_dim[0])
@@ -2098,8 +2322,12 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
         tdnn_layers = [TDNNLayer(config, i) for i in range(len(config.tdnn_dim))]
         self.tdnn = nn.ModuleList(tdnn_layers)
 
-        self.feature_extractor = nn.Linear(config.tdnn_dim[-1] * 2, config.xvector_output_dim)
-        self.classifier = nn.Linear(config.xvector_output_dim, config.xvector_output_dim)
+        self.feature_extractor = nn.Linear(
+            config.tdnn_dim[-1] * 2, config.xvector_output_dim
+        )
+        self.classifier = nn.Linear(
+            config.xvector_output_dim, config.xvector_output_dim
+        )
 
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
@@ -2171,8 +2399,12 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_hidden_states = (
+            True if self.config.use_weighted_layer_sum else output_hidden_states
+        )
 
         outputs = self.unispeech_sat(
             input_values,
@@ -2200,8 +2432,12 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
             mean_features = hidden_states.mean(dim=1)
             std_features = hidden_states.std(dim=1)
         else:
-            feat_extract_output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=1))
-            tdnn_output_lengths = self._get_tdnn_output_lengths(feat_extract_output_lengths)
+            feat_extract_output_lengths = self._get_feat_extract_output_lengths(
+                attention_mask.sum(dim=1)
+            )
+            tdnn_output_lengths = self._get_tdnn_output_lengths(
+                feat_extract_output_lengths
+            )
             mean_features = []
             std_features = []
             for i, length in enumerate(tdnn_output_lengths):
@@ -2219,7 +2455,9 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
             loss = self.objective(logits, labels)
 
         if not return_dict:
-            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
+            output = (logits, output_embeddings) + outputs[
+                _HIDDEN_STATES_START_POSITION:
+            ]
             return ((loss,) + output) if loss is not None else output
 
         return XVectorOutput(

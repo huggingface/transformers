@@ -18,17 +18,10 @@ import torch
 from huggingface_hub import file_exists, hf_hub_download, snapshot_download
 from safetensors import safe_open
 
-from transformers import (
-    AddedToken,
-    AutoConfig,
-    AutoImageProcessor,
-    AutoTokenizer,
-    LlavaConfig,
-    LlavaForConditionalGeneration,
-    LlavaProcessor,
-    SiglipVisionConfig,
-)
-
+from transformers import (AddedToken, AutoConfig, AutoImageProcessor,
+                          AutoTokenizer, LlavaConfig,
+                          LlavaForConditionalGeneration, LlavaProcessor,
+                          SiglipVisionConfig)
 
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/llava/convert_llava_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/llava-v1.5-7b-conv --old_state_dict_id liuhaotian/llava-v1.5-7b
@@ -63,7 +56,9 @@ KEYS_TO_MODIFY_MAPPING = {
 
 
 def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+    directory_path = snapshot_download(
+        repo_id=model_id, allow_patterns=["*.safetensors"]
+    )
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -74,7 +69,9 @@ def load_original_state_dict(model_id):
 
     # tied wieghts so lm.head is not saved. Let's clone to load state dict
     if "lm_head.weight" not in original_state_dict:
-        original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
+        original_state_dict["lm_head.weight"] = original_state_dict[
+            "model.embed_tokens.weight"
+        ].clone()
 
     if "model.image_newline" in original_state_dict:
         # not used in the original implementation because "merge_type=flat"
@@ -97,12 +94,16 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
-def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
+def convert_llava_llama_to_hf(
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id
+):
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_tokens(
+        AddedToken("<image>", special=True, normalized=False), special_tokens=True
+    )
     if "Qwen" not in text_model_id:  # qwen already has a pad token
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
@@ -154,7 +155,9 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mu, covariance_matrix=1e-5 * sigma
+    )
 
     # We add an image token so we resize the model and pad to 64 for performance reasons
     pad_shape = 64
@@ -162,12 +165,26 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
         tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.model.embed_tokens.weight.data[
+                        vocab_size:
+                    ].shape[0]
+                )
+            )
         ),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.lm_head.weight.data[vocab_size:].shape[0]
+                )
+            )
+        ),
         dim=0,
     )
 
@@ -197,7 +214,12 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    convert_llava_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
+    convert_llava_llama_to_hf(
+        args.text_model_id,
+        args.vision_model_id,
+        args.output_hub_path,
+        args.old_state_dict_id,
+    )
 
 
 if __name__ == "__main__":

@@ -20,8 +20,8 @@ from typing import Callable, List, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-
+from ...utils.backbone_utils import (
+    BackboneConfigMixin, get_aligned_output_features_output_indices)
 
 logger = logging.get_logger(__name__)
 
@@ -127,7 +127,9 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        image_size = (
+            (image_size, image_size) if isinstance(image_size, int) else image_size
+        )
 
         self.image_size = image_size
         self.num_channels = num_channels
@@ -148,8 +150,12 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.linear_attention = linear_attention
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        self._out_features, self._out_indices = (
+            get_aligned_output_features_output_indices(
+                out_features=out_features,
+                out_indices=out_indices,
+                stage_names=self.stage_names,
+            )
         )
 
 

@@ -17,11 +17,11 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
+from ...audio_utils import (mel_filter_bank, optimal_fft_length, spectrogram,
+                            window_function)
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -154,7 +154,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             self.n_fft = self.filter_length
         self.n_freqs = (self.n_fft // 2) + 1
 
-        self.window = window_function(window_length=self.win_length, name=self.win_function, periodic=True)
+        self.window = window_function(
+            window_length=self.win_length, name=self.win_function, periodic=True
+        )
 
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=self.n_freqs,
@@ -175,10 +177,19 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.pad_end_length = pad_end_length
 
     def normalize(self, spectrogram):
-        return 2 * ((spectrogram - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
+        return (
+            2
+            * (
+                (spectrogram - self.normalize_min)
+                / (self.normalize_max - self.normalize_min)
+            )
+            - 1
+        )
 
     def denormalize(self, spectrogram):
-        return self.normalize_min + (self.normalize_max - self.normalize_min) * ((spectrogram + 1) / 2)
+        return self.normalize_min + (self.normalize_max - self.normalize_min) * (
+            (spectrogram + 1) / 2
+        )
 
     def mel_spectrogram(self, waveform: np.ndarray) -> np.ndarray:
         """
@@ -196,7 +207,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         # See https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/utils/stft.py#L84-L86
         waveform = np.pad(
             waveform,
-            (int((self.n_fft - self.hop_length) / 2), int((self.n_fft - self.hop_length) / 2)),
+            (
+                int((self.n_fft - self.hop_length) / 2),
+                int((self.n_fft - self.hop_length) / 2),
+            ),
             mode="reflect",
         )
 
@@ -216,13 +230,16 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         # Apply the MEL filter bank and MEL floor manually since UnivNet uses a slightly different implementation
         amplitude_spectrogram = np.sqrt(
-            np.real(complex_spectrogram) ** 2 + np.imag(complex_spectrogram) ** 2 + self.mel_floor
+            np.real(complex_spectrogram) ** 2
+            + np.imag(complex_spectrogram) ** 2
+            + self.mel_floor
         )
         mel_spectrogram = np.matmul(self.mel_filters.T, amplitude_spectrogram)
 
         # Perform spectral normalization to get the log mel spectrogram.
         log_mel_spectrogram = np.log(
-            np.clip(mel_spectrogram, a_min=self.compression_clip_val, a_max=None) * self.compression_factor
+            np.clip(mel_spectrogram, a_min=self.compression_clip_val, a_max=None)
+            * self.compression_factor
         )
 
         # Return spectrogram with num_mel_bins last
@@ -279,7 +296,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         waveforms = [waveform.detach().clone().cpu().numpy() for waveform in waveforms]
 
         if waveform_lengths is not None:
-            waveforms = [waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
+            waveforms = [
+                waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)
+            ]
 
         return waveforms
 
@@ -374,18 +393,25 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        is_batched_numpy = (
+            isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        )
         if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+            raise ValueError(
+                f"Only mono-channel audio is supported for input to {self}"
+            )
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
             raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(
+            np.float64
+        ):
             raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
@@ -396,7 +422,11 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         if pad_end:
             pad_length = pad_length if pad_length is not None else self.pad_end_length
             raw_speech = [
-                np.pad(waveform, (0, pad_length * self.hop_length), constant_values=self.padding_value)
+                np.pad(
+                    waveform,
+                    (0, pad_length * self.hop_length),
+                    constant_values=self.padding_value,
+                )
                 for waveform in raw_speech
             ]
 
@@ -415,17 +445,25 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         # input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
         input_features = padded_inputs.get("input_features")
 
-        mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features]
+        mel_spectrograms = [
+            self.mel_spectrogram(waveform) for waveform in input_features
+        ]
 
         if isinstance(input_features[0], List):
-            batched_speech["input_features"] = [np.asarray(mel, dtype=np.float32) for mel in mel_spectrograms]
+            batched_speech["input_features"] = [
+                np.asarray(mel, dtype=np.float32) for mel in mel_spectrograms
+            ]
         else:
-            batched_speech["input_features"] = [mel.astype(np.float32) for mel in mel_spectrograms]
+            batched_speech["input_features"] = [
+                mel.astype(np.float32) for mel in mel_spectrograms
+            ]
 
         # convert attention_mask to correct format
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
-            batched_speech["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+            batched_speech["padding_mask"] = [
+                np.asarray(array, dtype=np.int32) for array in attention_mask
+            ]
 
         if return_noise:
             noise = [
@@ -436,7 +474,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         if do_normalize:
             batched_speech["input_features"] = [
-                self.normalize(spectrogram) for spectrogram in batched_speech["input_features"]
+                self.normalize(spectrogram)
+                for spectrogram in batched_speech["input_features"]
             ]
 
         if return_tensors is not None:

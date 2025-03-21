@@ -74,7 +74,6 @@ from pathlib import Path
 
 from setuptools import Command, find_packages, setup
 
-
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
@@ -207,7 +206,10 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
+deps = {
+    b: a
+    for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)
+}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -239,7 +241,11 @@ class DepsTableUpdateCommand(Command):
     description = "build runtime dependency table"
     user_options = [
         # format: (long option, short option, description).
-        ("dep-table-update", None, "updates src/transformers/dependency_versions_table.py"),
+        (
+            "dep-table-update",
+            None,
+            "updates src/transformers/dependency_versions_table.py",
+        ),
     ]
 
     def initialize_options(self):
@@ -267,10 +273,20 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
+extras["ja"] = deps_list(
+    "fugashi",
+    "ipadic",
+    "unidic_lite",
+    "unidic",
+    "sudachipy",
+    "sudachidict_core",
+    "rhoknp",
+)
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf"] = deps_list(
+    "tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp"
+)
 extras["tf-cpu"] = deps_list(
     "keras",
     "tensorflow-cpu",
@@ -304,7 +320,9 @@ extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = (
+    extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
+)
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
@@ -353,9 +371,13 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
-extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
+extras["deepspeed-testing"] = (
+    extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
+)
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["quality"] = deps_list(
+    "datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich"
+)
 
 extras["all"] = (
     extras["tf"]
@@ -406,7 +428,12 @@ extras["dev-tensorflow"] = (
     + extras["tf-speech"]
 )
 extras["dev"] = (
-    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
+    extras["all"]
+    + extras["testing"]
+    + extras["quality"]
+    + extras["ja"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
@@ -425,7 +452,13 @@ extras["torchhub"] = deps_list(
 )
 
 extras["agents"] = deps_list(
-    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
+    "diffusers",
+    "accelerate",
+    "datasets",
+    "torch",
+    "sentencepiece",
+    "opencv-python",
+    "Pillow",
 )
 
 extras["benchmark"] = deps_list("optimum-benchmark")
@@ -461,7 +494,11 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
+    entry_points={
+        "console_scripts": [
+            "transformers-cli=transformers.commands.transformers_cli:main"
+        ]
+    },
     python_requires=">=3.9.0",
     install_requires=list(install_requires),
     classifiers=[

@@ -23,9 +23,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import YolosConfig, YolosForObjectDetection, YolosImageProcessor
+from transformers import (YolosConfig, YolosForObjectDetection,
+                          YolosImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -58,7 +58,9 @@ def get_yolos_config(yolos_name: str) -> YolosConfig:
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -73,16 +75,24 @@ def read_in_q_k_v(state_dict: dict, config: YolosConfig, base_model: bool = Fals
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[
+            : config.hidden_size
         ]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
         state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[
+            -config.hidden_size :
+        ]
 
 
 def rename_key(name: str) -> str:
@@ -97,7 +107,9 @@ def rename_key(name: str) -> str:
     if "pos_embed" in name:
         name = name.replace("pos_embed", "embeddings.position_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "blocks" in name:
         name = name.replace("blocks", "encoder.layer")
     if "attn.proj" in name:
@@ -131,15 +143,25 @@ def convert_state_dict(orig_state_dict: dict, model: YolosForObjectDetection) ->
             layer_num = int(key_split[2])
             dim = model.vit.encoder.layer[layer_num].attention.attention.all_head_size
             if "weight" in key:
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                orig_state_dict[
+                    f"vit.encoder.layer.{layer_num}.attention.attention.query.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"vit.encoder.layer.{layer_num}.attention.attention.key.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"vit.encoder.layer.{layer_num}.attention.attention.value.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"vit.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                orig_state_dict[
+                    f"vit.encoder.layer.{layer_num}.attention.attention.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"vit.encoder.layer.{layer_num}.attention.attention.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"vit.encoder.layer.{layer_num}.attention.attention.value.bias"
+                ] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -155,7 +177,10 @@ def prepare_img() -> torch.Tensor:
 
 @torch.no_grad()
 def convert_yolos_checkpoint(
-    yolos_name: str, checkpoint_path: str, pytorch_dump_folder_path: str, push_to_hub: bool = False
+    yolos_name: str,
+    checkpoint_path: str,
+    pytorch_dump_folder_path: str,
+    push_to_hub: bool = False,
 ):
     """
     Copy/paste/tweak model's weights to our YOLOS structure.
@@ -181,38 +206,78 @@ def convert_yolos_checkpoint(
     expected_slice_logits, expected_slice_boxes = None, None
     if yolos_name == "yolos_ti":
         expected_slice_logits = torch.tensor(
-            [[-39.5022, -11.9820, -17.6888], [-29.9574, -9.9769, -17.7691], [-42.3281, -20.7200, -30.6294]]
+            [
+                [-39.5022, -11.9820, -17.6888],
+                [-29.9574, -9.9769, -17.7691],
+                [-42.3281, -20.7200, -30.6294],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.4021, 0.0836, 0.7979], [0.0184, 0.2609, 0.0364], [0.1781, 0.2004, 0.2095]]
+            [
+                [0.4021, 0.0836, 0.7979],
+                [0.0184, 0.2609, 0.0364],
+                [0.1781, 0.2004, 0.2095],
+            ]
         )
     elif yolos_name == "yolos_s_200_pre":
         expected_slice_logits = torch.tensor(
-            [[-24.0248, -10.3024, -14.8290], [-42.0392, -16.8200, -27.4334], [-27.2743, -11.8154, -18.7148]]
+            [
+                [-24.0248, -10.3024, -14.8290],
+                [-42.0392, -16.8200, -27.4334],
+                [-27.2743, -11.8154, -18.7148],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]]
+            [
+                [0.2559, 0.5455, 0.4706],
+                [0.2989, 0.7279, 0.1875],
+                [0.7732, 0.4017, 0.4462],
+            ]
         )
     elif yolos_name == "yolos_s_300_pre":
         expected_slice_logits = torch.tensor(
-            [[-36.2220, -14.4385, -23.5457], [-35.6970, -14.7583, -21.3935], [-31.5939, -13.6042, -16.8049]]
+            [
+                [-36.2220, -14.4385, -23.5457],
+                [-35.6970, -14.7583, -21.3935],
+                [-31.5939, -13.6042, -16.8049],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.7614, 0.2316, 0.4728], [0.7168, 0.4495, 0.3855], [0.4996, 0.1466, 0.9996]]
+            [
+                [0.7614, 0.2316, 0.4728],
+                [0.7168, 0.4495, 0.3855],
+                [0.4996, 0.1466, 0.9996],
+            ]
         )
     elif yolos_name == "yolos_s_dWr":
         expected_slice_logits = torch.tensor(
-            [[-42.8668, -24.1049, -41.1690], [-34.7456, -14.1274, -24.9194], [-33.7898, -12.1946, -25.6495]]
+            [
+                [-42.8668, -24.1049, -41.1690],
+                [-34.7456, -14.1274, -24.9194],
+                [-33.7898, -12.1946, -25.6495],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.5587, 0.2773, 0.0605], [0.5004, 0.3014, 0.9994], [0.4999, 0.1548, 0.9994]]
+            [
+                [0.5587, 0.2773, 0.0605],
+                [0.5004, 0.3014, 0.9994],
+                [0.4999, 0.1548, 0.9994],
+            ]
         )
     elif yolos_name == "yolos_base":
         expected_slice_logits = torch.tensor(
-            [[-40.6064, -24.3084, -32.6447], [-55.1990, -30.7719, -35.5877], [-51.4311, -33.3507, -35.6462]]
+            [
+                [-40.6064, -24.3084, -32.6447],
+                [-55.1990, -30.7719, -35.5877],
+                [-51.4311, -33.3507, -35.6462],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.5555, 0.2794, 0.0655], [0.9049, 0.2664, 0.1894], [0.9183, 0.1984, 0.1635]]
+            [
+                [0.5555, 0.2794, 0.0655],
+                [0.9049, 0.2664, 0.1894],
+                [0.9183, 0.1984, 0.1635],
+            ]
         )
     else:
         raise ValueError(f"Unknown yolos_name: {yolos_name}")
@@ -254,14 +319,27 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--checkpoint_path", default=None, type=str, help="Path to the original state dict (.pth file)."
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help="Path to the original state dict (.pth file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_yolos_checkpoint(args.yolos_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_yolos_checkpoint(
+        args.yolos_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+    )

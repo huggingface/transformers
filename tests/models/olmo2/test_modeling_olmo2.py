@@ -22,26 +22,18 @@ from parameterized import parameterized
 from transformers import Olmo2Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.testing_utils import (
-    require_tokenizers,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_tokenizers, require_torch,
+                                        slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Olmo2ForCausalLM,
-        Olmo2Model,
-    )
+    from transformers import Olmo2ForCausalLM, Olmo2Model
 
 
 class Olmo2ModelTester:
@@ -104,19 +96,33 @@ class Olmo2ModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return Olmo2Config(
@@ -136,14 +142,24 @@ class Olmo2ModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = Olmo2Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -173,7 +189,10 @@ class Olmo2ModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -191,7 +210,9 @@ class Olmo2ModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -247,13 +268,17 @@ class Olmo2ModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -271,7 +296,9 @@ class Olmo2ModelTester:
 
 
 @require_torch
-class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Olmo2ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (Olmo2Model, Olmo2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -290,7 +317,9 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = Olmo2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Olmo2Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -309,7 +338,9 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OLMo2 buffers include complex numbers, which breaks this test")
+    @unittest.skip(
+        reason="OLMo2 buffers include complex numbers, which breaks this test"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -317,16 +348,22 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = Olmo2Model(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = Olmo2Model(config)
         scaled_model.to(torch_device)
@@ -337,12 +374,18 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
 
 @require_torch
@@ -350,11 +393,24 @@ class Olmo2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
+        model = Olmo2ForCausalLM.from_pretrained(
+            "shanearora/OLMo2-7B-1124-hf", device_map="auto"
+        )
         out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor(
-            [[-13.0244, -13.9564, -11.8270, -11.3047, -12.3794, -12.4215, -15.6030, -12.7962]]
+            [
+                [
+                    -13.0244,
+                    -13.9564,
+                    -11.8270,
+                    -11.3047,
+                    -12.3794,
+                    -12.4215,
+                    -15.6030,
+                    -12.7962,
+                ]
+            ]
         )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
@@ -365,12 +421,18 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
-        model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "shanearora/OLMo2-7B-1124-hf", device_map="auto"
+        )
+        model = Olmo2ForCausalLM.from_pretrained(
+            "shanearora/OLMo2-7B-1124-hf", device_map="auto"
+        )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        generated_ids = model.generate(
+            input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False
+        )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
@@ -378,22 +440,35 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_simple_encode_decode(self):
         rust_tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo2-7B-1124-hf")
 
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [2028, 374, 264, 1296])
-        self.assertEqual(rust_tokenizer.decode([2028, 374, 264, 1296], skip_special_tokens=True), "This is a test")
+        self.assertEqual(
+            rust_tokenizer.encode("This is a test"), [2028, 374, 264, 1296]
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([2028, 374, 264, 1296], skip_special_tokens=True),
+            "This is a test",
+        )
 
         # bytefallback showcase
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [21990, 76706, 9554, 89151, 39013, 249, 21043])  # fmt: skip
         self.assertEqual(
-            rust_tokenizer.decode([21990, 76706, 9554, 89151, 39013, 249, 21043], skip_special_tokens=True),
+            rust_tokenizer.decode(
+                [21990, 76706, 9554, 89151, 39013, 249, 21043], skip_special_tokens=True
+            ),
             "生活的真谛是",
         )
 
         # Inner spaces showcase
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [13347, 220, 22691])
-        self.assertEqual(rust_tokenizer.decode([13347, 220, 22691], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(
+            rust_tokenizer.decode([13347, 220, 22691], skip_special_tokens=True),
+            "Hi  Hello",
+        )
 
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [13347, 256, 22691])
-        self.assertEqual(rust_tokenizer.decode([13347, 256, 22691], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(
+            rust_tokenizer.decode([13347, 256, 22691], skip_special_tokens=True),
+            "Hi   Hello",
+        )
 
         self.assertEqual(rust_tokenizer.encode(""), [])
 
@@ -410,18 +485,19 @@ class Olmo2IntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
+            convert_and_export_with_cache)
 
         olmo2_model = "shanearora/OLMo2-7B-1124-hf"
 
-        tokenizer = AutoTokenizer.from_pretrained(olmo2_model, pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained(
+            olmo2_model, pad_token="</s>", padding_side="right"
+        )
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light",
         ]
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-            "input_ids"
-        ].shape[-1]
+        max_generation_length = tokenizer(
+            EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True
+        )["input_ids"].shape[-1]
 
         # Load model
         device = "cpu"
@@ -447,21 +523,32 @@ class Olmo2IntegrationTest(unittest.TestCase):
         )
 
         prompts = ["Simply put, the theory of relativity states that "]
-        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(
+            model.device
+        )
         prompt_token_ids = prompt_tokens["input_ids"]
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + eager
         eager_generated_ids = model.generate(
-            **prompt_tokens, max_new_tokens=max_new_tokens, do_sample=False, cache_implementation=cache_implementation
+            **prompt_tokens,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            cache_implementation=cache_implementation
         )
-        eager_generated_text = tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)
+        eager_generated_text = tokenizer.batch_decode(
+            eager_generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, eager_generated_text)
 
         # Static Cache + export
         exported_program = convert_and_export_with_cache(model)
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+            exported_program=exported_program,
+            prompt_token_ids=prompt_token_ids,
+            max_new_tokens=max_new_tokens,
         )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+        ep_generated_text = tokenizer.batch_decode(
+            ep_generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)

@@ -19,28 +19,16 @@ import unittest
 
 import requests
 
-from transformers import (
-    AriaConfig,
-    AriaForConditionalGeneration,
-    AriaTextConfig,
-    AutoProcessor,
-    AutoTokenizer,
-    is_torch_available,
-    is_vision_available,
-)
+from transformers import (AriaConfig, AriaForConditionalGeneration,
+                          AriaTextConfig, AutoProcessor, AutoTokenizer,
+                          is_torch_available, is_vision_available)
 from transformers.models.idefics3 import Idefics3VisionConfig
-from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_bitsandbytes, require_torch,
+                                        require_vision, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-
 
 if is_torch_available():
     import torch
@@ -157,7 +145,12 @@ class AriaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 1
+            )
+            + 1
+        )
         attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
@@ -168,7 +161,9 @@ class AriaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_aria_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
+    def create_and_check_aria_model_fp16_forward(
+        self, config, input_ids, pixel_values, attention_mask
+    ):
         model = AriaForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
@@ -183,7 +178,9 @@ class AriaVisionText2TextModelTester:
 
 
 @require_torch
-class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class AriaForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     """
     Model tester for `AriaForConditionalGeneration`.
     """
@@ -195,7 +192,9 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     def setUp(self):
         self.model_tester = AriaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=AriaConfig, has_text_modality=False
+        )
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -312,7 +311,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", load_in_4bit=True
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://aria-vl.github.io/static/images/view.jpg"
@@ -336,13 +337,17 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
         image_file = "https://aria-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
@@ -358,17 +363,29 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://aria-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open(
+            requests.get(
+                "https://aria-vl.github.io/static/images/view.jpg", stream=True
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
+        )
 
-        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
+        inputs = processor(
+            images=[image1, image2], text=prompts, return_tensors="pt", padding=True
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -383,16 +400,28 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", load_in_4bit=True
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://aria-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open(
+            requests.get(
+                "https://aria-vl.github.io/static/images/view.jpg", stream=True
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
+        )
 
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
+        inputs = self.processor(
+            images=[image1, image2], text=prompts, return_tensors="pt", padding=True
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -412,17 +441,32 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "rhymes-ai/Aria"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True, attn_implementation="eager")
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True, attn_implementation="eager"
+        )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://aria-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image1 = Image.open(
+            requests.get(
+                "https://aria-vl.github.io/static/images/view.jpg", stream=True
+            ).raw
+        )
+        image2 = Image.open(
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
+        )
 
-        inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True)
+        inputs = processor(
+            images=[image1, image2, image1],
+            text=prompts,
+            return_tensors="pt",
+            padding=True,
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -438,7 +482,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", load_in_4bit=True
+        )
 
         processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
@@ -466,13 +512,18 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
-        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        outputs = processor.batch_decode(
+            generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     def test_tokenizer_integration(self):
         model_id = "rhymes-ai/Aria"
         slow_tokenizer = AutoTokenizer.from_pretrained(
-            model_id, bos_token="<|startoftext|>", eos_token="<|endoftext|>", use_fast=False
+            model_id,
+            bos_token="<|startoftext|>",
+            eos_token="<|endoftext|>",
+            use_fast=False,
         )
         slow_tokenizer.add_tokens("<image>", True)
 
@@ -494,7 +545,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images

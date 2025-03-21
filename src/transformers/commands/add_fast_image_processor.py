@@ -21,7 +21,6 @@ from pathlib import Path
 from ..utils import logging
 from . import BaseTransformersCLICommand
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -30,7 +29,9 @@ TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
 
-def add_import_structure_entry_init(content: str, fast_image_processor_name: str, model_name: str):
+def add_import_structure_entry_init(
+    content: str, fast_image_processor_name: str, model_name: str
+):
     """
     Add an entry to the `_import_structure` dictionary in the `__init__.py` file of the transformers package.
     """
@@ -67,12 +68,20 @@ def add_import_structure_entry_init(content: str, fast_image_processor_name: str
     updated_block = "\n".join(entry for entry in entries)
 
     # Replace the original block in the content
-    updated_content = content[: match.start(1)] + "\n" + updated_block + "\n" + content[match.end(1) :]
+    updated_content = (
+        content[: match.start(1)]
+        + "\n"
+        + updated_block
+        + "\n"
+        + content[match.end(1) :]
+    )
 
     return updated_content
 
 
-def add_import_statement_init(content: str, fast_image_processor_name: str, model_name: str):
+def add_import_statement_init(
+    content: str, fast_image_processor_name: str, model_name: str
+):
     """
     Add an import statement to the `__init__.py` file of the transformers package.
     """
@@ -109,13 +118,19 @@ def add_import_statement_init(content: str, fast_image_processor_name: str, mode
 
     # Replace the original block in the content
     updated_content = (
-        content[: match.start("else_block")] + "\n" + updated_block + "\n\n" + content[match.end("else_block") :]
+        content[: match.start("else_block")]
+        + "\n"
+        + updated_block
+        + "\n\n"
+        + content[match.end("else_block") :]
     )
 
     return updated_content
 
 
-def add_fast_image_processor_to_main_init(fast_image_processor_name: str, model_name: str):
+def add_fast_image_processor_to_main_init(
+    fast_image_processor_name: str, model_name: str
+):
     """
     Add the fast image processor to the main __init__.py file of the transformers package.
     """
@@ -123,7 +138,9 @@ def add_fast_image_processor_to_main_init(fast_image_processor_name: str, model_
         content = f.read()
 
     # add _import_structure entry
-    content = add_import_structure_entry_init(content, fast_image_processor_name, model_name)
+    content = add_import_structure_entry_init(
+        content, fast_image_processor_name, model_name
+    )
     # add import statement
     content = add_import_statement_init(content, fast_image_processor_name, model_name)
 
@@ -138,10 +155,14 @@ def add_fast_image_processor_to_model_init(
     """
     Add the fast image processor to the __init__.py file of the model.
     """
-    with open(TRANSFORMERS_PATH / "models" / model_name / "__init__.py", "r", encoding="utf-8") as f:
+    with open(
+        TRANSFORMERS_PATH / "models" / model_name / "__init__.py", "r", encoding="utf-8"
+    ) as f:
         content = f.read()
 
-    fast_image_processing_module_file = fast_image_processing_module_file.split(os.sep)[-1].replace(".py", "")
+    fast_image_processing_module_file = fast_image_processing_module_file.split(os.sep)[
+        -1
+    ].replace(".py", "")
 
     if "import *" in content:
         # we have an init file in the updated format
@@ -168,7 +189,11 @@ def add_fast_image_processor_to_model_init(
         updated_block = "\n".join(entry for entry in entries)
 
         # Replace the original block in the content
-        updated_content = content[: match.start("if_block")] + updated_block + content[match.end("if_block") :]
+        updated_content = (
+            content[: match.start("if_block")]
+            + updated_block
+            + content[match.end("if_block") :]
+        )
     else:
         # we have an init file in the old format
 
@@ -215,16 +240,17 @@ def add_fast_image_processor_to_model_init(
         )
 
         if vision_import_structure_block not in updated_content:
-            raise ValueError("Couldn't find the 'vision _import_structure block' block.")
+            raise ValueError(
+                "Couldn't find the 'vision _import_structure block' block."
+            )
 
         if added_import_structure_block not in updated_content:
             updated_content = updated_content.replace(
-                vision_import_structure_block, vision_import_structure_block + "\n" + added_import_structure_block
+                vision_import_structure_block,
+                vision_import_structure_block + "\n" + added_import_structure_block,
             )
 
-        vision_import_statement_block = (
-            f"        from .{fast_image_processing_module_file[:-5]} import {fast_image_processor_name[:-4]}\n"
-        )
+        vision_import_statement_block = f"        from .{fast_image_processing_module_file[:-5]} import {fast_image_processor_name[:-4]}\n"
 
         added_import_statement_block = (
             "    try:\n        if not is_torchvision_available():\n"
@@ -236,32 +262,48 @@ def add_fast_image_processor_to_model_init(
         )
 
         if vision_import_statement_block not in updated_content:
-            raise ValueError("Couldn't find the 'vision _import_structure block' block.")
+            raise ValueError(
+                "Couldn't find the 'vision _import_structure block' block."
+            )
 
         if added_import_statement_block not in updated_content:
             updated_content = updated_content.replace(
-                vision_import_statement_block, vision_import_statement_block + "\n" + added_import_statement_block
+                vision_import_statement_block,
+                vision_import_statement_block + "\n" + added_import_statement_block,
             )
 
     # write the updated content
-    with open(TRANSFORMERS_PATH / "models" / model_name / "__init__.py", "w", encoding="utf-8") as f:
+    with open(
+        TRANSFORMERS_PATH / "models" / model_name / "__init__.py", "w", encoding="utf-8"
+    ) as f:
         f.write(updated_content)
 
 
-def add_fast_image_processor_to_auto(image_processor_name: str, fast_image_processor_name: str):
+def add_fast_image_processor_to_auto(
+    image_processor_name: str, fast_image_processor_name: str
+):
     """
     Add the fast image processor to the auto module.
     """
-    with open(TRANSFORMERS_PATH / "models" / "auto" / "image_processing_auto.py", "r", encoding="utf-8") as f:
+    with open(
+        TRANSFORMERS_PATH / "models" / "auto" / "image_processing_auto.py",
+        "r",
+        encoding="utf-8",
+    ) as f:
         content = f.read()
 
     # get all lines containing the image processor name
     updated_content = content.replace(
-        f'("{image_processor_name}",)', f'("{image_processor_name}", "{fast_image_processor_name}")'
+        f'("{image_processor_name}",)',
+        f'("{image_processor_name}", "{fast_image_processor_name}")',
     )
 
     # write the updated content
-    with open(TRANSFORMERS_PATH / "models" / "auto" / "image_processing_auto.py", "w", encoding="utf-8") as f:
+    with open(
+        TRANSFORMERS_PATH / "models" / "auto" / "image_processing_auto.py",
+        "w",
+        encoding="utf-8",
+    ) as f:
         f.write(updated_content)
 
 
@@ -269,7 +311,9 @@ def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
     """
     Add the fast image processor to the dummy torchvision objects file.
     """
-    dummy_torchvision_objects_file = TRANSFORMERS_PATH / "utils" / "dummy_torchvision_objects.py"
+    dummy_torchvision_objects_file = (
+        TRANSFORMERS_PATH / "utils" / "dummy_torchvision_objects.py"
+    )
     with open(dummy_torchvision_objects_file, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -288,8 +332,12 @@ def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
     if new_dummy_object not in content:
         if index_new != len(image_processor_names) - 1:
             # add the dummy object just before the next ImageProcessorFast
-            first_line = f"class {image_processor_names[index_new+1]}(metaclass=DummyObject):"
-            updated_content = content.replace(first_line, new_dummy_object + "\n\n" + first_line)
+            first_line = (
+                f"class {image_processor_names[index_new+1]}(metaclass=DummyObject):"
+            )
+            updated_content = content.replace(
+                first_line, new_dummy_object + "\n\n" + first_line
+            )
         else:
             # add the dummy object at the very end
             updated_content = content + "\n\n" + new_dummy_object
@@ -308,15 +356,21 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
     doc_files = list(doc_source.glob(f"*/model_doc/{model_name}.md"))
     if not doc_files:
         # try again with "-"
-        doc_files = list(doc_source.glob(f"*/model_doc/{model_name.replace('_', '-')}.md"))
+        doc_files = list(
+            doc_source.glob(f"*/model_doc/{model_name.replace('_', '-')}.md")
+        )
     if not doc_files:
         raise ValueError(f"No doc files found for {model_name}")
 
     base_doc_string = (
-        f"## {fast_image_processor_name[:-4]}\n\n" f"[[autodoc]] {fast_image_processor_name[:-4]}\n" "    - preprocess"
+        f"## {fast_image_processor_name[:-4]}\n\n"
+        f"[[autodoc]] {fast_image_processor_name[:-4]}\n"
+        "    - preprocess"
     )
     fast_doc_string = (
-        f"## {fast_image_processor_name}\n\n" f"[[autodoc]] {fast_image_processor_name}\n" "    - preprocess"
+        f"## {fast_image_processor_name}\n\n"
+        f"[[autodoc]] {fast_image_processor_name}\n"
+        "    - preprocess"
     )
 
     for doc_file in doc_files:
@@ -363,7 +417,9 @@ def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name
     def replacement_function(match):
         # Extract existing imports
         existing_imports = (match.group(1) or match.group(2)).split(",")
-        existing_imports = existing_imports[:-1] if existing_imports[-1] == "\n" else existing_imports
+        existing_imports = (
+            existing_imports[:-1] if existing_imports[-1] == "\n" else existing_imports
+        )
         existing_imports = [imp.strip() for imp in existing_imports]
 
         # Add the new import if not already present
@@ -383,26 +439,35 @@ def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name
     updated_content = regex.sub(replacement_function, content)
 
     # add the fast image processor to the imports
-    base_import_string = f"    from transformers import {fast_image_processor_name[:-4]}"
+    base_import_string = (
+        f"    from transformers import {fast_image_processor_name[:-4]}"
+    )
     fast_import_string = (
-        "    if is_torchvision_available():\n" f"        from transformers import {fast_image_processor_name}"
+        "    if is_torchvision_available():\n"
+        f"        from transformers import {fast_image_processor_name}"
     )
     if fast_import_string not in updated_content:
-        updated_content = updated_content.replace(base_import_string, base_import_string + "\n\n" + fast_import_string)
+        updated_content = updated_content.replace(
+            base_import_string, base_import_string + "\n\n" + fast_import_string
+        )
 
     # get line starting with "    image_processing_class = " and add a line after it starting with "    fast_image_processing_class = "
-    image_processing_class_line = re.search(r"    image_processing_class = .*", updated_content)
+    image_processing_class_line = re.search(
+        r"    image_processing_class = .*", updated_content
+    )
     if not image_processing_class_line:
-        logger.warning(f"Couldn't find the 'image_processing_class' line in {test_file}. Skipping.")
+        logger.warning(
+            f"Couldn't find the 'image_processing_class' line in {test_file}. Skipping."
+        )
         return
 
-    fast_image_processing_class_line = (
-        f"    fast_image_processing_class = {fast_image_processor_name} if is_torchvision_available() else None"
-    )
+    fast_image_processing_class_line = f"    fast_image_processing_class = {fast_image_processor_name} if is_torchvision_available() else None"
     if "    fast_image_processing_class = " not in updated_content:
         updated_content = updated_content.replace(
             image_processing_class_line.group(0),
-            image_processing_class_line.group(0) + "\n" + fast_image_processing_class_line,
+            image_processing_class_line.group(0)
+            + "\n"
+            + fast_image_processing_class_line,
         )
 
     # write the updated content
@@ -417,7 +482,9 @@ def get_fast_image_processing_content_header(content: str) -> str:
     # get all the commented lines at the beginning of the file
     content_header = re.search(r"^# coding=utf-8\n(#[^\n]*\n)*", content, re.MULTILINE)
     if not content_header:
-        logger.warning("Couldn't find the content header in the slow image processor file. Using a default header.")
+        logger.warning(
+            "Couldn't find the content header in the slow image processor file. Using a default header."
+        )
         return (
             f"# coding=utf-8\n"
             f"# Copyright {CURRENT_YEAR} The HuggingFace Team. All rights reserved.\n"
@@ -437,22 +504,30 @@ def get_fast_image_processing_content_header(content: str) -> str:
         )
     content_header = content_header.group(0)
     # replace the year in the copyright
-    content_header = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content_header)
+    content_header = re.sub(
+        r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content_header
+    )
     # get the line starting with """Image processor in content if it exists
     match = re.search(r'^"""Image processor.*$', content, re.MULTILINE)
     if match:
-        content_header += match.group(0).replace("Image processor", "Fast Image processor")
+        content_header += match.group(0).replace(
+            "Image processor", "Fast Image processor"
+        )
 
     return content_header
 
 
 def write_default_fast_image_processor_file(
-    fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
+    fast_image_processing_module_file: str,
+    fast_image_processor_name: str,
+    content_base_file: str,
 ):
     """
     Write a default fast image processor file. Used when encountering a problem while parsing the slow image processor file.
     """
-    imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n\n\n"
+    imports = (
+        "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n\n\n"
+    )
     content_header = get_fast_image_processing_content_header(content_base_file)
     content_base_file = (
         f"class {fast_image_processor_name}(BaseImageProcessorFast):\n"
@@ -478,7 +553,9 @@ def write_default_fast_image_processor_file(
 
 
 def add_fast_image_processor_file(
-    fast_image_processing_module_file: str, fast_image_processor_name: str, content_base_file: str
+    fast_image_processing_module_file: str,
+    fast_image_processor_name: str,
+    content_base_file: str,
 ):
     """
     Add the fast image processor file to the model's folder.
@@ -491,10 +568,14 @@ def add_fast_image_processor_file(
     regex = rf"class {fast_image_processor_name[:-4]}.*?(\n\S|$)"
     match = re.search(regex, content_base_file, re.DOTALL)
     if not match:
-        print(f"Couldn't find the {fast_image_processor_name[:-4]} class in {fast_image_processing_module_file}")
+        print(
+            f"Couldn't find the {fast_image_processor_name[:-4]} class in {fast_image_processing_module_file}"
+        )
         print("Creating a new file with the default content.")
         return write_default_fast_image_processor_file(
-            fast_image_processing_module_file, fast_image_processor_name, content_base_file
+            fast_image_processing_module_file,
+            fast_image_processor_name,
+            content_base_file,
         )
     # Exclude the last unindented line
     slow_class_content = match.group(0).rstrip()
@@ -507,7 +588,9 @@ def add_fast_image_processor_file(
         )
         print("Creating a new file with the default content.")
         return write_default_fast_image_processor_file(
-            fast_image_processing_module_file, fast_image_processor_name, content_base_file
+            fast_image_processing_module_file,
+            fast_image_processor_name,
+            content_base_file,
         )
     init = match.group(0)
     init_signature_block = init.split(")")[0]
@@ -521,16 +604,30 @@ def add_fast_image_processor_file(
     pattern_default_size = r"size = size if size is not None else\s+(.*)"
     match_default_size = re.findall(pattern_default_size, init)
     default_args_dict["size"] = match_default_size[0] if match_default_size else None
-    pattern_default_crop_size = r"crop_size = crop_size if crop_size is not None else\s+(.*)"
+    pattern_default_crop_size = (
+        r"crop_size = crop_size if crop_size is not None else\s+(.*)"
+    )
     match_default_crop_size = re.findall(pattern_default_crop_size, init)
-    default_args_dict["crop_size"] = match_default_crop_size[0] if match_default_crop_size else None
-    pattern_default_image_mean = r"self.image_mean = image_mean if image_mean is not None else\s+(.*)"
+    default_args_dict["crop_size"] = (
+        match_default_crop_size[0] if match_default_crop_size else None
+    )
+    pattern_default_image_mean = (
+        r"self.image_mean = image_mean if image_mean is not None else\s+(.*)"
+    )
     match_default_image_mean = re.findall(pattern_default_image_mean, init)
-    default_args_dict["image_mean"] = match_default_image_mean[0] if match_default_image_mean else None
-    pattern_default_image_std = r"self.image_std = image_std if image_std is not None else\s+(.*)"
+    default_args_dict["image_mean"] = (
+        match_default_image_mean[0] if match_default_image_mean else None
+    )
+    pattern_default_image_std = (
+        r"self.image_std = image_std if image_std is not None else\s+(.*)"
+    )
     match_default_image_std = re.findall(pattern_default_image_std, init)
-    default_args_dict["image_std"] = match_default_image_std[0] if match_default_image_std else None
-    default_args_dict["default_to_square"] = False if "(size, default_to_square=False" in init else None
+    default_args_dict["image_std"] = (
+        match_default_image_std[0] if match_default_image_std else None
+    )
+    default_args_dict["default_to_square"] = (
+        False if "(size, default_to_square=False" in init else None
+    )
 
     content_header = get_fast_image_processing_content_header(content_base_file)
     content_base_file = (
@@ -560,11 +657,11 @@ def add_fast_image_processor_file(
         f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 
-    imports = (
-        "\n\nfrom ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast\n"
-    )
+    imports = "\n\nfrom ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast\n"
     image_utils_imports = []
-    if default_args_dict.get("resample") is not None and "PILImageResampling" in default_args_dict.get("resample"):
+    if default_args_dict.get(
+        "resample"
+    ) is not None and "PILImageResampling" in default_args_dict.get("resample"):
         image_utils_imports.append("PILImageResampling")
     if default_args_dict.get("image_mean") is not None and not any(
         char.isdigit() for char in default_args_dict.get("image_mean")
@@ -611,13 +708,19 @@ def add_fast_image_processor(model_name: str):
     # regex to find object starting with "class " and ending with "ImageProcessor", including "ImageProcessor" in the match
     image_processor_name = re.findall(r"class (\w*ImageProcessor)", content_base_file)
     if not image_processor_name:
-        raise ValueError(f"No ImageProcessor class found in {image_processing_module_file}")
+        raise ValueError(
+            f"No ImageProcessor class found in {image_processing_module_file}"
+        )
     elif len(image_processor_name) > 1:
-        raise ValueError(f"Multiple ImageProcessor classes found in {image_processing_module_file}")
+        raise ValueError(
+            f"Multiple ImageProcessor classes found in {image_processing_module_file}"
+        )
 
     image_processor_name = image_processor_name[0]
     fast_image_processor_name = image_processor_name + "Fast"
-    fast_image_processing_module_file = image_processing_module_file.replace(".py", "_fast.py")
+    fast_image_processing_module_file = image_processing_module_file.replace(
+        ".py", "_fast.py"
+    )
 
     print(f"Adding {fast_image_processor_name} to {fast_image_processing_module_file}")
 
@@ -637,7 +740,9 @@ def add_fast_image_processor(model_name: str):
         fast_image_processor_name=fast_image_processor_name,
     )
 
-    add_fast_image_processor_to_dummy(fast_image_processor_name=fast_image_processor_name)
+    add_fast_image_processor_to_dummy(
+        fast_image_processor_name=fast_image_processor_name
+    )
 
     add_fast_image_processor_to_doc(
         fast_image_processor_name=fast_image_processor_name,
@@ -670,7 +775,9 @@ class AddFastImageProcessorCommand(BaseTransformersCLICommand):
             required=True,
             help="The name of the folder containing the model's implementation.",
         )
-        add_fast_image_processor_parser.set_defaults(func=add_new_model_like_command_factory)
+        add_fast_image_processor_parser.set_defaults(
+            func=add_new_model_like_command_factory
+        )
 
     def __init__(self, model_name: str, *args):
         self.model_name = model_name

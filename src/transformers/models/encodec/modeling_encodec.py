@@ -23,15 +23,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_encodec import EncodecConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -83,7 +78,13 @@ class EncodecConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
 
     def __init__(
-        self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1, dilation: int = 1
+        self,
+        config,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        dilation: int = 1,
     ):
         super().__init__()
         self.causal = config.use_causal_conv
@@ -102,7 +103,9 @@ class EncodecConv1d(nn.Module):
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )
 
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride, dilation=dilation)
+        self.conv = nn.Conv1d(
+            in_channels, out_channels, kernel_size, stride, dilation=dilation
+        )
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):
             weight_norm = nn.utils.parametrizations.weight_norm
@@ -136,7 +139,12 @@ class EncodecConv1d(nn.Module):
         return ideal_length - length
 
     @staticmethod
-    def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+    def _pad1d(
+        hidden_states: torch.Tensor,
+        paddings: Tuple[int, int],
+        mode: str = "zero",
+        value: float = 0.0,
+    ):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happens.
         """
@@ -159,13 +167,17 @@ class EncodecConv1d(nn.Module):
 
         if self.causal:
             # Left padding for causal
-            hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(
+                hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode
+            )
         else:
             # Asymmetric padding required for odd strides
             padding_right = self.padding_total // 2
             padding_left = self.padding_total - padding_right
             hidden_states = self._pad1d(
-                hidden_states, (padding_left, padding_right + extra_padding), mode=self.pad_mode
+                hidden_states,
+                (padding_left, padding_right + extra_padding),
+                mode=self.pad_mode,
             )
 
         hidden_states = self.conv(hidden_states)
@@ -179,7 +191,14 @@ class EncodecConv1d(nn.Module):
 class EncodecConvTranspose1d(nn.Module):
     """ConvTranspose1d with asymmetric or causal padding and normalization."""
 
-    def __init__(self, config, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1):
+    def __init__(
+        self,
+        config,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+    ):
         super().__init__()
         self.causal = config.use_causal_conv
         self.trim_right_ratio = config.trim_right_ratio
@@ -201,7 +220,9 @@ class EncodecConvTranspose1d(nn.Module):
             self.norm = nn.GroupNorm(1, out_channels)
 
         if not (self.causal or self.trim_right_ratio == 1.0):
-            raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
+            raise ValueError(
+                "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
+            )
 
     def forward(self, hidden_states):
         kernel_size = self.conv.kernel_size[0]
@@ -266,7 +287,9 @@ class EncodecResnetBlock(nn.Module):
             in_chs = dim if i == 0 else hidden
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [nn.ELU()]
-            block += [EncodecConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
+            block += [
+                EncodecConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)
+            ]
         self.block = nn.ModuleList(block)
 
         if config.use_conv_shortcut:
@@ -287,7 +310,11 @@ class EncodecEncoder(nn.Module):
 
     def __init__(self, config: EncodecConfig):
         super().__init__()
-        model = [EncodecConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
+        model = [
+            EncodecConv1d(
+                config, config.audio_channels, config.num_filters, config.kernel_size
+            )
+        ]
         scaling = 1
 
         # Downsample to raw audio scale
@@ -295,15 +322,34 @@ class EncodecEncoder(nn.Module):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [EncodecResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])]
+                model += [
+                    EncodecResnetBlock(
+                        config, current_scale, [config.dilation_growth_rate**j, 1]
+                    )
+                ]
             # Add downsampling layers
             model += [nn.ELU()]
-            model += [EncodecConv1d(config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio)]
+            model += [
+                EncodecConv1d(
+                    config,
+                    current_scale,
+                    current_scale * 2,
+                    kernel_size=ratio * 2,
+                    stride=ratio,
+                )
+            ]
             scaling *= 2
 
         model += [EncodecLSTM(config, scaling * config.num_filters)]
         model += [nn.ELU()]
-        model += [EncodecConv1d(config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size)]
+        model += [
+            EncodecConv1d(
+                config,
+                scaling * config.num_filters,
+                config.hidden_size,
+                config.last_kernel_size,
+            )
+        ]
 
         self.layers = nn.ModuleList(model)
 
@@ -319,7 +365,14 @@ class EncodecDecoder(nn.Module):
     def __init__(self, config: EncodecConfig):
         super().__init__()
         scaling = int(2 ** len(config.upsampling_ratios))
-        model = [EncodecConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)]
+        model = [
+            EncodecConv1d(
+                config,
+                config.hidden_size,
+                scaling * config.num_filters,
+                config.kernel_size,
+            )
+        ]
 
         model += [EncodecLSTM(config, scaling * config.num_filters)]
 
@@ -329,16 +382,33 @@ class EncodecDecoder(nn.Module):
             # Add upsampling layers
             model += [nn.ELU()]
             model += [
-                EncodecConvTranspose1d(config, current_scale, current_scale // 2, kernel_size=ratio * 2, stride=ratio)
+                EncodecConvTranspose1d(
+                    config,
+                    current_scale,
+                    current_scale // 2,
+                    kernel_size=ratio * 2,
+                    stride=ratio,
+                )
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [EncodecResnetBlock(config, current_scale // 2, (config.dilation_growth_rate**j, 1))]
+                model += [
+                    EncodecResnetBlock(
+                        config, current_scale // 2, (config.dilation_growth_rate**j, 1)
+                    )
+                ]
             scaling //= 2
 
         # Add final layers
         model += [nn.ELU()]
-        model += [EncodecConv1d(config, config.num_filters, config.audio_channels, config.last_kernel_size)]
+        model += [
+            EncodecConv1d(
+                config,
+                config.num_filters,
+                config.audio_channels,
+                config.last_kernel_size,
+            )
+        ]
         self.layers = nn.ModuleList(model)
 
     def forward(self, hidden_states):
@@ -364,7 +434,11 @@ class EncodecEuclideanCodebook(nn.Module):
     def quantize(self, hidden_states):
         embed = self.embed.t()
         scaled_states = hidden_states.pow(2).sum(1, keepdim=True)
-        dist = -(scaled_states - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True))
+        dist = -(
+            scaled_states
+            - 2 * hidden_states @ embed
+            + embed.pow(2).sum(0, keepdim=True)
+        )
         embed_ind = dist.max(dim=-1).indices
         return embed_ind
 
@@ -411,9 +485,13 @@ class EncodecResidualVectorQuantizer(nn.Module):
         self.codebook_size = config.codebook_size
         self.frame_rate = config.frame_rate
         self.num_quantizers = config.num_quantizers
-        self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(config.num_quantizers)])
+        self.layers = nn.ModuleList(
+            [EncodecVectorQuantization(config) for _ in range(config.num_quantizers)]
+        )
 
-    def get_num_quantizers_for_bandwidth(self, bandwidth: Optional[float] = None) -> int:
+    def get_num_quantizers_for_bandwidth(
+        self, bandwidth: Optional[float] = None
+    ) -> int:
         """Return num_quantizers based on specified target bandwidth."""
         bw_per_q = math.log2(self.codebook_size) * self.frame_rate
         num_quantizers = self.num_quantizers
@@ -421,7 +499,9 @@ class EncodecResidualVectorQuantizer(nn.Module):
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
 
-    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+    def encode(
+        self, embeddings: torch.Tensor, bandwidth: Optional[float] = None
+    ) -> torch.Tensor:
         """
         Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
         the appropriate number of quantizers to use and returns indices for each quantizer.
@@ -469,7 +549,9 @@ class EncodecPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                k = math.sqrt(
+                    module.groups / (module.in_channels * module.kernel_size[0])
+                )
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -570,8 +652,13 @@ class EncodecModel(EncodecPreTrainedModel):
         length = input_values.shape[-1]
         duration = length / self.config.sampling_rate
 
-        if self.config.chunk_length_s is not None and duration > 1e-5 + self.config.chunk_length_s:
-            raise RuntimeError(f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}")
+        if (
+            self.config.chunk_length_s is not None
+            and duration > 1e-5 + self.config.chunk_length_s
+        ):
+            raise RuntimeError(
+                f"Duration of frame ({duration}) is longer than chunk {self.config.chunk_length_s}"
+            )
 
         scale = None
         if self.config.normalize:
@@ -611,7 +698,9 @@ class EncodecModel(EncodecPreTrainedModel):
             factors for each chunk when `normalize` is True. Each frames is a tuple `(codebook, scale)`, with
             `codebook` of shape `[batch_size, num_codebooks, frames]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[0]
@@ -624,7 +713,9 @@ class EncodecModel(EncodecPreTrainedModel):
         _, channels, input_length = input_values.shape
 
         if channels < 1 or channels > 2:
-            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+            raise ValueError(
+                f"Number of audio channels must be 1 or 2, but got {channels}"
+            )
 
         chunk_length = self.config.chunk_length
         if chunk_length is None:
@@ -688,7 +779,9 @@ class EncodecModel(EncodecPreTrainedModel):
         total_size = stride * (len(frames) - 1) + frames[-1].shape[-1]
 
         frame_length = frames[0].shape[-1]
-        time_vec = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[1:-1]
+        time_vec = torch.linspace(0, 1, frame_length + 2, device=device, dtype=dtype)[
+            1:-1
+        ]
         weight = 0.5 - (time_vec - 0.5).abs()
 
         sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
@@ -702,11 +795,15 @@ class EncodecModel(EncodecPreTrainedModel):
             offset += stride
 
         if sum_weight.min() == 0:
-            raise ValueError(f"`sum_weight` minimum element must be bigger than zero: {sum_weight}`")
+            raise ValueError(
+                f"`sum_weight` minimum element must be bigger than zero: {sum_weight}`"
+            )
 
         return out / sum_weight
 
-    def _decode_frame(self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _decode_frame(
+        self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         codes = codes.transpose(0, 1)
         embeddings = self.quantizer.decode(codes)
         outputs = self.decoder(embeddings)
@@ -738,7 +835,9 @@ class EncodecModel(EncodecPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         chunk_length = self.config.chunk_length
         if chunk_length is None:
@@ -752,7 +851,9 @@ class EncodecModel(EncodecPreTrainedModel):
                 frames = self._decode_frame(frame, scale)
                 decoded_frames.append(frames)
 
-            audio_values = self._linear_overlap_add(decoded_frames, self.config.chunk_stride or 1)
+            audio_values = self._linear_overlap_add(
+                decoded_frames, self.config.chunk_stride or 1
+            )
 
         # truncate based on padding mask
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
@@ -795,21 +896,31 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
         if audio_codes is not None and audio_scales is None:
-            raise ValueError("You specified `audio_codes` but did not specify the `audio_scales`")
+            raise ValueError(
+                "You specified `audio_codes` but did not specify the `audio_scales`"
+            )
 
         if audio_scales is not None and audio_codes is None:
-            raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
+            raise ValueError(
+                "You specified `audio_scales` but did not specify the `audio_codes`"
+            )
 
         if audio_scales is None and audio_codes is None:
-            audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, False)
+            audio_codes, audio_scales = self.encode(
+                input_values, padding_mask, bandwidth, False
+            )
 
-        audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
+        audio_values = self.decode(
+            audio_codes, audio_scales, padding_mask, return_dict=return_dict
+        )[0]
         if not return_dict:
             return (audio_codes, audio_values)
 

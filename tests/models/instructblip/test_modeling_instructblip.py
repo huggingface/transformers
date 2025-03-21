@@ -23,39 +23,26 @@ import pytest
 import requests
 from parameterized import parameterized
 
-from transformers import (
-    CONFIG_MAPPING,
-    InstructBlipConfig,
-    InstructBlipProcessor,
-    InstructBlipQFormerConfig,
-    InstructBlipVisionConfig,
-)
-from transformers.testing_utils import (
-    require_accelerate,
-    require_bitsandbytes,
-    require_torch,
-    require_torch_sdpa,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers import (CONFIG_MAPPING, InstructBlipConfig,
+                          InstructBlipProcessor, InstructBlipQFormerConfig,
+                          InstructBlipVisionConfig)
+from transformers.testing_utils import (require_accelerate,
+                                        require_bitsandbytes, require_torch,
+                                        require_torch_sdpa, require_vision,
+                                        slow, torch_device)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
-
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     ids_tensor, random_attention_mask)
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import InstructBlipForConditionalGeneration, InstructBlipVisionModel
+    from transformers import (InstructBlipForConditionalGeneration,
+                              InstructBlipVisionModel)
 
 
 if is_vision_available():
@@ -102,7 +89,9 @@ class InstructBlipVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -131,9 +120,16 @@ class InstructBlipVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -196,11 +192,15 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="InstructBlipVisionModel is an internal building block, doesn't support standalone training")
+    @unittest.skip(
+        reason="InstructBlipVisionModel is an internal building block, doesn't support standalone training"
+    )
     def test_training(self):
         pass
 
-    @unittest.skip(reason="InstructBlipVisionModel is an internal building block, doesn't support standalone training")
+    @unittest.skip(
+        reason="InstructBlipVisionModel is an internal building block, doesn't support standalone training"
+    )
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -216,11 +216,15 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -274,12 +278,16 @@ class InstructBlipQFormerModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        qformer_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        qformer_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-            qformer_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            qformer_attention_mask = ids_tensor(
+                [self.batch_size, self.seq_length], vocab_size=2
+            )
 
         if input_mask is not None:
             batch_size, seq_length = input_mask.shape
@@ -360,7 +368,9 @@ class InstructBlipTextModelDecoderOnlyTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
 
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3)
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(3)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         attention_mask = input_ids.ne(self.pad_token_id)
@@ -406,31 +416,58 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
             text_kwargs = {}
 
         self.parent = parent
-        self.vision_model_tester = InstructBlipVisionModelTester(parent, **vision_kwargs)
-        self.qformer_model_tester = InstructBlipQFormerModelTester(parent, **qformer_kwargs)
-        self.text_model_tester = InstructBlipTextModelDecoderOnlyTester(parent, **text_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length + num_query_tokens  # need seq_length for common tests
+        self.vision_model_tester = InstructBlipVisionModelTester(
+            parent, **vision_kwargs
+        )
+        self.qformer_model_tester = InstructBlipQFormerModelTester(
+            parent, **qformer_kwargs
+        )
+        self.text_model_tester = InstructBlipTextModelDecoderOnlyTester(
+            parent, **text_kwargs
+        )
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
+        self.seq_length = (
+            self.text_model_tester.seq_length + num_query_tokens
+        )  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
         self.image_token_index = image_token_index
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-        _, _, _, qformer_input_ids, qformer_attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
-        _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        _, _, _, qformer_input_ids, qformer_attention_mask = (
+            self.qformer_model_tester.prepare_config_and_inputs()
+        )
+        _, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
         vision_tokens = (
-            torch.ones((input_ids.shape[0], self.num_query_tokens), device=torch_device, dtype=input_ids.dtype)
+            torch.ones(
+                (input_ids.shape[0], self.num_query_tokens),
+                device=torch_device,
+                dtype=input_ids.dtype,
+            )
             * self.image_token_index
         )
-        input_ids[input_ids == self.image_token_index] = self.text_model_tester.pad_token_id
+        input_ids[input_ids == self.image_token_index] = (
+            self.text_model_tester.pad_token_id
+        )
         input_ids = torch.cat([vision_tokens, input_ids], dim=-1)
         vision_attention_mask = torch.ones_like(vision_tokens)
         attention_mask = torch.cat([vision_attention_mask, attention_mask], dim=-1)
 
-        return config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            qformer_input_ids,
+            qformer_attention_mask,
+            pixel_values,
+        )
 
     def get_config(self):
         return InstructBlipConfig.from_vision_qformer_text_configs(
@@ -442,7 +479,13 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         )
 
     def create_and_check_for_conditional_generation(
-        self, config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        qformer_input_ids,
+        qformer_attention_mask,
+        pixel_values,
     ):
         model = InstructBlipForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
@@ -457,12 +500,23 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         expected_seq_length = self.num_query_tokens + self.text_model_tester.seq_length
         self.parent.assertEqual(
             result.logits.shape,
-            (self.vision_model_tester.batch_size, expected_seq_length, self.text_model_tester.vocab_size),
+            (
+                self.vision_model_tester.batch_size,
+                expected_seq_length,
+                self.text_model_tester.vocab_size,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values = config_and_inputs
+        (
+            config,
+            input_ids,
+            attention_mask,
+            qformer_input_ids,
+            qformer_attention_mask,
+            pixel_values,
+        ) = config_and_inputs
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -475,9 +529,15 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 
 
 @require_torch
-class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
+class InstructBlipForConditionalGenerationDecoderOnlyTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = {
+        "image-text-to-text": InstructBlipForConditionalGeneration
+    }
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -487,7 +547,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(self)
+        self.model_tester = InstructBlipForConditionalGenerationDecoderOnlyModelTester(
+            self
+        )
         self.config_tester = ConfigTester(
             self,
             config_class=InstructBlipConfig,
@@ -500,13 +562,17 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
+        self.model_tester.create_and_check_for_conditional_generation(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="InstructBlipForConditionalGeneration doesn't support inputs_embeds")
+    @unittest.skip(
+        reason="InstructBlipForConditionalGeneration doesn't support inputs_embeds"
+    )
     def test_inputs_embeds(self):
         pass
 
@@ -555,13 +621,17 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = InstructBlipVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save InstructBlipConfig and check if we can load InstructBlipQFormerConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             qformer_config = InstructBlipQFormerConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
+            self.assertDictEqual(
+                config.qformer_config.to_dict(), qformer_config.to_dict()
+            )
 
     @slow
     def test_model_from_pretrained(self):
@@ -570,10 +640,16 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         self.assertIsNotNone(model)
 
     # overwrite because InstructBLIP internally calls LM.generate() with embeds thus it cannot operate in no cache format
-    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+    def _check_generate_outputs(
+        self, output, config, use_cache=False, num_return_sequences=1, num_beams=1
+    ):
         use_cache = True  # force this to be True in case False is passed
         super()._check_generate_outputs(
-            output, config, use_cache=use_cache, num_return_sequences=num_return_sequences, num_beams=num_beams
+            output,
+            config,
+            use_cache=use_cache,
+            num_return_sequences=num_return_sequences,
+            num_beams=num_beams,
         )
 
     # overwrite because InstructBLIP cannot generate only from input ids, and requires `pixel` values and `qformer_input_ids` in all cases to be present
@@ -600,14 +676,17 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             else:
                 decoder_only_classes.append(model_class)
         if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
+            self.skipTest(
+                reason="No decoder-only architecture available for this model."
+            )
 
         # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
             for attr_name in config.to_dict().keys()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+            if attr_name.startswith("encoder")
+            and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
             self.skipTest(
@@ -644,25 +723,40 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             # Without padding
             model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
             next_logits_wo_padding = model(
-                **model_kwargs, pixel_values=pixel_values, qformer_input_ids=qformer_input_ids
+                **model_kwargs,
+                pixel_values=pixel_values,
+                qformer_input_ids=qformer_input_ids,
             ).logits[:, -1, :]
 
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_text_config().pad_token_id
+                if config.get_text_config().pad_token_id is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
+            padding = (
+                torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device)
+                * pad_token_id
+            )
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            padded_attention_mask = torch.cat(
+                (torch.zeros_like(padding), attention_mask), dim=1
+            )
+            model_kwargs = _prepare_model_kwargs(
+                padded_input_ids, padded_attention_mask, signature
+            )
             next_logits_with_padding = model(
-                **model_kwargs, pixel_values=pixel_values, qformer_input_ids=qformer_input_ids
+                **model_kwargs,
+                pixel_values=pixel_values,
+                qformer_input_ids=qformer_input_ids,
             ).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5
+            )
 
     @unittest.skip(
         "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
@@ -690,7 +784,9 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -704,30 +800,53 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
+                self.assertTrue(
+                    model.language_model.config._attn_implementation == text_attn
+                )
+                self.assertTrue(
+                    model.vision_model.config._attn_implementation == vision_attn
+                )
+                self.assertTrue(
+                    model.qformer.config._attn_implementation == qformer_attn
+                )
 
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_class.from_pretrained(
+                    tmpdirname, attn_implementation="eager"
+                )
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.qformer.config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.language_model.config._attn_implementation == "eager"
+                )
+                self.assertTrue(
+                    model_eager.vision_model.config._attn_implementation == "eager"
+                )
+                self.assertTrue(
+                    model_eager.qformer.config._attn_implementation == "eager"
+                )
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                    if (
+                        "SdpaAttention" in class_name
+                        or "SdpaSelfAttention" in class_name
+                    ):
+                        raise ValueError(
+                            "The eager model should not have SDPA attention layers"
+                        )
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        "SdpaAttention" in class_name
+                        or "SdpaSelfAttention" in class_name
+                    ):
                         has_sdpa = True
                         break
                 if not has_sdpa and any(
-                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
+                    module_attn == "sdpa"
+                    for module_attn in [text_attn, vision_attn, qformer_attn]
                 ):
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
@@ -746,21 +865,68 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_accelerate
     def test_inference_vicuna_7b(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
+        processor = InstructBlipProcessor.from_pretrained(
+            "Salesforce/instructblip-vicuna-7b"
+        )
         model = InstructBlipForConditionalGeneration.from_pretrained(
-            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True, low_cpu_mem_usage=True
+            "Salesforce/instructblip-vicuna-7b",
+            load_in_8bit=True,
+            low_cpu_mem_usage=True,
         )
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)
-        generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+        generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[
+            0
+        ].strip()
 
-        expected_outputs = [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889]  # fmt: off
+        expected_outputs = [32001] * 32 + [
+            2,
+            1724,
+            338,
+            22910,
+            1048,
+            445,
+            1967,
+            29973,
+            450,
+            22910,
+            9565,
+            310,
+            445,
+            1967,
+            338,
+            393,
+            263,
+            767,
+            338,
+            13977,
+            292,
+            22095,
+            373,
+            278,
+            1250,
+            310,
+            263,
+            13328,
+            20134,
+            29963,
+            1550,
+            19500,
+            373,
+            263,
+            19587,
+            4272,
+            11952,
+            29889,
+        ]  # fmt: off
 
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
@@ -769,7 +935,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_flant5_xl(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
+        processor = InstructBlipProcessor.from_pretrained(
+            "Salesforce/instructblip-flan-t5-xl"
+        )
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
             torch_dtype=torch.bfloat16,
@@ -779,7 +947,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            torch_device
+        )
 
         for k, v in inputs.items():
             if torch.is_floating_point(v):
@@ -806,7 +976,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_interpolate_pos_encoding(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
+        processor = InstructBlipProcessor.from_pretrained(
+            "Salesforce/instructblip-flan-t5-xl"
+        )
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
             torch_dtype=torch.bfloat16,
@@ -816,18 +988,28 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         prompt = "What's in the image?"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            torch_device
+        )
 
         predictions = model.generate(**inputs, interpolate_pos_encoding=True)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[
+            0
+        ].strip()
 
         self.assertEqual(
-            predictions[0].tolist(), [0, 37, 1023, 753, 3, 9, 2335, 3823, 30, 8, 2608, 28, 3, 9, 1782, 5, 1]
+            predictions[0].tolist(),
+            [0, 37, 1023, 753, 3, 9, 2335, 3823, 30, 8, 2608, 28, 3, 9, 1782, 5, 1],
         )
-        self.assertEqual(generated_text, "The image features a woman sitting on the beach with a dog.")
+        self.assertEqual(
+            generated_text,
+            "The image features a woman sitting on the beach with a dog.",
+        )
 
     def test_expansion_in_processing(self):
-        processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
+        processor = InstructBlipProcessor.from_pretrained(
+            "Salesforce/instructblip-flan-t5-xl"
+        )
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
             torch_dtype=torch.bfloat16,
@@ -840,20 +1022,34 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         # Make sure we will go the legacy path by setting these args to None
         processor.num_query_tokens = None
         model.config.image_token_index = None
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            torch_device, dtype=torch.float16
+        )
 
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[
+            0
+        ].strip()
 
         # Add args to the config to trigger new logic when inputs are expanded in processing file
         processor.num_query_tokens = model.config.num_query_tokens
-        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        processor.tokenizer.add_special_tokens(
+            {"additional_special_tokens": ["<image>"]}
+        )
         model.config.image_token_index = len(processor.tokenizer) - 2
-        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
+        model.resize_token_embeddings(
+            processor.tokenizer.vocab_size, pad_to_multiple_of=64
+        )
 
         # Generate again with new inputs
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            torch_device, dtype=torch.float16
+        )
+        predictions_expanded = model.generate(
+            **inputs, do_sample=False, max_new_tokens=15
+        )
+        generated_text_expanded = processor.batch_decode(
+            predictions_expanded, skip_special_tokens=True
+        )[0].strip()
 
         self.assertTrue(generated_text_expanded == generated_text)

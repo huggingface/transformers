@@ -17,7 +17,6 @@
 import argparse
 
 import torch
-
 # Step 1. clone https://github.com/microsoft/unilm
 # Step 2. git checkout to https://github.com/microsoft/unilm/commit/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd
 # Step 3. cd unilm
@@ -27,7 +26,6 @@ from unilm.wavlm.WavLM import WavLM as WavLMOrig
 from unilm.wavlm.WavLM import WavLMConfig as WavLMConfigOrig
 
 from transformers import WavLMConfig, WavLMModel, logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -89,7 +87,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+    logger.info(
+        f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}."
+    )
 
 
 def recursively_load_weights(fairseq_model, hf_model):
@@ -136,7 +136,9 @@ def recursively_load_weights(fairseq_model, hf_model):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
+def load_conv_layer(
+    full_name, value, feature_extractor, unused_weights, use_group_norm
+):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
     layer_id = int(items[0])
@@ -144,40 +146,64 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but"
                 f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
             )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but"
                 f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
             )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
+    elif (type_id == 2 and not use_group_norm) or (
+        type_id == 2 and layer_id == 0 and use_group_norm
+    ):
         if "bias" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was"
                 " found."
             )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape, (
+            assert (
+                value.shape
+                == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
+            ), (
                 f"{full_name} has size {value.shape}, but"
                 f" {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
             )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
     else:
         unused_weights.append(full_name)
 
 
 @torch.no_grad()
-def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def convert_wavlm_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, config_path=None
+):
     # load the pre-trained checkpoints
     checkpoint = torch.load(checkpoint_path)
     cfg = WavLMConfigOrig(checkpoint["cfg"])
@@ -199,8 +225,22 @@ def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint"
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
     args = parser.parse_args()
-    convert_wavlm_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_wavlm_checkpoint(
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path
+    )

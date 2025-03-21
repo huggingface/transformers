@@ -17,17 +17,19 @@
 import unittest
 
 from transformers import XGLMConfig, XGLMTokenizer, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, slow
+from transformers.testing_utils import (require_flax, require_sentencepiece,
+                                        slow)
 
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
-
+from ...test_modeling_flax_common import (FlaxModelTesterMixin, ids_tensor,
+                                          random_attention_mask)
 
 if is_flax_available():
     import jax
     import jax.numpy as jnp
     import numpy as np
 
-    from transformers.models.xglm.modeling_flax_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel
+    from transformers.models.xglm.modeling_flax_xglm import (
+        FlaxXGLMForCausalLM, FlaxXGLMModel)
 
 
 @require_flax
@@ -74,7 +76,11 @@ class FlaxXGLMModelTester:
         self.pad_token_id = 1
 
     def prepare_config_and_inputs(self):
-        input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length], self.vocab_size), 3, self.vocab_size)
+        input_ids = np.clip(
+            ids_tensor([self.batch_size, self.seq_length], self.vocab_size),
+            3,
+            self.vocab_size,
+        )
 
         input_mask = None
         if self.use_input_mask:
@@ -105,7 +111,9 @@ class FlaxXGLMModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
@@ -113,7 +121,8 @@ class FlaxXGLMModelTester:
         attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
 
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
         outputs_cache = model(
             input_ids[:, :-1],
@@ -122,7 +131,9 @@ class FlaxXGLMModelTester:
             position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
@@ -132,21 +143,34 @@ class FlaxXGLMModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
         attention_mask_cache = jnp.concatenate(
-            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
+            [
+                attention_mask,
+                jnp.zeros(
+                    (
+                        attention_mask.shape[0],
+                        max_decoder_length - attention_mask.shape[1],
+                    )
+                ),
+            ],
             axis=-1,
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
         outputs_cache = model(
@@ -155,7 +179,9 @@ class FlaxXGLMModelTester:
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
@@ -164,26 +190,36 @@ class FlaxXGLMModelTester:
         )
 
         outputs = model(input_ids, attention_mask=attention_mask)
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_sentencepiece
 @require_flax
 class FlaxXGLMModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxXGLMModel, FlaxXGLMForCausalLM) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxXGLMModel, FlaxXGLMForCausalLM) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxXGLMModelTester(self)
 
     def test_use_cache_forward(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
+            self.model_tester.check_use_cache_forward(
+                model_class_name, config, input_ids, attention_mask
+            )
 
     def test_use_cache_forward_with_attn_mask(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
@@ -191,7 +227,12 @@ class FlaxXGLMModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_batch_generation(self):
         tokenizer = XGLMTokenizer.from_pretrained("XGLM", padding_side="left")
-        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
+        inputs = tokenizer(
+            ["Hello this is a long string", "Hey"],
+            return_tensors="np",
+            padding=True,
+            truncation=True,
+        )
 
         model = FlaxXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         model.config.num_beams = 1
@@ -199,9 +240,13 @@ class FlaxXGLMModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
         jit_generate = jax.jit(model.generate)
 
-        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+        output_sequences = jit_generate(
+            inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        ).sequences
 
-        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        output_string = tokenizer.batch_decode(
+            output_sequences, skip_special_tokens=True
+        )
 
         expected_string = [
             "Hello this is a long string of questions, but I'm not sure if I'm",

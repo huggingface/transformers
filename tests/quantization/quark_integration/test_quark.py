@@ -15,17 +15,12 @@
 
 import unittest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
-from transformers.testing_utils import (
-    is_torch_available,
-    require_accelerate,
-    require_quark,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-)
+from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
+                          GenerationConfig, QuarkConfig)
+from transformers.testing_utils import (is_torch_available, require_accelerate,
+                                        require_quark, require_torch_gpu,
+                                        require_torch_multi_gpu, slow)
 from transformers.utils.import_utils import is_quark_available
-
 
 if is_torch_available():
     import torch
@@ -36,7 +31,9 @@ if is_quark_available():
 
 class QuarkConfigTest(unittest.TestCase):
     def test_commmon_args(self):
-        config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
+        config = AutoConfig.from_pretrained(
+            "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
+        )
         QuarkConfig(**config.quantization_config)
 
 
@@ -50,9 +47,15 @@ class QuarkTest(unittest.TestCase):
     input_text = "Today I am in Paris and"
 
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris, France\nToday I am in Paris, Illinois")
-    EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying the city of light. I am not just any ordinary Paris")
-    EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
+    EXPECTED_OUTPUTS.add(
+        "Today I am in Paris and I am not in Paris, France\nToday I am in Paris, Illinois"
+    )
+    EXPECTED_OUTPUTS.add(
+        "Today I am in Paris and I am enjoying the city of light. I am not just any ordinary Paris"
+    )
+    EXPECTED_OUTPUTS.add(
+        "Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are"
+    )
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
@@ -63,11 +66,15 @@ class QuarkTest(unittest.TestCase):
         Setup reference & quantized model
         """
         cls.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            cls.reference_model_name, torch_dtype=torch.float16, device_map=cls.device_map
+            cls.reference_model_name,
+            torch_dtype=torch.float16,
+            device_map=cls.device_map,
         )
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.reference_model_name, use_fast=True)
+        cls.tokenizer = AutoTokenizer.from_pretrained(
+            cls.reference_model_name, use_fast=True
+        )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.quantized_model_name,
@@ -78,7 +85,9 @@ class QuarkTest(unittest.TestCase):
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()
 
-        self.assertTrue(self.mem_fp16 / mem_quantized > self.EXPECTED_RELATIVE_DIFFERENCE)
+        self.assertTrue(
+            self.mem_fp16 / mem_quantized > self.EXPECTED_RELATIVE_DIFFERENCE
+        )
 
     def test_device_and_dtype_assignment(self):
         r"""
@@ -99,9 +108,15 @@ class QuarkTest(unittest.TestCase):
         """
         self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
+        self.assertTrue(
+            self.quantized_model.config._pre_quantization_dtype == torch.float16
+        )
 
-        self.assertTrue(isinstance(self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear))
+        self.assertTrue(
+            isinstance(
+                self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear
+            )
+        )
 
     def check_inference_correctness(self, model):
         r"""
@@ -121,10 +136,15 @@ class QuarkTest(unittest.TestCase):
         )
 
         # Check the exactness of the results
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), generation_config=gen_config)
+        output_sequences = model.generate(
+            input_ids=encoded_input["input_ids"].to(0), generation_config=gen_config
+        )
 
         # Get the generation
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def test_generate_quality(self):
         """

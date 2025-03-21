@@ -25,17 +25,13 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_torchdynamo_compiling, logging,
+                      replace_return_docstrings)
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -89,7 +85,11 @@ class LlavaMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaConfig):
         super().__init__()
         # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        num_feature_layers = (
+            1
+            if isinstance(config.vision_feature_layer, int)
+            else len(config.vision_feature_layer)
+        )
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * num_feature_layers,
             config.text_config.hidden_size,
@@ -97,7 +97,9 @@ class LlavaMultiModalProjector(nn.Module):
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+            config.text_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
         )
 
     def forward(self, image_features):
@@ -254,9 +256,13 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        )
 
         self.post_init()
 
@@ -302,11 +308,15 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+            raise ValueError(
+                f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
+            )
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        image_outputs = self.vision_tower(
+            pixel_values, output_hidden_states=True, **kwargs
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -315,7 +325,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             if vision_feature_select_strategy == "default":
                 selected_image_feature = selected_image_feature[:, 1:]
         else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [
+                image_outputs.hidden_states[layer_idx]
+                for layer_idx in vision_feature_layer
+            ]
             # For default; crop CLS from each hidden state in the hidden state pool
             if vision_feature_select_strategy == "default":
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
@@ -326,7 +339,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -385,13 +400,23 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+            vision_feature_layer
+            if vision_feature_layer is not None
+            else self.config.vision_feature_layer
         )
         vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -400,7 +425,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -418,16 +445,27 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
                 image_sizes=image_sizes,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            if (
+                not is_torchdynamo_compiling()
+                and inputs_embeds[special_image_mask].numel() != image_features.numel()
+            ):
                 n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -451,16 +489,23 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:

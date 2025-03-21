@@ -29,23 +29,18 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
 from ....activations import ACT2FN
-from ....file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_scipy_available,
-    is_torch_cuda_available,
-    is_vision_available,
-    replace_return_docstrings,
-)
+from ....file_utils import (ModelOutput, add_start_docstrings,
+                            add_start_docstrings_to_model_forward,
+                            is_scipy_available, is_torch_cuda_available,
+                            is_vision_available, replace_return_docstrings)
 from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ....modeling_outputs import BaseModelOutput
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import meshgrid
-from ....utils import is_accelerate_available, is_ninja_available, is_torchvision_available, logging, requires_backends
+from ....utils import (is_accelerate_available, is_ninja_available,
+                       is_torchvision_available, logging, requires_backends)
 from ....utils.backbone_utils import load_backbone
 from .configuration_deta import DetaConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -103,7 +98,11 @@ class MultiScaleDeformableAttentionFunction(Function):
             context.im2col_step,
         )
         context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
         )
         return output
 
@@ -117,14 +116,16 @@ class MultiScaleDeformableAttentionFunction(Function):
             sampling_locations,
             attention_weights,
         ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
+        grad_value, grad_sampling_loc, grad_attn_weight = (
+            MultiScaleDeformableAttention.ms_deform_attn_backward(
+                value,
+                value_spatial_shapes,
+                value_level_start_index,
+                sampling_locations,
+                attention_weights,
+                grad_output,
+                context.im2col_step,
+            )
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
@@ -357,14 +358,27 @@ class DetaFrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(n))
 
     def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
     ):
         num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
         )
 
     def forward(self, x):
@@ -423,7 +437,11 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
         # TODO fix this
         if config.backbone_config.model_type == "resnet":
             for name, parameter in self.model.named_parameters():
-                if "stages.1" not in name and "stages.2" not in name and "stages.3" not in name:
+                if (
+                    "stages.1" not in name
+                    and "stages.2" not in name
+                    and "stages.3" not in name
+                ):
                     parameter.requires_grad_(False)
 
         self.position_embedding = build_position_encoding(config)
@@ -441,8 +459,12 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
         pos = []
         for feature_map in features:
             # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            position_embeddings = self.position_embedding(feature_map, mask).to(feature_map.dtype)
+            mask = nn.functional.interpolate(
+                pixel_mask[None].float(), size=feature_map.shape[-2:]
+            ).to(torch.bool)[0]
+            position_embeddings = self.position_embedding(feature_map, mask).to(
+                feature_map.dtype
+            )
             out.append((feature_map, mask))
             pos.append(position_embeddings)
 
@@ -455,7 +477,9 @@ class DetaSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=None):
+    def __init__(
+        self, embedding_dim=64, temperature=10000, normalize=False, scale=None
+    ):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.temperature = temperature
@@ -476,13 +500,21 @@ class DetaSinePositionEmbedding(nn.Module):
             y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+        dim_t = torch.arange(
+            self.embedding_dim, dtype=torch.int64, device=pixel_values.device
+        ).float()
+        dim_t = self.temperature ** (
+            2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim
+        )
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_x = torch.stack(
+            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
+        ).flatten(3)
+        pos_y = torch.stack(
+            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
+        ).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
 
@@ -503,7 +535,13 @@ class DetaLearnedPositionEmbedding(nn.Module):
         height_values = torch.arange(height, device=pixel_values.device)
         x_emb = self.column_embeddings(width_values)
         y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
+        pos = torch.cat(
+            [
+                x_emb.unsqueeze(0).repeat(height, 1, 1),
+                y_emb.unsqueeze(1).repeat(1, width, 1),
+            ],
+            dim=-1,
+        )
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
@@ -524,11 +562,16 @@ def build_position_encoding(config):
 
 
 def multi_scale_deformable_attention(
-    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
+    value: Tensor,
+    value_spatial_shapes: Tensor,
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
+    value_list = value.split(
+        [height.item() * width.item() for height, width in value_spatial_shapes], dim=1
+    )
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
@@ -537,15 +580,24 @@ def multi_scale_deformable_attention(
         # -> batch_size, num_heads*hidden_dim, height*width
         # -> batch_size*num_heads, hidden_dim, height, width
         value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
+            value_list[level_id]
+            .flatten(2)
+            .transpose(1, 2)
+            .reshape(batch_size * num_heads, hidden_dim, height, width)
         )
         # batch_size, num_queries, num_heads, num_points, 2
         # -> batch_size, num_heads, num_queries, num_points, 2
         # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        sampling_grid_l_ = (
+            sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        )
         # batch_size*num_heads, hidden_dim, num_queries, num_points
         sampling_value_l_ = nn.functional.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+            value_l_,
+            sampling_grid_l_,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
         )
         sampling_value_list.append(sampling_value_l_)
     # (batch_size, num_queries, num_heads, num_levels, num_points)
@@ -575,7 +627,9 @@ class DetaMultiscaleDeformableAttention(nn.Module):
             try:
                 load_cuda_kernels()
             except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+                logger.warning(
+                    f"Could not load the custom kernel for multi-scale deformable attention: {e}"
+                )
 
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -597,8 +651,12 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.sampling_offsets = nn.Linear(
+            config.d_model, num_heads * self.n_levels * n_points * 2
+        )
+        self.attention_weights = nn.Linear(
+            config.d_model, num_heads * self.n_levels * n_points
+        )
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
@@ -609,7 +667,9 @@ class DetaMultiscaleDeformableAttention(nn.Module):
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
         default_dtype = torch.get_default_dtype()
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
+        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (
+            2.0 * math.pi / self.n_heads
+        )
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -627,7 +687,9 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         nn.init.xavier_uniform_(self.output_proj.weight.data)
         nn.init.constant_(self.output_proj.bias.data, 0.0)
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -657,7 +719,9 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         if attention_mask is not None:
             # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        value = value.view(
+            batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads
+        )
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
         )
@@ -670,7 +734,9 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.stack(
+                [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1
+            )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
@@ -678,14 +744,21 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+                + sampling_offsets
+                / self.n_points
+                * reference_points[:, :, None, :, None, 2:]
+                * 0.5
             )
         else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            raise ValueError(
+                f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+            )
 
         if self.disable_custom_kernels:
             # PyTorch implementation
-            output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+            output = multi_scale_deformable_attention(
+                value, spatial_shapes, sampling_locations, attention_weights
+            )
         else:
             try:
                 # custom kernel
@@ -699,7 +772,9 @@ class DetaMultiscaleDeformableAttention(nn.Module):
                 )
             except Exception:
                 # PyTorch implementation
-                output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+                output = multi_scale_deformable_attention(
+                    value, spatial_shapes, sampling_locations, attention_weights
+                )
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -737,9 +812,15 @@ class DetaMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(batch_size, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -763,7 +844,9 @@ class DetaMultiheadAttention(nn.Module):
         value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
+        query_states = self._shape(query_states, target_len, batch_size).view(
+            *proj_shape
+        )
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
@@ -780,7 +863,9 @@ class DetaMultiheadAttention(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, hidden_states.dtype
+            )
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
@@ -788,8 +873,13 @@ class DetaMultiheadAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
+            attn_weights = (
+                attn_weights.view(batch_size, self.num_heads, target_len, source_len)
+                + attention_mask
+            )
+            attn_weights = attn_weights.view(
+                batch_size * self.num_heads, target_len, source_len
+            )
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -798,22 +888,34 @@ class DetaMultiheadAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
+            attn_weights_reshaped = attn_weights.view(
+                batch_size, self.num_heads, target_len, source_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                batch_size * self.num_heads, target_len, source_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
+        if attn_output.size() != (
+            batch_size * self.num_heads,
+            target_len,
+            self.head_dim,
+        ):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+        attn_output = attn_output.view(
+            batch_size, self.num_heads, target_len, self.head_dim
+        )
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
 
@@ -882,16 +984,22 @@ class DetaEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -899,7 +1007,9 @@ class DetaEncoderLayer(nn.Module):
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+                hidden_states = torch.clamp(
+                    hidden_states, min=-clamp_value, max=clamp_value
+                )
 
         outputs = (hidden_states,)
 
@@ -978,7 +1088,9 @@ class DetaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -998,7 +1110,9 @@ class DetaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = second_residual + hidden_states
 
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
@@ -1006,9 +1120,13 @@ class DetaDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -1024,7 +1142,11 @@ class DetaPreTrainedModel(PreTrainedModel):
     config_class = DetaConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    _no_split_modules = [r"DetaBackboneWithPositionalEncodings", r"DetaEncoderLayer", r"DetaDecoderLayer"]
+    _no_split_modules = [
+        r"DetaBackboneWithPositionalEncodings",
+        r"DetaEncoderLayer",
+        r"DetaDecoderLayer",
+    ]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -1121,7 +1243,9 @@ class DetaEncoder(DetaPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([DetaEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [DetaEncoderLayer(config) for _ in range(config.encoder_layers)]
+        )
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1145,8 +1269,12 @@ class DetaEncoder(DetaPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(
+                    0.5, height - 0.5, height, dtype=torch.float32, device=device
+                ),
+                torch.linspace(
+                    0.5, width - 0.5, width, dtype=torch.float32, device=device
+                ),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1196,16 +1324,28 @@ class DetaEncoder(DetaPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
+        reference_points = self.get_reference_points(
+            spatial_shapes, valid_ratios, device=inputs_embeds.device
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1231,9 +1371,15 @@ class DetaEncoder(DetaPreTrainedModel):
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, encoder_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -1256,7 +1402,9 @@ class DetaDecoder(DetaPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([DetaDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [DetaDecoderLayer(config) for _ in range(config.decoder_layers)]
+        )
         self.gradient_checkpointing = False
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
@@ -1312,11 +1460,19 @@ class DetaDecoder(DetaPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1324,19 +1480,26 @@ class DetaDecoder(DetaPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = (
+            () if (output_attentions and encoder_hidden_states is not None) else None
+        )
         intermediate = ()
         intermediate_reference_points = ()
 
         for idx, decoder_layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = (
-                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                    reference_points[:, :, None]
+                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             else:
                 if reference_points.shape[-1] != 2:
-                    raise ValueError("Reference points' last dimension must be of size 2")
-                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+                    raise ValueError(
+                        "Reference points' last dimension must be of size 2"
+                    )
+                reference_points_input = (
+                    reference_points[:, :, None] * valid_ratios[:, None]
+                )
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1379,7 +1542,9 @@ class DetaDecoder(DetaPreTrainedModel):
                             f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
                         )
                     new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
+                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(
+                        reference_points
+                    )
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
@@ -1394,7 +1559,9 @@ class DetaDecoder(DetaPreTrainedModel):
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        intermediate_reference_points = torch.stack(
+            intermediate_reference_points, dim=1
+        )
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1456,7 +1623,13 @@ class DetaModel(DetaPreTrainedModel):
             for _ in range(config.num_feature_levels - num_backbone_outs):
                 input_proj_list.append(
                     nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
+                        nn.Conv2d(
+                            in_channels,
+                            config.d_model,
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
+                        ),
                         nn.GroupNorm(32, config.d_model),
                     )
                 )
@@ -1466,19 +1639,27 @@ class DetaModel(DetaPreTrainedModel):
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.Conv2d(
+                            intermediate_channel_sizes[-1],
+                            config.d_model,
+                            kernel_size=1,
+                        ),
                         nn.GroupNorm(32, config.d_model),
                     )
                 ]
             )
 
         if not config.two_stage:
-            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
+            self.query_position_embeddings = nn.Embedding(
+                config.num_queries, config.d_model * 2
+            )
 
         self.encoder = DetaEncoder(config)
         self.decoder = DetaDecoder(config)
 
-        self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+        self.level_embed = nn.Parameter(
+            torch.Tensor(config.num_feature_levels, config.d_model)
+        )
 
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
@@ -1527,14 +1708,20 @@ class DetaModel(DetaPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).float()
-        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+        dim_t = torch.arange(
+            num_pos_feats, dtype=torch.int64, device=proposals.device
+        ).float()
+        dim_t = temperature ** (
+            2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats
+        )
         # batch_size, num_queries, 4
         proposals = proposals.sigmoid() * scale
         # batch_size, num_queries, 4, 128
         pos = proposals[:, :, :, None] / dim_t
         # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
+        pos = torch.stack(
+            (pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4
+        ).flatten(2)
         return pos
 
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
@@ -1557,18 +1744,26 @@ class DetaModel(DetaPreTrainedModel):
         _cur = 0
         level_ids = []
         for level, (height, width) in enumerate(spatial_shapes):
-            mask_flatten_ = padding_mask[:, _cur : (_cur + height * width)].view(batch_size, height, width, 1)
+            mask_flatten_ = padding_mask[:, _cur : (_cur + height * width)].view(
+                batch_size, height, width, 1
+            )
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = meshgrid(
-                torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                torch.linspace(
+                    0, height - 1, height, dtype=torch.float32, device=enc_output.device
+                ),
+                torch.linspace(
+                    0, width - 1, width, dtype=torch.float32, device=enc_output.device
+                ),
                 indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
-            scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
+            scale = torch.cat(
+                [valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1
+            ).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
             width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
             proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
@@ -1576,10 +1771,18 @@ class DetaModel(DetaPreTrainedModel):
             _cur += height * width
             level_ids.append(grid.new_ones(height * width, dtype=torch.long) * level)
         output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        output_proposals_valid = (
+            (output_proposals > 0.01) & (output_proposals < 0.99)
+        ).all(-1, keepdim=True)
+        output_proposals = torch.log(
+            output_proposals / (1 - output_proposals)
+        )  # inverse sigmoid
+        output_proposals = output_proposals.masked_fill(
+            padding_mask.unsqueeze(-1), float("inf")
+        )
+        output_proposals = output_proposals.masked_fill(
+            ~output_proposals_valid, float("inf")
+        )
 
         # assign each pixel as an object query
         object_query = enc_output
@@ -1590,7 +1793,9 @@ class DetaModel(DetaPreTrainedModel):
         return object_query, output_proposals, level_ids
 
     @add_start_docstrings_to_model_forward(DETA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DetaModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DetaModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1627,17 +1832,27 @@ class DetaModel(DetaPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 900, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
+            pixel_mask = torch.ones(
+                ((batch_size, height, width)), dtype=torch.long, device=device
+            )
 
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
@@ -1661,7 +1876,9 @@ class DetaModel(DetaPreTrainedModel):
                     source = self.input_proj[level](features[-1][0])
                 else:
                     source = self.input_proj[level](sources[-1])
-                mask = nn.functional.interpolate(pixel_mask[None].float(), size=source.shape[-2:]).to(torch.bool)[0]
+                mask = nn.functional.interpolate(
+                    pixel_mask[None].float(), size=source.shape[-2:]
+                ).to(torch.bool)[0]
                 pos_l = self.backbone.position_embedding(source, mask).to(source.dtype)
                 sources.append(source)
                 masks.append(mask)
@@ -1686,8 +1903,12 @@ class DetaModel(DetaPreTrainedModel):
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        spatial_shapes = torch.as_tensor(
+            spatial_shapes, dtype=torch.long, device=source_flatten.device
+        )
+        level_start_index = torch.cat(
+            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+        )
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
         valid_ratios = valid_ratios.float()
 
@@ -1719,8 +1940,10 @@ class DetaModel(DetaPreTrainedModel):
         enc_outputs_coord_logits = None
         output_proposals = None
         if self.config.two_stage:
-            object_query_embedding, output_proposals, level_ids = self.gen_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+            object_query_embedding, output_proposals, level_ids = (
+                self.gen_encoder_output_proposals(
+                    encoder_outputs[0], ~mask_flatten, spatial_shapes
+                )
             )
 
             # hack implementation for two-stage DETA
@@ -1736,7 +1959,9 @@ class DetaModel(DetaPreTrainedModel):
             proposal_logit = enc_outputs_class[..., 0]
 
             if self.assign_first_stage:
-                proposal_boxes = center_to_corners_format(enc_outputs_coord_logits.sigmoid().float()).clamp(0, 1)
+                proposal_boxes = center_to_corners_format(
+                    enc_outputs_coord_logits.sigmoid().float()
+                ).clamp(0, 1)
                 topk_proposals = []
                 for b in range(batch_size):
                     prop_boxes_b = proposal_boxes[b]
@@ -1747,12 +1972,19 @@ class DetaModel(DetaPreTrainedModel):
                     pre_nms_inds = []
                     for lvl in range(len(spatial_shapes)):
                         lvl_mask = level_ids == lvl
-                        pre_nms_inds.append(torch.topk(prop_logits_b.sigmoid() * lvl_mask, pre_nms_topk)[1])
+                        pre_nms_inds.append(
+                            torch.topk(
+                                prop_logits_b.sigmoid() * lvl_mask, pre_nms_topk
+                            )[1]
+                        )
                     pre_nms_inds = torch.cat(pre_nms_inds)
 
                     # nms on topk indices
                     post_nms_inds = batched_nms(
-                        prop_boxes_b[pre_nms_inds], prop_logits_b[pre_nms_inds], level_ids[pre_nms_inds], 0.9
+                        prop_boxes_b[pre_nms_inds],
+                        prop_logits_b[pre_nms_inds],
+                        level_ids[pre_nms_inds],
+                        0.9,
                     )
                     keep_inds = pre_nms_inds[post_nms_inds]
 
@@ -1767,9 +1999,13 @@ class DetaModel(DetaPreTrainedModel):
                     q_per_l = topk // len(spatial_shapes)
                     is_level_ordered = (
                         level_ids[keep_inds][None]
-                        == torch.arange(len(spatial_shapes), device=level_ids.device)[:, None]
+                        == torch.arange(len(spatial_shapes), device=level_ids.device)[
+                            :, None
+                        ]
                     )
-                    keep_inds_mask = is_level_ordered & (is_level_ordered.cumsum(1) <= q_per_l)  # LS
+                    keep_inds_mask = is_level_ordered & (
+                        is_level_ordered.cumsum(1) <= q_per_l
+                    )  # LS
                     keep_inds_mask = keep_inds_mask.any(0)  # S
 
                     # pad to Q indices (might let ones filtered from pre-nms sneak by... unlikely because we pick high conf anyways)
@@ -1785,16 +2021,23 @@ class DetaModel(DetaPreTrainedModel):
                 topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
 
             topk_coords_logits = torch.gather(
-                enc_outputs_coord_logits, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
+                enc_outputs_coord_logits,
+                1,
+                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
             )
             topk_coords_logits = topk_coords_logits.detach()
             reference_points = topk_coords_logits.sigmoid()
             init_reference_points = reference_points
-            pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
+            pos_trans_out = self.pos_trans_norm(
+                self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits))
+            )
             query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
 
             topk_feats = torch.stack(
-                [object_query_embedding[b][topk_proposals[b]] for b in range(batch_size)]
+                [
+                    object_query_embedding[b][topk_proposals[b]]
+                    for b in range(batch_size)
+                ]
             ).detach()
             target = target + self.pix_trans_norm(self.pix_trans(topk_feats))
         else:
@@ -1819,8 +2062,17 @@ class DetaModel(DetaPreTrainedModel):
         )
 
         if not return_dict:
-            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            enc_outputs = tuple(
+                value
+                for value in [enc_outputs_class, enc_outputs_coord_logits]
+                if value is not None
+            )
+            tuple_outputs = (
+                (init_reference_points,)
+                + decoder_outputs
+                + encoder_outputs
+                + enc_outputs
+            )
 
             return tuple_outputs
 
@@ -1863,7 +2115,10 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # Detection heads on top
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = DetaMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+            input_dim=config.d_model,
+            hidden_dim=config.d_model,
+            output_dim=4,
+            num_layers=3,
         )
 
         prior_prob = 0.01
@@ -1873,7 +2128,9 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
+        num_pred = (
+            (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
+        )
         if config.with_box_refine:
             self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
@@ -1882,7 +2139,9 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             self.model.decoder.bbox_embed = self.bbox_embed
         else:
             nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
+            self.class_embed = nn.ModuleList(
+                [self.class_embed for _ in range(num_pred)]
+            )
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
             self.model.decoder.bbox_embed = None
         if config.two_stage:
@@ -1901,12 +2160,16 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # as a dict having both a Tensor and a list.
         aux_loss = [
             {"logits": logits, "pred_boxes": pred_boxes}
-            for logits, pred_boxes in zip(outputs_class.transpose(0, 1)[:-1], outputs_coord.transpose(0, 1)[:-1])
+            for logits, pred_boxes in zip(
+                outputs_class.transpose(0, 1)[:-1], outputs_coord.transpose(0, 1)[:-1]
+            )
         ]
         return aux_loss
 
     @add_start_docstrings_to_model_forward(DETA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DetaObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DetaObjectDetectionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1962,7 +2225,9 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         Detected remote with confidence 0.638 at location [333.34, 76.81, 370.22, 187.94]
         Detected couch with confidence 0.584 at location [0.03, 0.99, 640.02, 474.93]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
         outputs = self.model(
@@ -1977,9 +2242,13 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
+        hidden_states = (
+            outputs.intermediate_hidden_states if return_dict else outputs[2]
+        )
         init_reference = outputs.init_reference_points if return_dict else outputs[0]
-        inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
+        inter_references = (
+            outputs.intermediate_reference_points if return_dict else outputs[3]
+        )
 
         # class logits + predicted bounding boxes
         outputs_classes = []
@@ -1999,7 +2268,9 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 delta_bbox[..., :2] += reference
                 outputs_coord_logits = delta_bbox
             else:
-                raise ValueError(f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}")
+                raise ValueError(
+                    f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}"
+                )
             outputs_coord = outputs_coord_logits.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
@@ -2014,7 +2285,9 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         if labels is not None:
             # First: create the matcher
             matcher = DetaHungarianMatcher(
-                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
+                class_cost=self.config.class_cost,
+                bbox_cost=self.config.bbox_cost,
+                giou_cost=self.config.giou_cost,
             )
             # Second: create the criterion
             losses = ["labels", "boxes", "cardinality"]
@@ -2051,10 +2324,16 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
-                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+                    aux_weight_dict.update(
+                        {k + f"_{i}": v for k, v in weight_dict.items()}
+                    )
                 aux_weight_dict.update({k + "_enc": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+            loss = sum(
+                loss_dict[k] * weight_dict[k]
+                for k in loss_dict.keys()
+                if k in weight_dict
+            )
 
         if not return_dict:
             if auxiliary_outputs is not None:
@@ -2108,7 +2387,9 @@ def dice_loss(inputs, targets, num_boxes):
     return loss.sum() / num_boxes
 
 
-def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
+def sigmoid_focal_loss(
+    inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2
+):
     """
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
 
@@ -2127,7 +2408,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
         Loss tensor
     """
     prob = inputs.sigmoid()
-    ce_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = nn.functional.binary_cross_entropy_with_logits(
+        inputs, targets, reduction="none"
+    )
     # add modulating factor
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
@@ -2189,14 +2472,23 @@ class DetaLoss(nn.Module):
         source_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_o = torch.cat(
+            [t["class_labels"][J] for t, (_, J) in zip(targets, indices)]
+        )
         target_classes = torch.full(
-            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
+            source_logits.shape[:2],
+            self.num_classes,
+            dtype=torch.int64,
+            device=source_logits.device,
         )
         target_classes[idx] = target_classes_o
 
         target_classes_onehot = torch.zeros(
-            [source_logits.shape[0], source_logits.shape[1], source_logits.shape[2] + 1],
+            [
+                source_logits.shape[0],
+                source_logits.shape[1],
+                source_logits.shape[2] + 1,
+            ],
             dtype=source_logits.dtype,
             layout=source_logits.layout,
             device=source_logits.device,
@@ -2205,7 +2497,13 @@ class DetaLoss(nn.Module):
 
         target_classes_onehot = target_classes_onehot[:, :, :-1]
         loss_ce = (
-            sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+            sigmoid_focal_loss(
+                source_logits,
+                target_classes_onehot,
+                num_boxes,
+                alpha=self.focal_alpha,
+                gamma=2,
+            )
             * source_logits.shape[1]
         )
         losses = {"loss_ce": loss_ce}
@@ -2221,7 +2519,9 @@ class DetaLoss(nn.Module):
         """
         logits = outputs["logits"]
         device = logits.device
-        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        target_lengths = torch.as_tensor(
+            [len(v["class_labels"]) for v in targets], device=device
+        )
         # Count the number of predictions that are NOT "no-object" (which is the last class)
         card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
         card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
@@ -2239,7 +2539,9 @@ class DetaLoss(nn.Module):
             raise KeyError("No predicted boxes found in outputs")
         idx = self._get_source_permutation_idx(indices)
         source_boxes = outputs["pred_boxes"][idx]
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = torch.cat(
+            [t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
+        )
 
         loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
 
@@ -2247,20 +2549,27 @@ class DetaLoss(nn.Module):
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
+            generalized_box_iou(
+                center_to_corners_format(source_boxes),
+                center_to_corners_format(target_boxes),
+            )
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        batch_idx = torch.cat(
+            [torch.full_like(source, i) for i, (source, _) in enumerate(indices)]
+        )
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        batch_idx = torch.cat(
+            [torch.full_like(target, i) for i, (_, target) in enumerate(indices)]
+        )
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
@@ -2285,7 +2594,11 @@ class DetaLoss(nn.Module):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k not in ("auxiliary_outputs", "enc_outputs")}
+        outputs_without_aux = {
+            k: v
+            for k, v in outputs.items()
+            if k not in ("auxiliary_outputs", "enc_outputs")
+        }
 
         # Retrieve the matching between the outputs of the last layer and the targets
         if self.assign_second_stage:
@@ -2295,7 +2608,9 @@ class DetaLoss(nn.Module):
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
-        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        num_boxes = torch.as_tensor(
+            [num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device
+        )
         # Check that we have initialized the distributed state
         world_size = 1
         if is_accelerate_available():
@@ -2315,7 +2630,9 @@ class DetaLoss(nn.Module):
                 if not self.assign_second_stage:
                     indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
-                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
+                    l_dict = self.get_loss(
+                        loss, auxiliary_outputs, targets, indices, num_boxes
+                    )
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -2329,7 +2646,9 @@ class DetaLoss(nn.Module):
             else:
                 indices = self.matcher(enc_outputs, bin_targets)
             for loss in self.losses:
-                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes)
+                l_dict = self.get_loss(
+                    loss, enc_outputs, bin_targets, indices, num_boxes
+                )
                 l_dict = {k + "_enc": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
@@ -2349,7 +2668,9 @@ class DetaMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
+        )
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -2374,7 +2695,9 @@ class DetaHungarianMatcher(nn.Module):
             The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+    def __init__(
+        self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1
+    ):
         super().__init__()
         requires_backends(self, ["scipy"])
 
@@ -2408,7 +2731,9 @@ class DetaHungarianMatcher(nn.Module):
         batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
+        out_prob = (
+            outputs["logits"].flatten(0, 1).sigmoid()
+        )  # [batch_size * num_queries, num_classes]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes
@@ -2418,7 +2743,9 @@ class DetaHungarianMatcher(nn.Module):
         # Compute the classification cost.
         alpha = 0.25
         gamma = 2.0
-        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        neg_cost_class = (
+            (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        )
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
         class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
 
@@ -2426,15 +2753,30 @@ class DetaHungarianMatcher(nn.Module):
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
 
         # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+        giou_cost = -generalized_box_iou(
+            center_to_corners_format(out_bbox), center_to_corners_format(target_bbox)
+        )
 
         # Final cost matrix
-        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        cost_matrix = (
+            self.bbox_cost * bbox_cost
+            + self.class_cost * class_cost
+            + self.giou_cost * giou_cost
+        )
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        indices = [
+            linear_sum_assignment(c[i])
+            for i, c in enumerate(cost_matrix.split(sizes, -1))
+        ]
+        return [
+            (
+                torch.as_tensor(i, dtype=torch.int64),
+                torch.as_tensor(j, dtype=torch.int64),
+            )
+            for i, j in indices
+        ]
 
 
 def _upcast(t: Tensor) -> Tensor:
@@ -2487,9 +2829,13 @@ def generalized_box_iou(boxes1, boxes2):
     # degenerate boxes gives inf / nan results
     # so do an early check
     if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
-        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+        raise ValueError(
+            f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}"
+        )
     if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
-        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
+        raise ValueError(
+            f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}"
+        )
     iou, union = box_iou(boxes1, boxes2)
 
     top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
@@ -2529,7 +2875,12 @@ class DetaMatcher:
     matches to prediction n in [0, N). (b) a vector of length N containing the labels for each prediction.
     """
 
-    def __init__(self, thresholds: List[float], labels: List[int], allow_low_quality_matches: bool = False):
+    def __init__(
+        self,
+        thresholds: List[float],
+        labels: List[int],
+        allow_low_quality_matches: bool = False,
+    ):
         """
         Args:
             thresholds (`list[float]`):
@@ -2559,7 +2910,9 @@ class DetaMatcher:
         if not all(l in [-1, 0, 1] for l in labels):
             raise ValueError("All labels should be either -1, 0 or 1")
         if len(labels) != len(thresholds) - 1:
-            raise ValueError("Number of labels should be equal to number of thresholds - 1")
+            raise ValueError(
+                "Number of labels should be equal to number of thresholds - 1"
+            )
         self.thresholds = thresholds
         self.labels = labels
         self.allow_low_quality_matches = allow_low_quality_matches
@@ -2579,7 +2932,9 @@ class DetaMatcher:
         """
         assert match_quality_matrix.dim() == 2
         if match_quality_matrix.numel() == 0:
-            default_matches = match_quality_matrix.new_full((match_quality_matrix.size(1),), 0, dtype=torch.int64)
+            default_matches = match_quality_matrix.new_full(
+                (match_quality_matrix.size(1),), 0, dtype=torch.int64
+            )
             # When no gt boxes exist, we define IOU = 0 and therefore set labels
             # to `self.labels[0]`, which usually defaults to background class 0
             # To choose to ignore instead, can make labels=[-1,0,-1,1] + set appropriate thresholds
@@ -2618,7 +2973,9 @@ class DetaMatcher:
         # Find the highest quality match available, even if it is low, including ties.
         # Note that the matches qualities must be positive due to the use of
         # `torch.nonzero`.
-        _, pred_inds_with_highest_quality = nonzero_tuple(match_quality_matrix == highest_quality_foreach_gt[:, None])
+        _, pred_inds_with_highest_quality = nonzero_tuple(
+            match_quality_matrix == highest_quality_foreach_gt[:, None]
+        )
         # If an anchor was labeled positive only due to a low-quality match
         # with gt_A, but it has larger overlap with gt_B, it's matched index will still be gt_B.
         # This follows the implementation in Detectron, and is found to have no significant impact.
@@ -2626,7 +2983,9 @@ class DetaMatcher:
 
 
 # from https://github.com/facebookresearch/detectron2/blob/cbbc1ce26473cb2a5cc8f58e8ada9ae14cb41052/detectron2/modeling/sampling.py#L9
-def subsample_labels(labels: torch.Tensor, num_samples: int, positive_fraction: float, bg_label: int):
+def subsample_labels(
+    labels: torch.Tensor, num_samples: int, positive_fraction: float, bg_label: int
+):
     """
     Return `num_samples` (or fewer, if not enough found) random samples from `labels` which is a mixture of positives &
     negatives. It will try to return as many positives as possible without exceeding `positive_fraction * num_samples`,
@@ -2690,10 +3049,17 @@ class DetaStage2Assigner(nn.Module):
         self.positive_fraction = 0.25
         self.bg_label = 400  # number > 91 to filter out later
         self.batch_size_per_image = num_queries
-        self.proposal_matcher = DetaMatcher(thresholds=[0.6], labels=[0, 1], allow_low_quality_matches=True)
+        self.proposal_matcher = DetaMatcher(
+            thresholds=[0.6], labels=[0, 1], allow_low_quality_matches=True
+        )
         self.k = max_k
 
-    def _sample_proposals(self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor):
+    def _sample_proposals(
+        self,
+        matched_idxs: torch.Tensor,
+        matched_labels: torch.Tensor,
+        gt_classes: torch.Tensor,
+    ):
         """
         Based on the matching between N proposals and M groundtruth, sample the proposals and set their classification
         labels.
@@ -2751,7 +3117,9 @@ class DetaStage2Assigner(nn.Module):
             )
             pos_pr_inds = sampled_idxs[sampled_gt_classes != self.bg_label]
             pos_gt_inds = matched_idxs[pos_pr_inds]
-            pos_pr_inds, pos_gt_inds = self.postprocess_indices(pos_pr_inds, pos_gt_inds, iou)
+            pos_pr_inds, pos_gt_inds = self.postprocess_indices(
+                pos_pr_inds, pos_gt_inds, iou
+            )
             indices.append((pos_pr_inds, pos_gt_inds))
             ious.append(iou)
         if return_cost_matrix:
@@ -2772,7 +3140,9 @@ class DetaStage1Assigner(nn.Module):
         self.t_low = t_low
         self.t_high = t_high
         self.anchor_matcher = DetaMatcher(
-            thresholds=[t_low, t_high], labels=[0, -1, 1], allow_low_quality_matches=True
+            thresholds=[t_low, t_high],
+            labels=[0, -1, 1],
+            allow_low_quality_matches=True,
         )
 
     def _subsample_labels(self, label):
@@ -2783,7 +3153,9 @@ class DetaStage1Assigner(nn.Module):
         Args:
             labels (Tensor): a vector of -1, 0, 1. Will be modified in-place and returned.
         """
-        pos_idx, neg_idx = subsample_labels(label, self.batch_size_per_image, self.positive_fraction, 0)
+        pos_idx, neg_idx = subsample_labels(
+            label, self.batch_size_per_image, self.positive_fraction, 0
+        )
         # Fill with the ignore label (-1), then set positive and negative labels
         label.fill_(-1)
         label.scatter_(0, pos_idx, 1)
@@ -2815,8 +3187,12 @@ class DetaStage1Assigner(nn.Module):
             all_pr_inds = torch.arange(len(anchors), device=matched_labels.device)
             pos_pr_inds = all_pr_inds[matched_labels == 1]
             pos_gt_inds = matched_idxs[pos_pr_inds]
-            pos_pr_inds, pos_gt_inds = self.postprocess_indices(pos_pr_inds, pos_gt_inds, iou)
-            pos_pr_inds, pos_gt_inds = pos_pr_inds.to(anchors.device), pos_gt_inds.to(anchors.device)
+            pos_pr_inds, pos_gt_inds = self.postprocess_indices(
+                pos_pr_inds, pos_gt_inds, iou
+            )
+            pos_pr_inds, pos_gt_inds = pos_pr_inds.to(anchors.device), pos_gt_inds.to(
+                anchors.device
+            )
             indices.append((pos_pr_inds, pos_gt_inds))
         return indices
 

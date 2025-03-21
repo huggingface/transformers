@@ -16,7 +16,9 @@ class Owlv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = self.processor_class.from_pretrained("google/owlv2-base-patch16-ensemble")
+        processor = self.processor_class.from_pretrained(
+            "google/owlv2-base-patch16-ensemble"
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
@@ -31,7 +33,9 @@ class Owlv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(None, image_input, query_images)
 
-        self.assertListEqual(list(inputs.keys()), ["query_pixel_values", "pixel_values"])
+        self.assertListEqual(
+            list(inputs.keys()), ["query_pixel_values", "pixel_values"]
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):

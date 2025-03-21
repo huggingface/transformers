@@ -26,20 +26,11 @@ import requests
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
-from .utils import (
-    IMAGE_PROCESSOR_NAME,
-    PushToHubMixin,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
-    cached_file,
-    copy_func,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
-    is_vision_available,
-    logging,
-)
-
+from .utils import (IMAGE_PROCESSOR_NAME, PushToHubMixin,
+                    add_model_info_to_auto_map,
+                    add_model_info_to_custom_pipelines, cached_file, copy_func,
+                    download_url, is_offline_mode, is_remote_url,
+                    is_vision_available, logging)
 
 if is_vision_available():
     from PIL import Image
@@ -206,11 +197,18 @@ class ImageProcessingMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        image_processor_dict, kwargs = cls.get_image_processor_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
 
         return cls.from_dict(image_processor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        push_to_hub: bool = False,
+        **kwargs,
+    ):
         """
         Save an image processor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~image_processing_utils.ImageProcessingMixin.from_pretrained`] class method.
@@ -239,7 +237,9 @@ class ImageProcessingMixin(PushToHubMixin):
             kwargs["token"] = use_auth_token
 
         if os.path.isfile(save_directory):
-            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+            raise AssertionError(
+                f"Provided path ({save_directory}) should be a directory, not a file"
+            )
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -300,7 +300,9 @@ class ImageProcessingMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
-        image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
+        image_processor_filename = kwargs.pop(
+            "image_processor_filename", IMAGE_PROCESSOR_NAME
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -316,7 +318,10 @@ class ImageProcessingMixin(PushToHubMixin):
                 )
             token = use_auth_token
 
-        user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
+        user_agent = {
+            "file_type": "image processor",
+            "from_auto_class": from_auto_class,
+        }
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
@@ -327,7 +332,9 @@ class ImageProcessingMixin(PushToHubMixin):
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
+            image_processor_file = os.path.join(
+                pretrained_model_name_or_path, image_processor_filename
+            )
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -386,8 +393,11 @@ class ImageProcessingMixin(PushToHubMixin):
                     image_processor_dict["auto_map"], pretrained_model_name_or_path
                 )
             if "custom_pipelines" in image_processor_dict:
-                image_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    image_processor_dict["custom_pipelines"], pretrained_model_name_or_path
+                image_processor_dict["custom_pipelines"] = (
+                    add_model_info_to_custom_pipelines(
+                        image_processor_dict["custom_pipelines"],
+                        pretrained_model_name_or_path,
+                    )
                 )
 
         return image_processor_dict, kwargs
@@ -549,11 +559,17 @@ class ImageProcessingMixin(PushToHubMixin):
             response.raise_for_status()
             return Image.open(BytesIO(response.content))
         else:
-            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+            raise TypeError(
+                f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}"
+            )
 
 
 ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)
 if ImageProcessingMixin.push_to_hub.__doc__ is not None:
-    ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
-        object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
+    ImageProcessingMixin.push_to_hub.__doc__ = (
+        ImageProcessingMixin.push_to_hub.__doc__.format(
+            object="image processor",
+            object_class="AutoImageProcessor",
+            object_files="image processor file",
+        )
     )

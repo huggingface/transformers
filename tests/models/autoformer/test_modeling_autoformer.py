@@ -21,20 +21,22 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import (is_flaky, require_torch, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoformerConfig, AutoformerForPrediction, AutoformerModel
-    from transformers.models.autoformer.modeling_autoformer import AutoformerDecoder, AutoformerEncoder
+    from transformers import (AutoformerConfig, AutoformerForPrediction,
+                              AutoformerModel)
+    from transformers.models.autoformer.modeling_autoformer import (
+        AutoformerDecoder, AutoformerEncoder)
 
 
 @require_torch
@@ -113,13 +115,19 @@ class AutoformerModelTester:
     def prepare_autoformer_inputs_dict(self, config):
         _past_length = config.context_length + max(config.lags_sequence)
 
-        static_categorical_features = ids_tensor([self.batch_size, 1], config.cardinality[0])
-        past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
+        static_categorical_features = ids_tensor(
+            [self.batch_size, 1], config.cardinality[0]
+        )
+        past_time_features = floats_tensor(
+            [self.batch_size, _past_length, config.num_time_features]
+        )
         past_values = floats_tensor([self.batch_size, _past_length])
         past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
 
         # decoder inputs
-        future_time_features = floats_tensor([self.batch_size, config.prediction_length, config.num_time_features])
+        future_time_features = floats_tensor(
+            [self.batch_size, config.prediction_length, config.num_time_features]
+        )
         future_values = floats_tensor([self.batch_size, config.prediction_length])
 
         inputs_dict = {
@@ -153,15 +161,25 @@ class AutoformerModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = AutoformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        transformer_inputs, feature, _, _, _ = model.create_network_inputs(**inputs_dict)
-        seasonal_input, trend_input = model.decomposition_layer(transformer_inputs[:, : config.context_length, ...])
+        transformer_inputs, feature, _, _, _ = model.create_network_inputs(
+            **inputs_dict
+        )
+        seasonal_input, trend_input = model.decomposition_layer(
+            transformer_inputs[:, : config.context_length, ...]
+        )
 
         enc_input = torch.cat(
-            (transformer_inputs[:, : config.context_length, ...], feature[:, : config.context_length, ...]),
+            (
+                transformer_inputs[:, : config.context_length, ...],
+                feature[:, : config.context_length, ...],
+            ),
             dim=-1,
         )
         encoder_last_hidden_state_2 = encoder(inputs_embeds=enc_input)[0]
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         mean = (
             torch.mean(transformer_inputs[:, : config.context_length, ...], dim=1)
@@ -169,13 +187,19 @@ class AutoformerModelTester:
             .repeat(1, config.prediction_length, 1)
         )
         zeros = torch.zeros(
-            [transformer_inputs.shape[0], config.prediction_length, transformer_inputs.shape[2]],
+            [
+                transformer_inputs.shape[0],
+                config.prediction_length,
+                transformer_inputs.shape[2],
+            ],
             device=enc_input.device,
         )
 
         dec_input = torch.cat(
             (
-                torch.cat((seasonal_input[:, -config.label_length :, ...], zeros), dim=1),
+                torch.cat(
+                    (seasonal_input[:, -config.label_length :, ...], zeros), dim=1
+                ),
                 feature[:, config.context_length - config.label_length :, ...],
             ),
             dim=-1,
@@ -199,13 +223,19 @@ class AutoformerModelTester:
             encoder_hidden_states=encoder_last_hidden_state,
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
 class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
+    all_model_classes = (
+        (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": AutoformerModel} if is_torch_available() else {}
+    )
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
@@ -214,7 +244,9 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = AutoformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AutoformerConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=AutoformerConfig, has_text_modality=False
+        )
 
     # TODO: (ydshieh) Fix the wrong logic for `tmp_delay` is possible
     @unittest.skip(
@@ -233,7 +265,9 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_encoder_decoder_model_standalone(self):
@@ -306,7 +340,9 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 ]
             )
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -328,7 +364,11 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -370,7 +410,9 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, decoder_seq_length, dim],
@@ -396,7 +438,11 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         self.assertEqual(out_len + 2, len(outputs))
 
-        self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+        self_attentions = (
+            outputs.encoder_attentions
+            if config.is_encoder_decoder
+            else outputs.attentions
+        )
 
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
@@ -414,7 +460,11 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 
 def prepare_batch(filename="train-batch.pt"):
-    file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
+    file = hf_hub_download(
+        repo_id="hf-internal-testing/tourism-monthly-batch",
+        filename=filename,
+        repo_type="dataset",
+    )
     batch = torch.load(file, map_location=torch_device)
     return batch
 
@@ -423,7 +473,9 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class AutoformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = AutoformerModel.from_pretrained("huggingface/autoformer-tourism-monthly").to(torch_device)
+        model = AutoformerModel.from_pretrained(
+            "huggingface/autoformer-tourism-monthly"
+        ).to(torch_device)
         batch = prepare_batch()
 
         with torch.no_grad():
@@ -437,17 +489,30 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
             )[0]
 
         expected_shape = torch.Size(
-            (64, model.config.prediction_length + model.config.label_length, model.config.feature_size)
+            (
+                64,
+                model.config.prediction_length + model.config.label_length,
+                model.config.feature_size,
+            )
         )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.3593, -1.3398, 0.6330], [0.2279, 1.5396, -0.1792], [0.0450, 1.3225, -0.2335]], device=torch_device
+            [
+                [0.3593, -1.3398, 0.6330],
+                [0.2279, 1.5396, -0.1792],
+                [0.0450, 1.3225, -0.2335],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_inference_head(self):
-        model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly").to(torch_device)
+        model = AutoformerForPrediction.from_pretrained(
+            "huggingface/autoformer-tourism-monthly"
+        ).to(torch_device)
         batch = prepare_batch("val-batch.pt")
         with torch.no_grad():
             output = model(
@@ -456,16 +521,27 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
                 past_observed_mask=batch["past_observed_mask"],
                 static_categorical_features=batch["static_categorical_features"],
             ).encoder_last_hidden_state
-        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
+        expected_shape = torch.Size(
+            (64, model.config.context_length, model.config.d_model)
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0734, -0.9036, 0.8358], [4.7186, 2.4113, 1.9581], [1.7953, 2.3558, 1.2970]], device=torch_device
+            [
+                [-0.0734, -0.9036, 0.8358],
+                [4.7186, 2.4113, 1.9581],
+                [1.7953, 2.3558, 1.2970],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_seq_to_seq_generation(self):
-        model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly").to(torch_device)
+        model = AutoformerForPrediction.from_pretrained(
+            "huggingface/autoformer-tourism-monthly"
+        ).to(torch_device)
         batch = prepare_batch("val-batch.pt")
         with torch.no_grad():
             outputs = model.generate(
@@ -475,9 +551,15 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
                 future_time_features=batch["future_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
             )
-        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
+        expected_shape = torch.Size(
+            (64, model.config.num_parallel_samples, model.config.prediction_length)
+        )
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([3130.6763, 4056.5293, 7053.0786], device=torch_device)
+        expected_slice = torch.tensor(
+            [3130.6763, 4056.5293, 7053.0786], device=torch_device
+        )
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1)
+        torch.testing.assert_close(
+            mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1
+        )

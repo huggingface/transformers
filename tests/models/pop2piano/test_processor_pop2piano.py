@@ -20,22 +20,15 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
-from transformers.testing_utils import (
-    require_essentia,
-    require_librosa,
-    require_pretty_midi,
-    require_scipy,
-    require_torch,
-)
+from transformers.testing_utils import (require_essentia, require_librosa,
+                                        require_pretty_midi, require_scipy,
+                                        require_torch)
 from transformers.tokenization_utils import BatchEncoding
-from transformers.utils.import_utils import (
-    is_essentia_available,
-    is_librosa_available,
-    is_pretty_midi_available,
-    is_scipy_available,
-    is_torch_available,
-)
-
+from transformers.utils.import_utils import (is_essentia_available,
+                                             is_librosa_available,
+                                             is_pretty_midi_available,
+                                             is_scipy_available,
+                                             is_torch_available)
 
 requirements_available = (
     is_torch_available()
@@ -48,12 +41,9 @@ requirements_available = (
 if requirements_available:
     import pretty_midi
 
-    from transformers import (
-        Pop2PianoFeatureExtractor,
-        Pop2PianoForConditionalGeneration,
-        Pop2PianoProcessor,
-        Pop2PianoTokenizer,
-    )
+    from transformers import (Pop2PianoFeatureExtractor,
+                              Pop2PianoForConditionalGeneration,
+                              Pop2PianoProcessor, Pop2PianoTokenizer)
 
 
 @require_scipy
@@ -65,7 +55,9 @@ class Pop2PianoProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained(
+            "sweetcocoa/pop2piano"
+        )
         tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         processor = Pop2PianoProcessor(feature_extractor, tokenizer)
 
@@ -103,15 +95,22 @@ class Pop2PianoProcessorTest(unittest.TestCase):
             bos_token="2",
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, Pop2PianoTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, Pop2PianoFeatureExtractor)
 
     def get_inputs(self):
         """get inputs for both feature extractor and tokenizer"""
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         speech_samples = ds.sort("id").select([0])["audio"]
         input_speech = [x["array"] for x in speech_samples][0]
         sampling_rate = [x["sampling_rate"] for x in speech_samples][0]
@@ -119,8 +118,13 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         feature_extractor_outputs = self.get_feature_extractor()(
             audio=input_speech, sampling_rate=sampling_rate, return_tensors="pt"
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
-        token_ids = model.generate(input_features=feature_extractor_outputs["input_features"], composer="composer1")
+        model = Pop2PianoForConditionalGeneration.from_pretrained(
+            "sweetcocoa/pop2piano"
+        )
+        token_ids = model.generate(
+            input_features=feature_extractor_outputs["input_features"],
+            composer="composer1",
+        )
         dummy_notes = [
             [
                 pretty_midi.Note(start=0.441179, end=2.159456, pitch=70, velocity=77),
@@ -150,10 +154,16 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         feature_extractor_outputs = feature_extractor(
             audio=input_speech, sampling_rate=sampling_rate, return_tensors="np"
         )
-        processor_outputs = processor(audio=input_speech, sampling_rate=sampling_rate, return_tensors="np")
+        processor_outputs = processor(
+            audio=input_speech, sampling_rate=sampling_rate, return_tensors="np"
+        )
 
         for key in feature_extractor_outputs.keys():
-            self.assertTrue(np.allclose(feature_extractor_outputs[key], processor_outputs[key], atol=1e-4))
+            self.assertTrue(
+                np.allclose(
+                    feature_extractor_outputs[key], processor_outputs[key], atol=1e-4
+                )
+            )
 
     def test_processor_batch_decode(self):
         feature_extractor = self.get_feature_extractor()
@@ -165,7 +175,9 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         )
 
         audio, sampling_rate, token_ids, _ = self.get_inputs()
-        feature_extractor_output = feature_extractor(audio=audio, sampling_rate=sampling_rate, return_tensors="pt")
+        feature_extractor_output = feature_extractor(
+            audio=audio, sampling_rate=sampling_rate, return_tensors="pt"
+        )
 
         encoded_processor = processor.batch_decode(
             token_ids=token_ids,
@@ -179,14 +191,26 @@ class Pop2PianoProcessorTest(unittest.TestCase):
             return_midi=True,
         )
         # check start timings
-        encoded_processor_start_timings = [token.start for token in encoded_processor["notes"]]
-        encoded_tokenizer_start_timings = [token.start for token in encoded_tokenizer["notes"]]
-        self.assertListEqual(encoded_processor_start_timings, encoded_tokenizer_start_timings)
+        encoded_processor_start_timings = [
+            token.start for token in encoded_processor["notes"]
+        ]
+        encoded_tokenizer_start_timings = [
+            token.start for token in encoded_tokenizer["notes"]
+        ]
+        self.assertListEqual(
+            encoded_processor_start_timings, encoded_tokenizer_start_timings
+        )
 
         # check end timings
-        encoded_processor_end_timings = [token.end for token in encoded_processor["notes"]]
-        encoded_tokenizer_end_timings = [token.end for token in encoded_tokenizer["notes"]]
-        self.assertListEqual(encoded_processor_end_timings, encoded_tokenizer_end_timings)
+        encoded_processor_end_timings = [
+            token.end for token in encoded_processor["notes"]
+        ]
+        encoded_tokenizer_end_timings = [
+            token.end for token in encoded_tokenizer["notes"]
+        ]
+        self.assertListEqual(
+            encoded_processor_end_timings, encoded_tokenizer_end_timings
+        )
 
         # check pitch
         encoded_processor_pitch = [token.pitch for token in encoded_processor["notes"]]
@@ -194,8 +218,12 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         self.assertListEqual(encoded_processor_pitch, encoded_tokenizer_pitch)
 
         # check velocity
-        encoded_processor_velocity = [token.velocity for token in encoded_processor["notes"]]
-        encoded_tokenizer_velocity = [token.velocity for token in encoded_tokenizer["notes"]]
+        encoded_processor_velocity = [
+            token.velocity for token in encoded_processor["notes"]
+        ]
+        encoded_tokenizer_velocity = [
+            token.velocity for token in encoded_tokenizer["notes"]
+        ]
         self.assertListEqual(encoded_processor_velocity, encoded_tokenizer_velocity)
 
     def test_tokenizer_call(self):

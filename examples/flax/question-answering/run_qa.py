@@ -46,17 +46,10 @@ from tqdm import tqdm
 from utils_qa import postprocess_qa_predictions
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    EvalPrediction,
-    FlaxAutoModelForQuestionAnswering,
-    HfArgumentParser,
-    PreTrainedTokenizerFast,
-    is_tensorboard_available,
-)
+from transformers import (AutoConfig, AutoTokenizer, EvalPrediction,
+                          FlaxAutoModelForQuestionAnswering, HfArgumentParser,
+                          PreTrainedTokenizerFast, is_tensorboard_available)
 from transformers.utils import check_min_version, send_example_telemetry
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +65,9 @@ PRNGKey = Any
 @dataclass
 class TrainingArguments:
     output_dir: str = field(
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written."
+        },
     )
     overwrite_output_dir: bool = field(
         default=False,
@@ -84,33 +79,71 @@ class TrainingArguments:
         },
     )
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
-    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
-    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    do_eval: bool = field(
+        default=False, metadata={"help": "Whether to run eval on the dev set."}
+    )
+    do_predict: bool = field(
+        default=False, metadata={"help": "Whether to run predictions on the test set."}
+    )
     per_device_train_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
     )
-    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
-    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
-    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
-    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
-    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
-    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
-    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
-    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
-    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
-    save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
-    eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
-    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    learning_rate: float = field(
+        default=5e-5, metadata={"help": "The initial learning rate for AdamW."}
+    )
+    weight_decay: float = field(
+        default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."}
+    )
+    adam_beta1: float = field(
+        default=0.9, metadata={"help": "Beta1 for AdamW optimizer"}
+    )
+    adam_beta2: float = field(
+        default=0.999, metadata={"help": "Beta2 for AdamW optimizer"}
+    )
+    adam_epsilon: float = field(
+        default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."}
+    )
+    adafactor: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to replace AdamW by Adafactor."},
+    )
+    num_train_epochs: float = field(
+        default=3.0, metadata={"help": "Total number of training epochs to perform."}
+    )
+    warmup_steps: int = field(
+        default=0, metadata={"help": "Linear warmup over warmup_steps."}
+    )
+    logging_steps: int = field(
+        default=500, metadata={"help": "Log every X updates steps."}
+    )
+    save_steps: int = field(
+        default=500, metadata={"help": "Save checkpoint every X updates steps."}
+    )
+    eval_steps: int = field(
+        default=None, metadata={"help": "Run an evaluation every X steps."}
+    )
+    seed: int = field(
+        default=42,
+        metadata={"help": "Random seed that will be set at the beginning of training."},
+    )
     push_to_hub: bool = field(
-        default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
+        default=False,
+        metadata={
+            "help": "Whether or not to upload the trained model to the model hub after training."
+        },
     )
     hub_model_id: str = field(
-        default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
+        default=None,
+        metadata={
+            "help": "The name of the repository to keep in sync with the local `output_dir`."
+        },
     )
-    hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    hub_token: str = field(
+        default=None, metadata={"help": "The token to use to push to the Model Hub."}
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -139,21 +172,33 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Path to directory to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Path to directory to store the pretrained models downloaded from huggingface.co"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -192,22 +237,33 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a text file)."}
+    )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."
+        },
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input test data file to evaluate the perplexity on (a text file)."},
+        metadata={
+            "help": "An optional input test data file to evaluate the perplexity on (a text file)."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -259,7 +315,8 @@ class DataTrainingArguments:
         },
     )
     version_2_with_negative: bool = field(
-        default=False, metadata={"help": "If true, some of the examples do not have an answer."}
+        default=False,
+        metadata={"help": "If true, some of the examples do not have an answer."},
     )
     null_score_diff_threshold: float = field(
         default=0.0,
@@ -273,11 +330,15 @@ class DataTrainingArguments:
     )
     doc_stride: int = field(
         default=128,
-        metadata={"help": "When splitting up a long document into chunks, how much stride to take between chunks."},
+        metadata={
+            "help": "When splitting up a long document into chunks, how much stride to take between chunks."
+        },
     )
     n_best_size: int = field(
         default=20,
-        metadata={"help": "The total number of n-best predictions to generate when looking for an answer."},
+        metadata={
+            "help": "The total number of n-best predictions to generate when looking for an answer."
+        },
     )
     max_answer_length: int = field(
         default=30,
@@ -296,17 +357,28 @@ class DataTrainingArguments:
             and self.validation_file is None
             and self.test_file is None
         ):
-            raise ValueError("Need either a dataset name or a training/validation file/test_file.")
+            raise ValueError(
+                "Need either a dataset name or a training/validation file/test_file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
             if self.test_file is not None:
                 extension = self.test_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`test_file` should be a csv or a json file."
 
 
 # endregion
@@ -349,7 +421,10 @@ def create_train_state(
             for layer in flat_params.keys()
             if layer_norm_name in "".join(layer).lower()
         }
-        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
+        flat_mask = {
+            path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params)
+            for path in flat_params
+        }
         return traverse_util.unflatten_dict(flat_mask)
 
     tx = optax.adamw(
@@ -362,8 +437,12 @@ def create_train_state(
     )
 
     def cross_entropy_loss(logits, labels):
-        start_loss = optax.softmax_cross_entropy(logits[0], onehot(labels[0], num_classes=num_labels))
-        end_loss = optax.softmax_cross_entropy(logits[1], onehot(labels[1], num_classes=num_labels))
+        start_loss = optax.softmax_cross_entropy(
+            logits[0], onehot(labels[0], num_classes=num_labels)
+        )
+        end_loss = optax.softmax_cross_entropy(
+            logits[1], onehot(labels[1], num_classes=num_labels)
+        )
         xentropy = (start_loss + end_loss) / 2.0
         return jnp.mean(xentropy)
 
@@ -381,16 +460,26 @@ def create_train_state(
 
 # region Create learning rate function
 def create_learning_rate_fn(
-    train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
+    train_ds_size: int,
+    train_batch_size: int,
+    num_train_epochs: int,
+    num_warmup_steps: int,
+    learning_rate: float,
 ) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
-    warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
-    decay_fn = optax.linear_schedule(
-        init_value=learning_rate, end_value=0, transition_steps=num_train_steps - num_warmup_steps
+    warmup_fn = optax.linear_schedule(
+        init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps
     )
-    schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
+    decay_fn = optax.linear_schedule(
+        init_value=learning_rate,
+        end_value=0,
+        transition_steps=num_train_steps - num_warmup_steps,
+    )
+    schedule_fn = optax.join_schedules(
+        schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps]
+    )
     return schedule_fn
 
 
@@ -441,11 +530,15 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -479,7 +572,9 @@ def main():
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
         api = HfApi()
-        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        repo_id = api.create_repo(
+            repo_name, exist_ok=True, token=training_args.hub_token
+        ).repo_id
 
     # region Load Data
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
@@ -528,14 +623,22 @@ def main():
     #
     # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        (
+            model_args.config_name
+            if model_args.config_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (
+            model_args.tokenizer_name
+            if model_args.tokenizer_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
@@ -580,7 +683,9 @@ def main():
         # Some of the questions have lots of whitespace on the left, which is not useful and will make the
         # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
         # left whitespace
-        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+        examples[question_column_name] = [
+            q.lstrip() for q in examples[question_column_name]
+        ]
 
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
@@ -638,13 +743,19 @@ def main():
                     token_end_index -= 1
 
                 # Detect if the answer is out of the span (in which case this feature is labeled with the CLS index).
-                if not (offsets[token_start_index][0] <= start_char and offsets[token_end_index][1] >= end_char):
+                if not (
+                    offsets[token_start_index][0] <= start_char
+                    and offsets[token_end_index][1] >= end_char
+                ):
                     tokenized_examples["start_positions"].append(cls_index)
                     tokenized_examples["end_positions"].append(cls_index)
                 else:
                     # Otherwise move the token_start_index and token_end_index to the two ends of the answer.
                     # Note: we could go after the last offset if the answer is the last word (edge case).
-                    while token_start_index < len(offsets) and offsets[token_start_index][0] <= start_char:
+                    while (
+                        token_start_index < len(offsets)
+                        and offsets[token_start_index][0] <= start_char
+                    ):
                         token_start_index += 1
                     tokenized_examples["start_positions"].append(token_start_index - 1)
                     while offsets[token_end_index][1] >= end_char:
@@ -681,7 +792,9 @@ def main():
         # Some of the questions have lots of whitespace on the left, which is not useful and will make the
         # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
         # left whitespace
-        examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
+        examples[question_column_name] = [
+            q.lstrip() for q in examples[question_column_name]
+        ]
 
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
@@ -751,7 +864,9 @@ def main():
         predict_examples = raw_datasets["test"]
         if data_args.max_predict_samples is not None:
             # We will select sample from whole data
-            predict_examples = predict_examples.select(range(data_args.max_predict_samples))
+            predict_examples = predict_examples.select(
+                range(data_args.max_predict_samples)
+            )
         # Predict Feature Creation
         predict_dataset = predict_examples.map(
             prepare_validation_features,
@@ -762,7 +877,9 @@ def main():
         )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            max_predict_samples = min(
+                len(predict_dataset), data_args.max_predict_samples
+            )
             predict_dataset = predict_dataset.select(range(max_predict_samples))
         processed_raw_datasets["test"] = predict_dataset
     # endregion
@@ -784,16 +901,22 @@ def main():
         # Format the result to the format the metric expects.
         if data_args.version_2_with_negative:
             formatted_predictions = [
-                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
+                {"id": k, "prediction_text": v, "no_answer_probability": 0.0}
+                for k, v in predictions.items()
             ]
         else:
-            formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
+            formatted_predictions = [
+                {"id": k, "prediction_text": v} for k, v in predictions.items()
+            ]
 
-        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
+        references = [
+            {"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples
+        ]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
     metric = evaluate.load(
-        "squad_v2" if data_args.version_2_with_negative else "squad", cache_dir=model_args.cache_dir
+        "squad_v2" if data_args.version_2_with_negative else "squad",
+        cache_dir=model_args.cache_dir,
     )
 
     def compute_metrics(p: EvalPrediction):
@@ -849,7 +972,9 @@ def main():
             from flax.metrics.tensorboard import SummaryWriter
 
             summary_writer = SummaryWriter(training_args.output_dir)
-            summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
+            summary_writer.hparams(
+                {**training_args.to_dict(), **vars(model_args), **vars(data_args)}
+            )
         except ImportError as ie:
             has_tensorboard = False
             logger.warning(
@@ -878,7 +1003,9 @@ def main():
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    train_batch_size = int(training_args.per_device_train_batch_size) * jax.local_device_count()
+    train_batch_size = (
+        int(training_args.per_device_train_batch_size) * jax.local_device_count()
+    )
     per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
     eval_batch_size = per_device_eval_batch_size * jax.local_device_count()
     # endregion
@@ -903,7 +1030,9 @@ def main():
         training_args.learning_rate,
     )
 
-    state = create_train_state(model, learning_rate_fn, num_labels=max_seq_length, training_args=training_args)
+    state = create_train_state(
+        model, learning_rate_fn, num_labels=max_seq_length, training_args=training_args
+    )
     # endregion
 
     # region Define train step functions
@@ -917,7 +1046,9 @@ def main():
         targets = (start_positions, end_positions)
 
         def loss_fn(params):
-            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)
+            logits = state.apply_fn(
+                **batch, params=params, dropout_rng=dropout_rng, train=True
+            )
             loss = state.loss_fn(logits, targets)
             return loss
 
@@ -925,7 +1056,10 @@ def main():
         loss, grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
         new_state = state.apply_gradients(grads=grad)
-        metrics = jax.lax.pmean({"loss": loss, "learning_rate": learning_rate_fn(state.step)}, axis_name="batch")
+        metrics = jax.lax.pmean(
+            {"loss": loss, "learning_rate": learning_rate_fn(state.step)},
+            axis_name="batch",
+        )
         return new_state, metrics, new_dropout_rng
 
     p_train_step = jax.pmap(train_step, axis_name="batch", donate_argnums=(0,))
@@ -977,7 +1111,9 @@ def main():
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
                 if has_tensorboard and jax.process_index() == 0:
-                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+                    write_train_metric(
+                        summary_writer, train_metrics, train_time, cur_step
+                    )
 
                 epochs.write(
                     f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate:"
@@ -988,7 +1124,10 @@ def main():
 
             if (
                 training_args.do_eval
-                and (cur_step % training_args.eval_steps == 0 or cur_step % step_per_epoch == 0)
+                and (
+                    cur_step % training_args.eval_steps == 0
+                    or cur_step % step_per_epoch == 0
+                )
                 and cur_step > 0
             ):
                 eval_metrics = {}
@@ -1010,25 +1149,37 @@ def main():
                     all_start_logits.append(start_logits)
                     all_end_logits.append(end_logits)
 
-                max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+                max_len = max(
+                    [x.shape[1] for x in all_start_logits]
+                )  # Get the max_length of the tensor
 
                 # concatenate the numpy array
-                start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
-                end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
+                start_logits_concat = create_and_fill_np_array(
+                    all_start_logits, eval_dataset, max_len
+                )
+                end_logits_concat = create_and_fill_np_array(
+                    all_end_logits, eval_dataset, max_len
+                )
 
                 # delete the list of numpy arrays
                 del all_start_logits
                 del all_end_logits
                 outputs_numpy = (start_logits_concat, end_logits_concat)
-                prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+                prediction = post_processing_function(
+                    eval_examples, eval_dataset, outputs_numpy
+                )
                 eval_metrics = compute_metrics(prediction)
 
-                logger.info(f"Step... ({cur_step}/{total_steps} | Evaluation metrics: {eval_metrics})")
+                logger.info(
+                    f"Step... ({cur_step}/{total_steps} | Evaluation metrics: {eval_metrics})"
+                )
 
                 if has_tensorboard and jax.process_index() == 0:
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
-            if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
+            if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (
+                cur_step == total_steps
+            ):
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
                     params = jax.device_get(unreplicate(state.params))
@@ -1053,30 +1204,46 @@ def main():
 
         eval_loader = eval_data_collator(eval_dataset, eval_batch_size)
         for batch in tqdm(
-            eval_loader, total=math.ceil(len(eval_dataset) / eval_batch_size), desc="Evaluating ...", position=2
+            eval_loader,
+            total=math.ceil(len(eval_dataset) / eval_batch_size),
+            desc="Evaluating ...",
+            position=2,
         ):
             _ = batch.pop("example_id")
-            predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
+            predictions = pad_shard_unpad(p_eval_step)(
+                state, batch, min_device_batch=per_device_eval_batch_size
+            )
             start_logits = np.array(predictions[0])
             end_logits = np.array(predictions[1])
             all_start_logits.append(start_logits)
             all_end_logits.append(end_logits)
 
-        max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+        max_len = max(
+            [x.shape[1] for x in all_start_logits]
+        )  # Get the max_length of the tensor
 
         # concatenate the numpy array
-        start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
-        end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
+        start_logits_concat = create_and_fill_np_array(
+            all_start_logits, eval_dataset, max_len
+        )
+        end_logits_concat = create_and_fill_np_array(
+            all_end_logits, eval_dataset, max_len
+        )
 
         # delete the list of numpy arrays
         del all_start_logits
         del all_end_logits
         outputs_numpy = (start_logits_concat, end_logits_concat)
-        prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+        prediction = post_processing_function(
+            eval_examples, eval_dataset, outputs_numpy
+        )
         eval_metrics = compute_metrics(prediction)
 
         if jax.process_index() == 0:
-            eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
+            eval_metrics = {
+                f"eval_{metric_name}": value
+                for metric_name, value in eval_metrics.items()
+            }
             path = os.path.join(training_args.output_dir, "eval_results.json")
             with open(path, "w") as f:
                 json.dump(eval_metrics, f, indent=4, sort_keys=True)

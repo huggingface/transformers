@@ -2,12 +2,8 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_tokenizers_available,
-)
-
+from ...utils import (OptionalDependencyNotAvailable, _LazyModule,
+                      is_tokenizers_available)
 
 ######################################################################
 # _import_structure - Only references the tokenizer for now.
@@ -55,7 +51,6 @@ if TYPE_CHECKING:
 
     # If you add "tokenization_arlow_fast.py," import it here too:
     # from .tokenization_arlow_fast import ArlowTokenizerFast
-
     # MODEL IMPORTS FOR LATER:
     # from .configuration_arlow import ArlowConfig
     # from .modeling_arlow import (

@@ -34,7 +34,6 @@ python utils/check_doctest_list.py --fix_and_overwrite
 import argparse
 import os
 
-
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_doctest_list.py
 REPO_PATH = "."
@@ -63,7 +62,9 @@ def clean_doctest_list(doctest_file: str, overwrite: bool = False):
 
     if len(non_existent_paths) > 0:
         non_existent_paths = "\n".join([f"- {f}" for f in non_existent_paths])
-        raise ValueError(f"`{doctest_file}` contains non-existent paths:\n{non_existent_paths}")
+        raise ValueError(
+            f"`{doctest_file}` contains non-existent paths:\n{non_existent_paths}"
+        )
 
     sorted_paths = sorted(all_paths)
     if all_paths != sorted_paths:
@@ -78,7 +79,11 @@ def clean_doctest_list(doctest_file: str, overwrite: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Whether to fix inconsistencies.",
+    )
     args = parser.parse_args()
 
     for doctest_file in DOCTEST_FILE_PATHS:

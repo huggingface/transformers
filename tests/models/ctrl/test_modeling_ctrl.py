@@ -16,22 +16,20 @@
 import unittest
 
 from transformers import CTRLConfig, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import (cleanup, require_torch, slow,
+                                        torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        CTRLForSequenceClassification,
-        CTRLLMHeadModel,
-        CTRLModel,
-    )
+    from transformers import (CTRLForSequenceClassification, CTRLLMHeadModel,
+                              CTRLModel)
 
 
 class CTRLModelTester:
@@ -95,18 +93,26 @@ class CTRLModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         mc_token_ids = None
         if self.use_mc_token_ids:
-            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+            mc_token_ids = ids_tensor(
+                [self.batch_size, self.num_choices], self.seq_length
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
@@ -141,7 +147,9 @@ class CTRLModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_ctrl_model(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = CTRLModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -149,17 +157,24 @@ class CTRLModelTester:
         model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
         model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = CTRLLMHeadModel(config)
         model.to(torch_device)
         model.eval()
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -176,11 +191,17 @@ class CTRLModelTester:
             choice_labels,
         ) = config_and_inputs
 
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "head_mask": head_mask,
+        }
 
         return config, inputs_dict
 
-    def create_and_check_ctrl_for_sequence_classification(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_ctrl_for_sequence_classification(
+        self, config, input_ids, head_mask, token_type_ids, *args
+    ):
         config.num_labels = self.num_labels
         model = CTRLForSequenceClassification(config)
         model.to(torch_device)
@@ -191,8 +212,14 @@ class CTRLModelTester:
 
 
 @require_torch
-class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
+class CTRLModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": CTRLModel,

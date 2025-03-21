@@ -23,9 +23,10 @@ import torch
 from PIL import Image
 from timm.data import ImageNetInfo, infer_imagenet_subset
 
-from transformers import DeiTImageProcessor, ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
+from transformers import (DeiTImageProcessor, ViTConfig,
+                          ViTForImageClassification, ViTImageProcessor,
+                          ViTModel)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -36,23 +37,67 @@ def create_rename_keys(config, base_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append(
+            (
+                f"blocks.{i}.norm1.weight",
+                f"vit.encoder.layer.{i}.layernorm_before.weight",
+            )
+        )
+        rename_keys.append(
+            (f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias")
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.attn.proj.weight",
+                f"vit.encoder.layer.{i}.attention.output.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.attn.proj.bias",
+                f"vit.encoder.layer.{i}.attention.output.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.norm2.weight",
+                f"vit.encoder.layer.{i}.layernorm_after.weight",
+            )
+        )
+        rename_keys.append(
+            (f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias")
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.mlp.fc1.weight",
+                f"vit.encoder.layer.{i}.intermediate.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"blocks.{i}.mlp.fc1.bias",
+                f"vit.encoder.layer.{i}.intermediate.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight")
+        )
+        rename_keys.append(
+            (f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias")
+        )
 
     # projection layer + position embeddings
     rename_keys.extend(
         [
             ("cls_token", "vit.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "vit.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"),
+            (
+                "patch_embed.proj.weight",
+                "vit.embeddings.patch_embeddings.projection.weight",
+            ),
+            (
+                "patch_embed.proj.bias",
+                "vit.embeddings.patch_embeddings.projection.bias",
+            ),
             ("pos_embed", "vit.embeddings.position_embeddings"),
         ]
     )
@@ -67,7 +112,10 @@ def create_rename_keys(config, base_model=False):
         )
 
         # if just the base model, we should remove "vit" from all keys that start with "vit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair for pair in rename_keys]
+        rename_keys = [
+            (pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair
+            for pair in rename_keys
+        ]
     else:
         # layernorm + classification head
         rename_keys.extend(
@@ -93,20 +141,24 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[: config.hidden_size]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[config.hidden_size : config.hidden_size * 2]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-config.hidden_size :]
+        )
 
 
 def remove_classification_head_(state_dict):
@@ -144,14 +196,20 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     # detect unsupported ViT models in transformers
     # fc_norm is present
     if not isinstance(getattr(timm_model, "fc_norm", None), torch.nn.Identity):
-        raise ValueError(f"{vit_name} is not supported in transformers because of the presence of fc_norm.")
+        raise ValueError(
+            f"{vit_name} is not supported in transformers because of the presence of fc_norm."
+        )
 
     # use of global average pooling in combination (or without) class token
     if getattr(timm_model, "global_pool", None) == "avg":
-        raise ValueError(f"{vit_name} is not supported in transformers because of use of global average pooling.")
+        raise ValueError(
+            f"{vit_name} is not supported in transformers because of use of global average pooling."
+        )
 
     # CLIP style vit with norm_pre layer present
-    if "clip" in vit_name and not isinstance(getattr(timm_model, "norm_pre", None), torch.nn.Identity):
+    if "clip" in vit_name and not isinstance(
+        getattr(timm_model, "norm_pre", None), torch.nn.Identity
+    ):
         raise ValueError(
             f"{vit_name} is not supported in transformers because it's a CLIP style ViT with norm_pre layer."
         )
@@ -163,14 +221,18 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         )
 
     # use of layer scale in ViT model blocks
-    if not isinstance(getattr(timm_model.blocks[0], "ls1", None), torch.nn.Identity) or not isinstance(
-        getattr(timm_model.blocks[0], "ls2", None), torch.nn.Identity
-    ):
-        raise ValueError(f"{vit_name} is not supported in transformers because it uses a layer scale in its blocks.")
+    if not isinstance(
+        getattr(timm_model.blocks[0], "ls1", None), torch.nn.Identity
+    ) or not isinstance(getattr(timm_model.blocks[0], "ls2", None), torch.nn.Identity):
+        raise ValueError(
+            f"{vit_name} is not supported in transformers because it uses a layer scale in its blocks."
+        )
 
     # Hybrid ResNet-ViTs
     if not isinstance(timm_model.patch_embed, timm.layers.PatchEmbed):
-        raise ValueError(f"{vit_name} is not supported in transformers because it is a hybrid ResNet-ViT.")
+        raise ValueError(
+            f"{vit_name} is not supported in transformers because it is a hybrid ResNet-ViT."
+        )
 
     # get patch size and image size from the patch embedding submodule
     config.patch_size = timm_model.patch_embed.patch_size[0]
@@ -188,7 +250,10 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         # infer ImageNet subset from timm model
         imagenet_subset = infer_imagenet_subset(timm_model)
         dataset_info = ImageNetInfo(imagenet_subset)
-        config.id2label = {i: dataset_info.index_to_label_name(i) for i in range(dataset_info.num_classes())}
+        config.id2label = {
+            i: dataset_info.index_to_label_name(i)
+            for i in range(dataset_info.num_classes())
+        }
         config.label2id = {v: k for k, v in config.id2label.items()}
     else:
         print(f"{vit_name} is going to be converted as a feature extractor only.")
@@ -247,7 +312,10 @@ if __name__ == "__main__":
         help="Name of the ViT timm model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()

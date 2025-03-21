@@ -19,11 +19,13 @@ from PIL import Image
 
 from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
-from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
-from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
+from ..models.auto.modeling_auto import (MODEL_FOR_PRETRAINING_MAPPING,
+                                         MODEL_MAPPING)
+from ..models.auto.processing_auto import (PROCESSOR_MAPPING_NAMES,
+                                           AutoProcessor)
+from ..models.auto.tokenization_auto import (TOKENIZER_MAPPING_NAMES,
+                                             AutoTokenizer)
 from .import_utils import is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -37,7 +39,9 @@ BLACK_SQUARE = "■"
 WHITE_SQUARE = "⬚"
 
 
-def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_window=None, token_type_ids=None):
+def generate_attention_matrix_from_mask(
+    words, mask, img_token="<img>", sliding_window=None, token_type_ids=None
+):
     """
     Generates an attention matrix from a given attention mask.
 
@@ -68,23 +72,30 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     # Generate sliding window mask (size = 4), excluding img_token
     sliding_window_mask = None
     if sliding_window is not None:
-        sliding_window_mask = [[1 if (0 <= i - j < sliding_window) else 0 for j in range(n)] for i in range(n)]
+        sliding_window_mask = [
+            [1 if (0 <= i - j < sliding_window) else 0 for j in range(n)]
+            for i in range(n)
+        ]
 
     row_dummy = " ".join(
-        f"{YELLOW}{BLACK_SQUARE}{RESET}"
-        if mask[0, j]
-        else f"{GREEN}{BLACK_SQUARE}{RESET}"
-        if 0 == j
-        else BLACK_SQUARE
-        if mask[0, j]
-        else WHITE_SQUARE
+        (
+            f"{YELLOW}{BLACK_SQUARE}{RESET}"
+            if mask[0, j]
+            else (
+                f"{GREEN}{BLACK_SQUARE}{RESET}"
+                if 0 == j
+                else BLACK_SQUARE if mask[0, j] else WHITE_SQUARE
+            )
+        )
         for j in range(n)
     )
 
     # Print headers
     legend = f"{GREEN}{BLACK_SQUARE}{RESET}: i == j (diagonal)   {YELLOW}{BLACK_SQUARE}{RESET}: token_type_ids"
     output.append(" " + legend)
-    f_string = " " * (max_word_length + 5) + "Attention Matrix".ljust(len(row_dummy) // 2)
+    f_string = " " * (max_word_length + 5) + "Attention Matrix".ljust(
+        len(row_dummy) // 2
+    )
     if sliding_window is not None:
         f_string += "Sliding Window Mask"
     output.append(f_string)
@@ -92,7 +103,9 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
     vertical_header = []
     for idx, word in enumerate(words):
         if mask[idx, idx] == 2:
-            vertical_header.append([f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))])
+            vertical_header.append(
+                [f"{YELLOW}{k}{RESET}" for k in list(str(idx).rjust(len(str(n))))]
+            )
         else:
             vertical_header.append(list(str(idx).rjust(len(str(n)))))
 
@@ -109,29 +122,35 @@ def generate_attention_matrix_from_mask(words, mask, img_token="<img>", sliding_
         word_repr = repr(word).ljust(max_word_length)
         colored_word = f"{YELLOW}{word_repr}{RESET}" if img_token in word else word_repr
         row_display = " ".join(
-            f"{YELLOW}{BLACK_SQUARE}{RESET}"
-            if img_token in words[j] and mask[i, j] and img_token in words[i]
-            else f"{GREEN}{BLACK_SQUARE}{RESET}"
-            if i == j
-            else BLACK_SQUARE
-            if mask[i, j]
-            else WHITE_SQUARE
+            (
+                f"{YELLOW}{BLACK_SQUARE}{RESET}"
+                if img_token in words[j] and mask[i, j] and img_token in words[i]
+                else (
+                    f"{GREEN}{BLACK_SQUARE}{RESET}"
+                    if i == j
+                    else BLACK_SQUARE if mask[i, j] else WHITE_SQUARE
+                )
+            )
             for j in range(n)
         )
         sliding_window_row = ""
         if sliding_window is not None:
             sliding_window_row = " ".join(
-                f"{YELLOW}{BLACK_SQUARE}{RESET}"
-                if img_token in words[j] and img_token in words[i]
-                else f"{GREEN}{BLACK_SQUARE}{RESET}"
-                if i == j
-                else BLACK_SQUARE
-                if sliding_window_mask[i][j]
-                else WHITE_SQUARE
+                (
+                    f"{YELLOW}{BLACK_SQUARE}{RESET}"
+                    if img_token in words[j] and img_token in words[i]
+                    else (
+                        f"{GREEN}{BLACK_SQUARE}{RESET}"
+                        if i == j
+                        else BLACK_SQUARE if sliding_window_mask[i][j] else WHITE_SQUARE
+                    )
+                )
                 for j in range(n)
             )
 
-        output.append(f"{colored_word}: {str(i).rjust(2)} {row_display}    |    {sliding_window_row}")
+        output.append(
+            f"{colored_word}: {str(i).rjust(2)} {row_display}    |    {sliding_window_row}"
+        )
 
     return "\n".join(output)
 
@@ -148,7 +167,9 @@ class AttentionMaskVisualizer:
             mapped_cls = _get_model_class(config, MODEL_FOR_PRETRAINING_MAPPING)
 
         if mapped_cls is None:
-            raise ValueError(f"Model name {model_name} is not supported for attention visualization")
+            raise ValueError(
+                f"Model name {model_name} is not supported for attention visualization"
+            )
         self.mapped_cls = mapped_cls
 
         class _ModelWrapper(mapped_cls, nn.Module):
@@ -175,25 +196,35 @@ class AttentionMaskVisualizer:
             if hasattr(processor, "image_token"):
                 image_token = processor.image_token
             else:
-                image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
+                image_token = processor.tokenizer.convert_ids_to_tokens(
+                    [processor.image_token_id]
+                )[0]
 
             if image_token:
                 input_sentence = input_sentence.replace("<img>", image_token)
 
             inputs = processor(img, input_sentence, suffix=suffix, return_tensors="pt")
 
-            self.image_token = processor.tokenizer.convert_ids_to_tokens([processor.image_token_id])[0]
+            self.image_token = processor.tokenizer.convert_ids_to_tokens(
+                [processor.image_token_id]
+            )[0]
 
             attention_mask = inputs["attention_mask"]
-            if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
+            if (
+                "token_type_ids" in inputs
+            ):  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
             tokens = processor.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
         elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
             tokens = tokenizer.tokenize(input_sentence)
-            attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
+            attention_mask = tokenizer(input_sentence, return_tensors="pt")[
+                "attention_mask"
+            ]
         else:
-            raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
+            raise ValueError(
+                f"Model type {model.config.model_type} does not support attention visualization"
+            )
 
         model.config._attn_implementation = "eager"
         model.train()
@@ -205,7 +236,10 @@ class AttentionMaskVisualizer:
             **kwargs,
         ).bool()
         top_bottom_border = "##" * (
-            len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
+            len(
+                f"Attention visualization for {self.config.model_type} | {self.mapped_cls}"
+            )
+            + 4
         )  # Box width adjusted to text length
         side_border = "##"
         print(f"\n{top_bottom_border}")

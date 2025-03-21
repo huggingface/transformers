@@ -23,15 +23,8 @@ import numpy as np
 from ...audio_utils import mel_filter_bank, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import (
-    TensorType,
-    is_essentia_available,
-    is_librosa_available,
-    is_scipy_available,
-    logging,
-    requires_backends,
-)
-
+from ...utils import (TensorType, is_essentia_available, is_librosa_available,
+                      is_scipy_available, logging, requires_backends)
 
 if is_essentia_available():
     import essentia
@@ -150,12 +143,17 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         """
         requires_backends(self, ["essentia"])
         essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
-        bpm, beat_times, confidence, estimates, essentia_beat_intervals = essentia_tracker(audio)
+        bpm, beat_times, confidence, estimates, essentia_beat_intervals = (
+            essentia_tracker(audio)
+        )
 
         return bpm, beat_times, confidence, estimates, essentia_beat_intervals
 
     def interpolate_beat_times(
-        self, beat_times: numpy.ndarray, steps_per_beat: numpy.ndarray, n_extend: numpy.ndarray
+        self,
+        beat_times: numpy.ndarray,
+        steps_per_beat: numpy.ndarray,
+        n_extend: numpy.ndarray,
     ):
         """
         This method takes beat_times and then interpolates that using `scipy.interpolate.interp1d` and the output is
@@ -179,7 +177,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         )
 
         ext_beats = beat_times_function(
-            np.linspace(0, beat_times.size + n_extend - 1, beat_times.size * steps_per_beat + n_extend)
+            np.linspace(
+                0,
+                beat_times.size + n_extend - 1,
+                beat_times.size * steps_per_beat + n_extend,
+            )
         )
 
         return ext_beats
@@ -238,7 +240,9 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         for i, each_feature in enumerate(features):
             # To pad "input_features".
             if len(each_feature.shape) == 3:
-                features_pad_value = max([*zip(*features_shapes)][1]) - features_shapes[i][1]
+                features_pad_value = (
+                    max([*zip(*features_shapes)][1]) - features_shapes[i][1]
+                )
                 attention_mask = np.ones(features_shapes[i][:2], dtype=np.int64)
                 feature_padding = ((0, 0), (0, features_pad_value), (0, 0))
                 attention_mask_padding = (feature_padding[0], feature_padding[1])
@@ -246,13 +250,28 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             # To pad "beatsteps" and "extrapolated_beatstep".
             else:
                 each_feature = each_feature.reshape(1, -1)
-                features_pad_value = max([*zip(*features_shapes)][0]) - features_shapes[i][0]
-                attention_mask = np.ones(features_shapes[i], dtype=np.int64).reshape(1, -1)
-                feature_padding = attention_mask_padding = ((0, 0), (0, features_pad_value))
+                features_pad_value = (
+                    max([*zip(*features_shapes)][0]) - features_shapes[i][0]
+                )
+                attention_mask = np.ones(features_shapes[i], dtype=np.int64).reshape(
+                    1, -1
+                )
+                feature_padding = attention_mask_padding = (
+                    (0, 0),
+                    (0, features_pad_value),
+                )
 
-            each_padded_feature = np.pad(each_feature, feature_padding, "constant", constant_values=self.padding_value)
+            each_padded_feature = np.pad(
+                each_feature,
+                feature_padding,
+                "constant",
+                constant_values=self.padding_value,
+            )
             attention_mask = np.pad(
-                attention_mask, attention_mask_padding, "constant", constant_values=self.padding_value
+                attention_mask,
+                attention_mask_padding,
+                "constant",
+                constant_values=self.padding_value,
             )
 
             if add_zero_line:
@@ -261,10 +280,18 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
                 # we concatenate the zero array line here
                 each_padded_feature = np.concatenate(
-                    [each_padded_feature, np.zeros([1, zero_array_len, self.feature_size])], axis=0
+                    [
+                        each_padded_feature,
+                        np.zeros([1, zero_array_len, self.feature_size]),
+                    ],
+                    axis=0,
                 )
                 attention_mask = np.concatenate(
-                    [attention_mask, np.zeros([1, zero_array_len], dtype=attention_mask.dtype)], axis=0
+                    [
+                        attention_mask,
+                        np.zeros([1, zero_array_len], dtype=attention_mask.dtype),
+                    ],
+                    axis=0,
                 )
 
             padded_features.append(each_padded_feature)
@@ -320,20 +347,28 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         processed_features_dict = {}
         for feature_name, feature_value in inputs.items():
             if feature_name == "input_features":
-                padded_feature_values, attention_mask = self._pad(feature_value, add_zero_line=True)
+                padded_feature_values, attention_mask = self._pad(
+                    feature_value, add_zero_line=True
+                )
                 processed_features_dict[feature_name] = padded_feature_values
                 if return_attention_mask:
                     processed_features_dict["attention_mask"] = attention_mask
             else:
-                padded_feature_values, attention_mask = self._pad(feature_value, add_zero_line=False)
+                padded_feature_values, attention_mask = self._pad(
+                    feature_value, add_zero_line=False
+                )
                 processed_features_dict[feature_name] = padded_feature_values
                 if return_attention_mask:
-                    processed_features_dict[f"attention_mask_{feature_name}"] = attention_mask
+                    processed_features_dict[f"attention_mask_{feature_name}"] = (
+                        attention_mask
+                    )
 
         # If we are processing only one example, we should remove the zero array line since we don't need it to
         # seperate examples from each other.
         if not is_batched and not return_attention_mask:
-            processed_features_dict["input_features"] = processed_features_dict["input_features"][:-1, ...]
+            processed_features_dict["input_features"] = processed_features_dict[
+                "input_features"
+            ][:-1, ...]
 
         outputs = BatchFeature(processed_features_dict, tensor_type=return_tensors)
 
@@ -375,7 +410,10 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         """
 
         requires_backends(self, ["librosa"])
-        is_batched = bool(isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list)))
+        is_batched = bool(
+            isinstance(audio, (list, tuple))
+            and isinstance(audio[0], (np.ndarray, tuple, list))
+        )
         if is_batched:
             # This enables the user to process files of different sampling_rate at same time
             if not isinstance(sampling_rate, list):
@@ -383,20 +421,29 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     "Please give sampling_rate of each audio separately when you are passing multiple raw_audios at the same time. "
                     f"Received {sampling_rate}, expected [audio_1_sr, ..., audio_n_sr]."
                 )
-            return_attention_mask = True if return_attention_mask is None else return_attention_mask
+            return_attention_mask = (
+                True if return_attention_mask is None else return_attention_mask
+            )
         else:
             audio = [audio]
             sampling_rate = [sampling_rate]
-            return_attention_mask = False if return_attention_mask is None else return_attention_mask
+            return_attention_mask = (
+                False if return_attention_mask is None else return_attention_mask
+            )
 
         batch_input_features, batch_beatsteps, batch_ext_beatstep = [], [], []
         for single_raw_audio, single_sampling_rate in zip(audio, sampling_rate):
-            bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(
-                audio=single_raw_audio
+            bpm, beat_times, confidence, estimates, essentia_beat_intervals = (
+                self.extract_rhythm(audio=single_raw_audio)
             )
-            beatsteps = self.interpolate_beat_times(beat_times=beat_times, steps_per_beat=steps_per_beat, n_extend=1)
+            beatsteps = self.interpolate_beat_times(
+                beat_times=beat_times, steps_per_beat=steps_per_beat, n_extend=1
+            )
 
-            if self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
+            if (
+                self.sampling_rate != single_sampling_rate
+                and self.sampling_rate is not None
+            ):
                 if resample:
                     # Change sampling_rate to self.sampling_rate
                     single_raw_audio = librosa.core.resample(

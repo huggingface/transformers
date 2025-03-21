@@ -2,19 +2,15 @@ from collections import defaultdict
 from typing import Optional
 
 from ..image_utils import load_image
-from ..utils import (
-    add_end_docstrings,
-    is_torch_available,
-    logging,
-    requires_backends,
-)
+from ..utils import (add_end_docstrings, is_torch_available, logging,
+                     requires_backends)
 from .base import ChunkPipeline, build_pipeline_init_args
-
 
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -105,7 +101,9 @@ class MaskGenerationPipeline(ChunkPipeline):
         if "crop_overlap_ratio" in kwargs:
             preprocess_kwargs["crop_overlap_ratio"] = kwargs["crop_overlap_ratio"]
         if "crop_n_points_downscale_factor" in kwargs:
-            preprocess_kwargs["crop_n_points_downscale_factor"] = kwargs["crop_n_points_downscale_factor"]
+            preprocess_kwargs["crop_n_points_downscale_factor"] = kwargs[
+                "crop_n_points_downscale_factor"
+            ]
         if "timeout" in kwargs:
             preprocess_kwargs["timeout"] = kwargs["timeout"]
         # postprocess args
@@ -163,7 +161,9 @@ class MaskGenerationPipeline(ChunkPipeline):
                   the "object" described by the label and the mask.
 
         """
-        return super().__call__(image, *args, num_workers=num_workers, batch_size=batch_size, **kwargs)
+        return super().__call__(
+            image, *args, num_workers=num_workers, batch_size=batch_size, **kwargs
+        )
 
     def preprocess(
         self,
@@ -177,8 +177,15 @@ class MaskGenerationPipeline(ChunkPipeline):
     ):
         image = load_image(image, timeout=timeout)
         target_size = self.image_processor.size["longest_edge"]
-        crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
-            image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
+        crop_boxes, grid_points, cropped_images, input_labels = (
+            self.image_processor.generate_crop_boxes(
+                image,
+                target_size,
+                crops_n_layers,
+                crop_overlap_ratio,
+                points_per_crop,
+                crop_n_points_downscale_factor,
+            )
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
         if self.framework == "pt":
@@ -188,12 +195,18 @@ class MaskGenerationPipeline(ChunkPipeline):
             if self.framework == "pt":
                 inference_context = self.get_inference_context()
                 with inference_context():
-                    model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+                    model_inputs = self._ensure_tensor_on_device(
+                        model_inputs, device=self.device
+                    )
+                    image_embeddings = self.model.get_image_embeddings(
+                        model_inputs.pop("pixel_values")
+                    )
                     model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]
-        points_per_batch = points_per_batch if points_per_batch is not None else n_points
+        points_per_batch = (
+            points_per_batch if points_per_batch is not None else n_points
+        )
 
         if points_per_batch <= 0:
             raise ValueError(
@@ -231,7 +244,11 @@ class MaskGenerationPipeline(ChunkPipeline):
         # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]
         masks = self.image_processor.post_process_masks(
-            low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
+            low_resolution_masks,
+            original_sizes,
+            reshaped_input_sizes,
+            mask_threshold,
+            binarize=False,
         )
         iou_scores = model_outputs["iou_scores"]
         masks, iou_scores, boxes = self.image_processor.filter_masks(
@@ -268,8 +285,10 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         all_scores = torch.cat(all_scores)
         all_boxes = torch.cat(all_boxes)
-        output_masks, iou_scores, rle_mask, bounding_boxes = self.image_processor.post_process_for_mask_generation(
-            all_masks, all_scores, all_boxes, crops_nms_thresh
+        output_masks, iou_scores, rle_mask, bounding_boxes = (
+            self.image_processor.post_process_for_mask_generation(
+                all_masks, all_scores, all_boxes, crops_nms_thresh
+            )
         )
 
         extra = defaultdict(list)

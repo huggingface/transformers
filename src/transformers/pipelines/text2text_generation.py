@@ -2,17 +2,19 @@ import enum
 import warnings
 
 from ..tokenization_utils import TruncationStrategy
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import (add_end_docstrings, is_tf_available, is_torch_available,
+                     logging)
 from .base import Pipeline, build_pipeline_init_args
-
 
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_tf_auto import \
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -95,10 +97,14 @@ class Text2TextGenerationPipeline(Pipeline):
             postprocess_params["return_type"] = return_type
 
         if clean_up_tokenization_spaces is not None:
-            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+            postprocess_params["clean_up_tokenization_spaces"] = (
+                clean_up_tokenization_spaces
+            )
 
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            stop_sequence_ids = self.tokenizer.encode(
+                stop_sequence, add_special_tokens=False
+            )
             if len(stop_sequence_ids) > 1:
                 warnings.warn(
                     "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
@@ -124,7 +130,9 @@ class Text2TextGenerationPipeline(Pipeline):
         prefix = self.prefix if self.prefix is not None else ""
         if isinstance(args[0], list):
             if self.tokenizer.pad_token_id is None:
-                raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
+                raise ValueError(
+                    "Please make sure that the tokenizer has a pad_token_id when using a batch input"
+                )
             args = ([prefix + arg for arg in args[0]],)
             padding = True
 
@@ -135,7 +143,9 @@ class Text2TextGenerationPipeline(Pipeline):
             raise ValueError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
-        inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
+        inputs = self.tokenizer(
+            *args, padding=padding, truncation=truncation, return_tensors=self.framework
+        )
         # This is produced by tokenizers but is an invalid generate kwargs
         if "token_type_ids" in inputs:
             del inputs["token_type_ids"]
@@ -179,7 +189,9 @@ class Text2TextGenerationPipeline(Pipeline):
             return [res[0] for res in result]
         return result
 
-    def preprocess(self, inputs, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs):
+    def preprocess(
+        self, inputs, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs
+    ):
         inputs = self._parse_and_tokenize(inputs, truncation=truncation, **kwargs)
         return inputs
 
@@ -204,10 +216,17 @@ class Text2TextGenerationPipeline(Pipeline):
         if self.framework == "pt":
             output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
         elif self.framework == "tf":
-            output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
+            output_ids = tf.reshape(
+                output_ids, (in_b, out_b // in_b, *output_ids.shape[1:])
+            )
         return {"output_ids": output_ids}
 
-    def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
+    def postprocess(
+        self,
+        model_outputs,
+        return_type=ReturnType.TEXT,
+        clean_up_tokenization_spaces=False,
+    ):
         records = []
         for output_ids in model_outputs["output_ids"][0]:
             if return_type == ReturnType.TENSORS:
@@ -284,7 +303,9 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Checks whether there might be something wrong with given input with regard to the model.
         """
         if max_length < min_length:
-            logger.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
+            logger.warning(
+                f"Your min_length={min_length} must be inferior than your max_length={max_length}."
+            )
 
         if input_length < max_length:
             logger.warning(
@@ -325,16 +346,28 @@ class TranslationPipeline(Text2TextGenerationPipeline):
             )
         return True
 
-    def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
+    def preprocess(
+        self,
+        *args,
+        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
+        src_lang=None,
+        tgt_lang=None,
+    ):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
             return self.tokenizer._build_translation_inputs(
-                *args, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
+                *args,
+                return_tensors=self.framework,
+                truncation=truncation,
+                src_lang=src_lang,
+                tgt_lang=tgt_lang,
             )
         else:
             return super()._parse_and_tokenize(*args, truncation=truncation)
 
     def _sanitize_parameters(self, src_lang=None, tgt_lang=None, **kwargs):
-        preprocess_params, forward_params, postprocess_params = super()._sanitize_parameters(**kwargs)
+        preprocess_params, forward_params, postprocess_params = (
+            super()._sanitize_parameters(**kwargs)
+        )
         if src_lang is not None:
             preprocess_params["src_lang"] = src_lang
         if tgt_lang is not None:

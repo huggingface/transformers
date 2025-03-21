@@ -21,15 +21,10 @@ import sys
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
-from transformers.testing_utils import (
-    CaptureLogger,
-    TestCasePlus,
-    backend_device_count,
-    is_torch_fp16_available_on_device,
-    slow,
-    torch_device,
-)
-
+from transformers.testing_utils import (CaptureLogger, TestCasePlus,
+                                        backend_device_count,
+                                        is_torch_fp16_available_on_device,
+                                        slow, torch_device)
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
@@ -476,7 +471,9 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_speech_recognition_ctc_adapter.main()
             result = get_results(tmp_dir)
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "./adapter.tur.safetensors")))
+            self.assertTrue(
+                os.path.isfile(os.path.join(tmp_dir, "./adapter.tur.safetensors"))
+            )
             self.assertLess(result["eval_loss"], result["train_loss"])
 
     def test_run_speech_recognition_seq2seq(self):

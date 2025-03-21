@@ -70,7 +70,9 @@ class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9]
+        )
 
     def test_token_type_ids(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -80,4 +82,6 @@ class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertListEqual(inputs["token_type_ids"], [2] + [0] * sentence_len)
 
             inputs = tokenizer("UNwant\u00e9d,running", "UNwant\u00e9d,running")
-            self.assertListEqual(inputs["token_type_ids"], [2] + [0] * sentence_len + [1] * sentence_len)
+            self.assertListEqual(
+                inputs["token_type_ids"], [2] + [0] * sentence_len + [1] * sentence_len
+            )

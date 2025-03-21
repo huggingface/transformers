@@ -191,7 +191,9 @@ class Zamba2Config(PretrainedConfig):
         self.use_long_context = use_long_context
         if use_mem_rope and use_long_context:
             a = 8
-            rope_theta = rope_theta * a ** (self.attention_head_dim / (self.attention_head_dim - 2))
+            rope_theta = rope_theta * a ** (
+                self.attention_head_dim / (self.attention_head_dim - 2)
+            )
         self.rope_theta = rope_theta
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
@@ -233,7 +235,11 @@ class Zamba2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
-        self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
+        self.hybrid_layer_ids = [
+            index
+            for index, type in enumerate(self.layers_block_type)
+            if type == "hybrid"
+        ]
         self.use_mem_eff_path = use_mem_eff_path
 
 

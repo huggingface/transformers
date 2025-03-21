@@ -18,9 +18,9 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.testing_utils import (require_torch, require_torchvision,
+                                        require_vision)
 from transformers.utils import is_torch_available, is_vision_available
-
 
 if is_torch_available():
     import torch
@@ -35,7 +35,9 @@ if is_vision_available():
 @require_vision
 @require_torchvision
 class TimmWrapperImageProcessingTest(unittest.TestCase):
-    image_processing_class = TimmWrapperImageProcessor if is_vision_available() else None
+    image_processing_class = (
+        TimmWrapperImageProcessor if is_vision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -47,7 +49,9 @@ class TimmWrapperImageProcessingTest(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_load_from_hub(self):
-        image_processor = TimmWrapperImageProcessor.from_pretrained("timm/resnet18.a1_in1k")
+        image_processor = TimmWrapperImageProcessor.from_pretrained(
+            "timm/resnet18.a1_in1k"
+        )
         self.assertIsInstance(image_processor, TimmWrapperImageProcessor)
 
     def test_load_from_local_dir(self):
@@ -77,7 +81,9 @@ class TimmWrapperImageProcessingTest(unittest.TestCase):
     def test_image_processor_call_pil(self):
         image_processor = TimmWrapperImageProcessor.from_pretrained(self.temp_dir.name)
 
-        single_image = Image.fromarray(np.random.randint(256, size=(256, 256, 3), dtype=np.uint8))
+        single_image = Image.fromarray(
+            np.random.randint(256, size=(256, 256, 3), dtype=np.uint8)
+        )
         batch_images = [single_image, single_image, single_image]
 
         # single image
@@ -91,7 +97,9 @@ class TimmWrapperImageProcessingTest(unittest.TestCase):
     def test_image_processor_call_tensor(self):
         image_processor = TimmWrapperImageProcessor.from_pretrained(self.temp_dir.name)
 
-        single_image = torch.from_numpy(np.random.randint(256, size=(3, 256, 256), dtype=np.uint8)).float()
+        single_image = torch.from_numpy(
+            np.random.randint(256, size=(3, 256, 256), dtype=np.uint8)
+        ).float()
         batch_images = [single_image, single_image, single_image]
 
         # single image

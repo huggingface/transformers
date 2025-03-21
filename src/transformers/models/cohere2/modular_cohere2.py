@@ -22,27 +22,18 @@ import torch.utils.checkpoint
 from ...cache_utils import Cache, HybridCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
-from ..cohere.modeling_cohere import (
-    CohereAttention,
-    CohereDecoderLayer,
-    CohereForCausalLM,
-    CohereLayerNorm,
-    CoherePreTrainedModel,
-    CohereRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
+from ...utils import logging
+from ..cohere.modeling_cohere import (CohereAttention, CohereDecoderLayer,
+                                      CohereForCausalLM, CohereLayerNorm,
+                                      CoherePreTrainedModel,
+                                      CohereRotaryEmbedding,
+                                      apply_rotary_pos_emb,
+                                      eager_attention_forward)
 from ..gemma2.modeling_gemma2 import Gemma2Model
-
 
 logger = logging.get_logger(__name__)
 
@@ -259,26 +250,40 @@ class Cohere2Attention(CohereAttention, nn.Module):
         nn.Module.__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.head_dim = getattr(
+            config, "head_dim", config.hidden_size // config.num_attention_heads
+        )
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.num_key_value_heads
+        )
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
         )
         self.sliding_window = (
-            config.sliding_window if (self.layer_idx + 1) % self.config.sliding_window_pattern != 0 else None
+            config.sliding_window
+            if (self.layer_idx + 1) % self.config.sliding_window_pattern != 0
+            else None
         )
 
     def forward(
@@ -299,7 +304,9 @@ class Cohere2Attention(CohereAttention, nn.Module):
 
         cos, sin = position_embeddings
         if self.sliding_window is not None:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(
+                query_states, key_states, cos, sin
+            )
 
         if past_key_value is not None:
             cache_kwargs = {
@@ -308,22 +315,34 @@ class Cohere2Attention(CohereAttention, nn.Module):
                 "sliding_window": self.sliding_window,
                 "cache_position": cache_position,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
+            if (
+                attention_mask is not None
+                and self.config._attn_implementation == "flash_attention_2"
+            ):
                 seq_len = attention_mask.shape[-1]
-                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
+                key_states, value_states = (
+                    key_states[:, :, :seq_len, :],
+                    value_states[:, :, :seq_len, :],
+                )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -361,7 +380,9 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -383,7 +404,9 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
             last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing
         """
 
-        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
+        if (
+            self.is_sliding and attention_mask is not None
+        ):  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
             # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
@@ -395,15 +418,20 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+                    torch.ones_like(attention_mask, dtype=torch.bool),
+                    diagonal=-self.sliding_window,
                 )
-                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+                attention_mask = torch.where(
+                    sliding_window_mask, min_dtype, attention_mask
+                )
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
                 # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
                 offset = last_cache_position - effective_seq_len
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
                 offset = max(0, offset)
-                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
+                attention_mask = attention_mask[
+                    :, :, :, offset : offset + effective_seq_len
+                ]
 
         residual = hidden_states
 
@@ -448,7 +476,9 @@ class Cohere2Model(Gemma2Model):
 
     def __init__(self, config: Cohere2Config):
         super().__init__(config)
-        self.norm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
+        self.norm = Cohere2LayerNorm(
+            hidden_size=(config.hidden_size), eps=config.layer_norm_eps
+        )
         self.rotary_emb = Cohere2RotaryEmbedding(config=config)
 
     def forward(
@@ -466,15 +496,25 @@ class Cohere2Model(Gemma2Model):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -497,9 +537,13 @@ class Cohere2Model(Gemma2Model):
             )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -512,10 +556,16 @@ class Cohere2Model(Gemma2Model):
                 # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
                 # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
                 last_cache_position = (
-                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+                    attention_mask.shape[-1]
+                    if attention_mask.dim() == 2
+                    else cache_position[-1].item()
                 )
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         hidden_states = inputs_embeds
@@ -605,7 +655,9 @@ class Cohere2ForCausalLM(CohereForCausalLM):
                 or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+            elif (
+                input_ids.shape[1] != cache_position.shape[0]
+            ):  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -625,11 +677,16 @@ class Cohere2ForCausalLM(CohereForCausalLM):
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+            model_inputs = {
+                "input_ids": input_ids.clone(memory_format=torch.contiguous_format),
+                "inputs_embeds": None,
+            }
 
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
-        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+        model_inputs["last_cache_position"] = (
+            attention_mask.shape[-1] if attention_mask is not None else 0
+        )
 
         if (
             isinstance(past_key_values, HybridCache)
@@ -643,14 +700,16 @@ class Cohere2ForCausalLM(CohereForCausalLM):
                 batch_size, sequence_length = model_inputs["input_ids"].shape
                 device = model_inputs["input_ids"].device
 
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
+            attention_mask = (
+                self.model._prepare_4d_causal_attention_mask_with_cache_position(
+                    attention_mask,
+                    sequence_length=sequence_length,
+                    target_length=past_key_values.get_max_cache_shape(),
+                    dtype=self.lm_head.weight.dtype,
+                    device=device,
+                    cache_position=cache_position,
+                    batch_size=batch_size,
+                )
             )
 
         if logits_to_keep is not None:
@@ -668,4 +727,9 @@ class Cohere2ForCausalLM(CohereForCausalLM):
         return model_inputs
 
 
-__all__ = ["Cohere2Config", "Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"]
+__all__ = [
+    "Cohere2Config",
+    "Cohere2ForCausalLM",
+    "Cohere2Model",
+    "Cohere2PreTrainedModel",
+]

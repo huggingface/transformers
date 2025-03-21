@@ -21,23 +21,13 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...utils import logging
-from ..gemma.modeling_gemma import (
-    GemmaForCausalLM,
-    GemmaForSequenceClassification,
-    GemmaForTokenClassification,
-)
-from ..granite.modeling_granite import (
-    GraniteAttention,
-)
-from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaMLP,
-    LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaRotaryEmbedding,
-)
+from ..gemma.modeling_gemma import (GemmaForCausalLM,
+                                    GemmaForSequenceClassification,
+                                    GemmaForTokenClassification)
+from ..granite.modeling_granite import GraniteAttention
+from ..llama.modeling_llama import (LlamaDecoderLayer, LlamaMLP, LlamaModel,
+                                    LlamaPreTrainedModel, LlamaRotaryEmbedding)
 from .configuration_helium import HeliumConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -119,8 +109,12 @@ class HeliumDecoderLayer(LlamaDecoderLayer):
         super().__init__()
 
         self.mlp = HeliumMLP(config)
-        self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = HeliumRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_attention_layernorm = HeliumRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
 
 class HeliumPreTrainedModel(LlamaPreTrainedModel):
@@ -131,7 +125,10 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
     def __init__(self, config: HeliumConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [HeliumDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                HeliumDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HeliumRotaryEmbedding(config)

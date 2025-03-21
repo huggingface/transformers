@@ -18,24 +18,18 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, resize, to_channel_dimension_format
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (center_crop, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            is_scaled_image, make_list_of_images,
+                            to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs,
+                      is_vision_available, logging)
 
 if is_vision_available():
     import PIL
@@ -98,7 +92,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 256, "width": 256}
+        )
         crop_size = get_size_dict(crop_size, param_name="crop_size")
         size = size if size is not None else {"height": 224, "width": 224}
         size = get_size_dict(size)
@@ -111,7 +107,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def center_crop(
@@ -196,7 +194,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
         return resize(
             image,
@@ -271,7 +271,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -279,7 +281,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -319,29 +323,49 @@ class PerceiverImageProcessor(BaseImageProcessor):
 
         if do_center_crop:
             images = [
-                self.center_crop(image, crop_size, size=size, input_data_format=input_data_format) for image in images
+                self.center_crop(
+                    image, crop_size, size=size, input_data_format=input_data_format
+                )
+                for image in images
             ]
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}

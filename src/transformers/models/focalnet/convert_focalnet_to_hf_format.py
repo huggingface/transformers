@@ -23,14 +23,18 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import BitImageProcessor, FocalNetConfig, FocalNetForImageClassification
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from transformers import (BitImageProcessor, FocalNetConfig,
+                          FocalNetForImageClassification)
+from transformers.image_utils import (IMAGENET_DEFAULT_MEAN,
+                                      IMAGENET_DEFAULT_STD, PILImageResampling)
 
 
 def get_focalnet_config(model_name):
     depths = [2, 2, 6, 2] if "tiny" in model_name else [2, 2, 18, 2]
     use_conv_embed = True if "large" in model_name or "huge" in model_name else False
-    use_post_layernorm = True if "large" in model_name or "huge" in model_name else False
+    use_post_layernorm = (
+        True if "large" in model_name or "huge" in model_name else False
+    )
     use_layerscale = True if "large" in model_name or "huge" in model_name else False
 
     if "large" in model_name or "xlarge" in model_name or "huge" in model_name:
@@ -68,7 +72,9 @@ def get_focalnet_config(model_name):
     else:
         filename = "imagenet-1k-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
@@ -89,7 +95,9 @@ def get_focalnet_config(model_name):
 
 def rename_key(name):
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if "layers" in name:
@@ -120,7 +128,9 @@ def rename_key(name):
     return name
 
 
-def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+def convert_focalnet_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub=False
+):
     # fmt: off
     model_name_to_url = {
         "focalnet-tiny": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_tiny_srf.pth",
@@ -138,7 +148,9 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     checkpoint_url = model_name_to_url[model_name]
     print("Checkpoint URL: ", checkpoint_url)
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")[
+        "model"
+    ]
 
     # rename keys
     for key in state_dict.copy().keys():
@@ -205,7 +217,9 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}"
+        )
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
@@ -225,7 +239,10 @@ if __name__ == "__main__":
         help="Name of the FocalNet model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--push_to_hub",
@@ -234,4 +251,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_focalnet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_focalnet_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

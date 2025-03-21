@@ -50,7 +50,6 @@ from transformers.models.colpali import ColPaliForRetrieval
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.utils import logging
 
-
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -70,7 +69,9 @@ def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     return new_state_dict
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> Dict[str, torch.Tensor]:
+def load_original_state_dict(
+    model_id: str, revision: Optional[str] = None
+) -> Dict[str, torch.Tensor]:
     directory_path = snapshot_download(
         repo_id=model_id,
         revision=revision,
@@ -144,7 +145,10 @@ def convert_colpali_weights_to_hf(
 
     # Tie the weights (following ColPali's `__init__`` step)
     if model.vlm.language_model._tied_weights_keys is not None:
-        model._tied_weights_keys = [f"vlm.language_model.{k}" for k in model.vlm.language_model._tied_weights_keys]
+        model._tied_weights_keys = [
+            f"vlm.language_model.{k}"
+            for k in model.vlm.language_model._tied_weights_keys
+        ]
 
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(original_state_dict.keys())

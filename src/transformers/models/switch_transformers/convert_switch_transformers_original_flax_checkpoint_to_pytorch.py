@@ -21,10 +21,11 @@ import re
 from flax.traverse_util import flatten_dict, unflatten_dict
 from t5x import checkpoints
 
-from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration
-from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
+from transformers import (SwitchTransformersConfig,
+                          SwitchTransformersForConditionalGeneration)
+from transformers.modeling_flax_pytorch_utils import \
+    load_flax_weights_in_pytorch_model
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 
@@ -82,11 +83,15 @@ def rename_keys(s_dict):
         s_dict[new_key] = s_dict.pop(key)
 
     if "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight" in s_dict:
-        s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
+        s_dict[
+            "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
+        ] = s_dict[
             "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
         ].T
     if "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight" in s_dict:
-        s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
+        s_dict[
+            "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
+        ] = s_dict[
             "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
         ].T
 
@@ -96,7 +101,9 @@ def rename_keys(s_dict):
             num_experts = s_dict[key].shape[0]
             expert_weihts = s_dict[key]
             for idx in range(num_experts):
-                s_dict[key.replace("expert/", f"experts/expert_{idx}/")] = expert_weihts[idx]
+                s_dict[key.replace("expert/", f"experts/expert_{idx}/")] = (
+                    expert_weihts[idx]
+                )
                 print(f"{key} -> {key.replace('expert/', f'experts/expert_{idx}/')}")
 
             s_dict.pop(key)
@@ -129,7 +136,9 @@ def convert_gin_to_config(gin_file, num_experts):
     args = {}
     for param, value in regex_match:
         if param in GIN_TO_CONFIG_MAPPING and value != "":
-            args[GIN_TO_CONFIG_MAPPING[param]] = float(value) if "." in value else int(value)
+            args[GIN_TO_CONFIG_MAPPING[param]] = (
+                float(value) if "." in value else int(value)
+            )
 
     activation = re.findall(r"(.*activations) = \(\'(.*)\',\)", raw_gin)[0]
     args[GIN_TO_CONFIG_MAPPING[activation[0]]] = str(activation[1])
@@ -140,7 +149,11 @@ def convert_gin_to_config(gin_file, num_experts):
 
 
 def convert_flax_checkpoint_to_pytorch(
-    flax_checkpoint_path, config_file, gin_file=None, pytorch_dump_path="./", num_experts=8
+    flax_checkpoint_path,
+    config_file,
+    gin_file=None,
+    pytorch_dump_path="./",
+    num_experts=8,
 ):
     # Initialise PyTorch model
 
@@ -187,12 +200,22 @@ if __name__ == "__main__":
         help="Path to the gin config file. If not provided, a `config_file` has to be passed   ",
     )
     parser.add_argument(
-        "--config_name", default=None, type=str, required=False, help="Config name of SwitchTransformers model."
+        "--config_name",
+        default=None,
+        type=str,
+        required=False,
+        help="Config name of SwitchTransformers model.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output pytorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output pytorch model.",
     )
-    parser.add_argument("--num_experts", default=8, type=int, required=False, help="Number of experts")
+    parser.add_argument(
+        "--num_experts", default=8, type=int, required=False, help="Number of experts"
+    )
     args = parser.parse_args()
     convert_flax_checkpoint_to_pytorch(
         args.switch_t5x_checkpoint_path,

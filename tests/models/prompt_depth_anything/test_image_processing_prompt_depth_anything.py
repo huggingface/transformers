@@ -21,8 +21,8 @@ import numpy as np
 from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_vision_available():
     from transformers import PromptDepthAnythingImageProcessor
@@ -69,7 +69,9 @@ class PromptDepthAnythingImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -83,8 +85,12 @@ class PromptDepthAnythingImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = PromptDepthAnythingImageProcessor if is_vision_available() else None
+class PromptDepthAnythingImageProcessingTest(
+    ImageProcessingTestMixin, unittest.TestCase
+):
+    image_processing_class = (
+        PromptDepthAnythingImageProcessor if is_vision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -108,15 +114,21 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
         self.assertTrue(hasattr(image_processing, "prompt_scale_to_meter"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        image_processor = PromptDepthAnythingImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        image_processor = PromptDepthAnythingImageProcessor(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32
+        )
 
         image = np.zeros((489, 640, 3))
 
@@ -126,7 +138,9 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_prompt_depth_processing(self):
         size = {"height": 756, "width": 756}
-        image_processor = PromptDepthAnythingImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+        image_processor = PromptDepthAnythingImageProcessor(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=32
+        )
 
         image = np.zeros((756, 1008, 3))
         prompt_depth = np.random.random((192, 256))

@@ -26,32 +26,20 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
-    TFBaseModelOutputWithPastAndCrossAttentions,
-    TFBaseModelOutputWithPooling,
-    TFMaskedLMOutput,
-    TFSequenceClassifierOutput,
-)
-from ...modeling_tf_utils import (
-    TFMaskedLanguageModelingLoss,
-    TFModelInputType,
-    TFPreTrainedModel,
-    TFSequenceClassificationLoss,
-    get_initializer,
-    keras,
-    keras_serializable,
-    unpack_inputs,
-)
-from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_tensorflow_probability_available,
-    logging,
-    replace_return_docstrings,
-)
+    TFBaseModelOutputWithPastAndCrossAttentions, TFBaseModelOutputWithPooling,
+    TFMaskedLMOutput, TFSequenceClassifierOutput)
+from ...modeling_tf_utils import (TFMaskedLanguageModelingLoss,
+                                  TFModelInputType, TFPreTrainedModel,
+                                  TFSequenceClassificationLoss,
+                                  get_initializer, keras, keras_serializable,
+                                  unpack_inputs)
+from ...tf_utils import (check_embeddings_within_bounds, shape_list,
+                         stable_softmax)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_tensorflow_probability_available, logging,
+                      replace_return_docstrings)
 from .configuration_tapas import TapasConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -132,7 +120,9 @@ class TFTapasEmbeddings(keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
@@ -191,7 +181,9 @@ class TFTapasEmbeddings(keras.layers.Layer):
         seq_length = input_shape[1]
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape + [self.number_of_token_type_embeddings], value=0)
+            token_type_ids = tf.fill(
+                dims=input_shape + [self.number_of_token_type_embeddings], value=0
+            )
 
         if position_ids is None:
             # create absolute position embeddings
@@ -200,9 +192,17 @@ class TFTapasEmbeddings(keras.layers.Layer):
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.reset_position_index_per_cell:
                 # shape (batch_size, seq_len)
-                col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
+                col_index = IndexMap(
+                    token_type_ids[:, :, 1],
+                    self.config.type_vocab_sizes[1],
+                    batch_dims=1,
+                )
                 # shape (batch_size, seq_len)
-                row_index = IndexMap(token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1)
+                row_index = IndexMap(
+                    token_type_ids[:, :, 2],
+                    self.config.type_vocab_sizes[2],
+                    batch_dims=1,
+                )
                 # shape (batch_size, seq_len)
                 full_index = ProductIndexMap(col_index, row_index)
                 # shape (max_rows * max_columns,). First absolute position for every cell
@@ -211,7 +211,9 @@ class TFTapasEmbeddings(keras.layers.Layer):
                 first_position = gather(first_position_per_segment, full_index)
                 # shape (1, seq_len)
                 position = tf.expand_dims(tf.range(start=0, limit=seq_length), axis=0)
-                position_ids = tf.math.minimum(self.max_position_embeddings - 1, position - first_position)
+                position_ids = tf.math.minimum(
+                    self.max_position_embeddings - 1, position - first_position
+                )
 
         if input_ids is not None:
             check_embeddings_within_bounds(input_ids, self.config.vocab_size)
@@ -223,7 +225,9 @@ class TFTapasEmbeddings(keras.layers.Layer):
 
         for i in range(self.number_of_token_type_embeddings):
             name = f"token_type_embeddings_{i}"
-            final_embeddings += tf.gather(params=getattr(self, name), indices=token_type_ids[:, :, i])
+            final_embeddings += tf.gather(
+                params=getattr(self, name), indices=token_type_ids[:, :, i]
+            )
 
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -248,13 +252,19 @@ class TFTapasSelfAttention(keras.layers.Layer):
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
         self.query = keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+            units=self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="query",
         )
         self.key = keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+            units=self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="key",
         )
         self.value = keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+            units=self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="value",
         )
         self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
@@ -263,7 +273,10 @@ class TFTapasSelfAttention(keras.layers.Layer):
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+        tensor = tf.reshape(
+            tensor=tensor,
+            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
+        )
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
@@ -293,17 +306,29 @@ class TFTapasSelfAttention(keras.layers.Layer):
             value_layer = past_key_value[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(inputs=encoder_hidden_states), batch_size)
-            value_layer = self.transpose_for_scores(self.value(inputs=encoder_hidden_states), batch_size)
+            key_layer = self.transpose_for_scores(
+                self.key(inputs=encoder_hidden_states), batch_size
+            )
+            value_layer = self.transpose_for_scores(
+                self.value(inputs=encoder_hidden_states), batch_size
+            )
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
-            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+            key_layer = self.transpose_for_scores(
+                self.key(inputs=hidden_states), batch_size
+            )
+            value_layer = self.transpose_for_scores(
+                self.value(inputs=hidden_states), batch_size
+            )
             key_layer = tf.concat([past_key_value[0], key_layer], axis=2)
             value_layer = tf.concat([past_key_value[1], value_layer], axis=2)
         else:
-            key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
-            value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
+            key_layer = self.transpose_for_scores(
+                self.key(inputs=hidden_states), batch_size
+            )
+            value_layer = self.transpose_for_scores(
+                self.value(inputs=hidden_states), batch_size
+            )
 
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
 
@@ -342,8 +367,14 @@ class TFTapasSelfAttention(keras.layers.Layer):
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
-        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        attention_output = tf.reshape(
+            tensor=attention_output, shape=(batch_size, -1, self.all_head_size)
+        )
+        outputs = (
+            (attention_output, attention_probs)
+            if output_attentions
+            else (attention_output,)
+        )
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
@@ -370,13 +401,19 @@ class TFTapasSelfOutput(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(
+        self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False
+    ) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -453,7 +490,9 @@ class TFTapasIntermediate(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.intermediate_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -483,13 +522,19 @@ class TFTapasOutput(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(
+        self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False
+    ) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -518,7 +563,9 @@ class TFTapasLayer(keras.layers.Layer):
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
-                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+                raise ValueError(
+                    f"{self} should be used as a decoder model if cross attention is added"
+                )
             self.crossattention = TFTapasAttention(config, name="crossattention")
         self.intermediate = TFTapasIntermediate(config, name="intermediate")
         self.bert_output = TFTapasOutput(config, name="output")
@@ -535,7 +582,9 @@ class TFTapasLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = (
+            past_key_value[:2] if past_key_value is not None else None
+        )
         self_attention_outputs = self.attention(
             input_tensor=hidden_states,
             attention_mask=attention_mask,
@@ -553,7 +602,9 @@ class TFTapasLayer(keras.layers.Layer):
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+            outputs = self_attention_outputs[
+                1:
+            ]  # add self attentions if we output attention weights
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -564,7 +615,9 @@ class TFTapasLayer(keras.layers.Layer):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attn_past_key_value = (
+                past_key_value[-2:] if past_key_value is not None else None
+            )
             cross_attention_outputs = self.crossattention(
                 input_tensor=attention_output,
                 attention_mask=attention_mask,
@@ -576,7 +629,9 @@ class TFTapasLayer(keras.layers.Layer):
                 training=training,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            outputs = (
+                outputs + cross_attention_outputs[1:-1]
+            )  # add cross attentions if we output attention weights
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
@@ -584,7 +639,9 @@ class TFTapasLayer(keras.layers.Layer):
 
         intermediate_output = self.intermediate(hidden_states=attention_output)
         layer_output = self.bert_output(
-            hidden_states=intermediate_output, input_tensor=attention_output, training=training
+            hidden_states=intermediate_output,
+            input_tensor=attention_output,
+            training=training,
         )
         outputs = (layer_output,) + outputs  # add attentions if we output them
 
@@ -617,7 +674,10 @@ class TFTapasEncoder(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.layer = [TFTapasLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.layer = [
+            TFTapasLayer(config, name=f"layer_._{i}")
+            for i in range(config.num_hidden_layers)
+        ]
 
     def call(
         self,
@@ -635,7 +695,9 @@ class TFTapasEncoder(keras.layers.Layer):
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -661,7 +723,10 @@ class TFTapasEncoder(keras.layers.Layer):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention and encoder_hidden_states is not None:
+                if (
+                    self.config.add_cross_attention
+                    and encoder_hidden_states is not None
+                ):
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         # Add last layer
@@ -670,7 +735,14 @@ class TFTapasEncoder(keras.layers.Layer):
 
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None
+                v
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_attentions,
+                    all_cross_attentions,
+                ]
+                if v is not None
             )
 
         return TFBaseModelOutputWithPastAndCrossAttentions(
@@ -737,7 +809,9 @@ class TFTapasPredictionHeadTransform(keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -761,7 +835,9 @@ class TFTapasPredictionHeadTransform(keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Tapas
 class TFTapasLMPredictionHead(keras.layers.Layer):
-    def __init__(self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs):
+    def __init__(
+        self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs
+    ):
         super().__init__(**kwargs)
 
         self.config = config
@@ -774,7 +850,12 @@ class TFTapasLMPredictionHead(keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape=None):
-        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(
+            shape=(self.config.vocab_size,),
+            initializer="zeros",
+            trainable=True,
+            name="bias",
+        )
 
         if self.built:
             return
@@ -801,8 +882,12 @@ class TFTapasLMPredictionHead(keras.layers.Layer):
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
+        hidden_states = tf.matmul(
+            a=hidden_states, b=self.input_embeddings.weight, transpose_b=True
+        )
+        hidden_states = tf.reshape(
+            tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size]
+        )
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
@@ -810,10 +895,14 @@ class TFTapasLMPredictionHead(keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Tapas
 class TFTapasMLMHead(keras.layers.Layer):
-    def __init__(self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs):
+    def __init__(
+        self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs
+    ):
         super().__init__(**kwargs)
 
-        self.predictions = TFTapasLMPredictionHead(config, input_embeddings, name="predictions")
+        self.predictions = TFTapasLMPredictionHead(
+            config, input_embeddings, name="predictions"
+        )
 
     def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
         prediction_scores = self.predictions(hidden_states=sequence_output)
@@ -840,7 +929,9 @@ class TFTapasMainLayer(keras.layers.Layer):
 
         self.embeddings = TFTapasEmbeddings(config, name="embeddings")
         self.encoder = TFTapasEncoder(config, name="encoder")
-        self.pooler = TFTapasPooler(config, name="pooler") if add_pooling_layer else None
+        self.pooler = (
+            TFTapasPooler(config, name="pooler") if add_pooling_layer else None
+        )
 
     def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
@@ -871,7 +962,9 @@ class TFTapasMainLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
@@ -883,7 +976,9 @@ class TFTapasMainLayer(keras.layers.Layer):
             attention_mask = tf.fill(dims=input_shape, value=1)
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape + [len(self.config.type_vocab_sizes)], value=0)
+            token_type_ids = tf.fill(
+                dims=input_shape + [len(self.config.type_vocab_sizes)], value=0
+            )
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -898,17 +993,23 @@ class TFTapasMainLayer(keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(attention_mask, (input_shape[0], 1, 1, input_shape[1]))
+        extended_attention_mask = tf.reshape(
+            attention_mask, (input_shape[0], 1, 1, input_shape[1])
+        )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.cast(
+            extended_attention_mask, dtype=embedding_output.dtype
+        )
         one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
         ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
+        extended_attention_mask = tf.multiply(
+            tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst
+        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -935,7 +1036,11 @@ class TFTapasMainLayer(keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(hidden_states=sequence_output)
+            if self.pooler is not None
+            else None
+        )
 
         if not return_dict:
             return (
@@ -978,8 +1083,12 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     def input_signature(self):
         return {
             "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-            "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
-            "token_type_ids": tf.TensorSpec((None, None, 7), tf.int32, name="token_type_ids"),
+            "attention_mask": tf.TensorSpec(
+                (None, None), tf.float32, name="attention_mask"
+            ),
+            "token_type_ids": tf.TensorSpec(
+                (None, None, 7), tf.int32, name="token_type_ids"
+            ),
         }
 
 
@@ -1090,8 +1199,12 @@ class TFTapasModel(TFTapasPreTrainedModel):
         self.tapas = TFTapasMainLayer(config, name="tapas")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: TFModelInputType | None = None,
@@ -1154,7 +1267,9 @@ class TFTapasModel(TFTapasPreTrainedModel):
                 self.tapas.build(None)
 
 
-@add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
+@add_start_docstrings(
+    """Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING
+)
 class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: TapasConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1166,14 +1281,20 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             )
 
         self.tapas = TFTapasMainLayer(config, add_pooling_layer=False, name="tapas")
-        self.lm_head = TFTapasMLMHead(config, input_embeddings=self.tapas.embeddings, name="cls")
+        self.lm_head = TFTapasMLMHead(
+            config, input_embeddings=self.tapas.embeddings, name="cls"
+        )
 
     def get_lm_head(self) -> keras.layers.Layer:
         return self.lm_head.predictions
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: TFModelInputType | None = None,
@@ -1236,7 +1357,11 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=prediction_scores)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=prediction_scores)
+        )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1273,12 +1398,19 @@ class TFTapasComputeTokenLogits(keras.layers.Layer):
                 shape=(config.hidden_size,),
                 dtype=tf.float32,
                 trainable=True,
-                initializer=tf.zeros_initializer()
-                if config.init_cell_selection_weights_to_zero
-                else keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+                initializer=(
+                    tf.zeros_initializer()
+                    if config.init_cell_selection_weights_to_zero
+                    else keras.initializers.TruncatedNormal(
+                        stddev=config.initializer_range
+                    )
+                ),
             )
             self.output_bias = self.add_weight(
-                name="output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
+                name="output_bias",
+                shape=(),
+                trainable=True,
+                initializer=tf.zeros_initializer(),
             )
 
     def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
@@ -1293,7 +1425,10 @@ class TFTapasComputeTokenLogits(keras.layers.Layer):
         Returns:
             logits (`tf.Tensor` of shape `(batch_size, sequence_length)`): Logits per token.
         """
-        logits = (tf.einsum("bsj,j->bs", sequence_output, self.output_weights) + self.output_bias) / self.temperature
+        logits = (
+            tf.einsum("bsj,j->bs", sequence_output, self.output_weights)
+            + self.output_bias
+        ) / self.temperature
         return logits
 
 
@@ -1307,15 +1442,24 @@ class TFTapasComputeColumnLogits(keras.layers.Layer):
                 shape=[config.hidden_size],
                 dtype=tf.float32,
                 trainable=True,
-                initializer=tf.zeros_initializer()
-                if config.init_cell_selection_weights_to_zero
-                else keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+                initializer=(
+                    tf.zeros_initializer()
+                    if config.init_cell_selection_weights_to_zero
+                    else keras.initializers.TruncatedNormal(
+                        stddev=config.initializer_range
+                    )
+                ),
             )
             self.column_output_bias = self.add_weight(
-                name="column_output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
+                name="column_output_bias",
+                shape=(),
+                trainable=True,
+                initializer=tf.zeros_initializer(),
             )
 
-    def call(self, sequence_output, cell_index, cell_mask, allow_empty_column_selection) -> tf.Tensor:
+    def call(
+        self, sequence_output, cell_index, cell_mask, allow_empty_column_selection
+    ) -> tf.Tensor:
         """
         Computes the column logits.
 
@@ -1336,7 +1480,10 @@ class TFTapasComputeColumnLogits(keras.layers.Layer):
         """
 
         # First, compute the token logits (batch_size, seq_len) - without temperature
-        token_logits = tf.einsum("bsj,j->bs", sequence_output, self.column_output_weights) + self.column_output_bias
+        token_logits = (
+            tf.einsum("bsj,j->bs", sequence_output, self.column_output_weights)
+            + self.column_output_bias
+        )
 
         # Next, average the logits per cell (batch_size, max_num_cols*max_num_rows)
         cell_logits, cell_logits_index = reduce_mean(token_logits, cell_index)
@@ -1349,11 +1496,15 @@ class TFTapasComputeColumnLogits(keras.layers.Layer):
         column_logits /= cell_count + EPSILON_ZERO_DIVISION
 
         # Mask columns that do not appear in the example.
-        is_padding = tf.logical_and(cell_count < 0.5, tf.not_equal(out_index.indices, 0))
+        is_padding = tf.logical_and(
+            cell_count < 0.5, tf.not_equal(out_index.indices, 0)
+        )
         column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(is_padding, tf.float32)
 
         if not allow_empty_column_selection:
-            column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(tf.equal(out_index.indices, 0), tf.float32)
+            column_logits += CLOSE_ENOUGH_TO_LOG_ZERO * tf.cast(
+                tf.equal(out_index.indices, 0), tf.float32
+            )
 
         return column_logits
 
@@ -1376,9 +1527,13 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         # dropout
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
 
-        self.compute_token_logits = TFTapasComputeTokenLogits(config, name="compute_token_logits")
+        self.compute_token_logits = TFTapasComputeTokenLogits(
+            config, name="compute_token_logits"
+        )
 
-        self.compute_column_logits = TFTapasComputeColumnLogits(config, name="compute_column_logits")
+        self.compute_column_logits = TFTapasComputeColumnLogits(
+            config, name="compute_column_logits"
+        )
 
         if config.num_aggregation_labels > 0:
             self.aggregation_classifier = keras.layers.Dense(
@@ -1389,8 +1544,12 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFTableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=TFTableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: TFModelInputType | None = None,
@@ -1487,7 +1646,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
         # Construct indices for the table.
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape + [len(self.config.type_vocab_sizes)], 0)
+            token_type_ids = tf.fill(
+                input_shape + [len(self.config.type_vocab_sizes)], 0
+            )
 
         token_types = [
             "segment_ids",
@@ -1504,24 +1665,34 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
         # Construct indices for the table.
         row_index = IndexMap(
-            indices=tf.minimum(tf.cast(row_ids, tf.int32), self.config.max_num_rows - 1),
+            indices=tf.minimum(
+                tf.cast(row_ids, tf.int32), self.config.max_num_rows - 1
+            ),
             num_segments=self.config.max_num_rows,
             batch_dims=1,
         )
         col_index = IndexMap(
-            indices=tf.minimum(tf.cast(column_ids, tf.int32), self.config.max_num_columns - 1),
+            indices=tf.minimum(
+                tf.cast(column_ids, tf.int32), self.config.max_num_columns - 1
+            ),
             num_segments=self.config.max_num_columns,
             batch_dims=1,
         )
         cell_index = ProductIndexMap(row_index, col_index)
 
         # Masks.
-        input_shape = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:-1]
+        input_shape = (
+            shape_list(input_ids)
+            if input_ids is not None
+            else shape_list(inputs_embeds)[:-1]
+        )
         if attention_mask is None:
             attention_mask = tf.ones(input_shape)
         # Table cells only, without question tokens and table headers.
         if table_mask is None:
-            table_mask = tf.where(row_ids > 0, tf.ones_like(row_ids), tf.zeros_like(row_ids))
+            table_mask = tf.where(
+                row_ids > 0, tf.ones_like(row_ids), tf.zeros_like(row_ids)
+            )
         # <float32>[batch_size, seq_length]
         input_mask_float = tf.cast(attention_mask, tf.float32)
         table_mask_float = tf.cast(table_mask, tf.float32)
@@ -1536,7 +1707,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         column_logits = None
         if self.config.select_one_column:
             column_logits = self.compute_column_logits(
-                sequence_output, cell_index, cell_mask, self.config.allow_empty_column_selection
+                sequence_output,
+                cell_index,
+                cell_mask,
+                self.config.allow_empty_column_selection,
             )
 
         # Aggregate logits.
@@ -1549,7 +1723,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         calculate_loss = False
         if labels is not None:
             calculate_loss = True
-            is_supervised = not self.config.num_aggregation_labels > 0 or not self.config.use_answer_as_supervision
+            is_supervised = (
+                not self.config.num_aggregation_labels > 0
+                or not self.config.use_answer_as_supervision
+            )
 
             # Semi-supervised cell selection in case of no aggregation:
             # If the answer (the denotation) appears directly in the table we might
@@ -1575,7 +1752,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                     )
                 else:
                     aggregate_mask = None
-                    raise ValueError("You have to specify float answers in order to calculate the aggregate mask")
+                    raise ValueError(
+                        "You have to specify float answers in order to calculate the aggregate mask"
+                    )
 
             # Cell selection log-likelihood
             if self.config.average_logits_per_cell:
@@ -1589,12 +1768,13 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 weight = tf.where(
                     labels == 0,
                     tf.ones_like(labels, dtype=tf.float32),
-                    self.config.positive_label_weight * tf.ones_like(labels, dtype=tf.float32),
+                    self.config.positive_label_weight
+                    * tf.ones_like(labels, dtype=tf.float32),
                 )
                 selection_loss_per_token = -dist_per_token.log_prob(labels) * weight
-                selection_loss_per_example = tf.reduce_sum(selection_loss_per_token * input_mask_float, axis=1) / (
-                    tf.reduce_sum(input_mask_float, axis=1) + EPSILON_ZERO_DIVISION
-                )
+                selection_loss_per_example = tf.reduce_sum(
+                    selection_loss_per_token * input_mask_float, axis=1
+                ) / (tf.reduce_sum(input_mask_float, axis=1) + EPSILON_ZERO_DIVISION)
             else:
                 selection_loss_per_example, logits = _single_column_cell_selection_loss(
                     logits, column_logits, labels, cell_index, col_index, cell_mask
@@ -1608,7 +1788,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 total_loss += tf.reduce_mean(selection_loss_per_example)
             else:
                 # For the not supervised case, do not assign loss for cell selection
-                total_loss += tf.reduce_mean(selection_loss_per_example * (1.0 - aggregate_mask))
+                total_loss += tf.reduce_mean(
+                    selection_loss_per_example * (1.0 - aggregate_mask)
+                )
 
             # Semi-supervised regression loss and supervised loss for aggregations
             if self.config.num_aggregation_labels > 0:
@@ -1643,17 +1825,21 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
                 if self.config.use_answer_as_supervision:
                     if numeric_values is not None and numeric_values_scale is not None:
-                        assert shape_list(numeric_values) == shape_list(numeric_values_scale)
+                        assert shape_list(numeric_values) == shape_list(
+                            numeric_values_scale
+                        )
                         # Add regression loss for numeric answers which require aggregation.
-                        answer_loss, large_answer_loss_mask = _calculate_regression_loss(
-                            float_answer,
-                            aggregate_mask,
-                            dist_per_token,
-                            numeric_values,
-                            numeric_values_scale,
-                            table_mask_float,
-                            logits_aggregation,
-                            self.config,
+                        answer_loss, large_answer_loss_mask = (
+                            _calculate_regression_loss(
+                                float_answer,
+                                aggregate_mask,
+                                dist_per_token,
+                                numeric_values,
+                                numeric_values_scale,
+                                table_mask_float,
+                                logits_aggregation,
+                                self.config,
+                            )
                         )
                         per_example_additional_loss += answer_loss
                         # Zero loss for examples with answer_loss > cutoff.
@@ -1708,7 +1894,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
     """,
     TAPAS_START_DOCSTRING,
 )
-class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassificationLoss):
+class TFTapasForSequenceClassification(
+    TFTapasPreTrainedModel, TFSequenceClassificationLoss
+):
     def __init__(self, config: TapasConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1716,13 +1904,19 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         self.tapas = TFTapasMainLayer(config, name="tapas")
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
         self.classifier = keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
+    )
     def call(
         self,
         input_ids: TFModelInputType | None = None,
@@ -1790,7 +1984,11 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=training)
         logits = self.classifier(inputs=pooled_output)
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=logits)
+        )
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1869,12 +2067,15 @@ class ProductIndexMap(IndexMap):
           inner_index: IndexMap, must have the same shape as `outer_index`.
         """
         if outer_index.batch_dims != inner_index.batch_dims:
-            raise ValueError("outer_index.batch_dims and inner_index.batch_dims must be the same.")
+            raise ValueError(
+                "outer_index.batch_dims and inner_index.batch_dims must be the same."
+            )
 
         super(ProductIndexMap, self).__init__(
             indices=(
                 inner_index.indices
-                + outer_index.indices * tf.cast(inner_index.num_segments, inner_index.indices.dtype)
+                + outer_index.indices
+                * tf.cast(inner_index.num_segments, inner_index.indices.dtype)
             ),
             num_segments=inner_index.num_segments * outer_index.num_segments,
             batch_dims=inner_index.batch_dims,
@@ -1935,7 +2136,11 @@ def flatten(index, name="segmented_flatten"):
         offset = tf.expand_dims(offset, -1)
 
     indices = tf.cast(offset, index.indices.dtype) + index.indices
-    return IndexMap(indices=tf.reshape(indices, [-1]), num_segments=index.num_segments * batch_size, batch_dims=0)
+    return IndexMap(
+        indices=tf.reshape(indices, [-1]),
+        num_segments=index.num_segments * batch_size,
+        batch_dims=0,
+    )
 
 
 def range_index_map(batch_shape, num_segments, name="range_index_map"):
@@ -1959,11 +2164,21 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     num_segments.shape.assert_has_rank(0)
 
     indices = tf.range(num_segments)
-    shape = tf.concat([tf.ones_like(batch_shape, dtype=tf.int32), tf.expand_dims(num_segments, axis=0)], axis=0)
+    shape = tf.concat(
+        [
+            tf.ones_like(batch_shape, dtype=tf.int32),
+            tf.expand_dims(num_segments, axis=0),
+        ],
+        axis=0,
+    )
     indices = tf.reshape(indices, shape)
     multiples = tf.concat([batch_shape, [1]], axis=0)
     indices = tf.tile(indices, multiples)
-    return IndexMap(indices=indices, num_segments=num_segments, batch_dims=batch_shape.shape.as_list()[0])
+    return IndexMap(
+        indices=indices,
+        num_segments=num_segments,
+        batch_dims=batch_shape.shape.as_list()[0],
+    )
 
 
 def _segment_reduce(values, index, segment_reduce_fn, name):
@@ -1991,11 +2206,15 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     flattened_shape = tf.concat([[-1], vector_shape], axis=0)
     flat_values = tf.reshape(values, flattened_shape)
     segment_means = segment_reduce_fn(
-        data=flat_values, segment_ids=flat_index.indices, num_segments=flat_index.num_segments
+        data=flat_values,
+        segment_ids=flat_index.indices,
+        num_segments=flat_index.num_segments,
     )
 
     # Unflatten the values.
-    new_shape = tf.concat([index.batch_shape(), [index.num_segments], vector_shape], axis=0)
+    new_shape = tf.concat(
+        [index.batch_shape(), [index.num_segments], vector_shape], axis=0
+    )
     output_values = tf.reshape(segment_means, new_shape)
     output_index = range_index_map(index.batch_shape(), index.num_segments)
     return output_values, output_index
@@ -2074,7 +2293,9 @@ def reduce_min(values, index, name="segmented_reduce_min"):
     return _segment_reduce(values, index, tf.math.unsorted_segment_min, name)
 
 
-def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell_index, col_index, cell_mask):
+def _single_column_cell_selection_loss(
+    token_logits, column_logits, labels, cell_index, col_index, cell_mask
+):
     """
     Computes the loss for cell selection constrained to a single column. The loss is a hierarchical log-likelihood. The
     model first predicts a column and then selects cells within that column (conditioned on the column). Cells outside
@@ -2118,7 +2339,9 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
 
     # Mask for the selected column.
     column_id_for_cells = cell_index.project_inner(labels_index).indices
-    column_mask = tf.cast(tf.equal(column_id_for_cells, tf.expand_dims(column_label, axis=1)), tf.float32)
+    column_mask = tf.cast(
+        tf.equal(column_id_for_cells, tf.expand_dims(column_label, axis=1)), tf.float32
+    )
 
     # Compute the log-likelihood for cells, but only for the selected column.
     cell_dist = tfp.distributions.Bernoulli(logits=logits_per_cell)
@@ -2128,26 +2351,35 @@ def _single_column_cell_selection_loss(token_logits, column_logits, labels, cell
     cell_loss /= tf.reduce_sum(column_mask * cell_mask, axis=1) + EPSILON_ZERO_DIVISION
 
     selection_loss_per_example = column_loss_per_example
-    selection_loss_per_example += tf.where(no_cell_selected, tf.zeros_like(selection_loss_per_example), cell_loss)
+    selection_loss_per_example += tf.where(
+        no_cell_selected, tf.zeros_like(selection_loss_per_example), cell_loss
+    )
 
     # Set the probs outside the selected column (selected by the *model*)
     # to 0. This ensures backwards compatibility with models that select
     # cells from multiple columns.
     selected_column_id = tf.argmax(column_logits, axis=-1, output_type=tf.int32)
     selected_column_mask = tf.cast(
-        tf.equal(column_id_for_cells, tf.expand_dims(selected_column_id, axis=-1)), tf.float32
+        tf.equal(column_id_for_cells, tf.expand_dims(selected_column_id, axis=-1)),
+        tf.float32,
     )
     # Never select cells with the special column id 0.
     selected_column_mask = tf.where(
-        tf.equal(column_id_for_cells, 0), tf.zeros_like(selected_column_mask), selected_column_mask
+        tf.equal(column_id_for_cells, 0),
+        tf.zeros_like(selected_column_mask),
+        selected_column_mask,
     )
-    logits_per_cell += CLOSE_ENOUGH_TO_LOG_ZERO * (1.0 - cell_mask * selected_column_mask)
+    logits_per_cell += CLOSE_ENOUGH_TO_LOG_ZERO * (
+        1.0 - cell_mask * selected_column_mask
+    )
     logits = gather(logits_per_cell, cell_index)
 
     return selection_loss_per_example, logits
 
 
-def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, labels, aggregation_classifier):
+def _calculate_aggregate_mask(
+    answer, pooled_output, cell_selection_preference, labels, aggregation_classifier
+):
     """
     Finds examples where the model should select cells with no aggregation.
 
@@ -2177,7 +2409,9 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     logits_aggregation = aggregation_classifier(pooled_output)
     dist_aggregation = tfp.distributions.Categorical(logits=logits_aggregation)
     # Index 0 corresponds to "no aggregation".
-    aggregation_ops_total_mass = tf.reduce_sum(dist_aggregation.probs_parameter()[:, 1:], axis=1)
+    aggregation_ops_total_mass = tf.reduce_sum(
+        dist_aggregation.probs_parameter()[:, 1:], axis=1
+    )
     # Cell selection examples according to current model.
     is_pred_cell_selection = aggregation_ops_total_mass <= cell_selection_preference
     # Examples with non-empty cell selection supervision.
@@ -2192,7 +2426,11 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
 
 
 def _calculate_aggregation_loss_known(
-    logits_aggregation, aggregate_mask, aggregation_labels, use_answer_as_supervision, num_aggregation_labels
+    logits_aggregation,
+    aggregate_mask,
+    aggregation_labels,
+    use_answer_as_supervision,
+    num_aggregation_labels,
 ):
     """
     Calculates aggregation loss when its type is known during training.
@@ -2224,11 +2462,15 @@ def _calculate_aggregation_loss_known(
         # Use aggregation supervision as the target.
         target_aggregation = aggregation_labels
 
-    one_hot_labels = tf.one_hot(target_aggregation, depth=num_aggregation_labels, dtype=tf.float32)
+    one_hot_labels = tf.one_hot(
+        target_aggregation, depth=num_aggregation_labels, dtype=tf.float32
+    )
     log_probs = tf.nn.log_softmax(logits_aggregation, axis=-1)
 
     # <float32>[batch_size]
-    per_example_aggregation_intermediate = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
+    per_example_aggregation_intermediate = -tf.reduce_sum(
+        one_hot_labels * log_probs, axis=-1
+    )
     if use_answer_as_supervision:
         # Accumulate loss only for examples requiring cell selection
         # (no aggregation).
@@ -2253,7 +2495,9 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
     """
     dist_aggregation = tfp.distributions.Categorical(logits=logits_aggregation)
     # Index 0 corresponds to "no aggregation".
-    aggregation_ops_total_mass = tf.reduce_sum(dist_aggregation.probs_parameter()[:, 1:], axis=1)
+    aggregation_ops_total_mass = tf.reduce_sum(
+        dist_aggregation.probs_parameter()[:, 1:], axis=1
+    )
     # Predict some aggregation in case of an answer that needs aggregation.
     # This increases the probability of all aggregation functions, in a way
     # similar to MML, but without considering whether the function gives the
@@ -2290,17 +2534,28 @@ def _calculate_aggregation_loss(
         aggregation_loss (`tf.Tensor` of shape `(batch_size,)`): Aggregation loss per example.
     """
     per_example_aggregation_loss = _calculate_aggregation_loss_known(
-        logits_aggregation, aggregate_mask, aggregation_labels, use_answer_as_supervision, num_aggregation_labels
+        logits_aggregation,
+        aggregate_mask,
+        aggregation_labels,
+        use_answer_as_supervision,
+        num_aggregation_labels,
     )
 
     if use_answer_as_supervision:
         # Add aggregation loss for numeric answers that need aggregation.
-        per_example_aggregation_loss += _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask)
+        per_example_aggregation_loss += _calculate_aggregation_loss_unknown(
+            logits_aggregation, aggregate_mask
+        )
     return aggregation_loss_weight * per_example_aggregation_loss
 
 
 def _calculate_expected_result(
-    dist_per_cell, numeric_values, numeric_values_scale, input_mask_float, logits_aggregation, config
+    dist_per_cell,
+    numeric_values,
+    numeric_values_scale,
+    input_mask_float,
+    logits_aggregation,
+    config,
 ):
     """
     Calculates the expected result given cell and aggregation probabilities.
@@ -2334,28 +2589,47 @@ def _calculate_expected_result(
         scaled_probability_per_cell = dist_per_cell.probs_parameter()
 
     # <float32>[batch_size, seq_length]
-    scaled_probability_per_cell = (scaled_probability_per_cell / numeric_values_scale) * input_mask_float
+    scaled_probability_per_cell = (
+        scaled_probability_per_cell / numeric_values_scale
+    ) * input_mask_float
     count_result = tf.reduce_sum(scaled_probability_per_cell, axis=1)
     numeric_values_masked = tf.where(
         tf.math.is_nan(numeric_values), tf.zeros_like(numeric_values), numeric_values
     )  # Mask non-numeric table values to zero.
-    sum_result = tf.reduce_sum(scaled_probability_per_cell * numeric_values_masked, axis=1)
+    sum_result = tf.reduce_sum(
+        scaled_probability_per_cell * numeric_values_masked, axis=1
+    )
     avg_approximation = config.average_approximation_function
     if avg_approximation == AverageApproximationFunction.RATIO:
         average_result = sum_result / (count_result + EPSILON_ZERO_DIVISION)
     elif avg_approximation == AverageApproximationFunction.FIRST_ORDER:
         # The sum of all probabilities exept that correspond to other cells
-        ex = tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True) - scaled_probability_per_cell + 1
-        average_result = tf.reduce_sum(numeric_values_masked * scaled_probability_per_cell / ex, axis=1)
+        ex = (
+            tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True)
+            - scaled_probability_per_cell
+            + 1
+        )
+        average_result = tf.reduce_sum(
+            numeric_values_masked * scaled_probability_per_cell / ex, axis=1
+        )
     elif avg_approximation == AverageApproximationFunction.SECOND_ORDER:
         # The sum of all probabilities exept that correspond to other cells
-        ex = tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True) - scaled_probability_per_cell + 1
+        ex = (
+            tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True)
+            - scaled_probability_per_cell
+            + 1
+        )
         pointwise_var = scaled_probability_per_cell * (1 - scaled_probability_per_cell)
         var = tf.reduce_sum(pointwise_var, axis=1, keepdims=True) - pointwise_var
         multiplier = (var / tf.math.square(ex) + 1) / ex
-        average_result = tf.reduce_sum(numeric_values_masked * scaled_probability_per_cell * multiplier, axis=1)
+        average_result = tf.reduce_sum(
+            numeric_values_masked * scaled_probability_per_cell * multiplier, axis=1
+        )
     else:
-        raise ValueError("Invalid average_approximation_function: %s", config.average_approximation_function)
+        raise ValueError(
+            "Invalid average_approximation_function: %s",
+            config.average_approximation_function,
+        )
 
     if config.use_gumbel_for_aggregation:
         gumbel_dist = tfp.distributions.RelaxedOneHotCategorical(
@@ -2365,7 +2639,9 @@ def _calculate_expected_result(
         aggregation_op_only_probs = gumbel_dist.sample()
     else:
         # <float32>[batch_size, num_aggregation_labels - 1]
-        aggregation_op_only_probs = stable_softmax(logits_aggregation[:, 1:] / config.aggregation_temperature, axis=-1)
+        aggregation_op_only_probs = stable_softmax(
+            logits_aggregation[:, 1:] / config.aggregation_temperature, axis=-1
+        )
     all_results = tf.concat(
         [
             tf.expand_dims(sum_result, axis=1),
@@ -2416,7 +2692,12 @@ def _calculate_regression_loss(
     """
     # float32 (batch_size,)
     expected_result = _calculate_expected_result(
-        dist_per_cell, numeric_values, numeric_values_scale, input_mask_float, logits_aggregation, config
+        dist_per_cell,
+        numeric_values,
+        numeric_values_scale,
+        input_mask_float,
+        logits_aggregation,
+        config,
     )
 
     # <float32>[batch_size]
@@ -2424,7 +2705,8 @@ def _calculate_regression_loss(
 
     if config.use_normalized_answer_loss:
         normalizer = tf.stop_gradient(
-            tf.math.maximum(tf.math.abs(expected_result), tf.math.abs(answer_masked)) + EPSILON_ZERO_DIVISION
+            tf.math.maximum(tf.math.abs(expected_result), tf.math.abs(answer_masked))
+            + EPSILON_ZERO_DIVISION
         )
         normalized_answer_masked = answer_masked / normalizer
         normalized_expected_result = expected_result / normalizer
@@ -2449,7 +2731,9 @@ def _calculate_regression_loss(
             tf.zeros_like(per_example_answer_loss, dtype=tf.float32),
             tf.ones_like(per_example_answer_loss, dtype=tf.float32),
         )
-    per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
+    per_example_answer_loss_scaled = config.answer_loss_importance * (
+        per_example_answer_loss * aggregate_mask
+    )
     return per_example_answer_loss_scaled, large_answer_loss_mask
 
 

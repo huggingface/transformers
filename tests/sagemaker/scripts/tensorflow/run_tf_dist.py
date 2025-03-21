@@ -12,7 +12,6 @@ from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 from transformers.modeling_tf_utils import keras
 from transformers.utils import is_sagemaker_dp_enabled
 
-
 if os.environ.get("SDP_ENABLED") or is_sagemaker_dp_enabled():
     SDP_ENABLED = True
     os.environ["SAGEMAKER_INSTANCE_TYPE"] = "p3dn.24xlarge"
@@ -50,31 +49,47 @@ def fit(model, loss, opt, train_dataset, epochs, train_batch_size, max_steps=Non
 
 def get_datasets(tokenizer, train_batch_size, eval_batch_size):
     # Load dataset
-    train_dataset, test_dataset = load_dataset("stanfordnlp/imdb", split=["train", "test"])
+    train_dataset, test_dataset = load_dataset(
+        "stanfordnlp/imdb", split=["train", "test"]
+    )
 
     # Preprocess train dataset
     train_dataset = train_dataset.map(
-        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"), batched=True
+        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"),
+        batched=True,
     )
-    train_dataset.set_format(type="tensorflow", columns=["input_ids", "attention_mask", "label"])
+    train_dataset.set_format(
+        type="tensorflow", columns=["input_ids", "attention_mask", "label"]
+    )
 
     train_features = {
-        x: train_dataset[x].to_tensor(default_value=0, shape=[None, tokenizer.model_max_length])
+        x: train_dataset[x].to_tensor(
+            default_value=0, shape=[None, tokenizer.model_max_length]
+        )
         for x in ["input_ids", "attention_mask"]
     }
-    tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_features, train_dataset["label"]))
+    tf_train_dataset = tf.data.Dataset.from_tensor_slices(
+        (train_features, train_dataset["label"])
+    )
 
     # Preprocess test dataset
     test_dataset = test_dataset.map(
-        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"), batched=True
+        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"),
+        batched=True,
     )
-    test_dataset.set_format(type="tensorflow", columns=["input_ids", "attention_mask", "label"])
+    test_dataset.set_format(
+        type="tensorflow", columns=["input_ids", "attention_mask", "label"]
+    )
 
     test_features = {
-        x: test_dataset[x].to_tensor(default_value=0, shape=[None, tokenizer.model_max_length])
+        x: test_dataset[x].to_tensor(
+            default_value=0, shape=[None, tokenizer.model_max_length]
+        )
         for x in ["input_ids", "attention_mask"]
     }
-    tf_test_dataset = tf.data.Dataset.from_tensor_slices((test_features, test_dataset["label"]))
+    tf_test_dataset = tf.data.Dataset.from_tensor_slices(
+        (test_features, test_dataset["label"])
+    )
 
     if SDP_ENABLED:
         tf_train_dataset = tf_train_dataset.shard(sdp.size(), sdp.rank())
@@ -100,7 +115,9 @@ if __name__ == "__main__":
     parser.add_argument("--max_steps", type=int, default=None)
 
     # Data, model, and output directories
-    parser.add_argument("--output_data_dir", type=str, default=os.environ["SM_OUTPUT_DATA_DIR"])
+    parser.add_argument(
+        "--output_data_dir", type=str, default=os.environ["SM_OUTPUT_DATA_DIR"]
+    )
     parser.add_argument("--model_dir", type=str, default=os.environ["SM_MODEL_DIR"])
     parser.add_argument("--n_gpus", type=str, default=os.environ["SM_NUM_GPUS"])
 
@@ -125,7 +142,9 @@ if __name__ == "__main__":
             tf.config.experimental.set_visible_devices(gpus[sdp.local_rank()], "GPU")
 
     # Load model and tokenizer
-    model = TFAutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
+    model = TFAutoModelForSequenceClassification.from_pretrained(
+        args.model_name_or_path
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     # get datasets
@@ -170,7 +189,11 @@ if __name__ == "__main__":
 
     # Evaluation
     if args.do_eval and (not SDP_ENABLED or sdp.rank() == 0):
-        result = model.evaluate(tf_test_dataset, batch_size=args.per_device_eval_batch_size, return_dict=True)
+        result = model.evaluate(
+            tf_test_dataset,
+            batch_size=args.per_device_eval_batch_size,
+            return_dict=True,
+        )
         logger.info("*** Evaluate ***")
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")

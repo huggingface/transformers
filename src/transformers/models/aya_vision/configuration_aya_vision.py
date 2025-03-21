@@ -18,7 +18,6 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -79,7 +78,9 @@ class AyaVisionConfig(PretrainedConfig):
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
+                vision_config["model_type"]
+                if "model_type" in vision_config
+                else "clip_vision_model"
             )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
@@ -96,7 +97,9 @@ class AyaVisionConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "llama"
+            )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["cohere2"]()

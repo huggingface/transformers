@@ -23,10 +23,15 @@ import re
 import subprocess
 import sys
 
-
-fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode(
+    "utf-8"
+)
 modified_files = (
-    subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split()).decode("utf-8").split()
+    subprocess.check_output(
+        f"git diff --diff-filter=d --name-only {fork_point_sha}".split()
+    )
+    .decode("utf-8")
+    .split()
 )
 
 joined_dirs = "|".join(sys.argv[1:])

@@ -19,21 +19,13 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import (
-    PaliGemmaConfig,
-    PaliGemmaForConditionalGeneration,
-    is_torch_available,
-    is_vision_available,
-)
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-)
+from transformers import (PaliGemmaConfig, PaliGemmaForConditionalGeneration,
+                          is_torch_available, is_vision_available)
+from transformers.testing_utils import require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-
 
 if is_torch_available():
     import torch
@@ -152,7 +144,12 @@ class PaliGemma2VisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 1
+            )
+            + 1
+        )
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
@@ -170,12 +167,16 @@ class PaliGemma2VisionText2TextModelTester:
 
 
 @require_torch
-class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PaliGemma2ForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     """
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
-    all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     fx_compatible = False
     test_pruning = False
@@ -185,7 +186,9 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     def setUp(self):
         self.model_tester = PaliGemma2VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=PaliGemmaConfig, has_text_modality=False
+        )
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -278,19 +281,27 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_model_parallelism(self):
         pass
 
@@ -353,16 +364,22 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma2 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma2 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma2 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_sample(self):
         pass
 

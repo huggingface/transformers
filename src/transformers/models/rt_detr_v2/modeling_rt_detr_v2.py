@@ -29,21 +29,17 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2CLS, ACT2FN
-from ...image_transforms import center_to_corners_format, corners_to_center_format
+from ...image_transforms import (center_to_corners_format,
+                                 corners_to_center_format)
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_torchdynamo_compiling, replace_return_docstrings,
+                      torch_int)
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr_v2 import RTDetrV2Config
-
 
 _CONFIG_FOR_DOC = "RTDetrV2Config"
 
@@ -76,7 +72,9 @@ def multi_scale_deformable_attention_v2(
         # -> batch_size, height*width, num_heads*hidden_dim
         # -> batch_size, num_heads*hidden_dim, height*width
         # -> batch_size*num_heads, hidden_dim, height, width
-        value_l_ = value_list[level_id].reshape(batch_size * num_heads, hidden_dim, height, width)
+        value_l_ = value_list[level_id].reshape(
+            batch_size * num_heads, hidden_dim, height, width
+        )
         # batch_size, num_queries, num_heads, num_points, 2
         # -> batch_size, num_heads, num_queries, num_points, 2
         # -> batch_size*num_heads, num_queries, num_points, 2
@@ -84,12 +82,17 @@ def multi_scale_deformable_attention_v2(
         # batch_size*num_heads, hidden_dim, num_queries, num_points
         if method == "default":
             sampling_value_l_ = nn.functional.grid_sample(
-                value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+                value_l_,
+                sampling_grid_l_,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
             )
         elif method == "discrete":
-            sampling_coord = (sampling_grid_l_ * torch.tensor([[width, height]], device=value.device) + 0.5).to(
-                torch.int64
-            )
+            sampling_coord = (
+                sampling_grid_l_ * torch.tensor([[width, height]], device=value.device)
+                + 0.5
+            ).to(torch.int64)
 
             # Separate clamping for x and y coordinates
             sampling_coord_x = sampling_coord[..., 0].clamp(0, width - 1)
@@ -97,15 +100,22 @@ def multi_scale_deformable_attention_v2(
 
             # Combine the clamped coordinates
             sampling_coord = torch.stack([sampling_coord_x, sampling_coord_y], dim=-1)
-            sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
+            sampling_coord = sampling_coord.reshape(
+                batch_size * num_heads, num_queries * num_points_list[level_id], 2
+            )
             sampling_idx = (
                 torch.arange(sampling_coord.shape[0], device=value.device)
                 .unsqueeze(-1)
                 .repeat(1, sampling_coord.shape[1])
             )
-            sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
+            sampling_value_l_ = value_l_[
+                sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]
+            ]
             sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
-                batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
+                batch_size * num_heads,
+                hidden_dim,
+                num_queries,
+                num_points_list[level_id],
             )
         sampling_value_list.append(sampling_value_l_)
     # (batch_size, num_queries, num_heads, num_levels, num_points)
@@ -156,8 +166,12 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.sampling_offsets = nn.Linear(
+            config.d_model, num_heads * self.n_levels * n_points * 2
+        )
+        self.attention_weights = nn.Linear(
+            config.d_model, num_heads * self.n_levels * n_points
+        )
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
@@ -168,7 +182,9 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
-        self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
+        self.register_buffer(
+            "n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32)
+        )
 
     def forward(
         self,
@@ -189,7 +205,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+        if (
+            not is_torchdynamo_compiling()
+            and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length
+        ):
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
             )
@@ -197,7 +216,9 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
             value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        value = value.view(
+            batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads
+        )
 
         # V2-specific sampling offsets shape
         sampling_offsets = self.sampling_offsets(hidden_states).view(
@@ -211,21 +232,37 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         # V2-specific sampling locations calculation
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.stack(
+                [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1
+            )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
         elif reference_points.shape[-1] == 4:
-            n_points_scale = self.n_points_scale.to(dtype=hidden_states.dtype).unsqueeze(-1)
-            offset = sampling_offsets * n_points_scale * reference_points[:, :, None, :, 2:] * self.offset_scale
+            n_points_scale = self.n_points_scale.to(
+                dtype=hidden_states.dtype
+            ).unsqueeze(-1)
+            offset = (
+                sampling_offsets
+                * n_points_scale
+                * reference_points[:, :, None, :, 2:]
+                * self.offset_scale
+            )
             sampling_locations = reference_points[:, :, None, :, :2] + offset
         else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            raise ValueError(
+                f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+            )
 
         # V2-specific attention implementation choice
         output = multi_scale_deformable_attention_v2(
-            value, spatial_shapes_list, sampling_locations, attention_weights, self.n_points_list, self.method
+            value,
+            spatial_shapes_list,
+            sampling_locations,
+            attention_weights,
+            self.n_points_list,
+            self.method,
         )
 
         output = self.output_proj(output)
@@ -264,9 +301,15 @@ class RTDetrV2MultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(batch_size, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -287,10 +330,14 @@ class RTDetrV2MultiheadAttention(nn.Module):
         # get queries, keys and values
         query_states = self.q_proj(hidden_states) * self.scaling
         key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
+        value_states = self._reshape(
+            self.v_proj(hidden_states_original), -1, batch_size
+        )
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
+        query_states = self._reshape(query_states, target_len, batch_size).view(
+            *proj_shape
+        )
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
@@ -307,7 +354,9 @@ class RTDetrV2MultiheadAttention(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [seq_len, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = attention_mask.expand(batch_size, 1, *attention_mask.size())
+            attention_mask = attention_mask.expand(
+                batch_size, 1, *attention_mask.size()
+            )
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
@@ -315,8 +364,13 @@ class RTDetrV2MultiheadAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
+            attn_weights = (
+                attn_weights.view(batch_size, self.num_heads, target_len, source_len)
+                + attention_mask
+            )
+            attn_weights = attn_weights.view(
+                batch_size * self.num_heads, target_len, source_len
+            )
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -325,22 +379,34 @@ class RTDetrV2MultiheadAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
+            attn_weights_reshaped = attn_weights.view(
+                batch_size, self.num_heads, target_len, source_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                batch_size * self.num_heads, target_len, source_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
+        if attn_output.size() != (
+            batch_size * self.num_heads,
+            target_len,
+            self.head_dim,
+        ):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
+        attn_output = attn_output.view(
+            batch_size, self.num_heads, target_len, self.head_dim
+        )
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
 
@@ -362,10 +428,14 @@ class RTDetrV2DecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(
+            config.d_model, eps=config.layer_norm_eps
+        )
         # override only the encoder attention module with v2 version
         self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(config)
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.encoder_attn_layer_norm = nn.LayerNorm(
+            config.d_model, eps=config.layer_norm_eps
+        )
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
@@ -414,7 +484,9 @@ class RTDetrV2DecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -433,7 +505,9 @@ class RTDetrV2DecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = second_residual + hidden_states
 
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
@@ -441,9 +515,13 @@ class RTDetrV2DecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -675,14 +753,27 @@ class RTDetrV2FrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(n))
 
     def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
     ):
         num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
         )
 
     def forward(self, x):
@@ -749,13 +840,24 @@ class RTDetrV2ConvEncoder(nn.Module):
         out = []
         for feature_map in features:
             # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            mask = nn.functional.interpolate(
+                pixel_mask[None].float(), size=feature_map.shape[-2:]
+            ).to(torch.bool)[0]
             out.append((feature_map, mask))
         return out
 
 
 class RTDetrV2ConvNormLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
+    def __init__(
+        self,
+        config,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding=None,
+        activation=None,
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
@@ -786,13 +888,17 @@ class RTDetrV2EncoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(
+            config.encoder_hidden_dim, eps=config.layer_norm_eps
+        )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.encoder_activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
-        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.encoder_hidden_dim, eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -825,7 +931,9 @@ class RTDetrV2EncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         if not self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -835,11 +943,15 @@ class RTDetrV2EncoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
 
         hidden_states = self.fc2(hidden_states)
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         hidden_states = residual + hidden_states
         if not self.normalize_before:
@@ -848,7 +960,9 @@ class RTDetrV2EncoderLayer(nn.Module):
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+                hidden_states = torch.clamp(
+                    hidden_states, min=-clamp_value, max=clamp_value
+                )
 
         outputs = (hidden_states,)
 
@@ -868,8 +982,12 @@ class RTDetrV2RepVggBlock(nn.Module):
 
         activation = config.activation_function
         hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
-        self.conv1 = RTDetrV2ConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
-        self.conv2 = RTDetrV2ConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
+        self.conv1 = RTDetrV2ConvNormLayer(
+            config, hidden_channels, hidden_channels, 3, 1, padding=1
+        )
+        self.conv2 = RTDetrV2ConvNormLayer(
+            config, hidden_channels, hidden_channels, 1, 1, padding=0
+        )
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -891,11 +1009,19 @@ class RTDetrV2CSPRepLayer(nn.Module):
         activation = config.activation_function
 
         hidden_channels = int(out_channels * config.hidden_expansion)
-        self.conv1 = RTDetrV2ConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.conv2 = RTDetrV2ConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.Sequential(*[RTDetrV2RepVggBlock(config) for _ in range(num_blocks)])
+        self.conv1 = RTDetrV2ConvNormLayer(
+            config, in_channels, hidden_channels, 1, 1, activation=activation
+        )
+        self.conv2 = RTDetrV2ConvNormLayer(
+            config, in_channels, hidden_channels, 1, 1, activation=activation
+        )
+        self.bottlenecks = nn.Sequential(
+            *[RTDetrV2RepVggBlock(config) for _ in range(num_blocks)]
+        )
         if hidden_channels != out_channels:
-            self.conv3 = RTDetrV2ConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
+            self.conv3 = RTDetrV2ConvNormLayer(
+                config, hidden_channels, out_channels, 1, 1, activation=activation
+            )
         else:
             self.conv3 = nn.Identity()
 
@@ -910,9 +1036,13 @@ class RTDetrV2Encoder(nn.Module):
     def __init__(self, config: RTDetrV2Config):
         super().__init__()
 
-        self.layers = nn.ModuleList([RTDetrV2EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [RTDetrV2EncoderLayer(config) for _ in range(config.encoder_layers)]
+        )
 
-    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
+    def forward(
+        self, src, src_mask=None, pos_embed=None, output_attentions: bool = False
+    ) -> torch.Tensor:
         hidden_states = src
         for layer in self.layers:
             hidden_states = layer(
@@ -949,7 +1079,9 @@ class RTDetrV2HybridEncoder(nn.Module):
         activation = config.activation_function
 
         # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrV2Encoder(config) for _ in range(len(self.encode_proj_layers))])
+        self.encoder = nn.ModuleList(
+            [RTDetrV2Encoder(config) for _ in range(len(self.encode_proj_layers))]
+        )
 
         # top-down FPN
         self.lateral_convs = nn.ModuleList()
@@ -985,13 +1117,20 @@ class RTDetrV2HybridEncoder(nn.Module):
 
     @staticmethod
     def build_2d_sincos_position_embedding(
-        width, height, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+        width,
+        height,
+        embed_dim=256,
+        temperature=10000.0,
+        device="cpu",
+        dtype=torch.float32,
     ):
         grid_w = torch.arange(torch_int(width), device=device).to(dtype)
         grid_h = torch.arange(torch_int(height), device=device).to(dtype)
         grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+            raise ValueError(
+                "Embed dimension must be divisible by 4 for 2D sin-cos position embedding"
+            )
         pos_dim = embed_dim // 4
         omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
         omega = 1.0 / (temperature**omega)
@@ -999,7 +1138,9 @@ class RTDetrV2HybridEncoder(nn.Module):
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
 
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+        return torch.concat(
+            [out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1
+        )[None, :, :]
 
     def forward(
         self,
@@ -1039,11 +1180,19 @@ class RTDetrV2HybridEncoder(nn.Module):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         hidden_states = inputs_embeds
 
@@ -1076,7 +1225,10 @@ class RTDetrV2HybridEncoder(nn.Module):
                     output_attentions=output_attentions,
                 )
                 hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
+                    layer_outputs[0]
+                    .permute(0, 2, 1)
+                    .reshape(-1, self.encoder_hidden_dim, height, width)
+                    .contiguous()
                 )
 
                 if output_attentions:
@@ -1087,15 +1239,21 @@ class RTDetrV2HybridEncoder(nn.Module):
 
         # top-down FPN
         fpn_feature_maps = [hidden_states[-1]]
-        for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
+        for idx, (lateral_conv, fpn_block) in enumerate(
+            zip(self.lateral_convs, self.fpn_blocks)
+        ):
             backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
             top_fpn_feature_map = fpn_feature_maps[-1]
             # apply lateral block
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
             fpn_feature_maps[-1] = top_fpn_feature_map
             # apply fpn block
-            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
-            fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
+            top_fpn_feature_map = F.interpolate(
+                top_fpn_feature_map, scale_factor=2.0, mode="nearest"
+            )
+            fused_feature_map = torch.concat(
+                [top_fpn_feature_map, backbone_feature_map], dim=1
+            )
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
@@ -1103,18 +1261,28 @@ class RTDetrV2HybridEncoder(nn.Module):
 
         # bottom-up PAN
         pan_feature_maps = [fpn_feature_maps[0]]
-        for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
+        for idx, (downsample_conv, pan_block) in enumerate(
+            zip(self.downsample_convs, self.pan_blocks)
+        ):
             top_pan_feature_map = pan_feature_maps[-1]
             fpn_feature_map = fpn_feature_maps[idx + 1]
             downsampled_feature_map = downsample_conv(top_pan_feature_map)
-            fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
+            fused_feature_map = torch.concat(
+                [downsampled_feature_map, fpn_feature_map], dim=1
+            )
             new_pan_feature_map = pan_block(fused_feature_map)
             pan_feature_maps.append(new_pan_feature_map)
 
         if not return_dict:
-            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [pan_feature_maps, encoder_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=pan_feature_maps, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=pan_feature_maps,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -1175,11 +1343,15 @@ def get_contrastive_denoising_training_group(
         return None, None, None, None
 
     num_groups_denoising_queries = num_denoising_queries // max_gt_num
-    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
+    num_groups_denoising_queries = (
+        1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
+    )
     # pad gt to max_num of a batch
     batch_size = len(num_ground_truths)
 
-    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
+    input_query_class = torch.full(
+        [batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device
+    )
     input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
     pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
 
@@ -1202,23 +1374,32 @@ def get_contrastive_denoising_training_group(
     positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
     denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
     denoise_positive_idx = torch.split(
-        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
+        denoise_positive_idx,
+        [n * num_groups_denoising_queries for n in num_ground_truths],
     )
     # total denoising queries
     num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
 
     if label_noise_ratio > 0:
-        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
+        mask = torch.rand_like(input_query_class, dtype=torch.float) < (
+            label_noise_ratio * 0.5
+        )
         # randomly put a new one here
-        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
-        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
+        new_label = torch.randint_like(
+            mask, 0, num_classes, dtype=input_query_class.dtype
+        )
+        input_query_class = torch.where(
+            mask & pad_gt_mask, new_label, input_query_class
+        )
 
     if box_noise_scale > 0:
         known_bbox = center_to_corners_format(input_query_bbox)
         diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
         rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
         rand_part = torch.rand_like(input_query_bbox)
-        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
+        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (
+            1 - negative_gt_mask
+        )
         rand_part *= rand_sign
         known_bbox += rand_part * diff
         known_bbox.clip_(min=0.0, max=1.0)
@@ -1228,7 +1409,9 @@ def get_contrastive_denoising_training_group(
     input_query_class = class_embed(input_query_class)
 
     target_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
+    attn_mask = torch.full(
+        [target_size, target_size], False, dtype=torch.bool, device=device
+    )
     # match query cannot see the reconstruction
     attn_mask[num_denoising_queries:, :num_denoising_queries] = True
 
@@ -1237,7 +1420,9 @@ def get_contrastive_denoising_training_group(
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
         attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+        attn_mask[
+            idx_block_start:idx_block_end, idx_block_end:num_denoising_queries
+        ] = True
 
     denoising_meta_values = {
         "dn_positive_idx": denoise_positive_idx,
@@ -1319,7 +1504,9 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
         if isinstance(module, (RTDetrV2ForObjectDetection, RTDetrV2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (
+                        self.config.num_labels + 1
+                    )
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
                     nn.init.xavier_uniform_(layer.weight)
                     nn.init.constant_(layer.bias, bias)
@@ -1332,9 +1519,9 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
         if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
-            )
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(
+                default_dtype
+            ) * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -1353,7 +1540,9 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.output_proj.bias.data, 0.0)
 
         if isinstance(module, RTDetrV2Model):
-            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (
+                self.config.num_labels + 1
+            )
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.enc_score_head.weight)
             nn.init.constant_(module.enc_score_head.bias, bias)
@@ -1374,8 +1563,12 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.query_pos_head = RTDetrV2MLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.layers = nn.ModuleList(
+            [RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)]
+        )
+        self.query_pos_head = RTDetrV2MLPPredictionHead(
+            config, 4, 2 * config.d_model, config.d_model, num_layers=2
+        )
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1431,11 +1624,19 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1443,7 +1644,9 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = (
+            () if (output_attentions and encoder_hidden_states is not None) else None
+        )
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
@@ -1475,12 +1678,16 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                new_reference_points = F.sigmoid(tmp + inverse_sigmoid(reference_points))
+                new_reference_points = F.sigmoid(
+                    tmp + inverse_sigmoid(reference_points)
+                )
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
             intermediate_reference_points += (
-                (new_reference_points,) if self.bbox_embed is not None else (reference_points,)
+                (new_reference_points,)
+                if self.bbox_embed is not None
+                else (reference_points,)
             )
 
             if self.class_embed is not None:
@@ -1495,7 +1702,9 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        intermediate_reference_points = torch.stack(
+            intermediate_reference_points, dim=1
+        )
         if self.class_embed is not None:
             intermediate_logits = torch.stack(intermediate_logits, dim=1)
 
@@ -1550,7 +1759,12 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             in_channels = intermediate_channel_sizes[_]
             encoder_input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
+                    nn.Conv2d(
+                        in_channels,
+                        config.encoder_hidden_dim,
+                        kernel_size=1,
+                        bias=False,
+                    ),
                     nn.BatchNorm2d(config.encoder_hidden_dim),
                 )
             )
@@ -1575,7 +1789,9 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = RTDetrV2MLPPredictionHead(
+            config, config.d_model, config.d_model, 4, num_layers=3
+        )
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -1596,7 +1812,14 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         for _ in range(config.num_feature_levels - num_backbone_outs):
             decoder_input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.Conv2d(
+                        in_channels,
+                        config.d_model,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        bias=False,
+                    ),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
             )
@@ -1622,10 +1845,15 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             param.requires_grad_(True)
 
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+    def generate_anchors(
+        self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32
+    ):
         if spatial_shapes is None:
             spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
+                [
+                    int(self.config.anchor_image_size[0] / s),
+                    int(self.config.anchor_image_size[1] / s),
+                ]
                 for s in self.config.feat_strides
             ]
         anchors = []
@@ -1640,18 +1868,26 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             grid_xy[..., 0] /= width
             grid_xy[..., 1] /= height
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
-            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
+            anchors.append(
+                torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4)
+            )
         # define the valid range for anchor coordinates
         eps = 1e-2
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+        anchors = torch.where(
+            valid_mask,
+            anchors,
+            torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device),
+        )
 
         return anchors, valid_mask
 
     @add_start_docstrings_to_model_forward(RTDetrV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrV2ModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=RTDetrV2ModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1688,11 +1924,19 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1702,7 +1946,10 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
 
         features = self.backbone(pixel_values, pixel_mask)
 
-        proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
+        proj_feats = [
+            self.encoder_input_proj[level](source)
+            for level, (source, mask) in enumerate(features)
+        ]
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1716,11 +1963,11 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if output_hidden_states else None,
-                attentions=encoder_outputs[2]
-                if len(encoder_outputs) > 2
-                else encoder_outputs[1]
-                if output_attentions
-                else None,
+                attentions=(
+                    encoder_outputs[2]
+                    if len(encoder_outputs) > 2
+                    else encoder_outputs[1] if output_attentions else None
+                ),
             )
 
         # Equivalent to def _get_encoder_input
@@ -1732,7 +1979,9 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
+            sources.append(
+                self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1]
+            )
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
 
@@ -1748,7 +1997,9 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
         source_flatten = torch.cat(source_flatten, 1)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        level_start_index = torch.cat(
+            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+        )
 
         # prepare denoising training
         if self.training and self.config.num_denoising > 0 and labels is not None:
@@ -1767,7 +2018,12 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
                 box_noise_scale=self.config.box_noise_scale,
             )
         else:
-            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
+            (
+                denoising_class,
+                denoising_bbox_unact,
+                attention_mask,
+                denoising_meta_values,
+            ) = (None, None, None, None)
 
         batch_size = len(source_flatten)
         device = source_flatten.device
@@ -1778,10 +2034,14 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
             # Pass spatial_shapes as tuple to make it hashable and make sure
             # lru_cache is working for generate_anchors()
             spatial_shapes_tuple = tuple(spatial_shapes_list)
-            anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
+            anchors, valid_mask = self.generate_anchors(
+                spatial_shapes_tuple, device=device, dtype=dtype
+            )
         else:
             anchors, valid_mask = self.anchors, self.valid_mask
-            anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
+            anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(
+                device, dtype
+            )
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
@@ -1791,25 +2051,36 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         enc_outputs_class = self.enc_score_head(output_memory)
         enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
 
-        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
+        _, topk_ind = torch.topk(
+            enc_outputs_class.max(-1).values, self.config.num_queries, dim=1
+        )
 
         reference_points_unact = enc_outputs_coord_logits.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
+            dim=1,
+            index=topk_ind.unsqueeze(-1).repeat(
+                1, 1, enc_outputs_coord_logits.shape[-1]
+            ),
         )
 
         enc_topk_bboxes = F.sigmoid(reference_points_unact)
         if denoising_bbox_unact is not None:
-            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+            reference_points_unact = torch.concat(
+                [denoising_bbox_unact, reference_points_unact], 1
+            )
 
         enc_topk_logits = enc_outputs_class.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
+            dim=1,
+            index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1]),
         )
 
         # extract region features
         if self.config.learn_initial_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
-            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = output_memory.gather(
+                dim=1,
+                index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]),
+            )
             target = target.detach()
 
         if denoising_class is not None:
@@ -1834,11 +2105,25 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         if not return_dict:
             enc_outputs = tuple(
                 value
-                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
+                for value in [
+                    enc_topk_logits,
+                    enc_topk_bboxes,
+                    enc_outputs_class,
+                    enc_outputs_coord_logits,
+                ]
                 if value is not None
             )
-            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
-            tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
+            dn_outputs = tuple(
+                value if value is not None else None
+                for value in [denoising_meta_values]
+            )
+            tuple_outputs = (
+                decoder_outputs
+                + encoder_outputs
+                + (init_reference_points,)
+                + enc_outputs
+                + dn_outputs
+            )
 
             return tuple_outputs
 
@@ -1877,7 +2162,9 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
+        )
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1905,10 +2192,21 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
 
         # Detection heads on top
         class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        bbox_embed = partial(RTDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+        bbox_embed = partial(
+            RTDetrV2MLPPredictionHead,
+            config,
+            config.d_model,
+            config.d_model,
+            4,
+            num_layers=3,
+        )
 
-        self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
-        self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
+        self.class_embed = nn.ModuleList(
+            [class_embed() for _ in range(config.decoder_layers)]
+        )
+        self.bbox_embed = nn.ModuleList(
+            [bbox_embed() for _ in range(config.decoder_layers)]
+        )
 
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
@@ -1921,10 +2219,14 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+        return [
+            {"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)
+        ]
 
     @add_start_docstrings_to_model_forward(RTDetrV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrV2ObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=RTDetrV2ObjectDetectionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1993,12 +2295,20 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
         Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.model(
             pixel_values,
@@ -2013,16 +2323,26 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         )
 
         denoising_meta_values = (
-            outputs.denoising_meta_values if return_dict else outputs[-1] if self.training else None
+            outputs.denoising_meta_values
+            if return_dict
+            else outputs[-1] if self.training else None
         )
 
         outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
-        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+        outputs_coord = (
+            outputs.intermediate_reference_points if return_dict else outputs[3]
+        )
 
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
 
-        loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = None, None, None, None, None
+        loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = (
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         if labels is not None:
             enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
             enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]

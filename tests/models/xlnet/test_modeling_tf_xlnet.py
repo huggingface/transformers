@@ -24,21 +24,17 @@ from transformers import XLNetConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, ids_tensor,
+                                        random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.xlnet.modeling_tf_xlnet import (
-        TFXLNetForMultipleChoice,
-        TFXLNetForQuestionAnsweringSimple,
-        TFXLNetForSequenceClassification,
-        TFXLNetForTokenClassification,
-        TFXLNetLMHeadModel,
-        TFXLNetModel,
-    )
+        TFXLNetForMultipleChoice, TFXLNetForQuestionAnsweringSimple,
+        TFXLNetForSequenceClassification, TFXLNetForTokenClassification,
+        TFXLNetLMHeadModel, TFXLNetModel)
 
 
 class TFXLNetModelTester:
@@ -76,15 +72,27 @@ class TFXLNetModelTester:
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids_2 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        segment_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-        input_mask = random_attention_mask([self.batch_size, self.seq_length], dtype=tf.float32)
+        segment_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.type_vocab_size
+        )
+        input_mask = random_attention_mask(
+            [self.batch_size, self.seq_length], dtype=tf.float32
+        )
 
-        input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
-        perm_mask = tf.zeros((self.batch_size, self.seq_length + 1, self.seq_length), dtype=tf.float32)
-        perm_mask_last = tf.ones((self.batch_size, self.seq_length + 1, 1), dtype=tf.float32)
+        input_ids_q = ids_tensor(
+            [self.batch_size, self.seq_length + 1], self.vocab_size
+        )
+        perm_mask = tf.zeros(
+            (self.batch_size, self.seq_length + 1, self.seq_length), dtype=tf.float32
+        )
+        perm_mask_last = tf.ones(
+            (self.batch_size, self.seq_length + 1, 1), dtype=tf.float32
+        )
         perm_mask = tf.concat([perm_mask, perm_mask_last], axis=-1)
         # perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-        target_mapping = tf.zeros((self.batch_size, 1, self.seq_length), dtype=tf.float32)
+        target_mapping = tf.zeros(
+            (self.batch_size, 1, self.seq_length), dtype=tf.float32
+        )
         target_mapping_last = tf.ones((self.batch_size, 1, 1), dtype=tf.float32)
         target_mapping = tf.concat([target_mapping, target_mapping_last], axis=-1)
         # target_mapping[:, 0, -1] = 1.0  # predict last token
@@ -94,7 +102,9 @@ class TFXLNetModelTester:
         is_impossible_labels = None
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
             is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
         config = XLNetConfig(
@@ -150,7 +160,11 @@ class TFXLNetModelTester:
     ):
         model = TFXLNetModel(config)
 
-        inputs = {"input_ids": input_ids_1, "input_mask": input_mask, "token_type_ids": segment_ids}
+        inputs = {
+            "input_ids": input_ids_1,
+            "input_mask": input_mask,
+            "token_type_ids": segment_ids,
+        }
         result = model(inputs)
 
         inputs = [input_ids_1, input_mask]
@@ -161,10 +175,14 @@ class TFXLNetModelTester:
         no_mems_outputs = model(inputs)
         self.parent.assertEqual(len(no_mems_outputs), 1)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in result.mems],
-            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
+            [(self.seq_length, self.batch_size, self.hidden_size)]
+            * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_lm_head(
@@ -186,21 +204,35 @@ class TFXLNetModelTester:
         inputs_1 = {"input_ids": input_ids_1, "token_type_ids": segment_ids}
         all_logits_1, mems_1 = model(inputs_1).to_tuple()
 
-        inputs_2 = {"input_ids": input_ids_2, "mems": mems_1, "token_type_ids": segment_ids}
+        inputs_2 = {
+            "input_ids": input_ids_2,
+            "mems": mems_1,
+            "token_type_ids": segment_ids,
+        }
         all_logits_2, mems_2 = model(inputs_2).to_tuple()
 
-        inputs_3 = {"input_ids": input_ids_q, "perm_mask": perm_mask, "target_mapping": target_mapping}
+        inputs_3 = {
+            "input_ids": input_ids_q,
+            "perm_mask": perm_mask,
+            "target_mapping": target_mapping,
+        }
         logits, _ = model(inputs_3).to_tuple()
 
-        self.parent.assertEqual(all_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            all_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in mems_1],
-            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
+            [(self.seq_length, self.batch_size, self.hidden_size)]
+            * self.num_hidden_layers,
         )
-        self.parent.assertEqual(all_logits_2.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            all_logits_2.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in mems_2],
-            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
+            [(self.mem_len, self.batch_size, self.hidden_size)]
+            * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_qa(
@@ -219,14 +251,23 @@ class TFXLNetModelTester:
     ):
         model = TFXLNetForQuestionAnsweringSimple(config)
 
-        inputs = {"input_ids": input_ids_1, "attention_mask": input_mask, "token_type_ids": segment_ids}
+        inputs = {
+            "input_ids": input_ids_1,
+            "attention_mask": input_mask,
+            "token_type_ids": segment_ids,
+        }
         result = model(inputs)
 
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in result.mems],
-            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
+            [(self.seq_length, self.batch_size, self.hidden_size)]
+            * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_sequence_classif(
@@ -247,10 +288,13 @@ class TFXLNetModelTester:
 
         result = model(input_ids_1)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in result.mems],
-            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
+            [(self.seq_length, self.batch_size, self.hidden_size)]
+            * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_for_token_classification(
@@ -275,10 +319,13 @@ class TFXLNetModelTester:
             # 'token_type_ids': token_type_ids
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, config.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, config.num_labels)
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in result.mems],
-            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
+            [(self.seq_length, self.batch_size, self.hidden_size)]
+            * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_for_multiple_choice(
@@ -297,9 +344,15 @@ class TFXLNetModelTester:
     ):
         config.num_choices = self.num_choices
         model = TFXLNetForMultipleChoice(config=config)
-        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids_1, 1), (1, self.num_choices, 1))
-        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(segment_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_inputs_ids = tf.tile(
+            tf.expand_dims(input_ids_1, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_input_mask = tf.tile(
+            tf.expand_dims(input_mask, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_token_type_ids = tf.tile(
+            tf.expand_dims(segment_ids, 1), (1, self.num_choices, 1)
+        )
         inputs = {
             "input_ids": multiple_choice_inputs_ids,
             "attention_mask": multiple_choice_input_mask,
@@ -307,10 +360,13 @@ class TFXLNetModelTester:
         }
         result = model(inputs)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
         self.parent.assertListEqual(
             [mem.shape for mem in result.mems],
-            [(self.seq_length, self.batch_size * self.num_choices, self.hidden_size)] * self.num_hidden_layers,
+            [(self.seq_length, self.batch_size * self.num_choices, self.hidden_size)]
+            * self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -366,7 +422,9 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     # Note that `TFXLNetModelTest` is not a subclass of `GenerationTesterMixin`, so no contrastive generation tests
     # from there is run against `TFXLNetModel`.
-    @unittest.skip("XLNet has special cache mechanism and is currently not working with contrastive generation")
+    @unittest.skip(
+        "XLNet has special cache mechanism and is currently not working with contrastive generation"
+    )
     def test_xla_generate_contrastive(self):
         super().test_xla_generate_contrastive()
 
@@ -408,7 +466,9 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_xlnet_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlnet_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_xlnet_for_token_classification(
+            *config_and_inputs
+        )
 
     def test_xlnet_qa(self):
         self.model_tester.set_seed()
@@ -436,9 +496,13 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model = model_class(config)
             if getattr(model, "hf_compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
                 added_label = prepared_for_class[
-                    sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
+                    sorted(
+                        prepared_for_class.keys() - inputs_dict.keys(), reverse=True
+                    )[0]
                 ]
                 expected_loss_size = added_label.shape.as_list()[:1]
 
@@ -449,20 +513,34 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 #     loss_size = loss_size - self.model_tester.batch_size
 
                 # Test that model correctly compute the loss with kwargs
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                input_name = "input_ids" if "input_ids" in prepared_for_class else "pixel_values"
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
+                input_name = (
+                    "input_ids" if "input_ids" in prepared_for_class else "pixel_values"
+                )
                 input_ids = prepared_for_class.pop(input_name)
 
                 loss = model(input_ids, **prepared_for_class)[0]
-                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                self.assertTrue(
+                    loss.shape.as_list() == expected_loss_size
+                    or loss.shape.as_list() == [1]
+                )
 
                 # Test that model correctly compute the loss with a dict
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
                 loss = model(prepared_for_class)[0]
-                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                self.assertTrue(
+                    loss.shape.as_list() == expected_loss_size
+                    or loss.shape.as_list() == [1]
+                )
 
                 # Test that model correctly compute the loss with a tuple
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
@@ -490,7 +568,10 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 # Send to model
                 loss = model(tuple_input[:-1])[0]
 
-                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                self.assertTrue(
+                    loss.shape.as_list() == expected_loss_size
+                    or loss.shape.as_list() == [1]
+                )
 
 
 @require_tf

@@ -17,21 +17,23 @@
 import unittest
 
 from transformers import MobileViTV2Config
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (require_torch, require_torch_multi_gpu,
+                                        require_vision, slow, torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation, MobileViTV2Model
-    from transformers.models.mobilevitv2.modeling_mobilevitv2 import (
-        make_divisible,
-    )
+    from transformers import (MobileViTV2ForImageClassification,
+                              MobileViTV2ForSemanticSegmentation,
+                              MobileViTV2Model)
+    from transformers.models.mobilevitv2.modeling_mobilevitv2 import \
+        make_divisible
 
 
 if is_vision_available():
@@ -87,13 +89,17 @@ class MobileViTV2ModelTester:
         self.attn_dropout_prob = attn_dropout
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.num_labels)
-            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            pixel_labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -132,7 +138,9 @@ class MobileViTV2ModelTester:
             ),
         )
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_classification(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = MobileViTV2ForImageClassification(config)
         model.to(torch_device)
@@ -140,7 +148,9 @@ class MobileViTV2ModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_semantic_segmentation(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = MobileViTV2ForSemanticSegmentation(config)
         model.to(torch_device)
@@ -181,7 +191,11 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     """
 
     all_model_classes = (
-        (MobileViTV2Model, MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation)
+        (
+            MobileViTV2Model,
+            MobileViTV2ForImageClassification,
+            MobileViTV2ForSemanticSegmentation,
+        )
         if is_torch_available()
         else ()
     )
@@ -204,7 +218,9 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = MobileViTV2ModelTester(self)
-        self.config_tester = MobileViTV2ConfigTester(self, config_class=MobileViTV2Config, has_text_modality=False)
+        self.config_tester = MobileViTV2ConfigTester(
+            self, config_class=MobileViTV2Config, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -222,7 +238,9 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @require_torch_multi_gpu
-    @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
+    @unittest.skip(
+        reason="Got `CUDA error: misaligned address` for tests after this one being run."
+    )
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
@@ -250,7 +268,10 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             for i in range(len(hidden_states)):
                 self.assertListEqual(
                     list(hidden_states[i].shape[-2:]),
-                    [self.model_tester.image_size // divisor, self.model_tester.image_size // divisor],
+                    [
+                        self.model_tester.image_size // divisor,
+                        self.model_tester.image_size // divisor,
+                    ],
                 )
                 divisor *= 2
 
@@ -295,16 +316,18 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MobileViTImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+            MobileViTImageProcessor.from_pretrained(
+                "apple/mobilevitv2-1.0-imagenet1k-256"
+            )
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileViTV2ForImageClassification.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256").to(
-            torch_device
-        )
+        model = MobileViTV2ForImageClassification.from_pretrained(
+            "apple/mobilevitv2-1.0-imagenet1k-256"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -318,16 +341,24 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.6336e00, -7.3204e-02, -5.1883e-01]).to(torch_device)
+        expected_slice = torch.tensor([-1.6336e00, -7.3204e-02, -5.1883e-01]).to(
+            torch_device
+        )
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        model = MobileViTV2ForSemanticSegmentation.from_pretrained(
+            "shehan97/mobilevitv2-1.0-voc-deeplabv3"
+        )
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessor.from_pretrained(
+            "shehan97/mobilevitv2-1.0-voc-deeplabv3"
+        )
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -343,21 +374,39 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [[7.0863, 7.1525, 6.8201], [6.6931, 6.8770, 6.8933], [6.2978, 7.0366, 6.9636]],
-                [[-3.7134, -3.6712, -3.6675], [-3.5825, -3.3549, -3.4777], [-3.3435, -3.3979, -3.2857]],
-                [[-2.9329, -2.8003, -2.7369], [-3.0564, -2.4780, -2.0207], [-2.6889, -1.9298, -1.7640]],
+                [
+                    [7.0863, 7.1525, 6.8201],
+                    [6.6931, 6.8770, 6.8933],
+                    [6.2978, 7.0366, 6.9636],
+                ],
+                [
+                    [-3.7134, -3.6712, -3.6675],
+                    [-3.5825, -3.3549, -3.4777],
+                    [-3.3435, -3.3979, -3.2857],
+                ],
+                [
+                    [-2.9329, -2.8003, -2.7369],
+                    [-3.0564, -2.4780, -2.0207],
+                    [-2.6889, -1.9298, -1.7640],
+                ],
             ],
             device=torch_device,
         )
 
-        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_post_processing_semantic_segmentation(self):
-        model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        model = MobileViTV2ForSemanticSegmentation.from_pretrained(
+            "shehan97/mobilevitv2-1.0-voc-deeplabv3"
+        )
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessor.from_pretrained(
+            "shehan97/mobilevitv2-1.0-voc-deeplabv3"
+        )
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -368,10 +417,14 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
 
         outputs.logits = outputs.logits.detach().cpu()
 
-        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(50, 60)])
+        segmentation = image_processor.post_process_semantic_segmentation(
+            outputs=outputs, target_sizes=[(50, 60)]
+        )
         expected_shape = torch.Size((50, 60))
         self.assertEqual(segmentation[0].shape, expected_shape)
 
-        segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
+        segmentation = image_processor.post_process_semantic_segmentation(
+            outputs=outputs
+        )
         expected_shape = torch.Size((32, 32))
         self.assertEqual(segmentation[0].shape, expected_shape)

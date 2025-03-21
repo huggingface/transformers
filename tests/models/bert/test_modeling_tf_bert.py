@@ -23,26 +23,20 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
     from transformers.models.bert.modeling_tf_bert import (
-        TFBertForMaskedLM,
-        TFBertForMultipleChoice,
-        TFBertForNextSentencePrediction,
-        TFBertForPreTraining,
-        TFBertForQuestionAnswering,
-        TFBertForSequenceClassification,
-        TFBertForTokenClassification,
-        TFBertLMHeadModel,
-        TFBertModel,
-    )
+        TFBertForMaskedLM, TFBertForMultipleChoice,
+        TFBertForNextSentencePrediction, TFBertForPreTraining,
+        TFBertForQuestionAnswering, TFBertForSequenceClassification,
+        TFBertForTokenClassification, TFBertLMHeadModel, TFBertModel)
 
 
 class TFBertModelTester:
@@ -103,14 +97,20 @@ class TFBertModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = BertConfig(
@@ -127,7 +127,15 @@ class TFBertModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def prepare_config_and_inputs_for_decoder(self):
         (
@@ -141,8 +149,12 @@ class TFBertModelTester:
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+        encoder_hidden_states = floats_tensor(
+            [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        encoder_attention_mask = ids_tensor(
+            [self.batch_size, self.seq_length], vocab_size=2
+        )
 
         return (
             config,
@@ -157,10 +169,21 @@ class TFBertModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFBertModel(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         result = model(inputs)
 
         inputs = [input_ids, input_mask]
@@ -168,16 +191,32 @@ class TFBertModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_causal_lm_base_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.is_decoder = True
 
         model = TFBertModel(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         result = model(inputs)
 
         inputs = [input_ids, input_mask]
@@ -185,8 +224,13 @@ class TFBertModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -213,16 +257,34 @@ class TFBertModelTester:
         result = model(inputs)
 
         inputs = [input_ids, input_mask]
-        result = model(inputs, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
+        result = model(
+            inputs,
+            token_type_ids=token_type_ids,
+            encoder_hidden_states=encoder_hidden_states,
+        )
 
         # Also check the case where encoder outputs are not passed
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_causal_lm_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.is_decoder = True
 
@@ -234,7 +296,8 @@ class TFBertModelTester:
         }
         prediction_scores = model(inputs)["logits"]
         self.parent.assertListEqual(
-            list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
+            list(prediction_scores.numpy().shape),
+            [self.batch_size, self.seq_length, self.vocab_size],
         )
 
     def create_and_check_causal_lm_model_as_decoder(
@@ -262,11 +325,16 @@ class TFBertModelTester:
         result = model(inputs)
 
         inputs = [input_ids, input_mask]
-        result = model(inputs, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
+        result = model(
+            inputs,
+            token_type_ids=token_type_ids,
+            encoder_hidden_states=encoder_hidden_states,
+        )
 
         prediction_scores = result["logits"]
         self.parent.assertListEqual(
-            list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
+            list(prediction_scores.numpy().shape),
+            [self.batch_size, self.seq_length, self.vocab_size],
         )
 
     def create_and_check_causal_lm_model_past(
@@ -299,7 +367,9 @@ class TFBertModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
 
-        output_from_no_past = model(next_input_ids, output_hidden_states=True).hidden_states[0]
+        output_from_no_past = model(
+            next_input_ids, output_hidden_states=True
+        ).hidden_states[0]
         output_from_past = model(
             next_tokens, past_key_values=past_key_values, output_hidden_states=True
         ).hidden_states[0]
@@ -310,7 +380,9 @@ class TFBertModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-6
+        )
 
     def create_and_check_causal_lm_model_past_with_attn_mask(
         self,
@@ -329,7 +401,9 @@ class TFBertModelTester:
         # create attention mask
         half_seq_length = self.seq_length // 2
         attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
-        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
+        attn_mask_end = tf.zeros(
+            (self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32
+        )
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
@@ -342,10 +416,16 @@ class TFBertModelTester:
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
-        vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, self.seq_length), config.vocab_size
+        )
+        vector_condition = tf.range(self.seq_length) == (
+            self.seq_length - random_seq_idx_to_change
+        )
         condition = tf.transpose(
-            tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
+            tf.broadcast_to(
+                tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size)
+            )
         )
         input_ids = tf.where(condition, random_other_next_tokens, input_ids)
 
@@ -362,7 +442,10 @@ class TFBertModelTester:
             output_hidden_states=True,
         ).hidden_states[0]
         output_from_past = model(
-            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_hidden_states=True
+            next_tokens,
+            past_key_values=past_key_values,
+            attention_mask=attn_mask,
+            output_hidden_states=True,
         ).hidden_states[0]
 
         # select random slice
@@ -371,7 +454,9 @@ class TFBertModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-6
+        )
 
     def create_and_check_causal_lm_model_past_large_inputs(
         self,
@@ -423,7 +508,9 @@ class TFBertModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-3
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -489,10 +576,19 @@ class TFBertModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-3
+        )
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFBertForMaskedLM(config=config)
         inputs = {
@@ -501,27 +597,63 @@ class TFBertModelTester:
             "token_type_ids": token_type_ids,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_next_sequence_prediction(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFBertForNextSentencePrediction(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_pretraining(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFBertForPreTraining(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         result = model(inputs)
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
+        self.parent.assertEqual(
+            result.prediction_logits.shape,
+            (self.batch_size, self.seq_length, self.vocab_size),
+        )
+        self.parent.assertEqual(
+            result.seq_relationship_logits.shape, (self.batch_size, 2)
+        )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = TFBertForSequenceClassification(config=config)
@@ -535,23 +667,45 @@ class TFBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = TFBertForMultipleChoice(config=config)
-        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_inputs_ids = tf.tile(
+            tf.expand_dims(input_ids, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_input_mask = tf.tile(
+            tf.expand_dims(input_mask, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_token_type_ids = tf.tile(
+            tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1)
+        )
         inputs = {
             "input_ids": multiple_choice_inputs_ids,
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = TFBertForTokenClassification(config=config)
@@ -561,10 +715,19 @@ class TFBertModelTester:
             "token_type_ids": token_type_ids,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFBertForQuestionAnswering(config=config)
         inputs = {
@@ -574,8 +737,12 @@ class TFBertModelTester:
         }
 
         result = model(inputs)
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -588,12 +755,18 @@ class TFBertModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
 @require_tf
-class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TFBertModelTest(
+    TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             TFBertModel,
@@ -628,11 +801,15 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["next_sentence_label"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
 
         return inputs_dict
 
@@ -676,7 +853,9 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
     def test_causal_lm_model_as_decoder(self):
         """Test the causal LM model as a decoder"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_causal_lm_model_as_decoder(*config_and_inputs)
+        self.model_tester.create_and_check_causal_lm_model_as_decoder(
+            *config_and_inputs
+        )
 
     def test_causal_lm_model_past(self):
         """Test causal LM model with `past_key_values`"""
@@ -686,17 +865,23 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
     def test_causal_lm_model_past_with_attn_mask(self):
         """Test the causal LM model with `past_key_values` and `attention_mask`"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_causal_lm_model_past_with_attn_mask(*config_and_inputs)
+        self.model_tester.create_and_check_causal_lm_model_past_with_attn_mask(
+            *config_and_inputs
+        )
 
     def test_causal_lm_model_past_with_large_inputs(self):
         """Test the causal LM model with `past_key_values` and a longer decoder sequence length"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_causal_lm_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_causal_lm_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_decoder_model_past_with_large_inputs(self):
         """Similar to `test_causal_lm_model_past_with_large_inputs` but with cross-attention"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -704,7 +889,9 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def test_for_next_sequence_prediction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_next_sequence_prediction(*config_and_inputs)
+        self.model_tester.create_and_check_for_next_sequence_prediction(
+            *config_and_inputs
+        )
 
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -716,7 +903,9 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

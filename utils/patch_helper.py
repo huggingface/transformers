@@ -44,10 +44,14 @@ from packaging import version
 def get_merge_commit(repo, pr_number, since_tag):
     try:
         # Use git log to find the merge commit for the PR within the given tag range
-        merge_commit = next(repo.iter_commits(f"v{since_tag}...origin/main", grep=f"#{pr_number}"))
+        merge_commit = next(
+            repo.iter_commits(f"v{since_tag}...origin/main", grep=f"#{pr_number}")
+        )
         return merge_commit
     except StopIteration:
-        print(f"No merge commit found for PR #{pr_number} between tags {since_tag} and {main}")
+        print(
+            f"No merge commit found for PR #{pr_number} between tags {since_tag} and {main}"
+        )
         return None
     except GitCommandError as e:
         print(f"Error finding merge commit for PR #{pr_number}: {str(e)}")
@@ -86,8 +90,16 @@ def main(pr_numbers):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Find and sort merge commits for specified PRs.")
-    parser.add_argument("--prs", nargs="+", required=False, type=str, help="PR numbers to find merge commits for")
+    parser = argparse.ArgumentParser(
+        description="Find and sort merge commits for specified PRs."
+    )
+    parser.add_argument(
+        "--prs",
+        nargs="+",
+        required=False,
+        type=str,
+        help="PR numbers to find merge commits for",
+    )
 
     args = parser.parse_args()
     if args.prs is None:

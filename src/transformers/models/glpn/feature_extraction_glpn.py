@@ -19,7 +19,6 @@ import warnings
 from ...utils import logging
 from .image_processing_glpn import GLPNImageProcessor
 
-
 logger = logging.get_logger(__name__)
 
 

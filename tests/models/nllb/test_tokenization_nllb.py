@@ -16,25 +16,14 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import (
-    SPIECE_UNDERLINE,
-    AddedToken,
-    BatchEncoding,
-    NllbTokenizer,
-    NllbTokenizerFast,
-    is_torch_available,
-)
+from transformers import (SPIECE_UNDERLINE, AddedToken, BatchEncoding,
+                          NllbTokenizer, NllbTokenizerFast, is_torch_available)
 from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
-from transformers.testing_utils import (
-    get_tests_dir,
-    nested_simplify,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-)
+from transformers.testing_utils import (get_tests_dir, nested_simplify,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch)
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -106,7 +95,29 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ids,
             [
                 value + tokenizer.fairseq_offset
-                for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
+                for value in [
+                    8,
+                    21,
+                    84,
+                    55,
+                    24,
+                    19,
+                    7,
+                    2,
+                    602,
+                    347,
+                    347,
+                    347,
+                    3,
+                    12,
+                    66,
+                    46,
+                    72,
+                    80,
+                    6,
+                    2,
+                    4,
+                ]
             ],
         )
 
@@ -140,11 +151,19 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # overwrite from test_tokenization_common to speed up test
     def test_save_pretrained(self):
-        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-nllb", {})
+        self.tokenizers_list[0] = (
+            self.rust_tokenizer_class,
+            "hf-internal-testing/tiny-random-nllb",
+            {},
+        )
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -153,7 +172,9 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Checks it save with the same files + the tokenizer.json file for the fast one
                 self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
+                tokenizer_r_files = tuple(
+                    f for f in tokenizer_r_files if "tokenizer.json" not in f
+                )
                 self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
 
                 # Checks everything loads correctly in the same way
@@ -169,7 +190,9 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Save tokenizer rust, legacy_format=True
                 tmpdirname2 = tempfile.mkdtemp()
 
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
+                tokenizer_r_files = tokenizer_r.save_pretrained(
+                    tmpdirname2, legacy_format=True
+                )
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
                 # Checks it save with the same files
@@ -188,7 +211,9 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Save tokenizer rust, legacy_format=False
                 tmpdirname2 = tempfile.mkdtemp()
 
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
+                tokenizer_r_files = tokenizer_r.save_pretrained(
+                    tmpdirname2, legacy_format=False
+                )
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
                 # Checks it saved the tokenizer.json file
@@ -236,7 +261,9 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tgt_lang="ron_Latn",
                     )
                 except NotImplementedError:
-                    self.skipTest(reason="Encountered NotImplementedError when calling prepare_seq2seq_batch")
+                    self.skipTest(
+                        reason="Encountered NotImplementedError when calling prepare_seq2seq_batch"
+                    )
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
                 # max_target_length will default to max_length if not specified
@@ -247,13 +274,18 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch.labels.shape[1], 3)
 
                 batch_encoder_only = tokenizer.prepare_seq2seq_batch(
-                    src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt"
+                    src_texts=src_text,
+                    max_length=3,
+                    max_target_length=10,
+                    return_tensors="pt",
                 )
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(
+        reason="Unfortunately way too slow to build a BPE with SentencePiece."
+    )
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -267,7 +299,9 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
 
-                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+                special_token_id = tokenizer_r.encode(
+                    "<special>", add_special_tokens=False
+                )[0]
 
                 self.assertTrue(special_token_id in r_output)
 
@@ -278,7 +312,9 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                        pretrained_name,
+                        additional_special_tokens=added_tokens,
+                        **kwargs,
                     )
 
                     p_output = tokenizer_p.encode("Hey this is a <special> token")
@@ -300,29 +336,42 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # here I create a tokenizer with the default behaviour
         tok1 = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
         # here I enhance the model's vocabulary with two new language codes
-        tok2 = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", additional_special_tokens=new_codes)
+        tok2 = NllbTokenizer.from_pretrained(
+            "facebook/nllb-200-distilled-600M", additional_special_tokens=new_codes
+        )
 
         # testing that the new codes can work
         self.assertEqual(len(tok2), len(tok1) + 2)
         tok2.tgt_lang = code1
         tok2.src_lang = code2
 
-        self.assertEqual(tok2("šumbrat!").input_ids[0], tok2.convert_tokens_to_ids(code2))
+        self.assertEqual(
+            tok2("šumbrat!").input_ids[0], tok2.convert_tokens_to_ids(code2)
+        )
         with tempfile.TemporaryDirectory() as tempdir:
             # testing that saving and loading the tokenizer preserves the new behaviour
             tok2.save_pretrained(tempdir)
             tok3 = NllbTokenizer.from_pretrained(tempdir)
             self.assertEqual(tok2.get_vocab(), tok3.get_vocab())
             tok3.src_lang = code2
-            self.assertEqual(tok3("šumbrat!").input_ids[0], tok3.convert_tokens_to_ids(code2))
+            self.assertEqual(
+                tok3("šumbrat!").input_ids[0], tok3.convert_tokens_to_ids(code2)
+            )
 
             # testing that saving and loading the tokenizer preserves the new behaviour
             tok2.save_pretrained(tempdir)
-            tok3 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=None)
+            tok3 = NllbTokenizer(
+                f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=None
+            )
             self.assertEqual(len(tok3), 256204)  # legacy
-            tok4 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[])
+            tok4 = NllbTokenizer(
+                f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[]
+            )
             self.assertEqual(len(tok4), 256002)
-            tok5 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[code1, code2])
+            tok5 = NllbTokenizer(
+                f"{tempdir}/sentencepiece.bpe.model",
+                additional_special_tokens=[code1, code2],
+            )
             self.assertEqual(len(tok5), 256004)
 
 
@@ -376,7 +425,9 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         generated_ids = [RO_CODE, 4254, 98068, 112923, 39072, 3909, 713, 102767, 26, 17314, 35642, 14683, 33118, 2022, 66987, 2, 256047]  # fmt: skip
 
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        expected_romanian = self.tokenizer.decode(
+            generated_ids[1:], skip_special_tokens=True
+        )
         self.assertEqual(result, expected_romanian)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
@@ -384,13 +435,17 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         src_text = ["this is gunna be a long sentence " * 20]
         assert isinstance(src_text[0], str)
         desired_max_length = 10
-        ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
+        ids = self.tokenizer(
+            src_text, max_length=desired_max_length, truncation=True
+        ).input_ids[0]
         self.assertEqual(ids[-1], 2)
         self.assertEqual(ids[0], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
 
     def test_mask_token(self):
-        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [256203, 3])
+        self.assertListEqual(
+            self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [256203, 3]
+        )
 
     @require_torch
     def test_enro_tokenizer_prepare_batch(self):
@@ -403,7 +458,9 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
         batch["decoder_input_ids"] = shift_tokens_right(
-            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.convert_tokens_to_ids("ron_Latn")
+            batch["labels"],
+            self.tokenizer.pad_token_id,
+            self.tokenizer.convert_tokens_to_ids("ron_Latn"),
         )
 
         self.assertIsInstance(batch, BatchEncoding)
@@ -418,15 +475,27 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
 
     def test_seq2seq_max_length(self):
-        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
+        batch = self.tokenizer(
+            self.src_text,
+            padding=True,
+            truncation=True,
+            max_length=3,
+            return_tensors="pt",
+        )
         targets = self.tokenizer(
-            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
+            text_target=self.tgt_text,
+            padding=True,
+            truncation=True,
+            max_length=10,
+            return_tensors="pt",
         )
         labels = targets["input_ids"]
         batch["decoder_input_ids"] = shift_tokens_right(
             labels,
             self.tokenizer.pad_token_id,
-            decoder_start_token_id=self.tokenizer.convert_tokens_to_ids(self.tokenizer.tgt_lang),
+            decoder_start_token_id=self.tokenizer.convert_tokens_to_ids(
+                self.tokenizer.tgt_lang
+            ),
         )
 
         self.assertEqual(batch.input_ids.shape[1], 3)
@@ -453,16 +522,48 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
     def test_legacy_behaviour(self):
         self.tokenizer.legacy_behaviour = True
         inputs = self.tokenizer(
-            "UN Chief says there is no military solution in Syria", src_lang="eng_Latn", tgt_lang="fra_Latn"
+            "UN Chief says there is no military solution in Syria",
+            src_lang="eng_Latn",
+            tgt_lang="fra_Latn",
         )
         self.assertEqual(
-            inputs.input_ids, [16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2, 256047]
+            inputs.input_ids,
+            [
+                16297,
+                134408,
+                25653,
+                6370,
+                248,
+                254,
+                103929,
+                94995,
+                108,
+                49486,
+                2,
+                256047,
+            ],
         )
 
         self.tokenizer.legacy_behaviour = False
         inputs = self.tokenizer(
-            "UN Chief says there is no military solution in Syria", src_lang="eng_Latn", tgt_lang="fra_Latn"
+            "UN Chief says there is no military solution in Syria",
+            src_lang="eng_Latn",
+            tgt_lang="fra_Latn",
         )
         self.assertEqual(
-            inputs.input_ids, [256047, 16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2]
+            inputs.input_ids,
+            [
+                256047,
+                16297,
+                134408,
+                25653,
+                6370,
+                248,
+                254,
+                103929,
+                94995,
+                108,
+                49486,
+                2,
+            ],
         )

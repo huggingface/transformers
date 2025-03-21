@@ -23,17 +23,14 @@ import regex as re
 import torch
 import torch.nn.functional as F
 
-from transformers import (
-    GenerationConfig,
-    MllamaConfig,
-    MllamaForConditionalGeneration,
-    MllamaImageProcessor,
-    PreTrainedTokenizerFast,
-)
+from transformers import (GenerationConfig, MllamaConfig,
+                          MllamaForConditionalGeneration, MllamaImageProcessor,
+                          PreTrainedTokenizerFast)
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
-from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
-
+from transformers.models.mllama.configuration_mllama import (
+    MllamaTextConfig, MllamaVisionConfig)
+from transformers.models.mllama.image_processing_mllama import \
+    get_all_supported_aspect_ratios
 
 # fmt: off
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
@@ -142,7 +139,9 @@ def pre_compute_positional_embedding(embedding):
 
     for i, (height, width) in enumerate(supported_aspect_ratios):
         aspect_ratio_id = i + 1  # we keep 0 index for padding
-        current_embedding = embedding[:height, :width].reshape(height * width, num_patches, hidden_size)
+        current_embedding = embedding[:height, :width].reshape(
+            height * width, num_patches, hidden_size
+        )
         precomputed_embeddings[aspect_ratio_id, : height * width] = current_embedding
     precomputed_embeddings = precomputed_embeddings.flatten(1)
     return precomputed_embeddings
@@ -161,7 +160,13 @@ def get_concat_dim(key):
     """
     Return the dimension to concatenate the weights on.
     """
-    concat_dim_1 = [r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.o_proj.weight",r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",r"language_model.model.layers.(\d+).self_attn.o_proj.weight",r"language_model.model.layers.(\d+).mlp.down_proj.weight"]  # fmt: off
+    concat_dim_1 = [
+        r"vision_model.(transformer|global_transformer).layers.(\d+).mlp.fc2.weight",
+        r"vision_model.(transformer|global_transformer).layers.(\d+).self_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).cross_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).self_attn.o_proj.weight",
+        r"language_model.model.layers.(\d+).mlp.down_proj.weight",
+    ]  # fmt: off
     if any(re.search(pattern, key) for pattern in concat_dim_1):
         return 1
     return 0
@@ -193,7 +198,9 @@ def interpolate_positional_embedding(
         return embeddings
 
     positional_embedding = positional_embedding.transpose(0, 1)
-    positional_embedding = positional_embedding.reshape(1, dim, num_patches, num_patches)
+    positional_embedding = positional_embedding.reshape(
+        1, dim, num_patches, num_patches
+    )
     positional_embedding = F.interpolate(
         positional_embedding,
         size=(new_num_patches, new_num_patches),
@@ -247,7 +254,9 @@ def write_model(
     # compute additional params for weight conversion
     text_num_heads_per_shard = text_num_heads // num_shards
     text_dim_per_head = text_dim // text_num_heads
-    text_intermediate_size = compute_intermediate_size(text_dim, multiple_of=params["multiple_of"])
+    text_intermediate_size = compute_intermediate_size(
+        text_dim, multiple_of=params["multiple_of"]
+    )
 
     if params.get("n_kv_heads", None) is not None:
         text_num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
@@ -262,9 +271,15 @@ def write_model(
     cross_attention_frequency = math.ceil(text_num_layers / cross_attention_num_layers)
     text_num_total_layers = text_num_layers + cross_attention_num_layers
     cross_attention_layers_shift = list(
-        range(cross_attention_frequency - 1, text_num_total_layers, cross_attention_frequency + 1)
+        range(
+            cross_attention_frequency - 1,
+            text_num_total_layers,
+            cross_attention_frequency + 1,
+        )
     )
-    self_attention_layers_shift = [k for k in range(text_num_total_layers) if k not in cross_attention_layers_shift]
+    self_attention_layers_shift = [
+        k for k in range(text_num_total_layers) if k not in cross_attention_layers_shift
+    ]
 
     bos_token_id = 128000
     eos_token_id = [128001, 128008, 128009] if instruct else 128001
@@ -309,7 +324,9 @@ def write_model(
     vision_dim_per_head = vision_dim // vision_num_heads
     vision_num_heads_per_shard = vision_num_heads // num_shards
     vision_intermediate_size = vision_dim * 4
-    vision_supported_aspect_ratios = get_all_supported_aspect_ratios(vision_max_num_tiles)
+    vision_supported_aspect_ratios = get_all_supported_aspect_ratios(
+        vision_max_num_tiles
+    )
 
     vision_config = MllamaVisionConfig(
         hidden_size=vision_dim,
@@ -327,7 +344,9 @@ def write_model(
     )
 
     # save config
-    config = MllamaConfig(vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype)
+    config = MllamaConfig(
+        vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype
+    )
     config.architectures = ["MllamaForConditionalGeneration"]
     config.save_pretrained(model_path)
     print("Model config saved successfully...")
@@ -345,7 +364,11 @@ def write_model(
         loaded = [torch.load(path, map_location="cpu", mmap=True)]
     else:
         loaded = [
-            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu", mmap=True)
+            torch.load(
+                os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
+                map_location="cpu",
+                mmap=True,
+            )
             for i in range(num_shards)
         ]
 
@@ -359,9 +382,19 @@ def write_model(
 
         # In the original model, self-attention layers and cross-attention layers are different lists of layers.
         # In the converted model, they are merged into one list with corresponding index shift to preserve the order.
-        if ("cross_attention" in key or "text_model.layers" in key) and "language_model" in new_key:
-            shift = cross_attention_layers_shift if "cross_attention" in key else self_attention_layers_shift
-            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{shift[int(_match.groups()[0])]}.", new_key)
+        if (
+            "cross_attention" in key or "text_model.layers" in key
+        ) and "language_model" in new_key:
+            shift = (
+                cross_attention_layers_shift
+                if "cross_attention" in key
+                else self_attention_layers_shift
+            )
+            new_key = re.sub(
+                r"layers.(\d+).",
+                lambda _match: f"layers.{shift[int(_match.groups()[0])]}.",
+                new_key,
+            )
 
         current_parameter = [chunk.pop(key).contiguous().clone() for chunk in loaded]
         if not is_param_different_across_shards(new_key):
@@ -379,18 +412,28 @@ def write_model(
                 param_num_heads = text_num_key_value_heads
                 param_num_head_per_shard = text_num_key_value_heads_per_shard
                 param_dim = text_key_value_dim
-            shards = [param.view(param_num_head_per_shard, text_dim_per_head, text_dim) for param in current_parameter]
+            shards = [
+                param.view(param_num_head_per_shard, text_dim_per_head, text_dim)
+                for param in current_parameter
+            ]
             current_parameter = torch.cat(shards, dim=concat_dim)
             if "cross_attn" not in new_key and "v_proj.weight" not in new_key:
-                current_parameter = permute_for_rope(current_parameter, param_num_heads, param_dim, text_dim)
-            state_dict[new_key] = current_parameter.reshape(param_num_heads * text_dim_per_head, text_dim)
+                current_parameter = permute_for_rope(
+                    current_parameter, param_num_heads, param_dim, text_dim
+                )
+            state_dict[new_key] = current_parameter.reshape(
+                param_num_heads * text_dim_per_head, text_dim
+            )
 
         elif "vision_model" in new_key and re.search("(k|v|q)_proj", new_key):
             shards = [
-                param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim) for param in current_parameter
+                param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim)
+                for param in current_parameter
             ]
             param = torch.cat(shards, dim=concat_dim)
-            state_dict[new_key] = param.reshape(vision_num_heads * vision_dim_per_head, vision_dim)
+            state_dict[new_key] = param.reshape(
+                vision_num_heads * vision_dim_per_head, vision_dim
+            )
 
         elif new_key == "vision_model.patch_embedding.weight":
             current_parameter = torch.cat(current_parameter, dim=concat_dim)
@@ -449,7 +492,9 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    MllamaForConditionalGeneration.from_pretrained(
+        model_path, torch_dtype=torch.bfloat16, device_map="auto"
+    )
     print("Model reloaded successfully.")
 
     # generation config
@@ -509,7 +554,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         "<|python_tag|>",
     ]
     special_tokens += [
-        f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
+        f"<|reserved_special_token_{i + 2}|>"
+        for i in range(num_reserved_special_tokens - len(special_tokens))
     ]
     # original tokenizer has <|image|> with 128011 token_id,
     # however, later in the code it is replaced with 128256 token_id
@@ -595,7 +641,10 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+        "--safe_serialization",
+        default=True,
+        type=bool,
+        help="Whether or not to save using `safetensors`.",
     )
     parser.add_argument(
         "--special_tokens",

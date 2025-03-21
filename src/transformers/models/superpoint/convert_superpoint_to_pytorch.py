@@ -18,7 +18,8 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SuperPointConfig, SuperPointForKeypointDetection, SuperPointImageProcessor
+from transformers import (SuperPointConfig, SuperPointForKeypointDetection,
+                          SuperPointImageProcessor)
 
 
 def get_superpoint_config():
@@ -87,7 +88,9 @@ def prepare_imgs():
 
 
 @torch.no_grad()
-def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub, test_mode=False):
+def convert_superpoint_checkpoint(
+    checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub, test_mode=False
+):
     """
     Copy/paste/tweak model's weights to our SuperPoint structure.
     """
@@ -123,16 +126,24 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
         expected_scores_shape = (2, 830)
         expected_descriptors_shape = (2, 830, 256)
 
-        expected_keypoints_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]])
-        expected_scores_values = torch.tensor([0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336])
+        expected_keypoints_values = torch.tensor(
+            [[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]
+        )
+        expected_scores_values = torch.tensor(
+            [0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336]
+        )
         expected_descriptors_value = torch.tensor(-0.1096)
         assert outputs.keypoints.shape == expected_keypoints_shape
         assert outputs.scores.shape == expected_scores_shape
         assert outputs.descriptors.shape == expected_descriptors_shape
 
-        assert torch.allclose(outputs.keypoints[0, :3], expected_keypoints_values, atol=1e-3)
+        assert torch.allclose(
+            outputs.keypoints[0, :3], expected_keypoints_values, atol=1e-3
+        )
         assert torch.allclose(outputs.scores[0, :9], expected_scores_values, atol=1e-3)
-        assert torch.allclose(outputs.descriptors[0, 0, 0], expected_descriptors_value, atol=1e-3)
+        assert torch.allclose(
+            outputs.descriptors[0, 0, 0], expected_descriptors_value, atol=1e-3
+        )
         print("Model outputs match the original results!")
 
     if save_model:
@@ -167,9 +178,16 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image preprocessor to the hub",
+    )
 
     args = parser.parse_args()
     convert_superpoint_checkpoint(
-        args.checkpoint_url, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub
+        args.checkpoint_url,
+        args.pytorch_dump_folder_path,
+        args.save_model,
+        args.push_to_hub,
     )

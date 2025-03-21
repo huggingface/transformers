@@ -21,26 +21,18 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import (
-    RTDetrConfig,
-    RTDetrImageProcessor,
-    RTDetrResNetConfig,
-    is_torch_available,
-    is_vision_available,
-)
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_accelerator,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers import (RTDetrConfig, RTDetrImageProcessor,
+                          RTDetrResNetConfig, is_torch_available,
+                          is_vision_available)
+from transformers.testing_utils import (require_torch,
+                                        require_torch_accelerator,
+                                        require_vision, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -147,12 +139,18 @@ class RTDetrModelTester:
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
 
-        self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
+        self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(
+            self.image_size / 32
+        )
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
-        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
+        pixel_mask = torch.ones(
+            [self.batch_size, self.image_size, self.image_size], device=torch_device
+        )
 
         labels = None
         if self.use_labels:
@@ -228,9 +226,14 @@ class RTDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.d_model))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.num_queries, self.d_model),
+        )
 
-    def create_and_check_rt_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_rt_detr_object_detection_head_model(
+        self, config, pixel_values, pixel_mask, labels
+    ):
         model = RTDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -238,21 +241,34 @@ class RTDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_queries, self.num_labels)
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_queries, self.num_labels)
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
+    all_model_classes = (
+        (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection}
+        {
+            "image-feature-extraction": RTDetrModel,
+            "object-detection": RTDetrForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -265,7 +281,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class.__name__ == "RTDetrForObjectDetection":
@@ -273,10 +291,15 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 for i in range(self.model_tester.batch_size):
                     target = {}
                     target["class_labels"] = torch.ones(
-                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                        size=(self.model_tester.n_targets,),
+                        device=torch_device,
+                        dtype=torch.long,
                     )
                     target["boxes"] = torch.ones(
-                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                        self.model_tester.n_targets,
+                        4,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     labels.append(target)
                 inputs_dict["labels"] = labels
@@ -301,7 +324,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_rt_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_rt_detr_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_rt_detr_object_detection_head_model(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="RTDetr does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -438,10 +463,16 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.encoder_in_channels) - 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                len(self.model_tester.encoder_in_channels) - 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -457,7 +488,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 hidden_states = outputs.decoder_hidden_states
 
                 expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.decoder_layers + 1
+                    self.model_tester,
+                    "expected_num_hidden_layers",
+                    self.model_tester.decoder_layers + 1,
                 )
 
                 self.assertIsInstance(hidden_states, (list, tuple))
@@ -548,7 +581,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.model.backbone.intermediate_channel_sizes), 3
+                )
             else:
                 # Confirm out_indices was propogated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
@@ -580,7 +615,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.model.backbone.intermediate_channel_sizes), 3
+                )
             else:
                 # Confirm out_indices was propogated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
@@ -601,12 +638,16 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # Skip the check for the backbone
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "RTDetrConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [
+                        f"{name}.{key}" for key in module.state_dict().keys()
+                    ]
                     break
 
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
+                    if (
+                        "class_embed" in name and "bias" in name
+                    ) or "enc_score_head.bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
                         if not torch.allclose(param.data, bias_tensor, atol=1e-4):
                             failed_cases.append(
@@ -662,7 +703,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
+    def test_inference_equivalence_for_static_and_dynamic_anchors(
+        self, torch_dtype_str
+    ):
         torch_dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
@@ -681,22 +724,35 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname,
+                    anchor_image_size=[h, w],
+                    device_map=torch_device,
+                    torch_dtype=torch_dtype,
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname,
+                    anchor_image_size=None,
+                    device_map=torch_device,
+                    torch_dtype=torch_dtype,
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
             self.assertIsNone(model_dynamic.config.anchor_image_size)
 
             with torch.no_grad():
-                outputs_static = model_static(**self._prepare_for_class(inputs_dict, model_class))
-                outputs_dynamic = model_dynamic(**self._prepare_for_class(inputs_dict, model_class))
+                outputs_static = model_static(
+                    **self._prepare_for_class(inputs_dict, model_class)
+                )
+                outputs_dynamic = model_dynamic(
+                    **self._prepare_for_class(inputs_dict, model_class)
+                )
 
             self.assertTrue(
                 torch.allclose(
-                    outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4
+                    outputs_static.last_hidden_state,
+                    outputs_dynamic.last_hidden_state,
+                    rtol=1e-4,
+                    atol=1e-4,
                 ),
                 f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
             )
@@ -716,7 +772,11 @@ def prepare_img():
 class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return (
+            RTDetrImageProcessor.from_pretrained(CHECKPOINT)
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
@@ -746,18 +806,28 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4
+        )
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4
+        )
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor(
-            [0.9703017473220825, 0.9599503874778748, 0.9575679302215576, 0.9506784677505493], device=torch_device
+            [
+                0.9703017473220825,
+                0.9599503874778748,
+                0.9575679302215576,
+                0.9506784677505493,
+            ],
+            device=torch_device,
         )
         expected_labels = [57, 15, 15, 65]
         expected_slice_boxes = torch.tensor(
@@ -770,6 +840,10 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        torch.testing.assert_close(results["scores"][:4], expected_scores, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            results["scores"][:4], expected_scores, rtol=1e-4, atol=1e-4
+        )
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            results["boxes"][:4], expected_slice_boxes, rtol=1e-4, atol=1e-4
+        )

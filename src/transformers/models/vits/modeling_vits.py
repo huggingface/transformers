@@ -27,14 +27,12 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_vits import VitsConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -177,16 +175,18 @@ def _unconstrained_rational_quadratic_spline(
     outputs[outside_interval_mask] = inputs[outside_interval_mask]
     log_abs_det[outside_interval_mask] = 0.0
 
-    outputs[inside_interval_mask], log_abs_det[inside_interval_mask] = _rational_quadratic_spline(
-        inputs=inputs[inside_interval_mask],
-        unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
-        unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
-        unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
-        reverse=reverse,
-        tail_bound=tail_bound,
-        min_bin_width=min_bin_width,
-        min_bin_height=min_bin_height,
-        min_derivative=min_derivative,
+    outputs[inside_interval_mask], log_abs_det[inside_interval_mask] = (
+        _rational_quadratic_spline(
+            inputs=inputs[inside_interval_mask],
+            unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
+            unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
+            unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
+            reverse=reverse,
+            tail_bound=tail_bound,
+            min_bin_width=min_bin_width,
+            min_bin_height=min_bin_height,
+            min_derivative=min_derivative,
+        )
     )
     return outputs, log_abs_det
 
@@ -244,9 +244,13 @@ def _rational_quadratic_spline(
     num_bins = unnormalized_widths.shape[-1]
 
     if min_bin_width * num_bins > 1.0:
-        raise ValueError(f"Minimal bin width {min_bin_width} too large for the number of bins {num_bins}")
+        raise ValueError(
+            f"Minimal bin width {min_bin_width} too large for the number of bins {num_bins}"
+        )
     if min_bin_height * num_bins > 1.0:
-        raise ValueError(f"Minimal bin height {min_bin_height} too large for the number of bins {num_bins}")
+        raise ValueError(
+            f"Minimal bin height {min_bin_height} too large for the number of bins {num_bins}"
+        )
 
     widths = nn.functional.softmax(unnormalized_widths, dim=-1)
     widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
@@ -290,7 +294,9 @@ def _rational_quadratic_spline(
         theta = (inputs - input_cumwidths) / input_bin_widths
         theta_one_minus_theta = theta * (1 - theta)
 
-        numerator = input_heights * (input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta)
+        numerator = input_heights * (
+            input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta
+        )
         denominator = input_delta + intermediate1 * theta_one_minus_theta
         outputs = input_cumheights + numerator / denominator
 
@@ -343,7 +349,9 @@ class VitsWaveNet(torch.nn.Module):
             weight_norm = nn.utils.weight_norm
 
         if config.speaker_embedding_size != 0:
-            cond_layer = torch.nn.Conv1d(config.speaker_embedding_size, 2 * config.hidden_size * num_layers, 1)
+            cond_layer = torch.nn.Conv1d(
+                config.speaker_embedding_size, 2 * config.hidden_size * num_layers, 1
+            )
             self.cond_layer = weight_norm(cond_layer, name="weight")
 
         for i in range(num_layers):
@@ -381,11 +389,15 @@ class VitsWaveNet(torch.nn.Module):
 
             if global_conditioning is not None:
                 cond_offset = i * 2 * self.hidden_size
-                global_states = global_conditioning[:, cond_offset : cond_offset + 2 * self.hidden_size, :]
+                global_states = global_conditioning[
+                    :, cond_offset : cond_offset + 2 * self.hidden_size, :
+                ]
             else:
                 global_states = torch.zeros_like(hidden_states)
 
-            acts = fused_add_tanh_sigmoid_multiply(hidden_states, global_states, num_channels_tensor[0])
+            acts = fused_add_tanh_sigmoid_multiply(
+                hidden_states, global_states, num_channels_tensor[0]
+            )
             acts = self.dropout(acts)
 
             res_skip_acts = self.res_skip_layers[i](acts)
@@ -413,7 +425,9 @@ class VitsPosteriorEncoder(nn.Module):
         self.out_channels = config.flow_size
 
         self.conv_pre = nn.Conv1d(config.spectrogram_bins, config.hidden_size, 1)
-        self.wavenet = VitsWaveNet(config, num_layers=config.posterior_encoder_num_wavenet_layers)
+        self.wavenet = VitsWaveNet(
+            config, num_layers=config.posterior_encoder_num_wavenet_layers
+        )
         self.conv_proj = nn.Conv1d(config.hidden_size, self.out_channels * 2, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None):
@@ -427,7 +441,9 @@ class VitsPosteriorEncoder(nn.Module):
 
 # Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
 class HifiGanResidualBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
+    def __init__(
+        self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1
+    ):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
@@ -480,9 +496,13 @@ class HifiGanResidualBlock(nn.Module):
     def forward(self, hidden_states):
         for conv1, conv2 in zip(self.convs1, self.convs2):
             residual = hidden_states
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = nn.functional.leaky_relu(
+                hidden_states, self.leaky_relu_slope
+            )
             hidden_states = conv1(hidden_states)
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = nn.functional.leaky_relu(
+                hidden_states, self.leaky_relu_slope
+            )
             hidden_states = conv2(hidden_states)
             hidden_states = hidden_states + residual
         return hidden_states
@@ -503,7 +523,9 @@ class VitsHifiGan(nn.Module):
         )
 
         self.upsampler = nn.ModuleList()
-        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+        for i, (upsample_rate, kernel_size) in enumerate(
+            zip(config.upsample_rates, config.upsample_kernel_sizes)
+        ):
             self.upsampler.append(
                 nn.ConvTranspose1d(
                     config.upsample_initial_channel // (2**i),
@@ -517,13 +539,23 @@ class VitsHifiGan(nn.Module):
         self.resblocks = nn.ModuleList()
         for i in range(len(self.upsampler)):
             channels = config.upsample_initial_channel // (2 ** (i + 1))
-            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
-                self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
+            for kernel_size, dilation in zip(
+                config.resblock_kernel_sizes, config.resblock_dilation_sizes
+            ):
+                self.resblocks.append(
+                    HifiGanResidualBlock(
+                        channels, kernel_size, dilation, config.leaky_relu_slope
+                    )
+                )
 
-        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3, bias=False)
+        self.conv_post = nn.Conv1d(
+            channels, 1, kernel_size=7, stride=1, padding=3, bias=False
+        )
 
         if config.speaker_embedding_size != 0:
-            self.cond = nn.Conv1d(config.speaker_embedding_size, config.upsample_initial_channel, 1)
+            self.cond = nn.Conv1d(
+                config.speaker_embedding_size, config.upsample_initial_channel, 1
+            )
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -542,7 +574,9 @@ class VitsHifiGan(nn.Module):
             layer.remove_weight_norm()
 
     def forward(
-        self, spectrogram: torch.FloatTensor, global_conditioning: Optional[torch.FloatTensor] = None
+        self,
+        spectrogram: torch.FloatTensor,
+        global_conditioning: Optional[torch.FloatTensor] = None,
     ) -> torch.FloatTensor:
         r"""
         Converts a spectrogram into a speech waveform.
@@ -562,7 +596,9 @@ class VitsHifiGan(nn.Module):
             hidden_states = hidden_states + self.cond(global_conditioning)
 
         for i in range(self.num_upsamples):
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
+            hidden_states = nn.functional.leaky_relu(
+                hidden_states, self.config.leaky_relu_slope
+            )
             hidden_states = self.upsampler[i](hidden_states)
 
             res_state = self.resblocks[i * self.num_kernels](hidden_states)
@@ -582,7 +618,9 @@ class VitsResidualCouplingLayer(nn.Module):
         self.half_channels = config.flow_size // 2
 
         self.conv_pre = nn.Conv1d(self.half_channels, config.hidden_size, 1)
-        self.wavenet = VitsWaveNet(config, num_layers=config.prior_encoder_num_wavenet_layers)
+        self.wavenet = VitsWaveNet(
+            config, num_layers=config.prior_encoder_num_wavenet_layers
+        )
         self.conv_post = nn.Conv1d(config.hidden_size, self.half_channels, 1)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
@@ -618,7 +656,9 @@ class VitsResidualCouplingBlock(nn.Module):
         else:
             for flow in reversed(self.flows):
                 inputs = torch.flip(inputs, [1])
-                inputs, _ = flow(inputs, padding_mask, global_conditioning, reverse=True)
+                inputs, _ = flow(
+                    inputs, padding_mask, global_conditioning, reverse=True
+                )
         return inputs
 
 
@@ -657,10 +697,14 @@ class VitsDilatedDepthSeparableConv(nn.Module):
 
         for i in range(self.num_layers):
             hidden_states = self.convs_dilated[i](inputs * padding_mask)
-            hidden_states = self.norms_1[i](hidden_states.transpose(1, -1)).transpose(1, -1)
+            hidden_states = self.norms_1[i](hidden_states.transpose(1, -1)).transpose(
+                1, -1
+            )
             hidden_states = nn.functional.gelu(hidden_states)
             hidden_states = self.convs_pointwise[i](hidden_states)
-            hidden_states = self.norms_2[i](hidden_states.transpose(1, -1)).transpose(1, -1)
+            hidden_states = self.norms_2[i](hidden_states.transpose(1, -1)).transpose(
+                1, -1
+            )
             hidden_states = nn.functional.gelu(hidden_states)
             hidden_states = self.dropout(hidden_states)
             inputs = inputs + hidden_states
@@ -678,7 +722,9 @@ class VitsConvFlow(nn.Module):
 
         self.conv_pre = nn.Conv1d(self.half_channels, self.filter_channels, 1)
         self.conv_dds = VitsDilatedDepthSeparableConv(config)
-        self.conv_proj = nn.Conv1d(self.filter_channels, self.half_channels * (self.num_bins * 3 - 1), 1)
+        self.conv_proj = nn.Conv1d(
+            self.filter_channels, self.half_channels * (self.num_bins * 3 - 1), 1
+        )
 
     def forward(self, inputs, padding_mask, global_conditioning=None, reverse=False):
         first_half, second_half = torch.split(inputs, [self.half_channels] * 2, dim=1)
@@ -688,10 +734,16 @@ class VitsConvFlow(nn.Module):
         hidden_states = self.conv_proj(hidden_states) * padding_mask
 
         batch_size, channels, length = first_half.shape
-        hidden_states = hidden_states.reshape(batch_size, channels, -1, length).permute(0, 1, 3, 2)
+        hidden_states = hidden_states.reshape(batch_size, channels, -1, length).permute(
+            0, 1, 3, 2
+        )
 
-        unnormalized_widths = hidden_states[..., : self.num_bins] / math.sqrt(self.filter_channels)
-        unnormalized_heights = hidden_states[..., self.num_bins : 2 * self.num_bins] / math.sqrt(self.filter_channels)
+        unnormalized_widths = hidden_states[..., : self.num_bins] / math.sqrt(
+            self.filter_channels
+        )
+        unnormalized_heights = hidden_states[
+            ..., self.num_bins : 2 * self.num_bins
+        ] / math.sqrt(self.filter_channels)
         unnormalized_derivatives = hidden_states[..., 2 * self.num_bins :]
 
         second_half, log_abs_det = _unconstrained_rational_quadratic_spline(
@@ -725,7 +777,9 @@ class VitsElementwiseAffine(nn.Module):
             log_determinant = torch.sum(self.log_scale * padding_mask, [1, 2])
             return outputs, log_determinant
         else:
-            outputs = (inputs - self.translate) * torch.exp(-self.log_scale) * padding_mask
+            outputs = (
+                (inputs - self.translate) * torch.exp(-self.log_scale) * padding_mask
+            )
             return outputs, None
 
 
@@ -762,7 +816,15 @@ class VitsStochasticDurationPredictor(nn.Module):
         for _ in range(config.duration_predictor_num_flows):
             self.post_flows.append(VitsConvFlow(config))
 
-    def forward(self, inputs, padding_mask, global_conditioning=None, durations=None, reverse=False, noise_scale=1.0):
+    def forward(
+        self,
+        inputs,
+        padding_mask,
+        global_conditioning=None,
+        durations=None,
+        reverse=False,
+        noise_scale=1.0,
+    ):
         inputs = torch.detach(inputs)
         inputs = self.conv_pre(inputs)
 
@@ -779,14 +841,18 @@ class VitsStochasticDurationPredictor(nn.Module):
             hidden_states = self.post_conv_proj(hidden_states) * padding_mask
 
             random_posterior = (
-                torch.randn(durations.size(0), 2, durations.size(2)).to(device=inputs.device, dtype=inputs.dtype)
+                torch.randn(durations.size(0), 2, durations.size(2)).to(
+                    device=inputs.device, dtype=inputs.dtype
+                )
                 * padding_mask
             )
             log_determinant_posterior_sum = 0
             latents_posterior = random_posterior
             for flow in self.post_flows:
                 latents_posterior, log_determinant = flow(
-                    latents_posterior, padding_mask, global_conditioning=inputs + hidden_states
+                    latents_posterior,
+                    padding_mask,
+                    global_conditioning=inputs + hidden_states,
                 )
                 latents_posterior = torch.flip(latents_posterior, [1])
                 log_determinant_posterior_sum += log_determinant
@@ -794,10 +860,20 @@ class VitsStochasticDurationPredictor(nn.Module):
             first_half, second_half = torch.split(latents_posterior, [1, 1], dim=1)
 
             log_determinant_posterior_sum += torch.sum(
-                (nn.functional.logsigmoid(first_half) + nn.functional.logsigmoid(-first_half)) * padding_mask, [1, 2]
+                (
+                    nn.functional.logsigmoid(first_half)
+                    + nn.functional.logsigmoid(-first_half)
+                )
+                * padding_mask,
+                [1, 2],
             )
             logq = (
-                torch.sum(-0.5 * (math.log(2 * math.pi) + (random_posterior**2)) * padding_mask, [1, 2])
+                torch.sum(
+                    -0.5
+                    * (math.log(2 * math.pi) + (random_posterior**2))
+                    * padding_mask,
+                    [1, 2],
+                )
                 - log_determinant_posterior_sum
             )
 
@@ -807,23 +883,34 @@ class VitsStochasticDurationPredictor(nn.Module):
 
             latents = torch.cat([first_half, second_half], dim=1)
             for flow in self.flows:
-                latents, log_determinant = flow(latents, padding_mask, global_conditioning=inputs)
+                latents, log_determinant = flow(
+                    latents, padding_mask, global_conditioning=inputs
+                )
                 latents = torch.flip(latents, [1])
                 log_determinant_sum += log_determinant
 
-            nll = torch.sum(0.5 * (math.log(2 * math.pi) + (latents**2)) * padding_mask, [1, 2]) - log_determinant_sum
+            nll = (
+                torch.sum(
+                    0.5 * (math.log(2 * math.pi) + (latents**2)) * padding_mask, [1, 2]
+                )
+                - log_determinant_sum
+            )
             return nll + logq
         else:
             flows = list(reversed(self.flows))
             flows = flows[:-2] + [flows[-1]]  # remove a useless vflow
 
             latents = (
-                torch.randn(inputs.size(0), 2, inputs.size(2)).to(device=inputs.device, dtype=inputs.dtype)
+                torch.randn(inputs.size(0), 2, inputs.size(2)).to(
+                    device=inputs.device, dtype=inputs.dtype
+                )
                 * noise_scale
             )
             for flow in flows:
                 latents = torch.flip(latents, [1])
-                latents, _ = flow(latents, padding_mask, global_conditioning=inputs, reverse=True)
+                latents, _ = flow(
+                    latents, padding_mask, global_conditioning=inputs, reverse=True
+                )
 
             log_duration, _ = torch.split(latents, [1, 1], dim=1)
             return log_duration
@@ -836,9 +923,13 @@ class VitsDurationPredictor(nn.Module):
         filter_channels = config.duration_predictor_filter_channels
 
         self.dropout = nn.Dropout(config.duration_predictor_dropout)
-        self.conv_1 = nn.Conv1d(config.hidden_size, filter_channels, kernel_size, padding=kernel_size // 2)
+        self.conv_1 = nn.Conv1d(
+            config.hidden_size, filter_channels, kernel_size, padding=kernel_size // 2
+        )
         self.norm_1 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
-        self.conv_2 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+        self.conv_2 = nn.Conv1d(
+            filter_channels, filter_channels, kernel_size, padding=kernel_size // 2
+        )
         self.norm_2 = nn.LayerNorm(filter_channels, eps=config.layer_norm_eps)
         self.proj = nn.Conv1d(filter_channels, 1, 1)
 
@@ -891,11 +982,19 @@ class VitsAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_bias)
 
         if self.window_size:
-            self.emb_rel_k = nn.Parameter(torch.randn(1, self.window_size * 2 + 1, self.head_dim) * self.scaling)
-            self.emb_rel_v = nn.Parameter(torch.randn(1, self.window_size * 2 + 1, self.head_dim) * self.scaling)
+            self.emb_rel_k = nn.Parameter(
+                torch.randn(1, self.window_size * 2 + 1, self.head_dim) * self.scaling
+            )
+            self.emb_rel_v = nn.Parameter(
+                torch.randn(1, self.window_size * 2 + 1, self.head_dim) * self.scaling
+            )
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -934,8 +1033,12 @@ class VitsAttention(nn.Module):
             )
 
         if self.window_size is not None:
-            key_relative_embeddings = self._get_relative_embeddings(self.emb_rel_k, src_len)
-            relative_logits = torch.matmul(query_states, key_relative_embeddings.transpose(-2, -1))
+            key_relative_embeddings = self._get_relative_embeddings(
+                self.emb_rel_k, src_len
+            )
+            relative_logits = torch.matmul(
+                query_states, key_relative_embeddings.transpose(-2, -1)
+            )
             rel_pos_bias = self._relative_position_to_absolute_position(relative_logits)
             attn_weights += rel_pos_bias
 
@@ -944,7 +1047,10 @@ class VitsAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -955,7 +1061,9 @@ class VitsAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -963,12 +1071,18 @@ class VitsAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -979,7 +1093,9 @@ class VitsAttention(nn.Module):
             )
 
         if self.window_size is not None:
-            value_relative_embeddings = self._get_relative_embeddings(self.emb_rel_v, src_len)
+            value_relative_embeddings = self._get_relative_embeddings(
+                self.emb_rel_v, src_len
+            )
             relative_weights = self._absolute_position_to_relative_position(attn_probs)
             rel_pos_bias = torch.matmul(relative_weights, value_relative_embeddings)
             attn_output += rel_pos_bias
@@ -998,7 +1114,9 @@ class VitsAttention(nn.Module):
     def _get_relative_embeddings(self, relative_embeddings, length):
         pad_length = max(length - (self.window_size + 1), 0)
         if pad_length > 0:
-            relative_embeddings = nn.functional.pad(relative_embeddings, [0, 0, pad_length, pad_length, 0, 0])
+            relative_embeddings = nn.functional.pad(
+                relative_embeddings, [0, 0, pad_length, pad_length, 0, 0]
+            )
 
         slice_start_position = max((self.window_size + 1) - length, 0)
         slice_end_position = slice_start_position + 2 * length - 1
@@ -1035,8 +1153,12 @@ class VitsAttention(nn.Module):
 class VitsFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.conv_1 = nn.Conv1d(config.hidden_size, config.ffn_dim, config.ffn_kernel_size)
-        self.conv_2 = nn.Conv1d(config.ffn_dim, config.hidden_size, config.ffn_kernel_size)
+        self.conv_1 = nn.Conv1d(
+            config.hidden_size, config.ffn_dim, config.ffn_kernel_size
+        )
+        self.conv_2 = nn.Conv1d(
+            config.ffn_dim, config.hidden_size, config.ffn_kernel_size
+        )
         self.dropout = nn.Dropout(config.activation_dropout)
 
         if isinstance(config.hidden_act, str):
@@ -1081,7 +1203,9 @@ class VitsEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = VitsFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -1117,7 +1241,9 @@ class VitsEncoder(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([VitsEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [VitsEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
         self.layerdrop = config.layerdrop
 
@@ -1136,7 +1262,9 @@ class VitsEncoder(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, hidden_states.dtype
+            )
 
         hidden_states = hidden_states * padding_mask
 
@@ -1181,7 +1309,11 @@ class VitsEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -1198,9 +1330,13 @@ class VitsTextEncoder(nn.Module):
     def __init__(self, config: VitsConfig):
         super().__init__()
         self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, config.pad_token_id
+        )
         self.encoder = VitsEncoder(config)
-        self.project = nn.Conv1d(config.hidden_size, config.flow_size * 2, kernel_size=1)
+        self.project = nn.Conv1d(
+            config.hidden_size, config.flow_size * 2, kernel_size=1
+        )
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1217,7 +1353,9 @@ class VitsTextEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], VitsTextEncoderOutput]:
-        hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
+        hidden_states = self.embed_tokens(input_ids) * math.sqrt(
+            self.config.hidden_size
+        )
 
         encoder_outputs = self.encoder(
             hidden_states=hidden_states,
@@ -1228,13 +1366,24 @@ class VitsTextEncoder(nn.Module):
             return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0] if not return_dict else encoder_outputs.last_hidden_state
+        last_hidden_state = (
+            encoder_outputs[0] if not return_dict else encoder_outputs.last_hidden_state
+        )
 
-        stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
-        prior_means, prior_log_variances = torch.split(stats, self.config.flow_size, dim=2)
+        stats = (
+            self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2)
+            * padding_mask
+        )
+        prior_means, prior_log_variances = torch.split(
+            stats, self.config.flow_size, dim=2
+        )
 
         if not return_dict:
-            outputs = (last_hidden_state, prior_means, prior_log_variances) + encoder_outputs[1:]
+            outputs = (
+                last_hidden_state,
+                prior_means,
+                prior_log_variances,
+            ) + encoder_outputs[1:]
             return outputs
 
         return VitsTextEncoderOutput(
@@ -1269,7 +1418,9 @@ class VitsPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                k = math.sqrt(
+                    module.groups / (module.in_channels * module.kernel_size[0])
+                )
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1343,7 +1494,9 @@ class VitsModel(VitsPreTrainedModel):
             self.duration_predictor = VitsDurationPredictor(config)
 
         if config.num_speakers > 1:
-            self.embed_speaker = nn.Embedding(config.num_speakers, config.speaker_embedding_size)
+            self.embed_speaker = nn.Embedding(
+                config.num_speakers, config.speaker_embedding_size
+            )
 
         # This is used only for training.
         self.posterior_encoder = VitsPosteriorEncoder(config)
@@ -1360,7 +1513,9 @@ class VitsModel(VitsPreTrainedModel):
         return self.text_encoder
 
     @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1397,11 +1552,19 @@ class VitsModel(VitsPreTrainedModel):
         torch.Size([1, 45824])
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
@@ -1414,9 +1577,13 @@ class VitsModel(VitsPreTrainedModel):
 
         if self.config.num_speakers > 1 and speaker_id is not None:
             if not 0 <= speaker_id < self.config.num_speakers:
-                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
+                raise ValueError(
+                    f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
+                )
             if isinstance(speaker_id, int):
-                speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
+                speaker_id = torch.full(
+                    size=(1,), fill_value=speaker_id, device=self.device
+                )
             speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
         else:
             speaker_embeddings = None
@@ -1429,11 +1596,23 @@ class VitsModel(VitsPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = text_encoder_output[0] if not return_dict else text_encoder_output.last_hidden_state
+        hidden_states = (
+            text_encoder_output[0]
+            if not return_dict
+            else text_encoder_output.last_hidden_state
+        )
         hidden_states = hidden_states.transpose(1, 2)
         input_padding_mask = input_padding_mask.transpose(1, 2)
-        prior_means = text_encoder_output[1] if not return_dict else text_encoder_output.prior_means
-        prior_log_variances = text_encoder_output[2] if not return_dict else text_encoder_output.prior_log_variances
+        prior_means = (
+            text_encoder_output[1]
+            if not return_dict
+            else text_encoder_output.prior_means
+        )
+        prior_log_variances = (
+            text_encoder_output[2]
+            if not return_dict
+            else text_encoder_output.prior_log_variances
+        )
 
         if self.config.use_stochastic_duration_prediction:
             log_duration = self.duration_predictor(
@@ -1444,33 +1623,60 @@ class VitsModel(VitsPreTrainedModel):
                 noise_scale=self.noise_scale_duration,
             )
         else:
-            log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
+            log_duration = self.duration_predictor(
+                hidden_states, input_padding_mask, speaker_embeddings
+            )
 
         length_scale = 1.0 / self.speaking_rate
-        duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
+        duration = torch.ceil(
+            torch.exp(log_duration) * input_padding_mask * length_scale
+        )
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
 
         # Create a padding mask for the output lengths of shape (batch, 1, max_output_length)
-        indices = torch.arange(predicted_lengths.max(), dtype=predicted_lengths.dtype, device=predicted_lengths.device)
+        indices = torch.arange(
+            predicted_lengths.max(),
+            dtype=predicted_lengths.dtype,
+            device=predicted_lengths.device,
+        )
         output_padding_mask = indices.unsqueeze(0) < predicted_lengths.unsqueeze(1)
-        output_padding_mask = output_padding_mask.unsqueeze(1).to(input_padding_mask.dtype)
+        output_padding_mask = output_padding_mask.unsqueeze(1).to(
+            input_padding_mask.dtype
+        )
 
         # Reconstruct an attention tensor of shape (batch, 1, out_length, in_length)
-        attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(output_padding_mask, -1)
+        attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(
+            output_padding_mask, -1
+        )
         batch_size, _, output_length, input_length = attn_mask.shape
         cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
-        indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
+        indices = torch.arange(
+            output_length, dtype=duration.dtype, device=duration.device
+        )
         valid_indices = indices.unsqueeze(0) < cum_duration
-        valid_indices = valid_indices.to(attn_mask.dtype).view(batch_size, input_length, output_length)
-        padded_indices = valid_indices - nn.functional.pad(valid_indices, [0, 0, 1, 0, 0, 0])[:, :-1]
+        valid_indices = valid_indices.to(attn_mask.dtype).view(
+            batch_size, input_length, output_length
+        )
+        padded_indices = (
+            valid_indices - nn.functional.pad(valid_indices, [0, 0, 1, 0, 0, 0])[:, :-1]
+        )
         attn = padded_indices.unsqueeze(1).transpose(2, 3) * attn_mask
 
         # Expand prior distribution
         prior_means = torch.matmul(attn.squeeze(1), prior_means).transpose(1, 2)
-        prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances).transpose(1, 2)
+        prior_log_variances = torch.matmul(
+            attn.squeeze(1), prior_log_variances
+        ).transpose(1, 2)
 
-        prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * self.noise_scale
-        latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
+        prior_latents = (
+            prior_means
+            + torch.randn_like(prior_means)
+            * torch.exp(prior_log_variances)
+            * self.noise_scale
+        )
+        latents = self.flow(
+            prior_latents, output_padding_mask, speaker_embeddings, reverse=True
+        )
 
         spectrogram = latents * output_padding_mask
         waveform = self.decoder(spectrogram, speaker_embeddings)
@@ -1478,7 +1684,9 @@ class VitsModel(VitsPreTrainedModel):
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if not return_dict:
-            outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[3:]
+            outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[
+                3:
+            ]
             return outputs
 
         return VitsModelOutput(

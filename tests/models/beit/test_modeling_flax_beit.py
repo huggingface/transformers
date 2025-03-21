@@ -19,16 +19,18 @@ import numpy as np
 
 from transformers import BeitConfig
 from transformers.testing_utils import require_flax, require_vision, slow
-from transformers.utils import cached_property, is_flax_available, is_vision_available
+from transformers.utils import (cached_property, is_flax_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor
-
+from ...test_modeling_flax_common import (FlaxModelTesterMixin, floats_tensor,
+                                          ids_tensor)
 
 if is_flax_available():
     import jax
 
-    from transformers import FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling, FlaxBeitModel
+    from transformers import (FlaxBeitForImageClassification,
+                              FlaxBeitForMaskedImageModeling, FlaxBeitModel)
 
 if is_vision_available():
     from PIL import Image
@@ -81,7 +83,9 @@ class FlaxBeitModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -108,24 +112,33 @@ class FlaxBeitModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = FlaxBeitModel(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels):
         model = FlaxBeitForMaskedImageModeling(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length - 1, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length - 1, self.vocab_size)
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = FlaxBeitForImageClassification(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
         model = FlaxBeitForImageClassification(config)
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
 
     def prepare_config_and_inputs_for_common(self):
@@ -142,12 +155,16 @@ class FlaxBeitModelTester:
 @require_flax
 class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (FlaxBeitModel, FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling) if is_flax_available() else ()
+        (FlaxBeitModel, FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling)
+        if is_flax_available()
+        else ()
     )
 
     def setUp(self) -> None:
         self.model_tester = FlaxBeitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=BeitConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -220,11 +237,17 @@ def prepare_img():
 class FlaxBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
+        return (
+            BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_masked_image_modeling_head(self):
-        model = FlaxBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        model = FlaxBeitForMaskedImageModeling.from_pretrained(
+            "microsoft/beit-base-patch16-224-pt22k"
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -242,14 +265,22 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = np.array(
-            [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
+            [
+                [-3.2437, 0.5072, -13.9174],
+                [-3.2456, 0.4948, -13.9401],
+                [-3.2033, 0.5121, -13.8550],
+            ]
         )
 
-        self.assertTrue(np.allclose(logits[bool_masked_pos][:3, :3], expected_slice, atol=1e-2))
+        self.assertTrue(
+            np.allclose(logits[bool_masked_pos][:3, :3], expected_slice, atol=1e-2)
+        )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
+        model = FlaxBeitForImageClassification.from_pretrained(
+            "microsoft/beit-base-patch16-224"
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -272,7 +303,9 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
-        model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k")
+        model = FlaxBeitForImageClassification.from_pretrained(
+            "microsoft/beit-large-patch16-224-pt22k-ft22k"
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()

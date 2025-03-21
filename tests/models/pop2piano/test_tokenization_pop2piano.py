@@ -23,14 +23,10 @@ import tempfile
 import unittest
 
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.testing_utils import (
-    is_pretty_midi_available,
-    is_torch_available,
-    require_pretty_midi,
-    require_torch,
-)
+from transformers.testing_utils import (is_pretty_midi_available,
+                                        is_torch_available,
+                                        require_pretty_midi, require_torch)
 from transformers.tokenization_utils import BatchEncoding
-
 
 if is_torch_available():
     import torch
@@ -83,12 +79,24 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
 
         # check the values
         expected_output_token_ids = torch.tensor(
-            [[134, 133, 74, 135, 77, 132, 77, 133, 77, 82], [134, 133, 74, 136, 132, 74, 134, 134, 134, 134]]
+            [
+                [134, 133, 74, 135, 77, 132, 77, 133, 77, 82],
+                [134, 133, 74, 136, 132, 74, 134, 134, 134, 134],
+            ]
         )
-        expected_output_attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 0, 0, 0, 0]])
+        expected_output_attention_mask = torch.tensor(
+            [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]
+        )
 
-        torch.testing.assert_close(output["token_ids"], expected_output_token_ids, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(output["attention_mask"], expected_output_attention_mask, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output["token_ids"], expected_output_token_ids, rtol=1e-4, atol=1e-4
+        )
+        torch.testing.assert_close(
+            output["attention_mask"],
+            expected_output_attention_mask,
+            rtol=1e-4,
+            atol=1e-4,
+        )
 
     def test_batch_decode(self):
         # test batch decode with model, feature-extractor outputs(beatsteps, extrapolated_beatstep)
@@ -124,9 +132,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
             }
         )
 
-        output = self.tokenizer.batch_decode(token_ids=model_output, feature_extractor_output=input_features)[
-            "pretty_midi_objects"
-        ]
+        output = self.tokenizer.batch_decode(
+            token_ids=model_output, feature_extractor_output=input_features
+        )["pretty_midi_objects"]
 
         # check length
         self.assertTrue(len(output) == 2)
@@ -149,11 +157,15 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         input_features = BatchEncoding(
             {
                 "beatsteps": torch.tensor([[0.0697, 0.1103, 0.1509, 0.1916]]),
-                "extrapolated_beatstep": torch.tensor([[0.0000, 0.0406, 0.0813, 0.1219]]),
+                "extrapolated_beatstep": torch.tensor(
+                    [[0.0000, 0.0406, 0.0813, 0.1219]]
+                ),
             }
         )
 
-        output = self.tokenizer.batch_decode(token_ids=model_output, feature_extractor_output=input_features)
+        output = self.tokenizer.batch_decode(
+            token_ids=model_output, feature_extractor_output=input_features
+        )
 
         # check outputs
         self.assertEqual(len(output["notes"]), 4)
@@ -174,7 +186,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
         predicted_start_timings = torch.tensor(predicted_start_timings)
 
-        torch.testing.assert_close(expected_start_timings, predicted_start_timings, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            expected_start_timings, predicted_start_timings, rtol=1e-4, atol=1e-4
+        )
 
         # Checking note end timings
         expected_end_timings = torch.tensor(
@@ -187,18 +201,24 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
         predicted_end_timings = torch.tensor(predicted_end_timings)
 
-        torch.testing.assert_close(expected_end_timings, predicted_end_timings, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            expected_end_timings, predicted_end_timings, rtol=1e-4, atol=1e-4
+        )
 
     def test_get_vocab(self):
         vocab_dict = self.tokenizer.get_vocab()
         self.assertIsInstance(vocab_dict, dict)
         self.assertGreaterEqual(len(self.tokenizer), len(vocab_dict))
 
-        vocab = [self.tokenizer.convert_ids_to_tokens(i) for i in range(len(self.tokenizer))]
+        vocab = [
+            self.tokenizer.convert_ids_to_tokens(i) for i in range(len(self.tokenizer))
+        ]
         self.assertEqual(len(vocab), len(self.tokenizer))
 
         self.tokenizer.add_tokens(["asdfasdfasdfasdf"])
-        vocab = [self.tokenizer.convert_ids_to_tokens(i) for i in range(len(self.tokenizer))]
+        vocab = [
+            self.tokenizer.convert_ids_to_tokens(i) for i in range(len(self.tokenizer))
+        ]
         self.assertEqual(len(vocab), len(self.tokenizer))
 
     def test_save_and_load_tokenizer(self):
@@ -209,7 +229,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.tokenizer.add_tokens(["bim", "bambam"])
         additional_special_tokens = self.tokenizer.additional_special_tokens
         additional_special_tokens.append("new_additional_special_token")
-        self.tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
+        self.tokenizer.add_special_tokens(
+            {"additional_special_tokens": additional_special_tokens}
+        )
         before_token_ids = self.tokenizer(sample_notes)["token_ids"]
         before_vocab = self.tokenizer.get_vocab()
         self.tokenizer.save_pretrained(tmpdirname)
@@ -221,7 +243,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertListEqual(before_token_ids, after_token_ids)
         self.assertIn("bim", after_vocab)
         self.assertIn("bambam", after_vocab)
-        self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+        self.assertIn(
+            "new_additional_special_token", after_tokenizer.additional_special_tokens
+        )
 
         shutil.rmtree(tmpdirname)
 
@@ -243,10 +267,14 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertListEqual(subwords, subwords_loaded)
 
     def test_padding_side_in_kwargs(self):
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="left")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained(
+            "sweetcocoa/pop2piano", padding_side="left"
+        )
         self.assertEqual(tokenizer_p.padding_side, "left")
 
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="right")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained(
+            "sweetcocoa/pop2piano", padding_side="right"
+        )
         self.assertEqual(tokenizer_p.padding_side, "right")
 
         self.assertRaises(
@@ -257,10 +285,14 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         )
 
     def test_truncation_side_in_kwargs(self):
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", truncation_side="left")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained(
+            "sweetcocoa/pop2piano", truncation_side="left"
+        )
         self.assertEqual(tokenizer_p.truncation_side, "left")
 
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", truncation_side="right")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained(
+            "sweetcocoa/pop2piano", truncation_side="right"
+        )
         self.assertEqual(tokenizer_p.truncation_side, "right")
 
         self.assertRaises(
@@ -280,23 +312,31 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
 
         # RIGHT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
         tokenizer.padding_side = "right"
-        padded_notes = tokenizer(notes, padding="max_length", max_length=max_length)["token_ids"]
+        padded_notes = tokenizer(notes, padding="max_length", max_length=max_length)[
+            "token_ids"
+        ]
         padded_notes_length = len(padded_notes)
         notes_without_padding = tokenizer(notes, padding="do_not_pad")["token_ids"]
         padding_size = max_length - len(notes_without_padding)
 
         self.assertEqual(padded_notes_length, max_length)
-        self.assertEqual(notes_without_padding + [padding_idx] * padding_size, padded_notes)
+        self.assertEqual(
+            notes_without_padding + [padding_idx] * padding_size, padded_notes
+        )
 
         # LEFT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
         tokenizer.padding_side = "left"
-        padded_notes = tokenizer(notes, padding="max_length", max_length=max_length)["token_ids"]
+        padded_notes = tokenizer(notes, padding="max_length", max_length=max_length)[
+            "token_ids"
+        ]
         padded_notes_length = len(padded_notes)
         notes_without_padding = tokenizer(notes, padding="do_not_pad")["token_ids"]
         padding_size = max_length - len(notes_without_padding)
 
         self.assertEqual(padded_notes_length, max_length)
-        self.assertEqual([padding_idx] * padding_size + notes_without_padding, padded_notes)
+        self.assertEqual(
+            [padding_idx] * padding_size + notes_without_padding, padded_notes
+        )
 
         # RIGHT & LEFT PADDING - Check that nothing is done for 'longest' and 'no_padding'
         notes_without_padding = tokenizer(notes)["token_ids"]
@@ -331,20 +371,28 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         tokenizer.truncation_side = "right"
         full_encoded_notes = tokenizer(notes)["token_ids"]
         full_encoded_notes_length = len(full_encoded_notes)
-        truncated_notes = tokenizer(notes, max_length=full_encoded_notes_length - truncation_size, truncation=True)[
-            "token_ids"
-        ]
-        self.assertEqual(full_encoded_notes_length, len(truncated_notes) + truncation_size)
+        truncated_notes = tokenizer(
+            notes,
+            max_length=full_encoded_notes_length - truncation_size,
+            truncation=True,
+        )["token_ids"]
+        self.assertEqual(
+            full_encoded_notes_length, len(truncated_notes) + truncation_size
+        )
         self.assertEqual(full_encoded_notes[:-truncation_size], truncated_notes)
 
         # LEFT TRUNCATION - Check that it correctly truncates when a maximum length is specified along with the truncation flag set to True
         tokenizer.truncation_side = "left"
         full_encoded_notes = tokenizer(notes)["token_ids"]
         full_encoded_notes_length = len(full_encoded_notes)
-        truncated_notes = tokenizer(notes, max_length=full_encoded_notes_length - truncation_size, truncation=True)[
-            "token_ids"
-        ]
-        self.assertEqual(full_encoded_notes_length, len(truncated_notes) + truncation_size)
+        truncated_notes = tokenizer(
+            notes,
+            max_length=full_encoded_notes_length - truncation_size,
+            truncation=True,
+        )["token_ids"]
+        self.assertEqual(
+            full_encoded_notes_length, len(truncated_notes) + truncation_size
+        )
         self.assertEqual(full_encoded_notes[truncation_size:], truncated_notes)
 
         # RIGHT & LEFT TRUNCATION - Check that nothing is done for 'longest' and 'no_truncation'
@@ -359,7 +407,9 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertEqual(truncated_notes_left, full_encoded_notes)
 
         tokenizer.truncation_side = "right"
-        truncated_notes_right = tokenizer(notes, truncation="longest_first")["token_ids"]
+        truncated_notes_right = tokenizer(notes, truncation="longest_first")[
+            "token_ids"
+        ]
         self.assertEqual(len(truncated_notes_right), full_encoded_notes_length)
         self.assertEqual(truncated_notes_right, full_encoded_notes)
 
@@ -376,16 +426,24 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         else:
             normal_tokens = self.tokenizer(notes[0], padding=True, pad_to_multiple_of=8)
             for key, value in normal_tokens.items():
-                self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                self.assertEqual(
+                    len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8"
+                )
 
             normal_tokens = self.tokenizer(notes[0], pad_to_multiple_of=8)
             for key, value in normal_tokens.items():
-                self.assertNotEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                self.assertNotEqual(
+                    len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8"
+                )
 
             # Should also work with truncation
-            normal_tokens = self.tokenizer(notes[0], padding=True, truncation=True, pad_to_multiple_of=8)
+            normal_tokens = self.tokenizer(
+                notes[0], padding=True, truncation=True, pad_to_multiple_of=8
+            )
             for key, value in normal_tokens.items():
-                self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                self.assertEqual(
+                    len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8"
+                )
 
             # truncation to something which is not a multiple of pad_to_multiple_of raises an error
             self.assertRaises(
@@ -410,6 +468,12 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         ]
         padded_features = self.tokenizer.pad(features)
         if self.tokenizer.padding_side == "right":
-            self.assertListEqual(padded_features["attention_mask"], [[1, 1, 1, 1, 1, 0], [1, 1, 0, 0, 0, 0]])
+            self.assertListEqual(
+                padded_features["attention_mask"],
+                [[1, 1, 1, 1, 1, 0], [1, 1, 0, 0, 0, 0]],
+            )
         else:
-            self.assertListEqual(padded_features["attention_mask"], [[1, 1, 1, 1, 1, 0], [0, 0, 0, 1, 1, 0]])
+            self.assertListEqual(
+                padded_features["attention_mask"],
+                [[1, 1, 1, 1, 1, 0], [0, 0, 0, 1, 1, 0]],
+            )

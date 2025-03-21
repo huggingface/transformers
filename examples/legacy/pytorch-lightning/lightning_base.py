@@ -7,29 +7,17 @@ from typing import Any, Dict
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
-from transformers import (
-    AutoConfig,
-    AutoModel,
-    AutoModelForPreTraining,
-    AutoModelForQuestionAnswering,
-    AutoModelForSeq2SeqLM,
-    AutoModelForSequenceClassification,
-    AutoModelForTokenClassification,
-    AutoModelWithLMHead,
-    AutoTokenizer,
-    PretrainedConfig,
-    PreTrainedTokenizer,
-    is_torch_available,
-)
+from transformers import (AutoConfig, AutoModel, AutoModelForPreTraining,
+                          AutoModelForQuestionAnswering, AutoModelForSeq2SeqLM,
+                          AutoModelForSequenceClassification,
+                          AutoModelForTokenClassification, AutoModelWithLMHead,
+                          AutoTokenizer, PretrainedConfig, PreTrainedTokenizer,
+                          is_torch_available)
 from transformers.optimization import (
-    Adafactor,
-    get_cosine_schedule_with_warmup,
+    Adafactor, get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
-    get_linear_schedule_with_warmup,
-    get_polynomial_decay_schedule_with_warmup,
-)
+    get_linear_schedule_with_warmup, get_polynomial_decay_schedule_with_warmup)
 from transformers.utils.versions import require_version
-
 
 if is_torch_available():
     import torch
@@ -87,7 +75,11 @@ class BaseTransformer(pl.LightningModule):
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
         if config is None:
             self.config = AutoConfig.from_pretrained(
-                self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
+                (
+                    self.hparams.config_name
+                    if self.hparams.config_name
+                    else self.hparams.model_name_or_path
+                ),
                 **({"num_labels": num_labels} if num_labels is not None else {}),
                 cache_dir=cache_dir,
                 **config_kwargs,
@@ -95,15 +87,26 @@ class BaseTransformer(pl.LightningModule):
         else:
             self.config: PretrainedConfig = config
 
-        extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+        extra_model_params = (
+            "encoder_layerdrop",
+            "decoder_layerdrop",
+            "dropout",
+            "attention_dropout",
+        )
         for p in extra_model_params:
             if getattr(self.hparams, p, None):
-                assert hasattr(self.config, p), f"model config doesn't have a `{p}` attribute"
+                assert hasattr(
+                    self.config, p
+                ), f"model config doesn't have a `{p}` attribute"
                 setattr(self.config, p, getattr(self.hparams, p))
 
         if tokenizer is None:
             self.tokenizer = AutoTokenizer.from_pretrained(
-                self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
+                (
+                    self.hparams.tokenizer_name
+                    if self.hparams.tokenizer_name
+                    else self.hparams.model_name_or_path
+                ),
                 cache_dir=cache_dir,
             )
         else:
@@ -125,7 +128,9 @@ class BaseTransformer(pl.LightningModule):
     def get_lr_scheduler(self):
         get_schedule_func = arg_to_scheduler[self.hparams.lr_scheduler]
         scheduler = get_schedule_func(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps()
+            self.opt,
+            num_warmup_steps=self.hparams.warmup_steps,
+            num_training_steps=self.total_steps(),
         )
         scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
         return scheduler
@@ -136,22 +141,35 @@ class BaseTransformer(pl.LightningModule):
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+                "params": [
+                    p
+                    for n, p in model.named_parameters()
+                    if not any(nd in n for nd in no_decay)
+                ],
                 "weight_decay": self.hparams.weight_decay,
             },
             {
-                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                "params": [
+                    p
+                    for n, p in model.named_parameters()
+                    if any(nd in n for nd in no_decay)
+                ],
                 "weight_decay": 0.0,
             },
         ]
         if self.hparams.adafactor:
             optimizer = Adafactor(
-                optimizer_grouped_parameters, lr=self.hparams.learning_rate, scale_parameter=False, relative_step=False
+                optimizer_grouped_parameters,
+                lr=self.hparams.learning_rate,
+                scale_parameter=False,
+                relative_step=False,
             )
 
         else:
             optimizer = torch.optim.AdamW(
-                optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon
+                optimizer_grouped_parameters,
+                lr=self.hparams.learning_rate,
+                eps=self.hparams.adam_epsilon,
             )
         self.opt = optimizer
 
@@ -168,14 +186,20 @@ class BaseTransformer(pl.LightningModule):
     def total_steps(self) -> int:
         """The number of total training steps that will be run. Used for lr scheduler purposes."""
         num_devices = max(1, self.hparams.gpus)  # TODO: consider num_tpu_cores
-        effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
+        effective_batch_size = (
+            self.hparams.train_batch_size
+            * self.hparams.accumulate_grad_batches
+            * num_devices
+        )
         return (self.dataset_size / effective_batch_size) * self.hparams.max_epochs
 
     def setup(self, mode):
         if mode == "test":
             self.dataset_size = len(self.test_dataloader().dataset)
         else:
-            self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
+            self.train_loader = self.get_dataloader(
+                "train", self.hparams.train_batch_size, shuffle=True
+            )
             self.dataset_size = len(self.train_dataloader().dataset)
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False):
@@ -217,7 +241,10 @@ class BaseTransformer(pl.LightningModule):
             help="Path to pretrained model or model identifier from huggingface.co/models",
         )
         parser.add_argument(
-            "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
+            "--config_name",
+            default="",
+            type=str,
+            help="Pretrained config name or path if not the same as model_name",
         )
         parser.add_argument(
             "--tokenizer_name",
@@ -251,7 +278,12 @@ class BaseTransformer(pl.LightningModule):
             type=float,
             help="Attention dropout probability (Optional). Goes into model.config",
         )
-        parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+        parser.add_argument(
+            "--learning_rate",
+            default=5e-5,
+            type=float,
+            help="The initial learning rate for Adam.",
+        )
         parser.add_argument(
             "--lr_scheduler",
             default="linear",
@@ -260,11 +292,30 @@ class BaseTransformer(pl.LightningModule):
             type=str,
             help="Learning rate scheduler",
         )
-        parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
-        parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-        parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-        parser.add_argument("--num_workers", default=4, type=int, help="kwarg passed to DataLoader")
-        parser.add_argument("--num_train_epochs", dest="max_epochs", default=3, type=int)
+        parser.add_argument(
+            "--weight_decay",
+            default=0.0,
+            type=float,
+            help="Weight decay if we apply some.",
+        )
+        parser.add_argument(
+            "--adam_epsilon",
+            default=1e-8,
+            type=float,
+            help="Epsilon for Adam optimizer.",
+        )
+        parser.add_argument(
+            "--warmup_steps",
+            default=0,
+            type=int,
+            help="Linear warmup over warmup_steps.",
+        )
+        parser.add_argument(
+            "--num_workers", default=4, type=int, help="kwarg passed to DataLoader"
+        )
+        parser.add_argument(
+            "--num_train_epochs", dest="max_epochs", default=3, type=int
+        )
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
         parser.add_argument("--adafactor", action="store_true")
@@ -288,7 +339,9 @@ class LoggingCallback(pl.Callback):
         rank_zero_info("***** Test results *****")
         metrics = trainer.callback_metrics
         # Log and save results to file
-        output_test_results_file = os.path.join(pl_module.hparams.output_dir, "test_results.txt")
+        output_test_results_file = os.path.join(
+            pl_module.hparams.output_dir, "test_results.txt"
+        )
         with open(output_test_results_file, "w") as writer:
             for key in sorted(metrics):
                 if key not in ["log", "progress_bar"]:
@@ -322,9 +375,21 @@ def add_generic_args(parser, root_dir) -> None:
         ),
     )
     parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int)
-    parser.add_argument("--max_grad_norm", dest="gradient_clip_val", default=1.0, type=float, help="Max gradient norm")
-    parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
+    parser.add_argument(
+        "--max_grad_norm",
+        dest="gradient_clip_val",
+        default=1.0,
+        type=float,
+        help="Max gradient norm",
+    )
+    parser.add_argument(
+        "--do_train", action="store_true", help="Whether to run training."
+    )
+    parser.add_argument(
+        "--do_predict",
+        action="store_true",
+        help="Whether to run predictions on the test set.",
+    )
     parser.add_argument(
         "--gradient_accumulation_steps",
         dest="accumulate_grad_batches",
@@ -332,7 +397,9 @@ def add_generic_args(parser, root_dir) -> None:
         default=1,
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="random seed for initialization"
+    )
     parser.add_argument(
         "--data_dir",
         default=None,
@@ -361,7 +428,11 @@ def generic_train(
     # add custom checkpoints
     if checkpoint_callback is None:
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
+            filepath=args.output_dir,
+            prefix="checkpoint",
+            monitor="val_loss",
+            mode="min",
+            save_top_k=1,
         )
     if early_stopping_callback:
         extra_callbacks.append(early_stopping_callback)

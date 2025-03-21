@@ -26,7 +26,6 @@ from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -303,7 +302,9 @@ class Gemma3Config(PretrainedConfig):
     ):
         if text_config is None:
             text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default Gemma3TextConfig vision config.")
+            logger.info(
+                "text_config is None, using default Gemma3TextConfig vision config."
+            )
         elif isinstance(text_config, dict):
             text_config = Gemma3TextConfig(**text_config)
 

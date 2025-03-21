@@ -18,28 +18,17 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    VideoInput,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_batched_videos,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (convert_to_rgb, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (OPENAI_CLIP_MEAN, OPENAI_CLIP_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            VideoInput, infer_channel_dimension_format,
+                            is_scaled_image, make_batched_videos,
+                            to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
 from ...utils import TensorType, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -175,24 +164,41 @@ class LlavaOnevisionVideoProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         return images
@@ -262,11 +268,15 @@ class LlavaOnevisionVideoProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         videos = make_batched_videos(videos)
 

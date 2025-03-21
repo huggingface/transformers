@@ -22,7 +22,6 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..gemma3.processing_gemma3 import Gemma3Processor, Gemma3ProcessorKwargs
 
-
 logger = logging.get_logger(__name__)
 
 DEFAULT_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
@@ -61,7 +60,13 @@ class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
 
 class ShieldGemma2Processor(Gemma3Processor):
     def __init__(
-        self, image_processor, tokenizer, chat_template=None, image_seq_length=256, policy_definitions=None, **kwargs
+        self,
+        image_processor,
+        tokenizer,
+        chat_template=None,
+        image_seq_length=256,
+        policy_definitions=None,
+        **kwargs,
     ):
         """A processor for the ShieldGemma 2 model.
 
@@ -77,7 +82,9 @@ class ShieldGemma2Processor(Gemma3Processor):
                 this processor. Typically, this is unset as the processor configuration on Hugging Face Hub includes
                 the base policies ShieldGemma was trained on.
         """
-        super().__init__(image_processor, tokenizer, chat_template, image_seq_length, **kwargs)
+        super().__init__(
+            image_processor, tokenizer, chat_template, image_seq_length, **kwargs
+        )
         if policy_definitions is None:
             self.policy_definitions = DEFAULT_SHIELDGEMMA2_POLICIES
         else:
@@ -128,7 +135,9 @@ class ShieldGemma2Processor(Gemma3Processor):
             images = [images]
 
         if not self.chat_template:
-            raise ValueError("ShieldGemma 2 requires the use of a specific chat template")
+            raise ValueError(
+                "ShieldGemma 2 requires the use of a specific chat template"
+            )
 
         # Disable pan and scan
         images_kwargs = kwargs.setdefault("images_kwargs", {})

@@ -20,14 +20,15 @@ import numpy as np
 from transformers import GPT2Config, GPT2Tokenizer, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-
+from ...test_modeling_flax_common import (FlaxModelTesterMixin, floats_tensor,
+                                          ids_tensor, random_attention_mask)
 
 if is_flax_available():
     import jax
     import jax.numpy as jnp
 
-    from transformers.models.gpt2.modeling_flax_gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model
+    from transformers.models.gpt2.modeling_flax_gpt2 import (
+        FlaxGPT2LMHeadModel, FlaxGPT2Model)
 
 
 class FlaxGPT2ModelTester:
@@ -103,8 +104,12 @@ class FlaxGPT2ModelTester:
     def prepare_config_and_inputs_for_decoder(self):
         config, input_ids, attention_mask = self.prepare_config_and_inputs()
 
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+        encoder_hidden_states = floats_tensor(
+            [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        encoder_attention_mask = ids_tensor(
+            [self.batch_size, self.seq_length], vocab_size=2
+        )
 
         return (
             config,
@@ -114,7 +119,9 @@ class FlaxGPT2ModelTester:
             encoder_attention_mask,
         )
 
-    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
@@ -122,7 +129,8 @@ class FlaxGPT2ModelTester:
         attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
 
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
         outputs_cache = model(
             input_ids[:, :-1],
@@ -131,7 +139,9 @@ class FlaxGPT2ModelTester:
             position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
@@ -141,21 +151,34 @@ class FlaxGPT2ModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
         attention_mask_cache = jnp.concatenate(
-            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
+            [
+                attention_mask,
+                jnp.zeros(
+                    (
+                        attention_mask.shape[0],
+                        max_decoder_length - attention_mask.shape[1],
+                    )
+                ),
+            ],
             axis=-1,
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
         outputs_cache = model(
@@ -164,7 +187,9 @@ class FlaxGPT2ModelTester:
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
@@ -174,10 +199,14 @@ class FlaxGPT2ModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_bool_attention_mask_in_generation(self, model_class_name, config, input_ids, attention_mask):
+    def check_bool_attention_mask_in_generation(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         model = model_class_name(config)
 
         output_int_att_mask = model.generate(
@@ -200,34 +229,51 @@ class FlaxGPT2ModelTester:
 
 @require_flax
 class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxGPT2Model, FlaxGPT2LMHeadModel) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxGPT2Model, FlaxGPT2LMHeadModel) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxGPT2ModelTester(self)
 
     def test_use_cache_forward(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
+            self.model_tester.check_use_cache_forward(
+                model_class_name, config, input_ids, attention_mask
+            )
 
     def test_use_cache_forward_with_attn_mask(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
 
     def test_bool_attention_mask_in_generation(self):
         for model_class_name in self.all_generative_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
             self.model_tester.check_bool_attention_mask_in_generation(
                 model_class_name, config, input_ids, attention_mask
             )
 
     @slow
     def test_batch_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2", pad_token="</s>", padding_side="left")
-        inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            "openai-community/gpt2", pad_token="</s>", padding_side="left"
+        )
+        inputs = tokenizer(
+            ["Hello this is a long string", "Hey"],
+            return_tensors="np",
+            padding=True,
+            truncation=True,
+        )
 
         model = FlaxGPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.do_sample = False
@@ -235,9 +281,13 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
         jit_generate = jax.jit(model.generate)
 
-        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+        output_sequences = jit_generate(
+            inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        ).sequences
 
-        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        output_string = tokenizer.batch_decode(
+            output_sequences, skip_special_tokens=True
+        )
 
         expected_string = [
             "Hello this is a long string of words. I'm going to start with the first one.\n",
@@ -249,6 +299,8 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("openai-community/gpt2", from_pt=True)
+            model = model_class_name.from_pretrained(
+                "openai-community/gpt2", from_pt=True
+            )
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)

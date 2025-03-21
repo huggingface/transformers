@@ -20,11 +20,11 @@ import unittest
 import pytest
 
 from transformers import AutoProcessor, Qwen2Tokenizer
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import (require_av, require_torch,
+                                        require_vision)
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
 
 if is_vision_available():
     from transformers import Qwen2VLImageProcessor, Qwen2VLProcessor
@@ -37,7 +37,9 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", patch_size=4)
+        processor = Qwen2VLProcessor.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", patch_size=4
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -56,12 +58,16 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(), image_processor.to_json_string()
+        )
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
         self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
 
@@ -69,27 +75,38 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         image_input = self.prepare_image_inputs()
 
         input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
+        input_processor = processor(
+            images=image_input, text="dummy", return_tensors="np"
+        )
 
         for key in input_image_proc.keys():
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"])
+        self.assertListEqual(
+            list(inputs.keys()),
+            ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"],
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -103,7 +120,9 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = Qwen2VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -129,21 +148,34 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False
+        )
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True
+        )
+        expected_output = processor.tokenizer(
+            formatted_prompt, return_tensors=None
+        ).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        out_dict = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True
+        )
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
         # Now test the ability to return dict
         messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+            {
+                "type": "image",
+                "url": "https://www.ilankelman.org/stopsigns/australia.jpg",
+            }
         )
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        out_dict = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True
+        )
         self.assertTrue(self.images_input_name in out_dict)
 
         # should always have input_ids and attention_mask
@@ -175,29 +207,47 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ],
         ]
 
-        formatted_prompt = processor.apply_chat_template(batched_messages, add_generation_prompt=True, tokenize=False)
+        formatted_prompt = processor.apply_chat_template(
+            batched_messages, add_generation_prompt=True, tokenize=False
+        )
         self.assertEqual(len(formatted_prompt), 2)
 
         formatted_prompt_tokenized = processor.apply_chat_template(
             batched_messages, add_generation_prompt=True, tokenize=True, padding=True
         )
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None, padding=True).input_ids
+        expected_output = processor.tokenizer(
+            formatted_prompt, return_tensors=None, padding=True
+        ).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(
-            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
+            batched_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            padding=True,
         )
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
         # Now test the ability to return dict
         batched_messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+            {
+                "type": "image",
+                "url": "https://www.ilankelman.org/stopsigns/australia.jpg",
+            }
         )
         batched_messages[1][0]["content"].append(
-            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"}
+            {
+                "type": "image",
+                "url": "http://images.cocodataset.org/val2017/000000039769.jpg",
+            }
         )
         out_dict = processor.apply_chat_template(
-            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
+            batched_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            padding=True,
         )
         self.assertTrue(self.images_input_name in out_dict)
 
@@ -231,14 +281,22 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False
+        )
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True
+        )
+        expected_output = processor.tokenizer(
+            formatted_prompt, return_tensors=None
+        ).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        out_dict = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True
+        )
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
         # Add video URL for return dict and load with `num_frames` arg

@@ -18,13 +18,13 @@ import inspect
 import unittest
 
 from transformers import AutoBackbone
-from transformers.testing_utils import require_timm, require_torch, torch_device
+from transformers.testing_utils import (require_timm, require_torch,
+                                        torch_device)
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
-
 
 if is_torch_available():
     import torch
@@ -60,7 +60,9 @@ class TimmBackboneModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -96,9 +98,13 @@ class TimmBackboneModelTester:
 
 @require_torch
 @require_timm
-class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TimmBackboneModelTest(
+    ModelTesterMixin, BackboneTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": TimmBackbone} if is_torch_available() else {}
+    )
     test_resize_embeddings = False
     test_head_masking = False
     test_pruning = False
@@ -109,7 +115,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         self.config_class = TimmBackboneConfig
         self.model_tester = TimmBackboneModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=self.config_class, has_text_modality=False, common_properties=["num_channels"]
+            self,
+            config_class=self.config_class,
+            has_text_modality=False,
+            common_properties=["num_channels"],
         )
 
     def test_config(self):
@@ -123,23 +132,37 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         timm_checkpoint = "resnet18"
         transformers_checkpoint = "microsoft/resnet-18"
 
-        timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True)
+        timm_model = AutoBackbone.from_pretrained(
+            timm_checkpoint, use_timm_backbone=True
+        )
         transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint)
 
-        self.assertEqual(len(timm_model.out_features), len(transformers_model.out_features))
-        self.assertEqual(len(timm_model.stage_names), len(transformers_model.stage_names))
+        self.assertEqual(
+            len(timm_model.out_features), len(transformers_model.out_features)
+        )
+        self.assertEqual(
+            len(timm_model.stage_names), len(transformers_model.stage_names)
+        )
         self.assertEqual(timm_model.channels, transformers_model.channels)
         # Out indices are set to the last layer by default. For timm models, we don't know
         # the number of layers in advance, so we set it to (-1,), whereas for transformers
         # models, we set it to [len(stage_names) - 1] (kept for backward compatibility).
         self.assertEqual(timm_model.out_indices, [-1])
-        self.assertEqual(transformers_model.out_indices, [len(timm_model.stage_names) - 1])
+        self.assertEqual(
+            transformers_model.out_indices, [len(timm_model.stage_names) - 1]
+        )
 
-        timm_model = AutoBackbone.from_pretrained(timm_checkpoint, use_timm_backbone=True, out_indices=[1, 2, 3])
-        transformers_model = AutoBackbone.from_pretrained(transformers_checkpoint, out_indices=[1, 2, 3])
+        timm_model = AutoBackbone.from_pretrained(
+            timm_checkpoint, use_timm_backbone=True, out_indices=[1, 2, 3]
+        )
+        transformers_model = AutoBackbone.from_pretrained(
+            transformers_checkpoint, out_indices=[1, 2, 3]
+        )
 
         self.assertEqual(timm_model.out_indices, transformers_model.out_indices)
-        self.assertEqual(len(timm_model.out_features), len(transformers_model.out_features))
+        self.assertEqual(
+            len(timm_model.out_features), len(transformers_model.out_features)
+        )
         self.assertEqual(timm_model.channels, transformers_model.channels)
 
     @unittest.skip(reason="TimmBackbone doesn't support feed forward chunking")
@@ -162,7 +185,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="TimmBackbone model cannot be created without specifying a backbone checkpoint")
+    @unittest.skip(
+        reason="TimmBackbone model cannot be created without specifying a backbone checkpoint"
+    )
     def test_from_pretrained_no_checkpoint(self):
         pass
 
@@ -198,7 +223,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    @unittest.skip(reason="TimmBackbone doesn't have hidden size info in its configuration.")
+    @unittest.skip(
+        reason="TimmBackbone doesn't have hidden size info in its configuration."
+    )
     def test_channels(self):
         pass
 
@@ -210,7 +237,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_can_use_safetensors(self):
         pass
 
-    @unittest.skip(reason="Need to use a timm backbone and there is no tiny model available.")
+    @unittest.skip(
+        reason="Need to use a timm backbone and there is no tiny model available."
+    )
     def test_model_is_small(self):
         pass
 

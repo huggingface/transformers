@@ -21,13 +21,9 @@ import textwrap
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaModel
-from transformers.testing_utils import (
-    TestCasePlus,
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    require_torch_multi_gpu,
-)
-
+from transformers.testing_utils import (TestCasePlus, execute_subprocess_async,
+                                        get_torch_dist_unique_port,
+                                        require_torch_multi_gpu)
 
 if is_torch_available():
     import torch
@@ -46,7 +42,9 @@ class TestTensorParallel(TestCasePlus):
 
             # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
-                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
+                _ = subprocess.run(
+                    cmd, capture_output=True, env=self.get_env(), text=True, check=True
+                )
             except subprocess.CalledProcessError as e:
                 raise Exception(f"The following error was captured: {e.stderr}")
 

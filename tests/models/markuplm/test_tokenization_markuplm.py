@@ -24,19 +24,16 @@ from typing import List
 
 from parameterized import parameterized
 
-from transformers import (
-    AddedToken,
-    MarkupLMTokenizerFast,
-    SpecialTokensMixin,
-    is_tf_available,
-    is_torch_available,
-    logging,
-)
-from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
+from transformers import (AddedToken, MarkupLMTokenizerFast,
+                          SpecialTokensMixin, is_tf_available,
+                          is_torch_available, logging)
+from transformers.models.markuplm.tokenization_markuplm import (
+    VOCAB_FILES_NAMES, MarkupLMTokenizer)
 from transformers.testing_utils import require_tokenizers, require_torch, slow
 
-from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
-
+from ...test_tokenization_common import (SMALL_TRAINING_CORPUS,
+                                         TokenizerTesterMixin,
+                                         merge_model_tokenizer_mappings)
 
 logger = logging.get_logger(__name__)
 
@@ -61,8 +58,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        self.tokenizer_config_file = os.path.join(self.tmpdirname, "tokenizer_config.json")
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
+        self.tokenizer_config_file = os.path.join(
+            self.tmpdirname, "tokenizer_config.json"
+        )
 
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
@@ -103,7 +104,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, nodes, xpaths
 
-    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    @unittest.skip(
+        reason="Chat template tests don't play well with table/layout models."
+    )
     def test_chat_template_batched(self):
         pass
 
@@ -121,11 +124,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 tokenizer.add_special_tokens({"cls_token": special_token})
                 encoded_special_token = tokenizer.encode(
-                    [special_token], xpaths=[special_token_xpath], add_special_tokens=False
+                    [special_token],
+                    xpaths=[special_token_xpath],
+                    add_special_tokens=False,
                 )
                 self.assertEqual(len(encoded_special_token), 1)
 
-                decoded = tokenizer.decode(encoded_special_token, skip_special_tokens=True)
+                decoded = tokenizer.decode(
+                    encoded_special_token, skip_special_tokens=True
+                )
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
@@ -158,13 +165,18 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 nodes = "aaaaa bbbbbb low cccccccccdddddddd l".split()
                 xpaths = ["/html/body/div/li[1]/div/span" for _ in range(len(nodes))]
 
-                tokens = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                tokens = tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
 
                 self.assertGreaterEqual(len(tokens), 4)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
 
-                new_toks_2 = {"eos_token": ">>>>|||<||<<|<<", "pad_token": "<<<<<|||>|>>>>|>"}
+                new_toks_2 = {
+                    "eos_token": ">>>>|||<||<<|<<",
+                    "pad_token": "<<<<<|||>|>>>>|>",
+                }
                 added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
                 vocab_size_3 = tokenizer.vocab_size
                 all_size_3 = len(tokenizer)
@@ -198,15 +210,23 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 nodes, xpaths = self.get_nodes_and_xpaths()
 
-                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
+                new_toks = [
+                    AddedToken("[ABC]", normalized=False),
+                    AddedToken("[DEF]", normalized=False),
+                ]
                 tokenizer.add_tokens(new_toks)
                 input = "[ABC][DEF][ABC][DEF]"
                 if self.space_between_special_tokens:
                     output = "[ABC] [DEF] [ABC] [DEF]"
                 else:
                     output = input
-                encoded = tokenizer.encode(input.split(), xpaths=xpaths, add_special_tokens=False)
-                decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
+                encoded = tokenizer.encode(
+                    input.split(), xpaths=xpaths, add_special_tokens=False
+                )
+                decoded = tokenizer.decode(
+                    encoded,
+                    spaces_between_special_tokens=self.space_between_special_tokens,
+                )
                 self.assertIn(decoded, [output, output.lower()])
 
     @unittest.skip(reason="Not implemented")
@@ -226,7 +246,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 padding_size = 10
                 padding_idx = tokenizer.pad_token_id
 
-                encoded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, return_special_tokens_mask=True)
+                encoded_sequence = tokenizer.encode_plus(
+                    nodes, xpaths=xpaths, return_special_tokens_mask=True
+                )
                 input_ids = encoded_sequence["input_ids"]
                 special_tokens_mask = encoded_sequence["special_tokens_mask"]
                 sequence_length = len(input_ids)
@@ -242,7 +264,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
-                not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
+                not_padded_special_tokens_mask = not_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 not_padded_sequence_length = len(not_padded_input_ids)
 
                 self.assertTrue(sequence_length == not_padded_sequence_length)
@@ -257,7 +281,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
-                not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
+                not_padded_special_tokens_mask = not_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 not_padded_sequence_length = len(not_padded_input_ids)
 
                 self.assertTrue(sequence_length == not_padded_sequence_length)
@@ -276,15 +302,26 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 else:
                     tokenizer_kwargs_right["padding_side"] = "right"
 
-                right_padded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, **tokenizer_kwargs_right)
+                right_padded_sequence = tokenizer.encode_plus(
+                    nodes, xpaths=xpaths, **tokenizer_kwargs_right
+                )
                 right_padded_input_ids = right_padded_sequence["input_ids"]
 
-                right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
+                right_padded_special_tokens_mask = right_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 right_padded_sequence_length = len(right_padded_input_ids)
 
-                self.assertTrue(sequence_length + padding_size == right_padded_sequence_length)
-                self.assertTrue(input_ids + [padding_idx] * padding_size == right_padded_input_ids)
-                self.assertTrue(special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask)
+                self.assertTrue(
+                    sequence_length + padding_size == right_padded_sequence_length
+                )
+                self.assertTrue(
+                    input_ids + [padding_idx] * padding_size == right_padded_input_ids
+                )
+                self.assertTrue(
+                    special_tokens_mask + [1] * padding_size
+                    == right_padded_special_tokens_mask
+                )
 
                 # Test left padding
                 tokenizer_kwargs_left = {
@@ -298,30 +335,56 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 else:
                     tokenizer_kwargs_left["padding_side"] = "left"
 
-                left_padded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, **tokenizer_kwargs_left)
+                left_padded_sequence = tokenizer.encode_plus(
+                    nodes, xpaths=xpaths, **tokenizer_kwargs_left
+                )
                 left_padded_input_ids = left_padded_sequence["input_ids"]
-                left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
+                left_padded_special_tokens_mask = left_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 left_padded_sequence_length = len(left_padded_input_ids)
 
-                self.assertTrue(sequence_length + padding_size == left_padded_sequence_length)
-                self.assertTrue([padding_idx] * padding_size + input_ids == left_padded_input_ids)
-                self.assertTrue([1] * padding_size + special_tokens_mask == left_padded_special_tokens_mask)
+                self.assertTrue(
+                    sequence_length + padding_size == left_padded_sequence_length
+                )
+                self.assertTrue(
+                    [padding_idx] * padding_size + input_ids == left_padded_input_ids
+                )
+                self.assertTrue(
+                    [1] * padding_size + special_tokens_mask
+                    == left_padded_special_tokens_mask
+                )
 
                 if "token_type_ids" in tokenizer.model_input_names:
                     token_type_ids = encoded_sequence["token_type_ids"]
                     left_padded_token_type_ids = left_padded_sequence["token_type_ids"]
-                    right_padded_token_type_ids = right_padded_sequence["token_type_ids"]
+                    right_padded_token_type_ids = right_padded_sequence[
+                        "token_type_ids"
+                    ]
 
-                    assert token_type_ids + [0] * padding_size == right_padded_token_type_ids
-                    assert [0] * padding_size + token_type_ids == left_padded_token_type_ids
+                    assert (
+                        token_type_ids + [0] * padding_size
+                        == right_padded_token_type_ids
+                    )
+                    assert [
+                        0
+                    ] * padding_size + token_type_ids == left_padded_token_type_ids
 
                 if "attention_mask" in tokenizer.model_input_names:
                     attention_mask = encoded_sequence["attention_mask"]
-                    right_padded_attention_mask = right_padded_sequence["attention_mask"]
+                    right_padded_attention_mask = right_padded_sequence[
+                        "attention_mask"
+                    ]
                     left_padded_attention_mask = left_padded_sequence["attention_mask"]
 
-                    self.assertTrue(attention_mask + [0] * padding_size == right_padded_attention_mask)
-                    self.assertTrue([0] * padding_size + attention_mask == left_padded_attention_mask)
+                    self.assertTrue(
+                        attention_mask + [0] * padding_size
+                        == right_padded_attention_mask
+                    )
+                    self.assertTrue(
+                        [0] * padding_size + attention_mask
+                        == left_padded_attention_mask
+                    )
 
     def test_internal_consistency(self):
         tokenizers = self.get_tokenizers()
@@ -348,11 +411,19 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 nodes, xpaths = self.get_nodes_and_xpaths()
 
                 if (
-                    tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
+                    tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[
+                        0
+                    ]
+                    != "PreTrainedTokenizer"
                     and "token_type_ids" in tokenizer.model_input_names
                 ):
-                    information = tokenizer.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
-                    sequences, mask = information["input_ids"], information["token_type_ids"]
+                    information = tokenizer.encode_plus(
+                        nodes, xpaths=xpaths, add_special_tokens=True
+                    )
+                    sequences, mask = (
+                        information["input_ids"],
+                        information["token_type_ids"],
+                    )
                     self.assertEqual(len(sequences), len(mask))
 
     def test_number_of_added_tokens(self):
@@ -362,25 +433,35 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # test 1: single sequence
                 nodes, xpaths = self.get_nodes_and_xpaths()
 
-                sequences = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=True)
+                sequences = tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
+                attached_sequences = tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
                     self.assertEqual(
-                        tokenizer.num_special_tokens_to_add(pair=False), len(attached_sequences) - len(sequences)
+                        tokenizer.num_special_tokens_to_add(pair=False),
+                        len(attached_sequences) - len(sequences),
                     )
 
                 # test 2: two sequences
                 question, nodes, xpaths = self.get_question_nodes_and_xpaths()
 
-                sequences = tokenizer.encode(question, nodes, xpaths=xpaths, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(question, nodes, xpaths=xpaths, add_special_tokens=True)
+                sequences = tokenizer.encode(
+                    question, nodes, xpaths=xpaths, add_special_tokens=False
+                )
+                attached_sequences = tokenizer.encode(
+                    question, nodes, xpaths=xpaths, add_special_tokens=True
+                )
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
                     self.assertEqual(
-                        tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
+                        tokenizer.num_special_tokens_to_add(pair=True),
+                        len(attached_sequences) - len(sequences),
                     )
 
     def test_padding_to_max_length(self):
@@ -402,18 +483,25 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence_length = len(encoded_sequence)
                 # FIXME: the next line should be padding(max_length) to avoid warning
                 padded_sequence = tokenizer.encode(
-                    nodes, xpaths=xpaths, max_length=sequence_length + padding_size, pad_to_max_length=True
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=sequence_length + padding_size,
+                    pad_to_max_length=True,
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                assert (
+                    encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                )
 
                 # Check that nothing is done when a maximum length is not specified
                 encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
 
                 tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(nodes, xpaths=xpaths, pad_to_max_length=True)
+                padded_sequence_right = tokenizer.encode(
+                    nodes, xpaths=xpaths, pad_to_max_length=True
+                )
                 padded_sequence_right_length = len(padded_sequence_right)
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
@@ -421,88 +509,188 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
                 # Encode - Simple input
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
-                input_r = tokenizer_r.encode(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                input_r = tokenizer_r.encode(
+                    nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                )
+                input_p = tokenizer_p.encode(
+                    nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                )
+                self.assert_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
+                input_r = tokenizer_r.encode(
+                    nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode(
+                    nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                )
+                self.assert_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
 
                 input_r = tokenizer_r.encode(nodes, xpaths=xpaths, padding="longest")
                 input_p = tokenizer_p.encode(nodes, xpaths=xpaths, padding=True)
-                self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
+                self.assert_padded_input_match(
+                    input_r, input_p, len(input_r), pad_token_id
+                )
 
                 # Encode - Pair input
                 question, nodes, xpaths = self.get_question_nodes_and_xpaths()
                 input_r = tokenizer_r.encode(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    pad_to_max_length=True,
                 )
                 input_p = tokenizer_p.encode(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    pad_to_max_length=True,
                 )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                self.assert_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
                 input_r = tokenizer_r.encode(
-                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    padding="max_length",
                 )
                 input_p = tokenizer_p.encode(
-                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    padding="max_length",
                 )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
-                input_r = tokenizer_r.encode(question, nodes, xpaths=xpaths, padding=True)
-                input_p = tokenizer_p.encode(question, nodes, xpaths=xpaths, padding="longest")
-                self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
+                self.assert_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
+                input_r = tokenizer_r.encode(
+                    question, nodes, xpaths=xpaths, padding=True
+                )
+                input_p = tokenizer_p.encode(
+                    question, nodes, xpaths=xpaths, padding="longest"
+                )
+                self.assert_padded_input_match(
+                    input_r, input_p, len(input_r), pad_token_id
+                )
 
                 # Encode_plus - Simple input
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-
-                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, padding=True)
+                input_r = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                )
+                input_p = tokenizer_p.encode_plus(
+                    nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                )
                 self.assert_padded_input_match(
-                    input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
+                    input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id
+                )
+                self.assertSequenceEqual(
+                    input_r["attention_mask"], input_p["attention_mask"]
+                )
+                input_r = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode_plus(
+                    nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                )
+                self.assert_padded_input_match(
+                    input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id
+                )
+                self.assertSequenceEqual(
+                    input_r["attention_mask"], input_p["attention_mask"]
                 )
 
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+                input_r = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, padding="longest"
+                )
+                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, padding=True)
+                self.assert_padded_input_match(
+                    input_r["input_ids"],
+                    input_p["input_ids"],
+                    len(input_r["input_ids"]),
+                    pad_token_id,
+                )
+
+                self.assertSequenceEqual(
+                    input_r["attention_mask"], input_p["attention_mask"]
+                )
 
                 # Encode_plus - Pair input
                 question, nodes, xpaths = self.get_question_nodes_and_xpaths()
                 input_r = tokenizer_r.encode_plus(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    pad_to_max_length=True,
                 )
                 input_p = tokenizer_p.encode_plus(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    pad_to_max_length=True,
                 )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(
-                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
-                )
-                input_p = tokenizer_p.encode_plus(
-                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(question, nodes, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.encode_plus(question, nodes, xpaths=xpaths, padding=True)
                 self.assert_padded_input_match(
-                    input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
+                    input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id
                 )
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+                self.assertSequenceEqual(
+                    input_r["attention_mask"], input_p["attention_mask"]
+                )
+                input_r = tokenizer_r.encode_plus(
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    padding="max_length",
+                )
+                input_p = tokenizer_p.encode_plus(
+                    question,
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    padding="max_length",
+                )
+                self.assert_padded_input_match(
+                    input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id
+                )
+                self.assertSequenceEqual(
+                    input_r["attention_mask"], input_p["attention_mask"]
+                )
+                input_r = tokenizer_r.encode_plus(
+                    question, nodes, xpaths=xpaths, padding="longest"
+                )
+                input_p = tokenizer_p.encode_plus(
+                    question, nodes, xpaths=xpaths, padding=True
+                )
+                self.assert_padded_input_match(
+                    input_r["input_ids"],
+                    input_p["input_ids"],
+                    len(input_r["input_ids"]),
+                    pad_token_id,
+                )
+                self.assertSequenceEqual(
+                    input_r["attention_mask"], input_p["attention_mask"]
+                )
 
                 # Batch_encode_plus - Simple input
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
@@ -519,7 +707,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     pad_to_max_length=True,
                 )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
 
                 input_r = tokenizer_r.batch_encode_plus(
                     nodes,
@@ -533,7 +723,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
 
                 input_r = tokenizer_r.batch_encode_plus(
                     nodes,
@@ -547,11 +739,19 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding=True,
                 )
-                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, len(input_r["input_ids"][0]), pad_token_id
+                )
 
-                input_r = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.batch_encode_plus(nodes, xpaths=xpaths, padding=True)
-                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+                input_r = tokenizer_r.batch_encode_plus(
+                    nodes, xpaths=xpaths, padding="longest"
+                )
+                input_p = tokenizer_p.batch_encode_plus(
+                    nodes, xpaths=xpaths, padding=True
+                )
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, len(input_r["input_ids"][0]), pad_token_id
+                )
 
                 # Batch_encode_plus - Pair input
                 questions, nodes, xpaths = self.get_question_nodes_and_xpaths_batch()
@@ -572,7 +772,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     truncation=True,
                     padding="max_length",
                 )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
 
                 input_r = tokenizer_r.batch_encode_plus(
                     list(zip(questions, nodes)),
@@ -586,7 +788,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     xpaths=xpaths,
                     padding="longest",
                 )
-                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, len(input_r["input_ids"][0]), pad_token_id
+                )
 
                 # Using pad on single examples after tokenization
                 nodes, xpaths = self.get_nodes_and_xpaths()
@@ -597,17 +801,26 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.pad(input_p)
 
                 self.assert_padded_input_match(
-                    input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
+                    input_r["input_ids"],
+                    input_p["input_ids"],
+                    len(input_r["input_ids"]),
+                    pad_token_id,
                 )
 
                 # Using pad on single examples after tokenization
                 input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
-                input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.pad(
+                    input_r, max_length=max_length, padding="max_length"
+                )
 
                 input_p = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
-                input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
+                input_p = tokenizer_r.pad(
+                    input_p, max_length=max_length, padding="max_length"
+                )
 
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
+                self.assert_padded_input_match(
+                    input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id
+                )
 
                 # Using pad after tokenization
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
@@ -617,17 +830,25 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
                 input_p = tokenizer_r.pad(input_p)
 
-                self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, len(input_r["input_ids"][0]), pad_token_id
+                )
 
                 # Using pad after tokenization
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
                 input_r = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
-                input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.pad(
+                    input_r, max_length=max_length, padding="max_length"
+                )
 
                 input_p = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
-                input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
+                input_p = tokenizer_r.pad(
+                    input_p, max_length=max_length, padding="max_length"
+                )
 
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+                self.assert_batch_padded_input_match(
+                    input_r, input_p, max_length, pad_token_id
+                )
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -648,7 +869,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Test batched
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
-                encoded_sequences_1 = tokenizer.batch_encode_plus(nodes, is_pair=False, xpaths=xpaths)
+                encoded_sequences_1 = tokenizer.batch_encode_plus(
+                    nodes, is_pair=False, xpaths=xpaths
+                )
                 encoded_sequences_2 = tokenizer(nodes, xpaths=xpaths)
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
@@ -667,11 +890,20 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     nodes, is_pair=False, xpaths=xpaths, padding=False
                 )
                 self.assertListEqual(
-                    encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+                    encoded_sequences,
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch
+                    ),
                 )
 
                 maximum_length = len(
-                    max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len)
+                    max(
+                        [
+                            encoded_sequence["input_ids"]
+                            for encoded_sequence in encoded_sequences
+                        ],
+                        key=len,
+                    )
                 )
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
@@ -679,7 +911,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 encoded_sequences_padded = [
                     tokenizer.encode_plus(
-                        nodes_example, xpaths=xpaths_example, max_length=maximum_length, padding="max_length"
+                        nodes_example,
+                        xpaths=xpaths_example,
+                        max_length=maximum_length,
+                        padding="max_length",
                     )
                     for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
@@ -689,7 +924,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 self.assertListEqual(
                     encoded_sequences_padded,
-                    self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch_padded),
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch_padded
+                    ),
                 )
 
                 # check 'longest' is unsensitive to a max length
@@ -697,7 +934,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     nodes, is_pair=False, xpaths=xpaths, padding=True
                 )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
-                    nodes, is_pair=False, xpaths=xpaths, max_length=maximum_length + 10, padding="longest"
+                    nodes,
+                    is_pair=False,
+                    xpaths=xpaths,
+                    max_length=maximum_length + 10,
+                    padding="longest",
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
@@ -710,7 +951,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     nodes, is_pair=False, xpaths=xpaths, padding=False
                 )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
-                    nodes, is_pair=False, xpaths=xpaths, max_length=maximum_length + 10, padding=False
+                    nodes,
+                    is_pair=False,
+                    xpaths=xpaths,
+                    max_length=maximum_length + 10,
+                    padding=False,
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
@@ -738,15 +983,25 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 encoded_sequences = [
                     tokenizer.encode_plus(
-                        nodes_example, xpaths=xpaths_example, max_length=max_length, padding="max_length"
+                        nodes_example,
+                        xpaths=xpaths_example,
+                        max_length=max_length,
+                        padding="max_length",
                     )
                     for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
-                    nodes, is_pair=False, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    nodes,
+                    is_pair=False,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    padding="max_length",
                 )
                 self.assertListEqual(
-                    encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+                    encoded_sequences,
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch
+                    ),
                 )
 
         # Left padding tests
@@ -763,15 +1018,25 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 encoded_sequences = [
                     tokenizer.encode_plus(
-                        nodes_example, xpaths=xpaths_example, max_length=max_length, padding="max_length"
+                        nodes_example,
+                        xpaths=xpaths_example,
+                        max_length=max_length,
+                        padding="max_length",
                     )
                     for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
-                    nodes, is_pair=False, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    nodes,
+                    is_pair=False,
+                    xpaths=xpaths,
+                    max_length=max_length,
+                    padding="max_length",
                 )
                 self.assertListEqual(
-                    encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+                    encoded_sequences,
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch
+                    ),
                 )
 
     def test_padding_to_multiple_of(self):
@@ -784,22 +1049,42 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     nodes, xpaths = self.get_nodes_and_xpaths()
 
                     # empty_tokens = tokenizer([""], [[]], padding=True, pad_to_multiple_of=8)
-                    normal_tokens = tokenizer(nodes, xpaths=xpaths, padding=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        nodes, xpaths=xpaths, padding=True, pad_to_multiple_of=8
+                    )
                     # for key, value in empty_tokens.items():
                     #     self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
                     for key, value in normal_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
-                    normal_tokens = tokenizer(nodes, xpaths=xpaths, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        nodes, xpaths=xpaths, pad_to_multiple_of=8
+                    )
                     for key, value in normal_tokens.items():
-                        self.assertNotEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertNotEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     # Should also work with truncation
                     normal_tokens = tokenizer(
-                        nodes, xpaths=xpaths, padding=True, truncation=True, pad_to_multiple_of=8
+                        nodes,
+                        xpaths=xpaths,
+                        padding=True,
+                        truncation=True,
+                        pad_to_multiple_of=8,
                     )
                     for key, value in normal_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     # truncation to something which is not a multiple of pad_to_multiple_of raises an error
                     self.assertRaises(
@@ -828,13 +1113,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 # Input tokens id
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                input_simple = tokenizer_p.encode(nodes, xpaths=xpaths, add_special_tokens=False)
-                input_pair = tokenizer_p.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                input_simple = tokenizer_p.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
+                input_pair = tokenizer_p.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
 
                 # Generate output
                 output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
@@ -842,8 +1135,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(output_p, output_r)
 
                 # Generate pair output
-                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
+                output_r = tokenizer_r.build_inputs_with_special_tokens(
+                    input_simple, input_pair
+                )
+                output_p = tokenizer_p.build_inputs_with_special_tokens(
+                    input_simple, input_pair
+                )
                 self.assertEqual(output_p, output_r)
 
     def test_special_tokens_mask_input_pairs(self):
@@ -851,7 +1148,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                encoded_sequence = tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
                 encoded_sequence_dict = tokenizer.encode_plus(
                     nodes,
                     xpaths=xpaths,
@@ -861,10 +1160,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
-                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
+                self.assertEqual(
+                    len(special_tokens_mask), len(encoded_sequence_w_special)
+                )
 
                 filtered_sequence = [
-                    (x if not special_tokens_mask[i] else None) for i, x in enumerate(encoded_sequence_w_special)
+                    (x if not special_tokens_mask[i] else None)
+                    for i, x in enumerate(encoded_sequence_w_special)
                 ]
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
@@ -875,15 +1177,26 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 nodes, xpaths = self.get_nodes_and_xpaths()
                 # Testing single inputs
-                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                encoded_sequence = tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    nodes, xpaths=xpaths, add_special_tokens=True, return_special_tokens_mask=True
+                    nodes,
+                    xpaths=xpaths,
+                    add_special_tokens=True,
+                    return_special_tokens_mask=True,
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
-                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
+                self.assertEqual(
+                    len(special_tokens_mask), len(encoded_sequence_w_special)
+                )
 
-                filtered_sequence = [x for i, x in enumerate(encoded_sequence_w_special) if not special_tokens_mask[i]]
+                filtered_sequence = [
+                    x
+                    for i, x in enumerate(encoded_sequence_w_special)
+                    if not special_tokens_mask[i]
+                ]
                 self.assertEqual(encoded_sequence, filtered_sequence)
 
     def test_save_and_load_tokenizer(self):
@@ -901,12 +1214,16 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 nodes, xpaths = self.get_nodes_and_xpaths()
                 tmpdirname = tempfile.mkdtemp()
 
-                before_tokens = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                before_tokens = tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
 
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
-                after_tokens = after_tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                after_tokens = after_tokenizer.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
                 after_vocab = after_tokenizer.get_vocab()
                 self.assertListEqual(before_tokens, after_tokens)
                 self.assertDictEqual(before_vocab, after_vocab)
@@ -931,35 +1248,49 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
                 padded_sequence = tokenizer.encode(
-                    nodes, xpaths=xpaths, max_length=sequence_length + padding_size, padding="max_length"
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=sequence_length + padding_size,
+                    padding="max_length",
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                assert (
+                    encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                )
 
                 # LEFT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
                 tokenizer.padding_side = "left"
                 encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
                 padded_sequence = tokenizer.encode(
-                    nodes, xpaths=xpaths, max_length=sequence_length + padding_size, padding="max_length"
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=sequence_length + padding_size,
+                    padding="max_length",
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
-                assert [padding_idx] * padding_size + encoded_sequence == padded_sequence
+                assert [
+                    padding_idx
+                ] * padding_size + encoded_sequence == padded_sequence
 
                 # RIGHT & LEFT PADDING - Check that nothing is done for 'longest' and 'no_padding'
                 encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
 
                 tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(nodes, xpaths=xpaths, padding=True)
+                padded_sequence_right = tokenizer.encode(
+                    nodes, xpaths=xpaths, padding=True
+                )
                 padded_sequence_right_length = len(padded_sequence_right)
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
 
                 tokenizer.padding_side = "left"
-                padded_sequence_left = tokenizer.encode(nodes, xpaths=xpaths, padding="longest")
+                padded_sequence_left = tokenizer.encode(
+                    nodes, xpaths=xpaths, padding="longest"
+                )
                 padded_sequence_left_length = len(padded_sequence_left)
                 assert sequence_length == padded_sequence_left_length
                 assert encoded_sequence == padded_sequence_left
@@ -971,7 +1302,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 assert encoded_sequence == padded_sequence_right
 
                 tokenizer.padding_side = "left"
-                padded_sequence_left = tokenizer.encode(nodes, xpaths=xpaths, padding=False)
+                padded_sequence_left = tokenizer.encode(
+                    nodes, xpaths=xpaths, padding=False
+                )
                 padded_sequence_left_length = len(padded_sequence_left)
                 assert sequence_length == padded_sequence_left_length
                 assert encoded_sequence == padded_sequence_left
@@ -986,10 +1319,14 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 output = tokenizer(nodes, xpaths=xpaths, return_token_type_ids=True)
 
                 # Assert that the token type IDs have the same length as the input IDs
-                self.assertEqual(len(output["token_type_ids"]), len(output["input_ids"]))
+                self.assertEqual(
+                    len(output["token_type_ids"]), len(output["input_ids"])
+                )
 
                 # Assert that the token type IDs have the same length as the attention mask
-                self.assertEqual(len(output["token_type_ids"]), len(output["attention_mask"]))
+                self.assertEqual(
+                    len(output["token_type_ids"]), len(output["attention_mask"])
+                )
 
                 self.assertIn(0, output["token_type_ids"])
                 self.assertNotIn(1, output["token_type_ids"])
@@ -1000,17 +1337,23 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 output = tokenizer(question, nodes, xpaths, return_token_type_ids=True)
 
                 # Assert that the token type IDs have the same length as the input IDs
-                self.assertEqual(len(output["token_type_ids"]), len(output["input_ids"]))
+                self.assertEqual(
+                    len(output["token_type_ids"]), len(output["input_ids"])
+                )
 
                 # Assert that the token type IDs have the same length as the attention mask
-                self.assertEqual(len(output["token_type_ids"]), len(output["attention_mask"]))
+                self.assertEqual(
+                    len(output["token_type_ids"]), len(output["attention_mask"])
+                )
 
                 self.assertIn(0, output["token_type_ids"])
 
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 text = ["a", "wonderful", "test"]
                 xpaths = ["html/body" for _ in range(len(text))]
@@ -1030,7 +1373,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
 
                 # Assert there is online added_tokens special_tokens
-                self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
+                self.assertEqual(
+                    sum(tokens_with_offsets["special_tokens_mask"]), added_tokens
+                )
 
                 # Pairs
                 text = "what's his name"
@@ -1051,7 +1396,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
 
                 # Assert there is online added_tokens special_tokens
-                self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
+                self.assertEqual(
+                    sum(tokens_with_offsets["special_tokens_mask"]), added_tokens
+                )
 
     @require_torch
     @slow
@@ -1060,24 +1407,32 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(
+            MODEL_MAPPING, TOKENIZER_MAPPING
+        )
 
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
+                    self.skipTest(
+                        f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING"
+                    )
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is an encoder-decoder or does not have a pad token set")
+                    self.skipTest(
+                        reason="Model is an encoder-decoder or does not have a pad token set"
+                    )
 
                 model = model_class(config)
 
                 # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
+                is_using_common_embeddings = hasattr(
+                    model.get_input_embeddings(), "weight"
+                )
                 assert (
                     (model.get_input_embeddings().weight.shape[0] >= len(tokenizer))
                     if is_using_common_embeddings
@@ -1086,7 +1441,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Build sequence
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                encoded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, return_tensors="pt")
+                encoded_sequence = tokenizer.encode_plus(
+                    nodes, xpaths=xpaths, return_tensors="pt"
+                )
                 batch_encoded_sequence = tokenizer.batch_encode_plus(
                     [nodes, nodes], [xpaths, xpaths], return_tensors="pt"
                 )
@@ -1124,8 +1481,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 nodes, xpaths = self.get_nodes_and_xpaths()
 
@@ -1135,7 +1496,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 for key in filter(
                     lambda x: x
-                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    in [
+                        "input_ids",
+                        "token_type_ids",
+                        "attention_mask",
+                        "xpath_tags_seq",
+                        "xpath_subs_seq",
+                    ],
                     input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key])
@@ -1145,7 +1512,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 for key in filter(
                     lambda x: x
-                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    in [
+                        "input_ids",
+                        "token_type_ids",
+                        "attention_mask",
+                        "xpath_tags_seq",
+                        "xpath_subs_seq",
+                    ],
                     input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
@@ -1154,27 +1527,53 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 xpaths = ["html/body" for _ in range(1000)]
 
                 # Ensure truncation match
-                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=512, truncation=True)
-                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=512, truncation=True)
+                input_p = tokenizer_p.encode_plus(
+                    nodes, xpaths=xpaths, max_length=512, truncation=True
+                )
+                input_r = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, max_length=512, truncation=True
+                )
 
                 for key in filter(
                     lambda x: x
-                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    in [
+                        "input_ids",
+                        "token_type_ids",
+                        "attention_mask",
+                        "xpath_tags_seq",
+                        "xpath_subs_seq",
+                    ],
                     input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key])
 
                 # Ensure truncation with stride match
                 input_p = tokenizer_p.encode_plus(
-                    nodes, xpaths=xpaths, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=512,
+                    truncation=True,
+                    stride=3,
+                    return_overflowing_tokens=True,
                 )
                 input_r = tokenizer_r.encode_plus(
-                    nodes, xpaths=xpaths, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                    nodes,
+                    xpaths=xpaths,
+                    max_length=512,
+                    truncation=True,
+                    stride=3,
+                    return_overflowing_tokens=True,
                 )
 
                 for key in filter(
                     lambda x: x
-                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    in [
+                        "input_ids",
+                        "token_type_ids",
+                        "attention_mask",
+                        "xpath_tags_seq",
+                        "xpath_subs_seq",
+                    ],
                     input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
@@ -1186,17 +1585,27 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                tokens_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
-                tokens_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
+                tokens_r = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
+                tokens_p = tokenizer_p.encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
 
                 for key in tokens_p.keys():
                     self.assertEqual(tokens_r[key], tokens_p[key])
 
                 if "token_type_ids" in tokens_r:
-                    self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
+                    self.assertEqual(
+                        sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"])
+                    )
 
                 tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
@@ -1205,47 +1614,82 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
-                simple_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=False)
+                simple_num_special_tokens_to_add = (
+                    tokenizer_r.num_special_tokens_to_add(pair=False)
+                )
 
                 nodes, xpaths = self.get_nodes_and_xpaths()
                 # tokenize()
-                no_special_tokens = tokenizer_r.tokenize(" ".join(nodes), add_special_tokens=False)
-                with_special_tokens = tokenizer_r.tokenize(" ".join(nodes), add_special_tokens=True)
-                self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
+                no_special_tokens = tokenizer_r.tokenize(
+                    " ".join(nodes), add_special_tokens=False
+                )
+                with_special_tokens = tokenizer_r.tokenize(
+                    " ".join(nodes), add_special_tokens=True
+                )
+                self.assertEqual(
+                    len(no_special_tokens),
+                    len(with_special_tokens) - simple_num_special_tokens_to_add,
+                )
 
                 # encode()
-                no_special_tokens = tokenizer_r.encode(nodes, xpaths=xpaths, add_special_tokens=False)
-                with_special_tokens = tokenizer_r.encode(nodes, xpaths=xpaths, add_special_tokens=True)
-                self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
+                no_special_tokens = tokenizer_r.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
+                with_special_tokens = tokenizer_r.encode(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
+                self.assertEqual(
+                    len(no_special_tokens),
+                    len(with_special_tokens) - simple_num_special_tokens_to_add,
+                )
 
                 # encode_plus()
-                no_special_tokens = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=False)
-                with_special_tokens = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
+                no_special_tokens = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
+                with_special_tokens = tokenizer_r.encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
                 for key in no_special_tokens.keys():
                     self.assertEqual(
                         len(no_special_tokens[key]),
-                        len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
+                        len(with_special_tokens[key])
+                        - simple_num_special_tokens_to_add,
                     )
 
                 # # batch_encode_plus
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
-                no_special_tokens = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths, add_special_tokens=False)
-                with_special_tokens = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
+                no_special_tokens = tokenizer_r.batch_encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=False
+                )
+                with_special_tokens = tokenizer_r.batch_encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
                 for key in no_special_tokens.keys():
-                    for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
-                        self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
+                    for i_no, i_with in zip(
+                        no_special_tokens[key], with_special_tokens[key]
+                    ):
+                        self.assertEqual(
+                            len(i_no), len(i_with) - simple_num_special_tokens_to_add
+                        )
 
     @slow
     def test_markuplm_truncation_integration_test(self):
         nodes, xpaths = self.get_nodes_and_xpaths()
 
-        tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base", model_max_length=512)
+        tokenizer = MarkupLMTokenizer.from_pretrained(
+            "microsoft/markuplm-base", model_max_length=512
+        )
 
         for i in range(12, 512):
-            new_encoded_inputs = tokenizer.encode(nodes, xpaths=xpaths, max_length=i, truncation=True)
+            new_encoded_inputs = tokenizer.encode(
+                nodes, xpaths=xpaths, max_length=i, truncation=True
+            )
 
             # Ensure that the input IDs are less than the max length defined.
             self.assertLessEqual(len(new_encoded_inputs), i)
@@ -1294,16 +1738,22 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 xpaths = ["html/body" for _ in range(len(nodes))]
                 r_output = tokenizer_r.encode(nodes, xpaths=xpaths)
 
-                special_token_id = tokenizer_r.encode(["<special>"], xpaths=["html/body"], add_special_tokens=False)[0]
+                special_token_id = tokenizer_r.encode(
+                    ["<special>"], xpaths=["html/body"], add_special_tokens=False
+                )[0]
 
                 self.assertTrue(special_token_id in r_output)
 
                 if self.test_slow_tokenizer:
                     tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                        pretrained_name,
+                        additional_special_tokens=added_tokens,
+                        **kwargs,
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                        pretrained_name,
+                        additional_special_tokens=added_tokens,
+                        **kwargs,
                     )
 
                     nodes = "Hey this is a <special> token".split()
@@ -1322,7 +1772,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         special_token = "[SPECIAL_TOKEN]"
         tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
-        encoded_special_token = tokenizer.tokenize(special_token, add_special_tokens=False)
+        encoded_special_token = tokenizer.tokenize(
+            special_token, add_special_tokens=False
+        )
         self.assertEqual(len(encoded_special_token), 1)
 
         encoded_split_special_token = tokenizer.tokenize(
@@ -1343,23 +1795,37 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         xpaths = [["html/body"] * 3, ["html/body"] * 3]
         inputs = new_tokenizer(text, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
-        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        decoded_input = new_tokenizer.decode(
+            inputs["input_ids"][0], skip_special_tokens=True
+        )
         expected_result = (  # original expected result "this is the" seems contradicts to FacebookAI/roberta-based tokenizer
             "thisisthe"
         )
 
         if tokenizer.backend_tokenizer.normalizer is not None:
-            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
+            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(
+                expected_result
+            )
         self.assertEqual(expected_result, decoded_input)
 
         # We check that the parameters of the tokenizer remained the same
         # Check we have the same number of added_tokens for both pair and non-pair inputs.
-        self.assertEqual(tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False))
-        self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
+        self.assertEqual(
+            tokenizer.num_special_tokens_to_add(False),
+            new_tokenizer.num_special_tokens_to_add(False),
+        )
+        self.assertEqual(
+            tokenizer.num_special_tokens_to_add(True),
+            new_tokenizer.num_special_tokens_to_add(True),
+        )
 
         # Check we have the correct max_length for both pair and non-pair inputs.
-        self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
-        self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
+        self.assertEqual(
+            tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence
+        )
+        self.assertEqual(
+            tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair
+        )
 
         # Assert the set of special tokens match as we didn't ask to change them
         self.assertSequenceEqual(
@@ -1367,7 +1833,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             new_tokenizer.all_special_tokens_extended,
         )
 
-        self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
+        self.assertDictEqual(
+            tokenizer.special_tokens_map, new_tokenizer.special_tokens_map
+        )
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
@@ -1379,7 +1847,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         class_signature = inspect.signature(tokenizer.__class__)
         if "cls_token" in class_signature.parameters:
             new_tokenizer = tokenizer.train_new_from_iterator(
-                SMALL_TRAINING_CORPUS, 100, special_tokens_map={tokenizer.cls_token: "<cls>"}
+                SMALL_TRAINING_CORPUS,
+                100,
+                special_tokens_map={tokenizer.cls_token: "<cls>"},
             )
             cls_id = new_tokenizer.get_vocab()["<cls>"]
             self.assertEqual(new_tokenizer.cls_token, "<cls>")
@@ -1415,7 +1885,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Check if the AddedToken / string format has been kept
         for special_token in tokenizer.all_special_tokens_extended:
-            if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
+            if (
+                isinstance(special_token, AddedToken)
+                and special_token.content not in special_tokens_map
+            ):
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
                     special_token in new_tokenizer.all_special_tokens_extended,
@@ -1454,18 +1927,25 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             else:
                 # The special token must appear in the list of the new tokenizer as an object of type string.
-                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
+                self.assertTrue(
+                    special_tokens_map[special_token]
+                    in new_tokenizer.all_special_tokens_extended
+                )
 
         # Test we can use the new tokenizer with something not seen during training
         nodes = [["this", "is"], ["hello", "🤗"]]
         xpaths = [["html/body"] * 2, ["html/body"] * 2]
         inputs = new_tokenizer(nodes, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
-        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        decoded_input = new_tokenizer.decode(
+            inputs["input_ids"][0], skip_special_tokens=True
+        )
         expected_result = "thisis"  # same as line 1399
 
         if tokenizer.backend_tokenizer.normalizer is not None:
-            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
+            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(
+                expected_result
+            )
         self.assertEqual(expected_result, decoded_input)
 
     def test_prepare_for_model(self):
@@ -1476,9 +1956,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 continue
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                prepared_input_dict = tokenizer.prepare_for_model(nodes, xpaths=xpaths, add_special_tokens=True)
+                prepared_input_dict = tokenizer.prepare_for_model(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
 
-                input_dict = tokenizer.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
+                input_dict = tokenizer.encode_plus(
+                    nodes, xpaths=xpaths, add_special_tokens=True
+                )
 
                 self.assertEqual(input_dict, prepared_input_dict)
 
@@ -1489,8 +1973,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
@@ -1507,15 +1995,23 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 del input_p[tokenizer_p.model_input_names[0]]
 
                 # Renaming `input_ids` to `inputs`
-                tokenizer_r.model_input_names = ["inputs"] + tokenizer_r.model_input_names[1:]
-                tokenizer_p.model_input_names = ["inputs"] + tokenizer_p.model_input_names[1:]
+                tokenizer_r.model_input_names = [
+                    "inputs"
+                ] + tokenizer_r.model_input_names[1:]
+                tokenizer_p.model_input_names = [
+                    "inputs"
+                ] + tokenizer_p.model_input_names[1:]
 
                 input_r = tokenizer_r.pad(input_r, padding="longest")
                 input_p = tokenizer_r.pad(input_p, padding="longest")
 
                 max_length = len(input_p["inputs"][0])
                 self.assert_batch_padded_input_match(
-                    input_r, input_p, max_length, pad_token_id, model_main_input_name="inputs"
+                    input_r,
+                    input_p,
+                    max_length,
+                    pad_token_id,
+                    model_main_input_name="inputs",
                 )
 
     def test_batch_encode_dynamic_overflowing(self):
@@ -1530,9 +2026,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         This needs to be padded so that it can represented as a tensor
         """
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+            tokenizer = self.rust_tokenizer_class.from_pretrained(
+                pretrained_name, **kwargs
+            )
 
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
+            with self.subTest(
+                f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"
+            ):
                 if is_torch_available():
                     returned_tensor = "pt"
                 elif is_tf_available():
@@ -1552,7 +2052,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     return_overflowing_tokens=True,
                 )
 
-                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
+                for key in filter(
+                    lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()
+                ):
                     if "xpath" not in key:
                         self.assertEqual(len(tokens[key].shape), 2)
                     else:
@@ -1571,7 +2073,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     return_overflowing_tokens=True,
                 )
 
-                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
+                for key in filter(
+                    lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()
+                ):
                     if "xpath" not in key:
                         self.assertEqual(len(tokens[key].shape), 2)
                         self.assertEqual(tokens[key].shape[-1], 6)
@@ -1583,13 +2087,22 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_alignement_methods(self):
         pass
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
-        toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
+    def get_clean_sequence(
+        self, tokenizer, with_prefix_space=False, max_length=20, min_length=5
+    ):
+        toks = [
+            (i, tokenizer.decode([i], clean_up_tokenization_spaces=False))
+            for i in range(len(tokenizer))
+        ]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
         toks = list(
             filter(
                 lambda t: [t[0]]
-                == tokenizer.encode(t[1].split(" "), xpaths=len(t[1]) * ["html/body"], add_special_tokens=False),
+                == tokenizer.encode(
+                    t[1].split(" "),
+                    xpaths=len(t[1]) * ["html/body"],
+                    add_special_tokens=False,
+                ),
                 toks,
             )
         )
@@ -1632,18 +2145,31 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     seq_0 = (seq_0 + " ") * (2 + stride)
                     ids = None
 
-                seq0_tokens = tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)
+                seq0_tokens = tokenizer(
+                    seq_0, xpaths=xpaths_0, add_special_tokens=False
+                )
                 self.assertGreater(len(seq0_tokens["input_ids"]), 2 + stride)
                 question_1 = "This is another sentence to be encoded."
                 seq_1 = ["hello", "world"]
                 xpaths_1 = ["html/body" for i in range(len(seq_1))]
-                seq1_tokens = tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)
-                if abs(len(seq0_tokens["input_ids"]) - len(seq1_tokens["input_ids"])) <= 2:
-                    seq1_tokens_input_ids = seq1_tokens["input_ids"] + seq1_tokens["input_ids"]
-                    seq_1 = tokenizer.decode(seq1_tokens_input_ids, clean_up_tokenization_spaces=False)
+                seq1_tokens = tokenizer(
+                    seq_1, xpaths=xpaths_1, add_special_tokens=False
+                )
+                if (
+                    abs(len(seq0_tokens["input_ids"]) - len(seq1_tokens["input_ids"]))
+                    <= 2
+                ):
+                    seq1_tokens_input_ids = (
+                        seq1_tokens["input_ids"] + seq1_tokens["input_ids"]
+                    )
+                    seq_1 = tokenizer.decode(
+                        seq1_tokens_input_ids, clean_up_tokenization_spaces=False
+                    )
                     seq_1 = seq_1.split(" ")
                     xpaths_1 = ["html/body" for i in range(len(seq_1))]
-                seq1_tokens = tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)
+                seq1_tokens = tokenizer(
+                    seq_1, xpaths=xpaths_1, add_special_tokens=False
+                )
 
                 self.assertGreater(len(seq1_tokens["input_ids"]), 2 + stride)
 
@@ -1655,7 +2181,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # We are not using the special tokens - a bit too hard to test all the tokenizers with this
                 # TODO try this again later
-                sequence = tokenizer(question_0, seq_1, xpaths=xpaths_1, add_special_tokens=False)
+                sequence = tokenizer(
+                    question_0, seq_1, xpaths=xpaths_1, add_special_tokens=False
+                )
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -1668,21 +2196,35 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 sequence1 = tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
-                sequence2 = tokenizer(question_2, seq_1, xpaths=xpaths_1, add_special_tokens=False)
+                sequence2 = tokenizer(
+                    question_2, seq_1, xpaths=xpaths_1, add_special_tokens=False
+                )
                 total_length2 = len(sequence2["input_ids"])
-                self.assertLess(total_length1, model_max_length, "Issue with the testing sequence, please update it.")
+                self.assertLess(
+                    total_length1,
+                    model_max_length,
+                    "Issue with the testing sequence, please update it.",
+                )
                 self.assertGreater(
-                    total_length2, model_max_length, "Issue with the testing sequence, please update it."
+                    total_length2,
+                    model_max_length,
+                    "Issue with the testing sequence, please update it.",
                 )
 
                 # Simple
                 padding_strategies = (
-                    [False, True, "longest"] if tokenizer.pad_token and tokenizer.pad_token_id >= 0 else [False]
+                    [False, True, "longest"]
+                    if tokenizer.pad_token and tokenizer.pad_token_id >= 0
+                    else [False]
                 )
                 for padding_state in padding_strategies:
-                    with self.subTest(f"{tokenizer.__class__.__name__} Padding: {padding_state}"):
+                    with self.subTest(
+                        f"{tokenizer.__class__.__name__} Padding: {padding_state}"
+                    ):
                         for truncation_state in [True, "longest_first", "only_first"]:
-                            with self.subTest(f"{tokenizer.__class__.__name__} Truncation: {truncation_state}"):
+                            with self.subTest(
+                                f"{tokenizer.__class__.__name__} Truncation: {truncation_state}"
+                            ):
                                 output = tokenizer(
                                     question_2,
                                     seq_1,
@@ -1690,9 +2232,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     padding=padding_state,
                                     truncation=truncation_state,
                                 )
-                                self.assertEqual(len(output["input_ids"]), model_max_length)
-                                self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
-                                self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
+                                self.assertEqual(
+                                    len(output["input_ids"]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_tags_seq"]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_subs_seq"]), model_max_length
+                                )
 
                                 output = tokenizer(
                                     [question_2],
@@ -1701,35 +2249,67 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     padding=padding_state,
                                     truncation=truncation_state,
                                 )
-                                self.assertEqual(len(output["input_ids"][0]), model_max_length)
-                                self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                                self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                                self.assertEqual(
+                                    len(output["input_ids"][0]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_tags_seq"][0]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_subs_seq"][0]), model_max_length
+                                )
 
                         # Simple
                         output = tokenizer(
-                            question_1, seq_2, xpaths=xpaths_2, padding=padding_state, truncation="only_second"
+                            question_1,
+                            seq_2,
+                            xpaths=xpaths_2,
+                            padding=padding_state,
+                            truncation="only_second",
                         )
                         self.assertEqual(len(output["input_ids"]), model_max_length)
-                        self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
-                        self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
+                        self.assertEqual(
+                            len(output["xpath_tags_seq"]), model_max_length
+                        )
+                        self.assertEqual(
+                            len(output["xpath_subs_seq"]), model_max_length
+                        )
 
                         output = tokenizer(
-                            [question_1], [seq_2], xpaths=[xpaths_2], padding=padding_state, truncation="only_second"
+                            [question_1],
+                            [seq_2],
+                            xpaths=[xpaths_2],
+                            padding=padding_state,
+                            truncation="only_second",
                         )
                         self.assertEqual(len(output["input_ids"][0]), model_max_length)
-                        self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                        self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                        self.assertEqual(
+                            len(output["xpath_tags_seq"][0]), model_max_length
+                        )
+                        self.assertEqual(
+                            len(output["xpath_subs_seq"][0]), model_max_length
+                        )
 
                         # Simple with no truncation
                         # Reset warnings
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
                             output = tokenizer(
-                                question_1, seq_2, xpaths=xpaths_2, padding=padding_state, truncation=False
+                                question_1,
+                                seq_2,
+                                xpaths=xpaths_2,
+                                padding=padding_state,
+                                truncation=False,
                             )
-                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_tags_seq"]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_subs_seq"]), model_max_length)
+                            self.assertNotEqual(
+                                len(output["input_ids"]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_tags_seq"]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_subs_seq"]), model_max_length
+                            )
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -1741,11 +2321,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
                             output = tokenizer(
-                                [question_1], [seq_2], xpaths=[xpaths_2], padding=padding_state, truncation=False
+                                [question_1],
+                                [seq_2],
+                                xpaths=[xpaths_2],
+                                padding=padding_state,
+                                truncation=False,
                             )
-                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                            self.assertNotEqual(
+                                len(output["input_ids"][0]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_tags_seq"][0]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_subs_seq"][0]), model_max_length
+                            )
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -1755,54 +2345,99 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         )
                 # Check the order of Sequence of input ids, overflowing tokens and xpath_tags_seq sequence with truncation
                 truncated_first_sequence = (
-                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"][:-2]
-                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["input_ids"]
+                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                        "input_ids"
+                    ][:-2]
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                        "input_ids"
+                    ]
                 )
                 truncated_second_sequence = (
-                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"]
-                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["input_ids"][:-2]
+                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                        "input_ids"
+                    ]
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                        "input_ids"
+                    ][:-2]
                 )
                 truncated_longest_sequence = (
-                    truncated_first_sequence if len(seq0_tokens) > len(seq1_tokens) else truncated_second_sequence
+                    truncated_first_sequence
+                    if len(seq0_tokens) > len(seq1_tokens)
+                    else truncated_second_sequence
                 )
 
                 overflow_first_sequence = (
-                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"][-(2 + stride) :]
-                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["input_ids"]
+                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                        "input_ids"
+                    ][-(2 + stride) :]
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                        "input_ids"
+                    ]
                 )
                 overflow_second_sequence = (
-                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"]
-                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["input_ids"][-(2 + stride) :]
+                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                        "input_ids"
+                    ]
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                        "input_ids"
+                    ][-(2 + stride) :]
                 )
                 overflow_longest_sequence = (
-                    overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
+                    overflow_first_sequence
+                    if len(seq0_tokens) > len(seq1_tokens)
+                    else overflow_second_sequence
                 )
 
                 xpath_tags_seq_first = [[5] * 50] * (
-                    len(tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"]) - 2
+                    len(
+                        tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                            "input_ids"
+                        ]
+                    )
+                    - 2
                 )
                 xpath_tags_seq_first_sequence = (
                     xpath_tags_seq_first
-                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"]
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                        "xpath_tags_seq"
+                    ]
                 )
-                overflowing_token_xpath_tags_seq_first_sequence_slow = [[5] * 50] * (2 + stride)
-                overflowing_token_xpath_tags_seq_first_sequence_fast = [[5] * 50] * (2 + stride) + tokenizer(
-                    seq_1, xpaths=xpaths_1, add_special_tokens=False
-                )["xpath_tags_seq"]
+                overflowing_token_xpath_tags_seq_first_sequence_slow = [[5] * 50] * (
+                    2 + stride
+                )
+                overflowing_token_xpath_tags_seq_first_sequence_fast = [[5] * 50] * (
+                    2 + stride
+                ) + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                    "xpath_tags_seq"
+                ]
 
                 xpath_tags_seq_second = [[5] * 50] * len(
-                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"]
+                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                        "input_ids"
+                    ]
                 )
                 xpath_tags_seq_second_sequence = (
                     xpath_tags_seq_second
-                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"][:-2]
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)[
+                        "xpath_tags_seq"
+                    ][:-2]
                 )
                 overflowing_token_xpath_tags_seq_second_sequence_slow = tokenizer(
                     seq_1, xpaths=xpaths_1, add_special_tokens=False
                 )["xpath_tags_seq"][-(2 + stride) :]
-                overflowing_token_xpath_tags_seq_second_sequence_fast = [[5] * 50] * len(
-                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"]
-                ) + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"][-(2 + stride) :]
+                overflowing_token_xpath_tags_seq_second_sequence_fast = [
+                    [5] * 50
+                ] * len(
+                    tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)[
+                        "input_ids"
+                    ]
+                ) + tokenizer(
+                    seq_1, xpaths=xpaths_1, add_special_tokens=False
+                )[
+                    "xpath_tags_seq"
+                ][
+                    -(2 + stride) :
+                ]
 
                 xpath_tags_seq_longest_sequence = (
                     xpath_tags_seq_first_sequence
@@ -1834,16 +2469,23 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflowing_xpath_tags_seq = information["xpath_tags_seq"][1]
                     self.assertEqual(len(information["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    self.assertEqual(
+                        len(truncated_sequence), len(sequence["input_ids"]) - 2
+                    )
                     self.assertEqual(truncated_sequence, truncated_longest_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
+                    self.assertEqual(
+                        len(overflowing_tokens), 2 + stride + len(smallest)
+                    )
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_longest_sequence)
 
-                    self.assertEqual(len(overflowing_xpath_tags_seq), 2 + stride + len(smallest))
                     self.assertEqual(
-                        overflowing_xpath_tags_seq, overflowing_token_xpath_tags_seq_longest_sequence_fast
+                        len(overflowing_xpath_tags_seq), 2 + stride + len(smallest)
+                    )
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        overflowing_token_xpath_tags_seq_longest_sequence_fast,
                     )
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
@@ -1886,14 +2528,19 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflowing_xpath_tags_seq = information["xpath_tags_seq"][1]
                     self.assertEqual(len(information["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    self.assertEqual(
+                        len(truncated_sequence), len(sequence["input_ids"]) - 2
+                    )
                     self.assertEqual(truncated_sequence, truncated_longest_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
+                    self.assertEqual(
+                        len(overflowing_tokens), 2 + stride + len(smallest)
+                    )
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_longest_sequence)
                     self.assertEqual(
-                        overflowing_xpath_tags_seq, overflowing_token_xpath_tags_seq_longest_sequence_fast
+                        overflowing_xpath_tags_seq,
+                        overflowing_token_xpath_tags_seq_longest_sequence_fast,
                     )
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
@@ -1932,30 +2579,51 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     truncated_sequence = information_first_truncated["input_ids"][0]
                     overflowing_tokens = information_first_truncated["input_ids"][1]
                     xpath_tags_seq = information_first_truncated["xpath_tags_seq"][0]
-                    overflowing_xpath_tags_seq = information_first_truncated["xpath_tags_seq"][1]
+                    overflowing_xpath_tags_seq = information_first_truncated[
+                        "xpath_tags_seq"
+                    ][1]
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    self.assertEqual(
+                        len(truncated_sequence), len(sequence["input_ids"]) - 2
+                    )
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens["input_ids"]))
+                    self.assertEqual(
+                        len(overflowing_tokens),
+                        2 + stride + len(seq1_tokens["input_ids"]),
+                    )
                     self.assertEqual(overflowing_tokens, overflow_first_sequence)
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_first_sequence)
                     # ISSUE HAPPENS HERE ↓
-                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_token_xpath_tags_seq_first_sequence_fast)
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        overflowing_token_xpath_tags_seq_first_sequence_fast,
+                    )
                 else:
                     truncated_sequence = information_first_truncated["input_ids"]
-                    overflowing_tokens = information_first_truncated["overflowing_tokens"]
-                    overflowing_xpath_tags_seq = information_first_truncated["overflowing_xpath_tags_seq"]
+                    overflowing_tokens = information_first_truncated[
+                        "overflowing_tokens"
+                    ]
+                    overflowing_xpath_tags_seq = information_first_truncated[
+                        "overflowing_xpath_tags_seq"
+                    ]
                     xpath_tags_seq = information_first_truncated["xpath_tags_seq"]
 
-                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    self.assertEqual(
+                        len(truncated_sequence), len(sequence["input_ids"]) - 2
+                    )
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, seq0_tokens["input_ids"][-(2 + stride) :])
+                    self.assertEqual(
+                        overflowing_tokens, seq0_tokens["input_ids"][-(2 + stride) :]
+                    )
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_first_sequence)
-                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_token_xpath_tags_seq_first_sequence_slow)
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        overflowing_token_xpath_tags_seq_first_sequence_slow,
+                    )
 
                 information_second_truncated = tokenizer(
                     question_0,
@@ -1973,30 +2641,51 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     truncated_sequence = information_second_truncated["input_ids"][0]
                     overflowing_tokens = information_second_truncated["input_ids"][1]
                     xpath_tags_seq = information_second_truncated["xpath_tags_seq"][0]
-                    overflowing_xpath_tags_seq = information_second_truncated["xpath_tags_seq"][1]
+                    overflowing_xpath_tags_seq = information_second_truncated[
+                        "xpath_tags_seq"
+                    ][1]
 
                     self.assertEqual(len(information_second_truncated["input_ids"]), 2)
 
-                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    self.assertEqual(
+                        len(truncated_sequence), len(sequence["input_ids"]) - 2
+                    )
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
-                    self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens["input_ids"]))
+                    self.assertEqual(
+                        len(overflowing_tokens),
+                        2 + stride + len(seq0_tokens["input_ids"]),
+                    )
                     self.assertEqual(overflowing_tokens, overflow_second_sequence)
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_second_sequence)
-                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_token_xpath_tags_seq_second_sequence_fast)
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        overflowing_token_xpath_tags_seq_second_sequence_fast,
+                    )
                 else:
                     truncated_sequence = information_second_truncated["input_ids"]
-                    overflowing_tokens = information_second_truncated["overflowing_tokens"]
+                    overflowing_tokens = information_second_truncated[
+                        "overflowing_tokens"
+                    ]
                     xpath_tags_seq = information_second_truncated["xpath_tags_seq"]
-                    overflowing_xpath_tags_seq = information_second_truncated["overflowing_xpath_tags_seq"]
+                    overflowing_xpath_tags_seq = information_second_truncated[
+                        "overflowing_xpath_tags_seq"
+                    ]
 
-                    self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    self.assertEqual(
+                        len(truncated_sequence), len(sequence["input_ids"]) - 2
+                    )
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :])
+                    self.assertEqual(
+                        overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :]
+                    )
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_second_sequence)
-                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_token_xpath_tags_seq_second_sequence_slow)
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        overflowing_token_xpath_tags_seq_second_sequence_slow,
+                    )
 
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
@@ -2007,7 +2696,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence = tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)
                 total_length = len(sequence["input_ids"])
 
-                self.assertGreater(total_length, 4, "Issue with the testing sequence, please update it it's too short")
+                self.assertGreater(
+                    total_length,
+                    4,
+                    "Issue with the testing sequence, please update it it's too short",
+                )
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -2017,12 +2710,16 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence1 = tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
                 self.assertGreater(
-                    total_length1, model_max_length, "Issue with the testing sequence, please update it it's too short"
+                    total_length1,
+                    model_max_length,
+                    "Issue with the testing sequence, please update it it's too short",
                 )
 
                 # Simple
                 padding_strategies = (
-                    [False, True, "longest"] if tokenizer.pad_token and tokenizer.pad_token_id >= 0 else [False]
+                    [False, True, "longest"]
+                    if tokenizer.pad_token and tokenizer.pad_token_id >= 0
+                    else [False]
                 )
                 for padding_state in padding_strategies:
                     with self.subTest(f"Padding: {padding_state}"):
@@ -2034,9 +2731,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     padding=padding_state,
                                     truncation=truncation_state,
                                 )
-                                self.assertEqual(len(output["input_ids"]), model_max_length)
-                                self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
-                                self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
+                                self.assertEqual(
+                                    len(output["input_ids"]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_tags_seq"]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_subs_seq"]), model_max_length
+                                )
 
                                 output = tokenizer(
                                     [seq_1],
@@ -2044,18 +2747,35 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     padding=padding_state,
                                     truncation=truncation_state,
                                 )
-                                self.assertEqual(len(output["input_ids"][0]), model_max_length)
-                                self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                                self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                                self.assertEqual(
+                                    len(output["input_ids"][0]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_tags_seq"][0]), model_max_length
+                                )
+                                self.assertEqual(
+                                    len(output["xpath_subs_seq"][0]), model_max_length
+                                )
 
                         # Simple with no truncation
                         # Reset warnings
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer(seq_1, xpaths=xpaths_1, padding=padding_state, truncation=False)
-                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_tags_seq"]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_subs_seq"]), model_max_length)
+                            output = tokenizer(
+                                seq_1,
+                                xpaths=xpaths_1,
+                                padding=padding_state,
+                                truncation=False,
+                            )
+                            self.assertNotEqual(
+                                len(output["input_ids"]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_tags_seq"]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_subs_seq"]), model_max_length
+                            )
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -2066,10 +2786,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer([seq_1], xpaths=[xpaths_1], padding=padding_state, truncation=False)
-                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                            self.assertNotEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                            output = tokenizer(
+                                [seq_1],
+                                xpaths=[xpaths_1],
+                                padding=padding_state,
+                                truncation=False,
+                            )
+                            self.assertNotEqual(
+                                len(output["input_ids"][0]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_tags_seq"][0]), model_max_length
+                            )
+                            self.assertNotEqual(
+                                len(output["xpath_subs_seq"][0]), model_max_length
+                            )
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -2101,22 +2832,34 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(truncated_sequence, sequence["input_ids"][:-2])
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, sequence["input_ids"][-(2 + stride) :])
+                    self.assertEqual(
+                        overflowing_tokens, sequence["input_ids"][-(2 + stride) :]
+                    )
 
                     self.assertEqual(xpath_tags_seq, sequence["xpath_tags_seq"][:-2])
-                    self.assertEqual(overflowing_xpath_tags_seq, sequence["xpath_tags_seq"][-(2 + stride) :])
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        sequence["xpath_tags_seq"][-(2 + stride) :],
+                    )
                 else:
                     truncated_sequence = information["input_ids"]
                     overflowing_tokens = information["overflowing_tokens"]
                     xpath_tags_seq = information["xpath_tags_seq"]
-                    overflowing_xpath_tags_seq = information["overflowing_xpath_tags_seq"]
+                    overflowing_xpath_tags_seq = information[
+                        "overflowing_xpath_tags_seq"
+                    ]
                     self.assertEqual(len(truncated_sequence), total_length - 2)
                     self.assertEqual(truncated_sequence, sequence["input_ids"][:-2])
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
-                    self.assertEqual(overflowing_tokens, sequence["input_ids"][-(2 + stride) :])
+                    self.assertEqual(
+                        overflowing_tokens, sequence["input_ids"][-(2 + stride) :]
+                    )
                     self.assertEqual(xpath_tags_seq, sequence["xpath_tags_seq"][:-2])
-                    self.assertEqual(overflowing_xpath_tags_seq, sequence["xpath_tags_seq"][-(2 + stride) :])
+                    self.assertEqual(
+                        overflowing_xpath_tags_seq,
+                        sequence["xpath_tags_seq"][-(2 + stride) :],
+                    )
 
     @unittest.skip(reason="MarkupLM tokenizer requires xpaths besides sequences.")
     def test_pretokenized_inputs(self):
@@ -2141,7 +2884,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_p(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
-        tokenizer_p = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base", only_label_first_subword=False)
+        tokenizer_p = MarkupLMTokenizer.from_pretrained(
+            "microsoft/markuplm-base", only_label_first_subword=False
+        )
         encoding = tokenizer_p(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
@@ -2150,7 +2895,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
-        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", only_label_first_subword=False)
+        tokenizer_r = MarkupLMTokenizerFast.from_pretrained(
+            "microsoft/markuplm-base", only_label_first_subword=False
+        )
         encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
@@ -2173,8 +2920,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_results = {'input_ids': [0, 42891, 8331, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'xpath_tags_seq': [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]], 'xpath_subs_seq': [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
-        encoding_p = tokenizer_p(nodes, xpaths=xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(
+            nodes, xpaths=xpaths, padding="max_length", max_length=20
+        )
+        encoding_r = tokenizer_r(
+            nodes, xpaths=xpaths, padding="max_length", max_length=20
+        )
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
@@ -2183,8 +2934,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_results = {'input_ids': [[0, 42891, 232, 12364, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 42891, 127, 766, 16, 22401, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'xpath_tags_seq': [[[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]], [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]]], 'xpath_subs_seq': [[[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]], [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
-        encoding_p = tokenizer_p(nodes, xpaths=xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(
+            nodes, xpaths=xpaths, padding="max_length", max_length=20
+        )
+        encoding_r = tokenizer_r(
+            nodes, xpaths=xpaths, padding="max_length", max_length=20
+        )
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
@@ -2194,8 +2949,20 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_results = {'input_ids': [0, 42891, 8331, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'xpath_tags_seq': [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]], 'xpath_subs_seq': [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'labels': [-100, 1, 2, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
-        encoding_p = tokenizer_p(nodes, xpaths=xpaths, node_labels=node_labels, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(
+            nodes,
+            xpaths=xpaths,
+            node_labels=node_labels,
+            padding="max_length",
+            max_length=20,
+        )
+        encoding_r = tokenizer_r(
+            nodes,
+            xpaths=xpaths,
+            node_labels=node_labels,
+            padding="max_length",
+            max_length=20,
+        )
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
@@ -2205,8 +2972,20 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_results = {'input_ids': [[0, 42891, 232, 12364, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 42891, 127, 766, 16, 22401, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'xpath_tags_seq': [[[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]], [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]]], 'xpath_subs_seq': [[[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]], [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'labels': [[-100, 1, -100, 2, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
-        encoding_p = tokenizer_p(nodes, xpaths=xpaths, node_labels=node_labels, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(
+            nodes,
+            xpaths=xpaths,
+            node_labels=node_labels,
+            padding="max_length",
+            max_length=20,
+        )
+        encoding_r = tokenizer_r(
+            nodes,
+            xpaths=xpaths,
+            node_labels=node_labels,
+            padding="max_length",
+            max_length=20,
+        )
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
@@ -2215,8 +2994,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_results = {'input_ids': [0, 12196, 18, 39, 766, 116, 2, 42891, 232, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'xpath_tags_seq': [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]], 'xpath_subs_seq': [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
-        encoding_p = tokenizer_p(question, nodes, xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(question, nodes, xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(
+            question, nodes, xpaths, padding="max_length", max_length=20
+        )
+        encoding_r = tokenizer_r(
+            question, nodes, xpaths, padding="max_length", max_length=20
+        )
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
@@ -2225,8 +3008,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         expected_results = {'input_ids': [[0, 12196, 18, 39, 766, 116, 2, 42891, 232, 12364, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 9178, 16, 37, 373, 116, 2, 42891, 127, 766, 16, 22401, 2, 1, 1, 1, 1, 1, 1, 1]], 'xpath_tags_seq': [[[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]], [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 120, 50, 178, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]]], 'xpath_subs_seq': [[[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]], [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 2, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
-        encoding_p = tokenizer_p(questions, nodes, xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(questions, nodes, xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(
+            questions, nodes, xpaths, padding="max_length", max_length=20
+        )
+        encoding_r = tokenizer_r(
+            questions, nodes, xpaths, padding="max_length", max_length=20
+        )
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
@@ -2279,7 +3066,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chat_template(self):
         pass
 
-    @unittest.skip(reason="The model tested fails `Hub -> Fast == Hub -> Slow`, nothing much we can do")
+    @unittest.skip(
+        reason="The model tested fails `Hub -> Fast == Hub -> Slow`, nothing much we can do"
+    )
     def test_added_tokens_serialization(self):
         pass
 

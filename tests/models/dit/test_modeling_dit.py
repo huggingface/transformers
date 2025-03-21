@@ -16,8 +16,8 @@
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 if is_torch_available():
     import torch
@@ -33,8 +33,12 @@ if is_vision_available():
 class DiTIntegrationTest(unittest.TestCase):
     @slow
     def test_for_image_classification(self):
-        image_processor = AutoImageProcessor.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
-        model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
+        image_processor = AutoImageProcessor.from_pretrained(
+            "microsoft/dit-base-finetuned-rvlcdip"
+        )
+        model = AutoModelForImageClassification.from_pretrained(
+            "microsoft/dit-base-finetuned-rvlcdip"
+        )
         model.to(torch_device)
 
         from datasets import load_dataset

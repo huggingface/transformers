@@ -26,19 +26,15 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, ContextManager, Dict, Iterable, List, Optional, Tuple, TypedDict
+from typing import (Any, ContextManager, Dict, Iterable, List, Optional, Tuple,
+                    TypedDict)
 
 import numpy as np
 from packaging import version
 
-from .import_utils import (
-    get_torch_version,
-    is_flax_available,
-    is_mlx_available,
-    is_tf_available,
-    is_torch_available,
-    is_torch_fx_proxy,
-)
+from .import_utils import (get_torch_version, is_flax_available,
+                           is_mlx_available, is_tf_available,
+                           is_torch_available, is_torch_fx_proxy)
 
 
 class cached_property(property):
@@ -114,7 +110,9 @@ def _get_frameworks_and_test_func(x):
     frameworks = [] if preferred_framework is None else [preferred_framework]
     if preferred_framework != "np":
         frameworks.append("np")
-    frameworks.extend([f for f in framework_to_test if f not in [preferred_framework, "np"]])
+    frameworks.extend(
+        [f for f in framework_to_test if f not in [preferred_framework, "np"]]
+    )
     return {f: framework_to_test[f] for f in frameworks}
 
 
@@ -370,10 +368,14 @@ class ModelOutput(OrderedDict):
         if not len(class_fields):
             raise ValueError(f"{self.__class__.__name__} has no fields.")
         if not all(field.default is None for field in class_fields[1:]):
-            raise ValueError(f"{self.__class__.__name__} should not have more than one required field.")
+            raise ValueError(
+                f"{self.__class__.__name__} should not have more than one required field."
+            )
 
         first_field = getattr(self, class_fields[0].name)
-        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+        other_fields_are_none = all(
+            getattr(self, field.name) is None for field in class_fields[1:]
+        )
 
         if other_fields_are_none and not is_tensor(first_field):
             if isinstance(first_field, dict):
@@ -416,16 +418,24 @@ class ModelOutput(OrderedDict):
                     self[field.name] = v
 
     def __delitem__(self, *args, **kwargs):
-        raise Exception(f"You cannot use ``__delitem__`` on a {self.__class__.__name__} instance.")
+        raise Exception(
+            f"You cannot use ``__delitem__`` on a {self.__class__.__name__} instance."
+        )
 
     def setdefault(self, *args, **kwargs):
-        raise Exception(f"You cannot use ``setdefault`` on a {self.__class__.__name__} instance.")
+        raise Exception(
+            f"You cannot use ``setdefault`` on a {self.__class__.__name__} instance."
+        )
 
     def pop(self, *args, **kwargs):
-        raise Exception(f"You cannot use ``pop`` on a {self.__class__.__name__} instance.")
+        raise Exception(
+            f"You cannot use ``pop`` on a {self.__class__.__name__} instance."
+        )
 
     def update(self, *args, **kwargs):
-        raise Exception(f"You cannot use ``update`` on a {self.__class__.__name__} instance.")
+        raise Exception(
+            f"You cannot use ``update`` on a {self.__class__.__name__} instance."
+        )
 
     def __getitem__(self, k):
         if isinstance(k, str):
@@ -463,7 +473,9 @@ class ModelOutput(OrderedDict):
 if is_torch_available():
     import torch.utils._pytree as _torch_pytree
 
-    def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
+    def _model_output_flatten(
+        output: ModelOutput,
+    ) -> Tuple[List[Any], "_torch_pytree.Context"]:
         return list(output.values()), list(output.keys())
 
     def _model_output_unflatten(
@@ -581,7 +593,11 @@ def find_labels(model_class):
         signature = inspect.signature(model_class.__call__)  # Flax models
 
     if "QuestionAnswering" in model_name:
-        return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
+        return [
+            p
+            for p in signature.parameters
+            if "label" in p or p in ("start_positions", "end_positions")
+        ]
     else:
         return [p for p in signature.parameters if "label" in p]
 
@@ -717,7 +733,10 @@ def add_model_info_to_auto_map(auto_map, repo_id):
     """
     for key, value in auto_map.items():
         if isinstance(value, (tuple, list)):
-            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
+            auto_map[key] = [
+                f"{repo_id}--{v}" if (v is not None and "--" not in v) else v
+                for v in value
+            ]
         elif value is not None and "--" not in value:
             auto_map[key] = f"{repo_id}--{value}"
 
@@ -745,11 +764,19 @@ def infer_framework(model_class):
     for base_class in inspect.getmro(model_class):
         module = base_class.__module__
         name = base_class.__name__
-        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
+        if (
+            module.startswith("tensorflow")
+            or module.startswith("keras")
+            or name == "TFPreTrainedModel"
+        ):
             return "tf"
         elif module.startswith("torch") or name == "PreTrainedModel":
             return "pt"
-        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
+        elif (
+            module.startswith("flax")
+            or module.startswith("jax")
+            or name == "FlaxPreTrainedModel"
+        ):
             return "flax"
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
@@ -764,7 +791,11 @@ def torch_int(x):
 
     import torch
 
-    return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+    return (
+        x.to(torch.int64)
+        if torch.jit.is_tracing() and isinstance(x, torch.Tensor)
+        else int(x)
+    )
 
 
 def torch_float(x):
@@ -776,7 +807,11 @@ def torch_float(x):
 
     import torch
 
-    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+    return (
+        x.to(torch.float32)
+        if torch.jit.is_tracing() and isinstance(x, torch.Tensor)
+        else int(x)
+    )
 
 
 def filter_out_non_signature_kwargs(extra: Optional[list] = None):

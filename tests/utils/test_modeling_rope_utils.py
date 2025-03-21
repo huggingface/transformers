@@ -18,8 +18,8 @@ import math
 import unittest
 
 from transformers import LlamaConfig
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
-
+from transformers.testing_utils import (is_torch_available, require_torch,
+                                        torch_device)
 
 if is_torch_available():
     import torch
@@ -71,9 +71,14 @@ class RopeTest(unittest.TestCase):
 
         for rope_type in all_rope_types:
             if rope_type == "default":
-                config.rope_scaling = {"rope_type": rope_type, model_specific_kwarg: True}
+                config.rope_scaling = {
+                    "rope_type": rope_type,
+                    model_specific_kwarg: True,
+                }
                 rope_config_validation(config, ignore_keys={model_specific_kwarg})
-                with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+                with self.assertLogs(
+                    "transformers.modeling_rope_utils", level="WARNING"
+                ) as logs:
                     rope_config_validation(config)
                     self.assertEqual(len(logs.output), 1)
                     self.assertIn(model_specific_kwarg, logs.output[0])
@@ -162,7 +167,9 @@ class RopeTest(unittest.TestCase):
         rope_fn = ROPE_INIT_FUNCTIONS["default"]
         inv_freq, attention_scale = rope_fn(config=config, device=torch_device)
 
-        self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for default RoPE
+        self.assertEqual(
+            attention_scale, 1.0
+        )  # attention scale is always 1 for default RoPE
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
     def test_linear_rope_numerically(self):
@@ -176,7 +183,9 @@ class RopeTest(unittest.TestCase):
         for factor in (2.0, 10.0, 20.0):
             config.rope_scaling = {"rope_type": "linear", "factor": factor}
             inv_freq, attention_scale = rope_fn(config=config, device=torch_device)
-            self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for linear RoPE
+            self.assertEqual(
+                attention_scale, 1.0
+            )  # attention scale is always 1 for linear RoPE
             torch.testing.assert_close(inv_freq, default_inv_freq / factor)
 
     def test_dynamic_rope_numerically(self):
@@ -215,7 +224,9 @@ class RopeTest(unittest.TestCase):
         for factor in (2.0, 10.0, 20.0):
             config.rope_scaling = {"rope_type": "dynamic", "factor": factor}
             inv_freq, attention_scale = rope_fn(config=config, device=torch_device)
-            self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for dynamic RoPE
+            self.assertEqual(
+                attention_scale, 1.0
+            )  # attention scale is always 1 for dynamic RoPE
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
             inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=1)
@@ -268,7 +279,11 @@ class RopeTest(unittest.TestCase):
             _, attention_scale = rope_fn(config=config, device=torch_device)
             self.assertEqual(attention_scale, 0.1 * math.log(factor) + 1.0)
 
-            config.rope_scaling = {"rope_type": "yarn", "factor": factor, "attention_factor": 0.5}
+            config.rope_scaling = {
+                "rope_type": "yarn",
+                "factor": factor,
+                "attention_factor": 0.5,
+            }
             _, attention_scale = rope_fn(config=config, device=torch_device, seq_len=1)
             self.assertEqual(attention_scale, 0.5)
 
@@ -278,27 +293,45 @@ class RopeTest(unittest.TestCase):
         # (note: adds a margin to the test for numerical stability)
         factor = 10.0
         margin = 1e-8
-        config.rope_scaling = {"rope_type": "yarn", "factor": factor, "beta_fast": 32, "beta_slow": 1}
+        config.rope_scaling = {
+            "rope_type": "yarn",
+            "factor": factor,
+            "beta_fast": 32,
+            "beta_slow": 1,
+        }
         inv_freq, _ = rope_fn(config=config, device=torch_device)
         is_bounded_by_factor = [
-            ((default_inv_freq[idx] / factor) - margin) <= yarn_inv_freq_value <= (default_inv_freq[idx] + margin)
+            ((default_inv_freq[idx] / factor) - margin)
+            <= yarn_inv_freq_value
+            <= (default_inv_freq[idx] + margin)
             for idx, yarn_inv_freq_value in enumerate(inv_freq)
         ]
         self.assertTrue(all(is_bounded_by_factor))
 
         # super high beta_fast = interpolation (i.e. scaling) in all but the first inverse frequency. The last ~20
         # values (empirically checked for `beta_fast` = 1000) should be very small to linear scaling
-        config.rope_scaling = {"rope_type": "yarn", "factor": factor, "beta_fast": 1000, "beta_slow": 1}
+        config.rope_scaling = {
+            "rope_type": "yarn",
+            "factor": factor,
+            "beta_fast": 1000,
+            "beta_slow": 1,
+        }
         inv_freq, _ = rope_fn(config=config, device=torch_device)
         is_interpolating = [
-            yarn_inv_freq_value < (default_inv_freq[idx] + margin) for idx, yarn_inv_freq_value in enumerate(inv_freq)
+            yarn_inv_freq_value < (default_inv_freq[idx] + margin)
+            for idx, yarn_inv_freq_value in enumerate(inv_freq)
         ]
         self.assertFalse(is_interpolating[0])
         self.assertTrue(all(is_interpolating[1:]))
         torch.testing.assert_close(inv_freq[-20:], default_inv_freq[-20:] / factor)
 
         # Check 3: numerical snapshot to avoid regressions
-        config.rope_scaling = {"rope_type": "yarn", "factor": factor, "beta_fast": 32, "beta_slow": 1}
+        config.rope_scaling = {
+            "rope_type": "yarn",
+            "factor": factor,
+            "beta_fast": 32,
+            "beta_slow": 1,
+        }
         inv_freq, _ = rope_fn(config=config, device=torch_device)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
@@ -313,8 +346,12 @@ class RopeTest(unittest.TestCase):
 
         # longrope applies scaling on EACH inv frequency, `short_factor` or `long_factor`, depending on the seq_len
         dim = config.hidden_size // config.num_attention_heads
-        short_factor = [2.0] * (dim // 2)  # scaling applied when seq_len <= max_position_embeddings
-        long_factor = torch.ones(dim // 2).cumsum(0).tolist()  # scaling applied when seq_len > max_position_embeddings
+        short_factor = [2.0] * (
+            dim // 2
+        )  # scaling applied when seq_len <= max_position_embeddings
+        long_factor = (
+            torch.ones(dim // 2).cumsum(0).tolist()
+        )  # scaling applied when seq_len > max_position_embeddings
 
         rope_fn = ROPE_INIT_FUNCTIONS["default"]
         default_inv_freq, _ = rope_fn(config=config, device=torch_device)
@@ -331,7 +368,10 @@ class RopeTest(unittest.TestCase):
                 "long_factor": long_factor,
             }
             _, attention_scale = rope_fn(config=config, device=torch_device)
-            self.assertEqual(attention_scale, math.sqrt(1 + math.log(factor) / math.log(max_position_embeddings)))
+            self.assertEqual(
+                attention_scale,
+                math.sqrt(1 + math.log(factor) / math.log(max_position_embeddings)),
+            )
 
             config.rope_scaling = {
                 "rope_type": "longrope",
@@ -361,11 +401,19 @@ class RopeTest(unittest.TestCase):
             "long_factor": long_factor,
         }
         inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=0)
-        torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(short_factor).to(torch_device))
+        torch.testing.assert_close(
+            inv_freq, default_inv_freq / torch.tensor(short_factor).to(torch_device)
+        )
 
         # Check 3: seq_len > max_position_embeddings -> long factor is applied to the default frequencies
-        inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=config.max_position_embeddings + 1)
-        torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(long_factor).to(torch_device))
+        inv_freq, _ = rope_fn(
+            config=config,
+            device=torch_device,
+            seq_len=config.max_position_embeddings + 1,
+        )
+        torch.testing.assert_close(
+            inv_freq, default_inv_freq / torch.tensor(long_factor).to(torch_device)
+        )
 
     def test_llama3_rope_numerically(self):
         # fmt: off
@@ -424,7 +472,9 @@ class RopeTest(unittest.TestCase):
         }
         inv_freq, _ = rope_fn(config=config, device=torch_device)
         is_bounded_by_factor = [
-            (default_inv_freq[idx] / factor) <= llama3_inv_freq_value <= default_inv_freq[idx]
+            (default_inv_freq[idx] / factor)
+            <= llama3_inv_freq_value
+            <= default_inv_freq[idx]
             for idx, llama3_inv_freq_value in enumerate(inv_freq)
         ]
         self.assertTrue(all(is_bounded_by_factor))
@@ -439,7 +489,10 @@ class RopeTest(unittest.TestCase):
             "high_freq_factor": 1000,
         }
         inv_freq, _ = rope_fn(config=config, device=torch_device)
-        is_scaled = [yarn_inv_freq_value < default_inv_freq[idx] for idx, yarn_inv_freq_value in enumerate(inv_freq)]
+        is_scaled = [
+            yarn_inv_freq_value < default_inv_freq[idx]
+            for idx, yarn_inv_freq_value in enumerate(inv_freq)
+        ]
         self.assertTrue(all(is_scaled))
 
         # Check 3: numerical snapshot to avoid regressions

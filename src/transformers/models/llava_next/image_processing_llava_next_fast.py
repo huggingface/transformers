@@ -16,35 +16,19 @@
 
 from typing import List, Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
+from ...image_processing_utils import (BatchFeature, get_patch_output_size,
+                                       select_best_resolution)
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    divide_to_patches,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-    get_image_size,
-    make_flat_list_of_images,
-)
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs, divide_to_patches, group_images_by_shape,
+    reorder_images)
+from ...image_utils import (OPENAI_CLIP_MEAN, OPENAI_CLIP_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            SizeDict, get_image_size, make_flat_list_of_images)
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-)
-
+from ...utils import (TensorType, add_start_docstrings, is_torch_available,
+                      is_torchvision_available, is_torchvision_v2_available)
 
 if is_torch_available():
     import torch
@@ -89,7 +73,13 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
     do_pad = True
-    image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
+    image_grid_pinpoints = [
+        [336, 672],
+        [672, 336],
+        [672, 672],
+        [1008, 336],
+        [336, 1008],
+    ]
     valid_kwargs = LlavaNextFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]):
@@ -106,7 +96,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
@@ -148,21 +140,30 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         Returns:
             "torch.Tensor": The resized and padded image.
         """
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = get_patch_output_size(
+            image, target_resolution, input_data_format
+        )
 
         # Resize the image
-        resized_image = F.resize(image, (new_height, new_width), interpolation=interpolation)
+        resized_image = F.resize(
+            image, (new_height, new_width), interpolation=interpolation
+        )
 
         return resized_image
 
     def _pad_for_patching(
-        self, image: "torch.Tensor", target_resolution: tuple, input_data_format: ChannelDimension
+        self,
+        image: "torch.Tensor",
+        target_resolution: tuple,
+        input_data_format: ChannelDimension,
     ) -> "torch.Tensor":
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
         target_height, target_width = target_resolution
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = get_patch_output_size(
+            image, target_resolution, input_data_format
+        )
 
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
@@ -205,9 +206,14 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         image_size = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
         resized_image = self._resize_for_patching(
-            image, best_resolution, interpolation=interpolation, input_data_format=ChannelDimension.FIRST
+            image,
+            best_resolution,
+            interpolation=interpolation,
+            input_data_format=ChannelDimension.FIRST,
         )
-        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=ChannelDimension.FIRST)
+        padded_image = self._pad_for_patching(
+            resized_image, best_resolution, input_data_format=ChannelDimension.FIRST
+        )
         patches = divide_to_patches(padded_image, patch_size=patch_size)
         resized_original_image = F.resize(image, size=size, interpolation=interpolation)
 
@@ -231,7 +237,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         """
         max_patch = max(len(x) for x in pixel_values)
         pixel_values = [
-            torch.nn.functional.pad(image, pad=[0, 0, 0, 0, 0, 0, 0, max_patch - image.shape[0]])
+            torch.nn.functional.pad(
+                image, pad=[0, 0, 0, 0, 0, 0, 0, max_patch - image.shape[0]]
+            )
             for image in pixel_values
         ]
 
@@ -281,7 +289,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                image_patches
+            )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(
@@ -290,24 +300,38 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                         interpolation=interpolation,
                     )
                 if do_center_crop:
-                    stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
+                    stacked_image_patches = self.center_crop(
+                        stacked_image_patches, crop_size
+                    )
                 # Fused rescale and normalize
                 stacked_image_patches = self.rescale_and_normalize(
-                    stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                    stacked_image_patches,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
+                    image_mean,
+                    image_std,
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
+            processed_image_patches = reorder_images(
+                processed_image_patches_grouped, grouped_image_patches_index
+            )
             processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
+                torch.stack(processed_image_patches, dim=0)
+                if return_tensors
+                else processed_image_patches
             )
             processed_images.append(processed_image_patches)
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        processed_images = (
+            torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        )
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes},
+            tensor_type=return_tensors,
         )
 
 

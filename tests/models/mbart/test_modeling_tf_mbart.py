@@ -18,18 +18,19 @@ from __future__ import annotations
 import unittest
 
 from transformers import AutoTokenizer, MBartConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import (require_sentencepiece, require_tf,
+                                        require_tokenizers, slow)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration, TFMBartModel
+    from transformers import (TFAutoModelForSeq2SeqLM,
+                              TFMBartForConditionalGeneration, TFMBartModel)
 
 
 @require_tf
@@ -76,10 +77,14 @@ class TFMBartModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
+        eos_tensor = tf.expand_dims(
+            tf.constant([self.eos_token_id] * self.batch_size), 1
+        )
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.config_cls(
             vocab_size=self.vocab_size,
@@ -112,7 +117,12 @@ class TFMBartModelTester:
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
         past_key_values = past_key_values[1]
@@ -129,21 +139,30 @@ def prepare_mbart_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+        attention_mask = tf.cast(
+            tf.math.not_equal(input_ids, config.pad_token_id), tf.int8
+        )
     if decoder_attention_mask is None:
         decoder_attention_mask = tf.concat(
             [
                 tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8),
-                tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8),
+                tf.cast(
+                    tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id),
+                    tf.int8,
+                ),
             ],
             axis=-1,
         )
     if head_mask is None:
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
-        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        decoder_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        cross_attn_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -157,8 +176,12 @@ def prepare_mbart_inputs_dict(
 
 @require_tf
 class TFMBartModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TFMBartForConditionalGeneration, TFMBartModel) if is_tf_available() else ()
-    all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
+    all_model_classes = (
+        (TFMBartForConditionalGeneration, TFMBartModel) if is_tf_available() else ()
+    )
+    all_generative_model_classes = (
+        (TFMBartForConditionalGeneration,) if is_tf_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": TFMBartModel,
@@ -228,11 +251,17 @@ class TFMBartModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer(self.src_text, **tokenizer_kwargs, return_tensors="tf")
-        generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+        model_inputs = self.tokenizer(
+            self.src_text, **tokenizer_kwargs, return_tensors="tf"
         )
-        generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = self.model.generate(
+            model_inputs.input_ids,
+            attention_mask=model_inputs.attention_mask,
+            num_beams=2,
+        )
+        generated_words = self.tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
         return generated_words
 
     @slow

@@ -25,18 +25,17 @@ from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutput,
-    FlaxMaskedLMOutput,
-    FlaxMultipleChoiceModelOutput,
-    FlaxQuestionAnsweringModelOutput,
-    FlaxSequenceClassifierOutput,
-    FlaxTokenClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...modeling_flax_outputs import (FlaxBaseModelOutput, FlaxMaskedLMOutput,
+                                      FlaxMultipleChoiceModelOutput,
+                                      FlaxQuestionAnsweringModelOutput,
+                                      FlaxSequenceClassifierOutput,
+                                      FlaxTokenClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring,
+                                    overwrite_call_docstring)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_roformer import RoFormerConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -119,7 +118,12 @@ ROFORMER_INPUTS_DOCSTRING = r"""
 
 # Copied from transformers.models.marian.modeling_flax_marian.create_sinusoidal_positions
 def create_sinusoidal_positions(n_pos, dim):
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    position_enc = np.array(
+        [
+            [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
+            for pos in range(n_pos)
+        ]
+    )
     sentinel = dim // 2 + dim % 2
     out = np.zeros_like(position_enc)
     out[:, 0:sentinel] = np.sin(position_enc[:, 0::2])
@@ -138,17 +142,25 @@ class FlaxRoFormerEmbeddings(nn.Module):
         self.word_embeddings = nn.Embed(
             self.config.vocab_size,
             self.config.hidden_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.hidden_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def __call__(self, input_ids, token_type_ids, attention_mask, deterministic: bool = True):
+    def __call__(
+        self, input_ids, token_type_ids, attention_mask, deterministic: bool = True
+    ):
         # Embed
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
         token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
@@ -214,8 +226,10 @@ class FlaxRoFormerSelfAttention(nn.Module):
 
         if sinusoidal_pos is not None:
             if self.rotary_value:
-                query_states, key_states, value_states = self.apply_rotary_position_embeddings(
-                    sinusoidal_pos, query_states, key_states, value_states
+                query_states, key_states, value_states = (
+                    self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_states, key_states, value_states
+                    )
                 )
             else:
                 query_states, key_states = self.apply_rotary_position_embeddings(
@@ -229,7 +243,9 @@ class FlaxRoFormerSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(
+                    self.dtype
+                ),
             )
         else:
             attention_bias = None
@@ -261,15 +277,21 @@ class FlaxRoFormerSelfAttention(nn.Module):
         return outputs
 
     @staticmethod
-    def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer, value_layer=None):
+    def apply_rotary_position_embeddings(
+        sinusoidal_pos, query_layer, key_layer, value_layer=None
+    ):
         sin, cos = sinusoidal_pos.split(2, axis=-1)
         sin_pos = jnp.stack([sin, sin], axis=-1).reshape(sinusoidal_pos.shape)
         cos_pos = jnp.stack([cos, cos], axis=-1).reshape(sinusoidal_pos.shape)
 
         def rotate_layer(layer, sin_pos, cos_pos):
-            rotate_half_layer = jnp.stack([-layer[..., 1::2], layer[..., ::2]], axis=-1).reshape(layer.shape)
+            rotate_half_layer = jnp.stack(
+                [-layer[..., 1::2], layer[..., ::2]], axis=-1
+            ).reshape(layer.shape)
             rotary_matrix_cos = jnp.einsum("bslh,...sh->bslh", layer, cos_pos)
-            rotary_matrix_sin = jnp.einsum("bslh,...sh->bslh", rotate_half_layer, sin_pos)
+            rotary_matrix_sin = jnp.einsum(
+                "bslh,...sh->bslh", rotate_half_layer, sin_pos
+            )
             return rotary_matrix_cos + rotary_matrix_sin
 
         query_layer = rotate_layer(query_layer, sin_pos, cos_pos)
@@ -291,7 +313,9 @@ class FlaxRoFormerSelfOutput(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
@@ -330,7 +354,9 @@ class FlaxRoFormerAttention(nn.Module):
             output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
-        hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
+        hidden_states = self.output(
+            attn_output, hidden_states, deterministic=deterministic
+        )
 
         outputs = (hidden_states,)
 
@@ -371,7 +397,9 @@ class FlaxRoFormerOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -409,7 +437,9 @@ class FlaxRoFormerLayer(nn.Module):
         attention_output = attention_outputs[0]
 
         hidden_states = self.intermediate(attention_output)
-        hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
+        hidden_states = self.output(
+            hidden_states, attention_output, deterministic=deterministic
+        )
 
         outputs = (hidden_states,)
 
@@ -424,7 +454,8 @@ class FlaxRoFormerLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxRoFormerLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxRoFormerLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
         ]
 
     def __call__(
@@ -476,7 +507,9 @@ class FlaxRoFormerLayerCollection(nn.Module):
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -486,7 +519,8 @@ class FlaxRoFormerEncoder(nn.Module):
 
     def setup(self):
         self.embed_positions = create_sinusoidal_positions(
-            self.config.max_position_embeddings, self.config.hidden_size // self.config.num_attention_heads
+            self.config.max_position_embeddings,
+            self.config.hidden_size // self.config.num_attention_heads,
         )
         self.layer = FlaxRoFormerLayerCollection(self.config, dtype=self.dtype)
 
@@ -522,7 +556,9 @@ class FlaxRoFormerPredictionHeadTransform(nn.Module):
     def setup(self):
         self.dense = nn.Dense(self.config.hidden_size, dtype=self.dtype)
         self.activation = ACT2FN[self.config.hidden_act]
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
 
     def __call__(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -537,15 +573,21 @@ class FlaxRoFormerLMPredictionHead(nn.Module):
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        self.transform = FlaxRoFormerPredictionHeadTransform(self.config, dtype=self.dtype)
-        self.decoder = nn.Dense(self.config.vocab_size, dtype=self.dtype, use_bias=False)
+        self.transform = FlaxRoFormerPredictionHeadTransform(
+            self.config, dtype=self.dtype
+        )
+        self.decoder = nn.Dense(
+            self.config.vocab_size, dtype=self.dtype, use_bias=False
+        )
         self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
     def __call__(self, hidden_states, shared_embedding=None):
         hidden_states = self.transform(hidden_states)
 
         if shared_embedding is not None:
-            hidden_states = self.decoder.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+            hidden_states = self.decoder.apply(
+                {"params": {"kernel": shared_embedding.T}}, hidden_states
+            )
         else:
             hidden_states = self.decoder(hidden_states)
 
@@ -563,7 +605,9 @@ class FlaxRoFormerOnlyMLMHead(nn.Module):
         self.predictions = FlaxRoFormerLMPredictionHead(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, shared_embedding=None):
-        hidden_states = self.predictions(hidden_states, shared_embedding=shared_embedding)
+        hidden_states = self.predictions(
+            hidden_states, shared_embedding=shared_embedding
+        )
         return hidden_states
 
 
@@ -615,20 +659,36 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)
         attention_mask = jnp.ones_like(input_ids)
-        head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+        head_mask = jnp.ones(
+            (self.config.num_hidden_layers, self.config.num_attention_heads)
+        )
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         random_params = self.module.init(
-            rngs, input_ids, attention_mask, token_type_ids, head_mask, return_dict=False
+            rngs,
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            head_mask,
+            return_dict=False,
         )["params"]
 
         if params is not None:
@@ -641,7 +701,9 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     def __call__(
         self,
         input_ids,
@@ -655,11 +717,19 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         # init input tensors if not passed
         if token_type_ids is None:
@@ -669,7 +739,9 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(input_ids)
 
         if head_mask is None:
-            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+            head_mask = jnp.ones(
+                (self.config.num_hidden_layers, self.config.num_attention_heads)
+            )
 
         # Handle any PRNG if needed
         rngs = {}
@@ -709,7 +781,9 @@ class FlaxRoFormerModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        hidden_states = self.embeddings(input_ids, token_type_ids, attention_mask, deterministic=deterministic)
+        hidden_states = self.embeddings(
+            input_ids, token_type_ids, attention_mask, deterministic=deterministic
+        )
         outputs = self.encoder(
             hidden_states,
             attention_mask,
@@ -739,7 +813,9 @@ class FlaxRoFormerModel(FlaxRoFormerPreTrainedModel):
     module_class = FlaxRoFormerModule
 
 
-append_call_sample_docstring(FlaxRoFormerModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxRoFormerModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+)
 
 
 class FlaxRoFormerForMaskedLMModule(nn.Module):
@@ -775,7 +851,9 @@ class FlaxRoFormerForMaskedLMModule(nn.Module):
 
         hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
-            shared_embedding = self.roformer.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+            shared_embedding = self.roformer.variables["params"]["embeddings"][
+                "word_embeddings"
+            ]["embedding"]
         else:
             shared_embedding = None
 
@@ -792,7 +870,10 @@ class FlaxRoFormerForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""RoFormer Model with a `language modeling` head on top.""", ROFORMER_START_DOCSTRING)
+@add_start_docstrings(
+    """RoFormer Model with a `language modeling` head on top.""",
+    ROFORMER_START_DOCSTRING,
+)
 class FlaxRoFormerForMaskedLM(FlaxRoFormerPreTrainedModel):
     module_class = FlaxRoFormerForMaskedLMModule
 
@@ -812,7 +893,9 @@ class FlaxRoFormerForSequenceClassificationModule(nn.Module):
 
     def setup(self):
         self.roformer = FlaxRoFormerModule(config=self.config, dtype=self.dtype)
-        self.classifier = FlaxRoFormerClassificationHead(config=self.config, dtype=self.dtype)
+        self.classifier = FlaxRoFormerClassificationHead(
+            config=self.config, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -937,7 +1020,8 @@ class FlaxRoFormerForMultipleChoice(FlaxRoFormerPreTrainedModel):
 
 
 overwrite_call_docstring(
-    FlaxRoFormerForMultipleChoice, ROFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    FlaxRoFormerForMultipleChoice,
+    ROFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"),
 )
 append_call_sample_docstring(
     FlaxRoFormerForMultipleChoice,

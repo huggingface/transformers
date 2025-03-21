@@ -26,9 +26,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import BeitConfig, ZoeDepthConfig, ZoeDepthForDepthEstimation, ZoeDepthImageProcessor
+from transformers import (BeitConfig, ZoeDepthConfig,
+                          ZoeDepthForDepthEstimation, ZoeDepthImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -44,7 +44,12 @@ def get_zoedepth_config(model_name):
         num_attention_heads=16,
         use_relative_position_bias=True,
         reshape_hidden_states=False,
-        out_features=["stage6", "stage12", "stage18", "stage24"],  # beit-large-512 uses [5, 11, 17, 23],
+        out_features=[
+            "stage6",
+            "stage12",
+            "stage18",
+            "stage24",
+        ],  # beit-large-512 uses [5, 11, 17, 23],
     )
 
     neck_hidden_sizes = [256, 512, 1024, 1024]
@@ -75,13 +80,18 @@ def get_zoedepth_config(model_name):
 def rename_key(name):
     # Transformer backbone
     if "core.core.pretrained.model.blocks" in name:
-        name = name.replace("core.core.pretrained.model.blocks", "backbone.encoder.layer")
+        name = name.replace(
+            "core.core.pretrained.model.blocks", "backbone.encoder.layer"
+        )
     if "core.core.pretrained.model.patch_embed.proj" in name:
         name = name.replace(
-            "core.core.pretrained.model.patch_embed.proj", "backbone.embeddings.patch_embeddings.projection"
+            "core.core.pretrained.model.patch_embed.proj",
+            "backbone.embeddings.patch_embeddings.projection",
         )
     if "core.core.pretrained.model.cls_token" in name:
-        name = name.replace("core.core.pretrained.model.cls_token", "backbone.embeddings.cls_token")
+        name = name.replace(
+            "core.core.pretrained.model.cls_token", "backbone.embeddings.cls_token"
+        )
     if "norm1" in name and "patch_transformer" not in name:
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name and "patch_transformer" not in name:
@@ -103,42 +113,68 @@ def rename_key(name):
         )
     if "attn.relative_position_index" in name:
         name = name.replace(
-            "attn.relative_position_index", "attention.attention.relative_position_bias.relative_position_index"
+            "attn.relative_position_index",
+            "attention.attention.relative_position_bias.relative_position_index",
         )
 
     # activation postprocessing (readout projections + resize blocks)
     if "core.core.pretrained.act_postprocess1.0.project" in name:
         name = name.replace(
-            "core.core.pretrained.act_postprocess1.0.project", "neck.reassemble_stage.readout_projects.0"
+            "core.core.pretrained.act_postprocess1.0.project",
+            "neck.reassemble_stage.readout_projects.0",
         )
     if "core.core.pretrained.act_postprocess2.0.project" in name:
         name = name.replace(
-            "core.core.pretrained.act_postprocess2.0.project", "neck.reassemble_stage.readout_projects.1"
+            "core.core.pretrained.act_postprocess2.0.project",
+            "neck.reassemble_stage.readout_projects.1",
         )
     if "core.core.pretrained.act_postprocess3.0.project" in name:
         name = name.replace(
-            "core.core.pretrained.act_postprocess3.0.project", "neck.reassemble_stage.readout_projects.2"
+            "core.core.pretrained.act_postprocess3.0.project",
+            "neck.reassemble_stage.readout_projects.2",
         )
     if "core.core.pretrained.act_postprocess4.0.project" in name:
         name = name.replace(
-            "core.core.pretrained.act_postprocess4.0.project", "neck.reassemble_stage.readout_projects.3"
+            "core.core.pretrained.act_postprocess4.0.project",
+            "neck.reassemble_stage.readout_projects.3",
         )
 
     if "core.core.pretrained.act_postprocess1.3" in name:
-        name = name.replace("core.core.pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.projection")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess1.3",
+            "neck.reassemble_stage.layers.0.projection",
+        )
     if "core.core.pretrained.act_postprocess2.3" in name:
-        name = name.replace("core.core.pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.projection")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess2.3",
+            "neck.reassemble_stage.layers.1.projection",
+        )
     if "core.core.pretrained.act_postprocess3.3" in name:
-        name = name.replace("core.core.pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.projection")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess3.3",
+            "neck.reassemble_stage.layers.2.projection",
+        )
     if "core.core.pretrained.act_postprocess4.3" in name:
-        name = name.replace("core.core.pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.projection")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess4.3",
+            "neck.reassemble_stage.layers.3.projection",
+        )
 
     if "core.core.pretrained.act_postprocess1.4" in name:
-        name = name.replace("core.core.pretrained.act_postprocess1.4", "neck.reassemble_stage.layers.0.resize")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess1.4",
+            "neck.reassemble_stage.layers.0.resize",
+        )
     if "core.core.pretrained.act_postprocess2.4" in name:
-        name = name.replace("core.core.pretrained.act_postprocess2.4", "neck.reassemble_stage.layers.1.resize")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess2.4",
+            "neck.reassemble_stage.layers.1.resize",
+        )
     if "core.core.pretrained.act_postprocess4.4" in name:
-        name = name.replace("core.core.pretrained.act_postprocess4.4", "neck.reassemble_stage.layers.3.resize")
+        name = name.replace(
+            "core.core.pretrained.act_postprocess4.4",
+            "neck.reassemble_stage.layers.3.resize",
+        )
 
     # scratch convolutions
     if "core.core.scratch.layer1_rn.weight" in name:
@@ -153,13 +189,21 @@ def rename_key(name):
     # fusion layers
     # tricky here: mapping = {1:3, 2:2, 3:1, 4:0}
     if "core.core.scratch.refinenet1" in name:
-        name = name.replace("core.core.scratch.refinenet1", "neck.fusion_stage.layers.3")
+        name = name.replace(
+            "core.core.scratch.refinenet1", "neck.fusion_stage.layers.3"
+        )
     if "core.core.scratch.refinenet2" in name:
-        name = name.replace("core.core.scratch.refinenet2", "neck.fusion_stage.layers.2")
+        name = name.replace(
+            "core.core.scratch.refinenet2", "neck.fusion_stage.layers.2"
+        )
     if "core.core.scratch.refinenet3" in name:
-        name = name.replace("core.core.scratch.refinenet3", "neck.fusion_stage.layers.1")
+        name = name.replace(
+            "core.core.scratch.refinenet3", "neck.fusion_stage.layers.1"
+        )
     if "core.core.scratch.refinenet4" in name:
-        name = name.replace("core.core.scratch.refinenet4", "neck.fusion_stage.layers.0")
+        name = name.replace(
+            "core.core.scratch.refinenet4", "neck.fusion_stage.layers.0"
+        )
 
     if "resConfUnit1" in name:
         name = name.replace("resConfUnit1", "residual_layer1")
@@ -217,10 +261,17 @@ def rename_key(name):
         name = name.replace("attractors", "metric_head.attractors")
 
     if "conditional_log_binomial" in name:
-        name = name.replace("conditional_log_binomial", "metric_head.conditional_log_binomial")
+        name = name.replace(
+            "conditional_log_binomial", "metric_head.conditional_log_binomial"
+        )
 
     # metric depth estimation head
-    if "conv2" in name and "metric_head" not in name and "attractors" not in name and "relative_head" not in name:
+    if (
+        "conv2" in name
+        and "metric_head" not in name
+        and "attractors" not in name
+        and "relative_head" not in name
+    ):
         name = name.replace("conv2", "metric_head.conv2")
 
     if "transformer_encoder.layers" in name:
@@ -233,25 +284,33 @@ def read_in_q_k_v_metric_head(state_dict):
     hidden_size = 128
     for i in range(4):
         # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.query.weight"] = in_proj_weight[
-            :hidden_size, :
-        ]
-        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[
+            f"patch_transformer.transformer_encoder.{i}.self_attn.query.weight"
+        ] = in_proj_weight[:hidden_size, :]
+        state_dict[
+            f"patch_transformer.transformer_encoder.{i}.self_attn.query.bias"
+        ] = in_proj_bias[:hidden_size]
 
-        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.key.bias"] = in_proj_bias[
-            hidden_size : hidden_size * 2
-        ]
+        state_dict[
+            f"patch_transformer.transformer_encoder.{i}.self_attn.key.weight"
+        ] = in_proj_weight[hidden_size : hidden_size * 2, :]
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.key.bias"] = (
+            in_proj_bias[hidden_size : hidden_size * 2]
+        )
 
-        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.value.weight"] = in_proj_weight[
-            -hidden_size:, :
-        ]
-        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[
+            f"patch_transformer.transformer_encoder.{i}.self_attn.value.weight"
+        ] = in_proj_weight[-hidden_size:, :]
+        state_dict[
+            f"patch_transformer.transformer_encoder.{i}.self_attn.value.bias"
+        ] = in_proj_bias[-hidden_size:]
 
 
 def convert_state_dict(orig_state_dict):
@@ -282,22 +341,36 @@ def read_in_q_k_v(state_dict, config):
     hidden_size = config.backbone_config.hidden_size
     for i in range(config.backbone_config.num_hidden_layers):
         # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"core.core.pretrained.model.blocks.{i}.attn.qkv.weight")
+        in_proj_weight = state_dict.pop(
+            f"core.core.pretrained.model.blocks.{i}.attn.qkv.weight"
+        )
         q_bias = state_dict.pop(f"core.core.pretrained.model.blocks.{i}.attn.q_bias")
         v_bias = state_dict.pop(f"core.core.pretrained.model.blocks.{i}.attn.v_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = (
+            q_bias
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = (
+            v_bias
+        )
 
 
 # We will verify our results on an image
 def prepare_img():
-    filepath = hf_hub_download(repo_id="shariqfarooq/ZoeDepth", filename="examples/person_1.jpeg", repo_type="space")
+    filepath = hf_hub_download(
+        repo_id="shariqfarooq/ZoeDepth",
+        filename="examples/person_1.jpeg",
+        repo_type="space",
+    )
     image = Image.open(filepath).convert("RGB")
     return image
 
@@ -313,7 +386,10 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     # load original model
     original_model = torch.hub.load(
-        "NielsRogge/ZoeDepth:understanding_zoedepth", model_name, pretrained=True, force_reload=True
+        "NielsRogge/ZoeDepth:understanding_zoedepth",
+        model_name,
+        pretrained=True,
+        force_reload=True,
     )
     original_model.eval()
     state_dict = original_model.state_dict()
@@ -365,13 +441,31 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # These were obtained by inserting the pixel_values at the patch embeddings of BEiT
     if model_name == "ZoeD_N":
         expected_shape = torch.Size([1, 384, 384])
-        expected_slice = torch.tensor([[1.0328, 1.0604, 1.0747], [1.0816, 1.1293, 1.1456], [1.1117, 1.1629, 1.1766]])
+        expected_slice = torch.tensor(
+            [
+                [1.0328, 1.0604, 1.0747],
+                [1.0816, 1.1293, 1.1456],
+                [1.1117, 1.1629, 1.1766],
+            ]
+        )
     elif model_name == "ZoeD_K":
         expected_shape = torch.Size([1, 384, 384])
-        expected_slice = torch.tensor([[1.6567, 1.6852, 1.7065], [1.6707, 1.6764, 1.6713], [1.7195, 1.7166, 1.7118]])
+        expected_slice = torch.tensor(
+            [
+                [1.6567, 1.6852, 1.7065],
+                [1.6707, 1.6764, 1.6713],
+                [1.7195, 1.7166, 1.7118],
+            ]
+        )
     elif model_name == "ZoeD_NK":
         expected_shape = torch.Size([1, 384, 384])
-        expected_slice = torch.tensor([[1.1228, 1.1079, 1.1382], [1.1807, 1.1658, 1.1891], [1.2344, 1.2094, 1.2317]])
+        expected_slice = torch.tensor(
+            [
+                [1.1228, 1.1079, 1.1382],
+                [1.1807, 1.1658, 1.1891],
+                [1.2344, 1.2094, 1.2317],
+            ]
+        )
 
     print("Shape of depth:", depth.shape)
     print("First 3x3 slice of depth:", depth[0, :3, :3])
@@ -423,4 +517,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_zoedepth_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_zoedepth_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

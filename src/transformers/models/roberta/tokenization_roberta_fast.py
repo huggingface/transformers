@@ -24,10 +24,13 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_roberta import RobertaTokenizer
 
-
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json",
+}
 
 
 class RobertaTokenizerFast(PreTrainedTokenizerFast):
@@ -155,7 +158,9 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
         )
 
         tokenizer_component = "post_processor"
-        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        tokenizer_component_instance = getattr(
+            self.backend_tokenizer, tokenizer_component, None
+        )
         if tokenizer_component_instance:
             state = json.loads(tokenizer_component_instance.__getstate__())
 
@@ -204,7 +209,11 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
         """
         # Mask token behave like a normal word, i.e. include the space before it
         # So we set lstrip to True
-        value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
+        value = (
+            AddedToken(value, lstrip=True, rstrip=False)
+            if isinstance(value, str)
+            else value
+        )
         self._mask_token = value
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
@@ -226,7 +235,9 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

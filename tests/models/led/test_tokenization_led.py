@@ -59,7 +59,9 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
@@ -86,11 +88,19 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_prepare_batch(self):
-        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        src_text = [
+            "A long paragraph for summarization.",
+            "Another paragraph for summarization.",
+        ]
         expected_src_tokens = [0, 250, 251, 17818, 13, 39186, 1938, 4, 2]
 
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer(src_text, max_length=len(expected_src_tokens), padding=True, return_tensors="pt")
+            batch = tokenizer(
+                src_text,
+                max_length=len(expected_src_tokens),
+                padding=True,
+                return_tensors="pt",
+            )
             self.assertIsInstance(batch, BatchEncoding)
 
             self.assertEqual((2, 9), batch.input_ids.shape)
@@ -100,7 +110,10 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_prepare_batch_empty_target_text(self):
-        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        src_text = [
+            "A long paragraph for summarization.",
+            "Another paragraph for summarization.",
+        ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             batch = tokenizer(src_text, padding=True, return_tensors="pt")
             self.assertIn("input_ids", batch)
@@ -115,14 +128,22 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            targets = tokenizer(text_target=tgt_text, max_length=32, padding="max_length", return_tensors="pt")
+            targets = tokenizer(
+                text_target=tgt_text,
+                max_length=32,
+                padding="max_length",
+                return_tensors="pt",
+            )
             self.assertEqual(32, targets["input_ids"].shape[1])
 
     @require_torch
     def test_prepare_batch_not_longer_than_maxlen(self):
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             batch = tokenizer(
-                ["I am a small frog" * 1024, "I am a small frog"], padding=True, truncation=True, return_tensors="pt"
+                ["I am a small frog" * 1024, "I am a small frog"],
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
             )
             self.assertIsInstance(batch, BatchEncoding)
             self.assertEqual(batch.input_ids.shape, (2, 5122))
@@ -147,12 +168,19 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
     def test_global_attention_mask(self):
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             src_text = ["Summary of the text.", "Another summary."]
-            expected_global_attention_mask = [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, -1, -1]]
+            expected_global_attention_mask = [
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, -1, -1],
+            ]
 
             encoded_output = tokenizer(src_text, padding=False)
-            encoded_output["global_attention_mask"] = [[0] * len(x) for x in encoded_output["input_ids"]]
+            encoded_output["global_attention_mask"] = [
+                [0] * len(x) for x in encoded_output["input_ids"]
+            ]
             outputs = tokenizer.pad(encoded_output)
-            self.assertSequenceEqual(outputs["global_attention_mask"], expected_global_attention_mask)
+            self.assertSequenceEqual(
+                outputs["global_attention_mask"], expected_global_attention_mask
+            )
 
     @unittest.skip
     def test_pretokenized_inputs(self):
@@ -161,12 +189,22 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
                 sentence = "A, <mask> AllenNLP sentence."
-                tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-                tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
+                tokens_r = tokenizer_r.encode_plus(
+                    sentence, add_special_tokens=True, return_token_type_ids=True
+                )
+                tokens_p = tokenizer_p.encode_plus(
+                    sentence, add_special_tokens=True, return_token_type_ids=True
+                )
+                self.assertEqual(
+                    sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"])
+                )
                 self.assertEqual(
                     sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
                     sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
@@ -174,12 +212,42 @@ class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
 
                 tokens_r_str = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
-                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-                self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-
                 self.assertSequenceEqual(
-                    tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_p["input_ids"],
+                    [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2],
                 )
                 self.assertSequenceEqual(
-                    tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_r["input_ids"],
+                    [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2],
+                )
+
+                self.assertSequenceEqual(
+                    tokens_p_str,
+                    [
+                        "<s>",
+                        "A",
+                        ",",
+                        "<mask>",
+                        "ĠAllen",
+                        "N",
+                        "LP",
+                        "Ġsentence",
+                        ".",
+                        "</s>",
+                    ],
+                )
+                self.assertSequenceEqual(
+                    tokens_r_str,
+                    [
+                        "<s>",
+                        "A",
+                        ",",
+                        "<mask>",
+                        "ĠAllen",
+                        "N",
+                        "LP",
+                        "Ġsentence",
+                        ".",
+                        "</s>",
+                    ],
                 )

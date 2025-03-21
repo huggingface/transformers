@@ -17,16 +17,11 @@ import gc
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
-from transformers.testing_utils import (
-    require_accelerate,
-    require_hqq,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_accelerate, require_hqq,
+                                        require_torch_gpu,
+                                        require_torch_multi_gpu, slow,
+                                        torch_device)
 from transformers.utils import is_hqq_available, is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -77,7 +72,11 @@ def check_hqqlayer(test_module, hqq_layer, batch_size=1, context_size=1024):
 def check_forward(test_module, model, batch_size=1, context_size=1024):
     # Test forward pass
     with torch.no_grad():
-        out = model(torch.zeros([batch_size, context_size], device=model.device, dtype=torch.int32)).logits
+        out = model(
+            torch.zeros(
+                [batch_size, context_size], device=model.device, dtype=torch.int32
+            )
+        ).logits
     test_module.assertEqual(out.shape[0], batch_size)
     test_module.assertEqual(out.shape[1], context_size)
     cleanup()
@@ -96,7 +95,9 @@ class HqqConfigTest(unittest.TestCase):
         quantization_config = HqqConfig()
         hqq_orig_config = quantization_config.to_dict()
 
-        self.assertEqual(quantization_config.quant_config, hqq_orig_config["quant_config"])
+        self.assertEqual(
+            quantization_config.quant_config, hqq_orig_config["quant_config"]
+        )
 
 
 @slow
@@ -114,7 +115,10 @@ class HQQTest(unittest.TestCase):
         quant_config = HqqConfig(nbits=8, group_size=64)
 
         hqq_runner = HQQLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+            model_id=MODEL_ID,
+            quant_config=quant_config,
+            compute_dtype=torch.float16,
+            device=torch_device,
         )
 
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
@@ -138,7 +142,10 @@ class HQQTestMultiGPU(unittest.TestCase):
         quant_config = HqqConfig(nbits=8, group_size=64)
 
         hqq_runner = HQQLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device="auto"
+            model_id=MODEL_ID,
+            quant_config=quant_config,
+            compute_dtype=torch.float16,
+            device="auto",
         )
 
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
@@ -160,7 +167,10 @@ class HQQTestBias(unittest.TestCase):
         quant_config = HqqConfig(nbits=8, group_size=64)
 
         hqq_runner = HQQLLMRunner(
-            model_id="facebook/opt-125m", quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+            model_id="facebook/opt-125m",
+            quant_config=quant_config,
+            compute_dtype=torch.float16,
+            device=torch_device,
         )
 
         check_hqqlayer(self, hqq_runner.model.model.decoder.layers[0].self_attn.v_proj)
@@ -182,7 +192,10 @@ class HQQSerializationTest(unittest.TestCase):
         quant_config = HqqConfig(nbits=4, group_size=64)
 
         hqq_runner = HQQLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+            model_id=MODEL_ID,
+            quant_config=quant_config,
+            compute_dtype=torch.float16,
+            device=torch_device,
         )
 
         input_tensor = torch.zeros((1, 8), dtype=torch.int32, device=torch_device)
@@ -200,7 +213,10 @@ class HQQSerializationTest(unittest.TestCase):
 
         # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(
-            "quant_model", torch_dtype=torch.float16, device_map=torch_device, low_cpu_mem_usage=True
+            "quant_model",
+            torch_dtype=torch.float16,
+            device_map=torch_device,
+            low_cpu_mem_usage=True,
         )
 
         with torch.no_grad():
@@ -228,7 +244,10 @@ class HQQSerializationTest(unittest.TestCase):
         )
 
         hqq_runner = HQQLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+            model_id=MODEL_ID,
+            quant_config=quant_config,
+            compute_dtype=torch.float16,
+            device=torch_device,
         )
 
         model = hqq_runner.model
@@ -237,6 +256,18 @@ class HQQSerializationTest(unittest.TestCase):
         with torch.no_grad():
             model.forward(input_tensor).logits
 
-        self.assertEqual(isinstance(model.model.layers[1].mlp.down_proj, torch.nn.Linear), True)
-        self.assertEqual(model.model.layers[1].self_attn.v_proj.quant_config["weight_quant_params"]["nbits"], 4)
-        self.assertEqual(model.model.layers[1].mlp.gate_proj.quant_config["weight_quant_params"]["nbits"], 3)
+        self.assertEqual(
+            isinstance(model.model.layers[1].mlp.down_proj, torch.nn.Linear), True
+        )
+        self.assertEqual(
+            model.model.layers[1].self_attn.v_proj.quant_config["weight_quant_params"][
+                "nbits"
+            ],
+            4,
+        )
+        self.assertEqual(
+            model.model.layers[1].mlp.gate_proj.quant_config["weight_quant_params"][
+                "nbits"
+            ],
+            3,
+        )

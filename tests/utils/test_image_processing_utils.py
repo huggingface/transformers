@@ -24,13 +24,13 @@ from requests.exceptions import HTTPError
 
 from transformers import AutoImageProcessor, ViTImageProcessor
 from transformers.image_processing_utils import get_size_dict
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
-
+from transformers.testing_utils import (TOKEN, TemporaryHubRepo, get_tests_dir,
+                                        is_staging_test)
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
-from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
-
+from test_module.custom_image_processing import \
+    CustomImageProcessor  # noqa E402
 
 SAMPLE_IMAGE_PROCESSING_CONFIG_DIR = get_tests_dir("fixtures")
 
@@ -47,7 +47,9 @@ class ImageProcessorUtilTester(unittest.TestCase):
         # Download this model to make sure it's in the cache.
         _ = ViTImageProcessor.from_pretrained("hf-internal-testing/tiny-random-vit")
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch(
+            "requests.Session.request", return_value=response_mock
+        ) as mock_head:
             _ = ViTImageProcessor.from_pretrained("hf-internal-testing/tiny-random-vit")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -55,10 +57,13 @@ class ImageProcessorUtilTester(unittest.TestCase):
     def test_image_processor_from_pretrained_subfolder(self):
         with self.assertRaises(OSError):
             # config is in subfolder, the following should not work without specifying the subfolder
-            _ = AutoImageProcessor.from_pretrained("hf-internal-testing/stable-diffusion-all-variants")
+            _ = AutoImageProcessor.from_pretrained(
+                "hf-internal-testing/stable-diffusion-all-variants"
+            )
 
         config = AutoImageProcessor.from_pretrained(
-            "hf-internal-testing/stable-diffusion-all-variants", subfolder="feature_extractor"
+            "hf-internal-testing/stable-diffusion-all-variants",
+            subfolder="feature_extractor",
         )
 
         self.assertIsNotNone(config)
@@ -73,7 +78,9 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
-            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor = ViTImageProcessor.from_pretrained(
+                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR
+            )
             image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
             new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
@@ -82,10 +89,17 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
-            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor = ViTImageProcessor.from_pretrained(
+                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR
+            )
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                image_processor.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
             for k, v in image_processor.__dict__.items():
@@ -93,7 +107,9 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_in_organization(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
-            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor = ViTImageProcessor.from_pretrained(
+                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR
+            )
             image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
             new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
@@ -102,10 +118,17 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
-            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor = ViTImageProcessor.from_pretrained(
+                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR
+            )
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                image_processor.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
             for k, v in image_processor.__dict__.items():
@@ -114,7 +137,9 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
     def test_push_to_hub_dynamic_image_processor(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             CustomImageProcessor.register_for_auto_class()
-            image_processor = CustomImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor = CustomImageProcessor.from_pretrained(
+                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR
+            )
 
             image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
@@ -124,9 +149,13 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
                 {"AutoImageProcessor": "custom_image_processing.CustomImageProcessor"},
             )
 
-            new_image_processor = AutoImageProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            new_image_processor = AutoImageProcessor.from_pretrained(
+                tmp_repo.repo_id, trust_remote_code=True
+            )
             # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
-            self.assertEqual(new_image_processor.__class__.__name__, "CustomImageProcessor")
+            self.assertEqual(
+                new_image_processor.__class__.__name__, "CustomImageProcessor"
+            )
 
 
 class ImageProcessingUtilsTester(unittest.TestCase):

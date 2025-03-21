@@ -17,7 +17,6 @@ import os
 
 import requests
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--workflow_id", type=str, required=True)
@@ -38,7 +37,9 @@ if __name__ == "__main__":
         project_slug = job["project_slug"]
         if job["name"].startswith(("tests_", "examples_", "pipelines_")):
             url = f'https://circleci.com/api/v2/project/{project_slug}/{job["job_number"]}/artifacts'
-            r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+            r = requests.get(
+                url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")}
+            )
             job_artifacts = r.json()["items"]
 
             os.makedirs(job["name"], exist_ok=True)
@@ -46,10 +47,15 @@ if __name__ == "__main__":
 
             job_test_summaries = {}
             for artifact in job_artifacts:
-                if artifact["path"].startswith("reports/") and artifact["path"].endswith("/summary_short.txt"):
+                if artifact["path"].startswith("reports/") and artifact[
+                    "path"
+                ].endswith("/summary_short.txt"):
                     node_index = artifact["node_index"]
                     url = artifact["url"]
-                    r = requests.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    r = requests.get(
+                        url,
+                        headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")},
+                    )
                     test_summary = r.text
                     job_test_summaries[node_index] = test_summary
 

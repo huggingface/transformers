@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -101,7 +100,9 @@ class Pop2PianoConfig(PretrainedConfig):
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
-        self.num_decoder_layers = num_decoder_layers if num_decoder_layers is not None else self.num_layers
+        self.num_decoder_layers = (
+            num_decoder_layers if num_decoder_layers is not None else self.num_layers
+        )
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance

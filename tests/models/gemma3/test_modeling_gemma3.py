@@ -20,39 +20,24 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    Gemma3Config,
-    Gemma3TextConfig,
-    GenerationConfig,
-    is_torch_available,
-)
-from transformers.testing_utils import (
-    cleanup,
-    require_flash_attn,
-    require_read_token,
-    require_torch,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers import (AutoModelForCausalLM, AutoTokenizer, Gemma3Config,
+                          Gemma3TextConfig, GenerationConfig,
+                          is_torch_available)
+from transformers.testing_utils import (cleanup, require_flash_attn,
+                                        require_read_token, require_torch,
+                                        require_torch_gpu, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...models.gemma.test_modeling_gemma import GemmaModelTester
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Gemma3ForCausalLM,
-        Gemma3ForConditionalGeneration,
-        Gemma3Processor,
-        Gemma3TextModel,
-    )
+    from transformers import (Gemma3ForCausalLM,
+                              Gemma3ForConditionalGeneration, Gemma3Processor,
+                              Gemma3TextModel)
 
 
 class Gemma3ModelTester(GemmaModelTester):
@@ -64,7 +49,9 @@ class Gemma3ModelTester(GemmaModelTester):
 
 @require_torch
 class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3TextModel, Gemma3ForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (Gemma3TextModel, Gemma3ForCausalLM) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
@@ -73,7 +60,9 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = Gemma3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Gemma3Config, hidden_size=37
+        )
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
@@ -81,16 +70,22 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma3 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma3 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma3 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
@@ -118,19 +113,27 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    @unittest.skip(
+        "Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together."
+    )
     def test_eager_matches_fa2_generate(self):
         pass
 
@@ -219,7 +222,12 @@ class Gemma3Vision2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 1
+            )
+            + 1
+        )
         attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
@@ -240,9 +248,15 @@ class Gemma3Vision2TextModelTester:
 
 
 @require_torch
-class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+class Gemma3Vision2TextModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+    )
+    all_generative_model_classes = (
+        (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+    )
     test_headmasking = False
     test_pruning = False
     test_missing_keys = False
@@ -258,17 +272,25 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     def setUp(self):
         self.model_tester = Gemma3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Gemma3Config, hidden_size=37
+        )
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @unittest.skip(
+        reason="SiglipVisionModel (vision backbone) does not support standalone training"
+    )
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @unittest.skip(
+        reason="SiglipVisionModel (vision backbone) does not support standalone training"
+    )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @unittest.skip(
+        reason="SiglipVisionModel (vision backbone) does not support standalone training"
+    )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -285,16 +307,22 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma3 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma3 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma3 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
@@ -322,11 +350,15 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
@@ -360,11 +392,16 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 @require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")
+        self.processor = Gemma3Processor.from_pretrained(
+            "google/gemma-3-4b-it", padding_side="left"
+        )
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self.messages = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
+            },
             {
                 "role": "user",
                 "content": [
@@ -406,7 +443,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         messages_2 = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
+            },
             {
                 "role": "user",
                 "content": [
@@ -414,7 +454,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://www.ilankelman.org/stopsigns/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -479,11 +522,17 @@ class Gemma3IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         messages = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
+            },
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://www.ilankelman.org/stopsigns/australia.jpg",
+                    },
                     {"type": "text", "text": "What do you see here?"},
                 ],
             },
@@ -507,11 +556,13 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3ForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Gemma3ForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+        ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
+        inputs = tokenizer(
+            "Write a poem about Machine Learning.", return_tensors="pt"
+        ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -527,7 +578,9 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            model_id,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -553,11 +606,14 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-1b-it"
 
         input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "This is a nice place. " * 800
+            + "I really enjoy the scenery,",  # This is larger than 4096 tokens
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(
+            torch_device
+        )
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
@@ -567,7 +623,9 @@ class Gemma3IntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[
+            :, input_size:
+        ]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
@@ -582,11 +640,14 @@ class Gemma3IntegrationTest(unittest.TestCase):
         attn_implementation = "sdpa"
 
         input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "This is a nice place. " * 800
+            + "I really enjoy the scenery,",  # This is larger than 4096 tokens
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(
+            torch_device
+        )
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
@@ -599,7 +660,9 @@ class Gemma3IntegrationTest(unittest.TestCase):
         generation_config = GenerationConfig(max_new_tokens=5, min_new_tokens=5)
         out = model.generate(**inputs, generation_config=generation_config)
 
-        out = model.generate(**inputs, generation_config=generation_config, do_sample=False)[:, input_size:]
+        out = model.generate(
+            **inputs, generation_config=generation_config, do_sample=False
+        )[:, input_size:]
         output_text = tokenizer.batch_decode(out)
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
@@ -610,5 +673,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         # Note: Auto-inheritance only works for models saved starting from 4.50.0
         model.generation_config.transformers_version = "4.49.0"
-        with self.assertRaises(RuntimeError):  # errors out because it is not using hybrid cache
+        with self.assertRaises(
+            RuntimeError
+        ):  # errors out because it is not using hybrid cache
             out = model.generate(**inputs, generation_config=generation_config)

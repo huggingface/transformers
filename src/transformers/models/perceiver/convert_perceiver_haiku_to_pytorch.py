@@ -26,19 +26,15 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import (
-    PerceiverConfig,
-    PerceiverForImageClassificationConvProcessing,
-    PerceiverForImageClassificationFourier,
-    PerceiverForImageClassificationLearned,
-    PerceiverForMaskedLM,
-    PerceiverForMultimodalAutoencoding,
-    PerceiverForOpticalFlow,
-    PerceiverImageProcessor,
-    PerceiverTokenizer,
-)
+from transformers import (PerceiverConfig,
+                          PerceiverForImageClassificationConvProcessing,
+                          PerceiverForImageClassificationFourier,
+                          PerceiverForImageClassificationLearned,
+                          PerceiverForMaskedLM,
+                          PerceiverForMultimodalAutoencoding,
+                          PerceiverForOpticalFlow, PerceiverImageProcessor,
+                          PerceiverTokenizer)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -60,12 +56,17 @@ def rename_keys(state_dict, architecture):
         name = name.replace("embed/embeddings", "input_preprocessor.embeddings.weight")
         if name.startswith("trainable_position_encoding/pos_embs"):
             name = name.replace(
-                "trainable_position_encoding/pos_embs", "input_preprocessor.position_embeddings.weight"
+                "trainable_position_encoding/pos_embs",
+                "input_preprocessor.position_embeddings.weight",
             )
 
         # rename image preprocessor embeddings (for image classification model with learned position embeddings)
-        name = name.replace("image_preprocessor/~/conv2_d/w", "input_preprocessor.convnet_1x1.weight")
-        name = name.replace("image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias")
+        name = name.replace(
+            "image_preprocessor/~/conv2_d/w", "input_preprocessor.convnet_1x1.weight"
+        )
+        name = name.replace(
+            "image_preprocessor/~/conv2_d/b", "input_preprocessor.convnet_1x1.bias"
+        )
         name = name.replace(
             "image_preprocessor/~_build_network_inputs/trainable_position_encoding/pos_embs",
             "input_preprocessor.position_embeddings.position_embeddings",
@@ -83,13 +84,16 @@ def rename_keys(state_dict, architecture):
         if "counter" in name or "hidden" in name:
             continue
         name = name.replace(
-            "image_preprocessor/~/conv2_d_downsample/~/conv/w", "input_preprocessor.convnet.conv.weight"
+            "image_preprocessor/~/conv2_d_downsample/~/conv/w",
+            "input_preprocessor.convnet.conv.weight",
         )
         name = name.replace(
-            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/offset", "input_preprocessor.convnet.batchnorm.bias"
+            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/offset",
+            "input_preprocessor.convnet.batchnorm.bias",
         )
         name = name.replace(
-            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/scale", "input_preprocessor.convnet.batchnorm.weight"
+            "image_preprocessor/~/conv2_d_downsample/~/batchnorm/scale",
+            "input_preprocessor.convnet.batchnorm.weight",
         )
         name = name.replace(
             "image_preprocessor/~/conv2_d_downsample/~/batchnorm/~/mean_ema/average",
@@ -101,28 +105,68 @@ def rename_keys(state_dict, architecture):
         )
 
         # rename image preprocessor embeddings (for optical flow model)
-        name = name.replace("image_preprocessor/patches_linear/b", "input_preprocessor.conv_after_patches.bias")
-        name = name.replace("image_preprocessor/patches_linear/w", "input_preprocessor.conv_after_patches.weight")
+        name = name.replace(
+            "image_preprocessor/patches_linear/b",
+            "input_preprocessor.conv_after_patches.bias",
+        )
+        name = name.replace(
+            "image_preprocessor/patches_linear/w",
+            "input_preprocessor.conv_after_patches.weight",
+        )
 
         # rename multimodal preprocessor embeddings
-        name = name.replace("multimodal_preprocessor/audio_mask_token/pos_embs", "input_preprocessor.mask.audio")
-        name = name.replace("multimodal_preprocessor/audio_padding/pos_embs", "input_preprocessor.padding.audio")
-        name = name.replace("multimodal_preprocessor/image_mask_token/pos_embs", "input_preprocessor.mask.image")
-        name = name.replace("multimodal_preprocessor/image_padding/pos_embs", "input_preprocessor.padding.image")
-        name = name.replace("multimodal_preprocessor/label_mask_token/pos_embs", "input_preprocessor.mask.label")
-        name = name.replace("multimodal_preprocessor/label_padding/pos_embs", "input_preprocessor.padding.label")
+        name = name.replace(
+            "multimodal_preprocessor/audio_mask_token/pos_embs",
+            "input_preprocessor.mask.audio",
+        )
+        name = name.replace(
+            "multimodal_preprocessor/audio_padding/pos_embs",
+            "input_preprocessor.padding.audio",
+        )
+        name = name.replace(
+            "multimodal_preprocessor/image_mask_token/pos_embs",
+            "input_preprocessor.mask.image",
+        )
+        name = name.replace(
+            "multimodal_preprocessor/image_padding/pos_embs",
+            "input_preprocessor.padding.image",
+        )
+        name = name.replace(
+            "multimodal_preprocessor/label_mask_token/pos_embs",
+            "input_preprocessor.mask.label",
+        )
+        name = name.replace(
+            "multimodal_preprocessor/label_padding/pos_embs",
+            "input_preprocessor.padding.label",
+        )
 
         # DECODERS
         # rename prefix of decoders
         # multimodal autoencoding model
         name = name.replace(
-            "multimodal_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
+            "multimodal_decoder/~/basic_decoder/cross_attention/",
+            "decoder.decoder.decoding_cross_attention.",
         )
-        name = name.replace("multimodal_decoder/~decoder_query/audio_padding/pos_embs", "decoder.padding.audio")
-        name = name.replace("multimodal_decoder/~decoder_query/image_padding/pos_embs", "decoder.padding.image")
-        name = name.replace("multimodal_decoder/~decoder_query/label_padding/pos_embs", "decoder.padding.label")
-        name = name.replace("multimodal_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
-        name = name.replace("multimodal_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
+        name = name.replace(
+            "multimodal_decoder/~decoder_query/audio_padding/pos_embs",
+            "decoder.padding.audio",
+        )
+        name = name.replace(
+            "multimodal_decoder/~decoder_query/image_padding/pos_embs",
+            "decoder.padding.image",
+        )
+        name = name.replace(
+            "multimodal_decoder/~decoder_query/label_padding/pos_embs",
+            "decoder.padding.label",
+        )
+        name = name.replace(
+            "multimodal_decoder/~/basic_decoder/output/b",
+            "decoder.decoder.final_layer.bias",
+        )
+        name = name.replace(
+            "multimodal_decoder/~/basic_decoder/output/w",
+            "decoder.decoder.final_layer.weight",
+        )
         if architecture == "multimodal_autoencoding":
             name = name.replace(
                 "classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs",
@@ -130,10 +174,16 @@ def rename_keys(state_dict, architecture):
             )
         # flow model
         name = name.replace(
-            "flow_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
+            "flow_decoder/~/basic_decoder/cross_attention/",
+            "decoder.decoder.decoding_cross_attention.",
         )
-        name = name.replace("flow_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
-        name = name.replace("flow_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
+        name = name.replace(
+            "flow_decoder/~/basic_decoder/output/w",
+            "decoder.decoder.final_layer.weight",
+        )
+        name = name.replace(
+            "flow_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias"
+        )
         # image models
         name = name.replace(
             "classification_decoder/~/basic_decoder/~/trainable_position_encoding/pos_embs",
@@ -144,36 +194,62 @@ def rename_keys(state_dict, architecture):
             "decoder.output_position_encodings.position_embeddings",
         )
         name = name.replace(
-            "classification_decoder/~/basic_decoder/cross_attention/", "decoder.decoder.decoding_cross_attention."
+            "classification_decoder/~/basic_decoder/cross_attention/",
+            "decoder.decoder.decoding_cross_attention.",
         )
-        name = name.replace("classification_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
-        name = name.replace("classification_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
-        name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
-        name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
+        name = name.replace(
+            "classification_decoder/~/basic_decoder/output/b",
+            "decoder.decoder.final_layer.bias",
+        )
+        name = name.replace(
+            "classification_decoder/~/basic_decoder/output/w",
+            "decoder.decoder.final_layer.weight",
+        )
+        name = name = name.replace(
+            "classification_decoder/~/basic_decoder/~/", "decoder.decoder."
+        )
+        name = name.replace(
+            "basic_decoder/cross_attention/", "decoder.decoding_cross_attention."
+        )
         name = name.replace("basic_decoder/~/", "decoder.")
 
         # POSTPROCESSORS
         name = name.replace(
-            "projection_postprocessor/linear/b", "output_postprocessor.modalities.image.classifier.bias"
+            "projection_postprocessor/linear/b",
+            "output_postprocessor.modalities.image.classifier.bias",
         )
         name = name.replace(
-            "projection_postprocessor/linear/w", "output_postprocessor.modalities.image.classifier.weight"
+            "projection_postprocessor/linear/w",
+            "output_postprocessor.modalities.image.classifier.weight",
         )
         name = name.replace(
-            "classification_postprocessor/linear/b", "output_postprocessor.modalities.label.classifier.bias"
+            "classification_postprocessor/linear/b",
+            "output_postprocessor.modalities.label.classifier.bias",
         )
         name = name.replace(
-            "classification_postprocessor/linear/w", "output_postprocessor.modalities.label.classifier.weight"
+            "classification_postprocessor/linear/w",
+            "output_postprocessor.modalities.label.classifier.weight",
         )
-        name = name.replace("audio_postprocessor/linear/b", "output_postprocessor.modalities.audio.classifier.bias")
-        name = name.replace("audio_postprocessor/linear/w", "output_postprocessor.modalities.audio.classifier.weight")
+        name = name.replace(
+            "audio_postprocessor/linear/b",
+            "output_postprocessor.modalities.audio.classifier.bias",
+        )
+        name = name.replace(
+            "audio_postprocessor/linear/w",
+            "output_postprocessor.modalities.audio.classifier.weight",
+        )
 
         # PERCEIVER MODEL
 
         # rename latent embeddings
-        name = name.replace("perceiver_encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
+        name = name.replace(
+            "perceiver_encoder/~/trainable_position_encoding/pos_embs",
+            "embeddings.latents",
+        )
         # rename latent embeddings (for multimodal model)
-        name = name.replace("encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents")
+        name = name.replace(
+            "encoder/~/trainable_position_encoding/pos_embs", "embeddings.latents"
+        )
 
         # rename prefixes
         if name.startswith("perceiver_encoder/~/"):
@@ -213,7 +289,9 @@ def rename_keys(state_dict, architecture):
         name = name.replace("-", ".")
         name = name.replace("/", ".")
         # rename keys, queries, values and output of attention layers
-        if ("cross_attention" in name or "self_attention" in name) and "mlp" not in name:
+        if (
+            "cross_attention" in name or "self_attention" in name
+        ) and "mlp" not in name:
             if "linear.b" in name:
                 name = name.replace("linear.b", "self.query.bias")
             if "linear.w" in name:
@@ -260,7 +338,9 @@ def rename_keys(state_dict, architecture):
 
 
 @torch.no_grad()
-def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architecture="MLM"):
+def convert_perceiver_checkpoint(
+    pickle_file, pytorch_dump_folder_path, architecture="MLM"
+):
     """
     Copy/paste/tweak model's weights to our Perceiver structure.
     """
@@ -317,7 +397,9 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         # set labels
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -359,14 +441,20 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         # process the first chunk
         chunk_idx = 0
         subsampling = {
-            "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
-            "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
+            "image": torch.arange(
+                image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)
+            ),
+            "audio": torch.arange(
+                audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)
+            ),
             "label": None,
         }
         model = PerceiverForMultimodalAutoencoding(config)
         # set labels
         filename = "kinetics700-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -380,14 +468,20 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
     # prepare dummy input
     input_mask = None
     if architecture == "MLM":
-        tokenizer = PerceiverTokenizer.from_pretrained("/Users/NielsRogge/Documents/Perceiver/Tokenizer files")
+        tokenizer = PerceiverTokenizer.from_pretrained(
+            "/Users/NielsRogge/Documents/Perceiver/Tokenizer files"
+        )
         text = "This is an incomplete sentence where some words are missing."
         encoding = tokenizer(text, padding="max_length", return_tensors="pt")
         # mask " missing.". Note that the model performs much better if the masked chunk starts with a space.
         encoding.input_ids[0, 51:60] = tokenizer.mask_token_id
         inputs = encoding.input_ids
         input_mask = encoding.attention_mask
-    elif architecture in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
+    elif architecture in [
+        "image_classification",
+        "image_classification_fourier",
+        "image_classification_conv",
+    ]:
         image_processor = PerceiverImageProcessor()
         image = prepare_img()
         encoding = image_processor(image, return_tensors="pt")
@@ -397,11 +491,19 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
     elif architecture == "multimodal_autoencoding":
         images = torch.randn((1, 16, 3, 224, 224))
         audio = torch.randn((1, 30720, 1))
-        inputs = {"image": images, "audio": audio, "label": torch.zeros((images.shape[0], 700))}
+        inputs = {
+            "image": images,
+            "audio": audio,
+            "label": torch.zeros((images.shape[0], 700)),
+        }
 
     # forward pass
     if architecture == "multimodal_autoencoding":
-        outputs = model(inputs=inputs, attention_mask=input_mask, subsampled_output_points=subsampling)
+        outputs = model(
+            inputs=inputs,
+            attention_mask=input_mask,
+            subsampled_output_points=subsampling,
+        )
     else:
         outputs = model(inputs=inputs, attention_mask=input_mask)
     logits = outputs.logits
@@ -415,7 +517,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
 
     if architecture == "MLM":
         expected_slice = torch.tensor(
-            [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
+            [
+                [-11.8336, -11.6850, -11.8483],
+                [-12.8149, -12.5863, -12.7904],
+                [-12.8440, -12.6410, -12.8646],
+            ]
         )
         assert torch.allclose(logits[0, :3, :3], expected_slice)
         masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()
@@ -427,7 +533,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         print("Predicted string:")
         print(tokenizer.decode(masked_tokens_predictions))
 
-    elif architecture in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
+    elif architecture in [
+        "image_classification",
+        "image_classification_fourier",
+        "image_classification_conv",
+    ]:
         print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
 
     # Finally, save files
@@ -465,4 +575,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_perceiver_checkpoint(args.pickle_file, args.pytorch_dump_folder_path, args.architecture)
+    convert_perceiver_checkpoint(
+        args.pickle_file, args.pytorch_dump_folder_path, args.architecture
+    )

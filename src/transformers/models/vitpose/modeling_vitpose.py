@@ -22,16 +22,11 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from ...utils.backbone_utils import load_backbone
 from .configuration_vitpose import VitPoseConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -84,7 +79,9 @@ class VitPosePreTrainedModel(PreTrainedModel):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
+                module.weight.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -150,7 +147,9 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
         raise ValueError("target_type should be gaussian-heatmap or combined-target")
 
     if output_flipped.ndim != 4:
-        raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
+        raise ValueError(
+            "output_flipped should be [batch_size, num_keypoints, height, width]"
+        )
     batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
     if target_type == "combined-target":
@@ -163,7 +162,9 @@ def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     for left, right in flip_pairs.tolist():
         output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
         output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
-    output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
+    output_flipped_back = output_flipped_back.reshape(
+        (batch_size, num_keypoints, height, width)
+    )
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
     return output_flipped_back
@@ -179,12 +180,20 @@ class VitPoseSimpleDecoder(nn.Module):
         super().__init__()
 
         self.activation = nn.ReLU()
-        self.upsampling = nn.Upsample(scale_factor=config.scale_factor, mode="bilinear", align_corners=False)
+        self.upsampling = nn.Upsample(
+            scale_factor=config.scale_factor, mode="bilinear", align_corners=False
+        )
         self.conv = nn.Conv2d(
-            config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1
+            config.backbone_config.hidden_size,
+            config.num_labels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
         )
 
-    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         # Transform input: ReLU + upsample
         hidden_state = self.activation(hidden_state)
         hidden_state = self.upsampling(hidden_state)
@@ -206,18 +215,29 @@ class VitPoseClassicDecoder(nn.Module):
         super().__init__()
 
         self.deconv1 = nn.ConvTranspose2d(
-            config.backbone_config.hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False
+            config.backbone_config.hidden_size,
+            256,
+            kernel_size=4,
+            stride=2,
+            padding=1,
+            bias=False,
         )
         self.batchnorm1 = nn.BatchNorm2d(256)
         self.relu1 = nn.ReLU()
 
-        self.deconv2 = nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False)
+        self.deconv2 = nn.ConvTranspose2d(
+            256, 256, kernel_size=4, stride=2, padding=1, bias=False
+        )
         self.batchnorm2 = nn.BatchNorm2d(256)
         self.relu2 = nn.ReLU()
 
-        self.conv = nn.Conv2d(256, config.num_labels, kernel_size=1, stride=1, padding=0)
+        self.conv = nn.Conv2d(
+            256, config.num_labels, kernel_size=1, stride=1, padding=0
+        )
 
-    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None):
+    def forward(
+        self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None
+    ):
         hidden_state = self.deconv1(hidden_state)
         hidden_state = self.batchnorm1(hidden_state)
         hidden_state = self.relu1(hidden_state)
@@ -252,13 +272,19 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         if not hasattr(self.backbone.config, "patch_size"):
             raise ValueError("The backbone should have a patch_size attribute")
 
-        self.head = VitPoseSimpleDecoder(config) if config.use_simple_decoder else VitPoseClassicDecoder(config)
+        self.head = (
+            VitPoseSimpleDecoder(config)
+            if config.use_simple_decoder
+            else VitPoseClassicDecoder(config)
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VITPOSE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VitPoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=VitPoseEstimatorOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -293,11 +319,19 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> heatmaps = outputs.heatmaps
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         loss = None
         if labels is not None:
@@ -314,10 +348,18 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
         sequence_output = outputs.feature_maps[-1] if return_dict else outputs[0][-1]
         batch_size = sequence_output.shape[0]
-        patch_height = self.config.backbone_config.image_size[0] // self.config.backbone_config.patch_size[0]
-        patch_width = self.config.backbone_config.image_size[1] // self.config.backbone_config.patch_size[1]
+        patch_height = (
+            self.config.backbone_config.image_size[0]
+            // self.config.backbone_config.patch_size[0]
+        )
+        patch_width = (
+            self.config.backbone_config.image_size[1]
+            // self.config.backbone_config.patch_size[1]
+        )
         sequence_output = (
-            sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
+            sequence_output.permute(0, 2, 1)
+            .reshape(batch_size, -1, patch_height, patch_width)
+            .contiguous()
         )
 
         heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)

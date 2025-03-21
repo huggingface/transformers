@@ -17,7 +17,8 @@
 import tempfile
 import unittest
 
-from transformers import DonutImageProcessor, DonutProcessor, XLMRobertaTokenizerFast
+from transformers import (DonutImageProcessor, DonutProcessor,
+                          XLMRobertaTokenizerFast)
 
 from ...test_processing_common import ProcessorTesterMixin
 

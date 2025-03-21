@@ -22,14 +22,14 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
+from transformers import (SamConfig, SamMaskDecoderConfig,
+                          SamPromptEncoderConfig, SamVisionConfig)
 from transformers.testing_utils import require_tf, slow
 from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
@@ -189,7 +189,9 @@ class TFSamModelTester:
         self.mask_decoder_tester = TFSamMaskDecoderTester()
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -281,7 +283,9 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     all_model_classes = (TFSamModel,) if is_tf_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": TFSamModel, "mask-generation": TFSamModel} if is_tf_available() else {}
+        {"feature-extraction": TFSamModel, "mask-generation": TFSamModel}
+        if is_tf_available()
+        else {}
     )
     test_pruning = False
     test_resize_embeddings = False
@@ -303,7 +307,9 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = TFSamModelTester(self)
-        self.vision_config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
+        self.vision_config_tester = ConfigTester(
+            self, config_class=SamVisionConfig, has_text_modality=False
+        )
         self.prompt_encoder_config_tester = ConfigTester(
             self,
             config_class=SamPromptEncoderConfig,
@@ -366,7 +372,12 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             196,
             196,
         )
-        expected_mask_decoder_attention_shape = (self.model_tester.batch_size, 1, 144, 32)
+        expected_mask_decoder_attention_shape = (
+            self.model_tester.batch_size,
+            1,
+            144,
+            32,
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -376,10 +387,15 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             vision_attentions = outputs.vision_attentions
-            self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(vision_attentions), self.model_tester.num_hidden_layers
+            )
 
             mask_decoder_attentions = outputs.mask_decoder_attentions
-            self.assertEqual(len(mask_decoder_attentions), self.model_tester.mask_decoder_tester.num_hidden_layers)
+            self.assertEqual(
+                len(mask_decoder_attentions),
+                self.model_tester.mask_decoder_tester.num_hidden_layers,
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -387,10 +403,15 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             vision_attentions = outputs.vision_attentions
-            self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(vision_attentions), self.model_tester.num_hidden_layers
+            )
 
             mask_decoder_attentions = outputs.mask_decoder_attentions
-            self.assertEqual(len(mask_decoder_attentions), self.model_tester.mask_decoder_tester.num_hidden_layers)
+            self.assertEqual(
+                len(mask_decoder_attentions),
+                self.model_tester.mask_decoder_tester.num_hidden_layers,
+            )
 
             self.assertListEqual(
                 list(vision_attentions[0].shape[-4:]),
@@ -408,12 +429,16 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        model = TFSamModel.from_pretrained("facebook/sam-vit-base")  # sam-vit-huge blows out our memory
+        model = TFSamModel.from_pretrained(
+            "facebook/sam-vit-base"
+        )  # sam-vit-huge blows out our memory
         self.assertIsNotNone(model)
 
 
 def prepare_image():
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    img_url = (
+        "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    )
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -438,7 +463,9 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         scores = tf.squeeze(outputs.iou_scores)
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.4515), atol=2e-4))
-        self.assertTrue(np.allclose(masks.numpy(), np.array([-4.1807, -3.4949, -3.4483]), atol=1e-2))
+        self.assertTrue(
+            np.allclose(masks.numpy(), np.array([-4.1807, -3.4949, -3.4483]), atol=1e-2)
+        )
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-base")
@@ -448,14 +475,23 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         input_boxes = [[[650, 900, 1000, 1250]]]
         input_points = [[[820, 1080]]]
 
-        inputs = processor(images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="tf")
+        inputs = processor(
+            images=raw_image,
+            input_boxes=input_boxes,
+            input_points=input_points,
+            return_tensors="tf",
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
         self.assertTrue(np.allclose(scores[-1], np.array(0.9566), atol=2e-4))
-        self.assertTrue(np.allclose(masks.numpy(), np.array([-12.7657, -12.3683, -12.5985]), atol=2e-2))
+        self.assertTrue(
+            np.allclose(
+                masks.numpy(), np.array([-12.7657, -12.3683, -12.5985]), atol=2e-2
+            )
+        )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-base")
@@ -467,7 +503,11 @@ class TFSamModelIntegrationTest(unittest.TestCase):
             [[[510, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
         ]
 
-        inputs = processor(images=[raw_image, raw_image], input_points=input_points, return_tensors="tf")
+        inputs = processor(
+            images=[raw_image, raw_image],
+            input_points=input_points,
+            return_tensors="tf",
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
@@ -523,7 +563,12 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         input_points = [[[400, 650]]]
         input_labels = [[1]]
 
-        inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="tf")
+        inputs = processor(
+            images=raw_image,
+            input_points=input_points,
+            input_labels=input_labels,
+            return_tensors="tf",
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
@@ -533,7 +578,9 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         # With no label
         input_points = [[[400, 650]]]
 
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="tf")
+        inputs = processor(
+            images=raw_image, input_points=input_points, return_tensors="tf"
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
@@ -548,7 +595,12 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         input_points = [[[400, 650], [800, 650]]]
         input_labels = [[1, 1]]
 
-        inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="tf")
+        inputs = processor(
+            images=raw_image,
+            input_points=input_points,
+            input_labels=input_labels,
+            return_tensors="tf",
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
@@ -556,7 +608,9 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(scores[-1].numpy(), np.array(0.9762), atol=1e-4))
 
         # no labels
-        inputs = processor(images=raw_image, input_points=input_points, return_tensors="tf")
+        inputs = processor(
+            images=raw_image, input_points=input_points, return_tensors="tf"
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
@@ -573,7 +627,10 @@ class TFSamModelIntegrationTest(unittest.TestCase):
         input_labels = [[1, 1], [1]]
 
         inputs = processor(
-            images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="tf"
+            images=[raw_image, raw_image],
+            input_points=input_points,
+            input_labels=input_labels,
+            return_tensors="tf",
         )
 
         outputs = model(**inputs)
@@ -590,7 +647,9 @@ class TFSamModelIntegrationTest(unittest.TestCase):
 
         input_boxes = [[[75, 275, 1725, 850]]]
 
-        inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="tf")
+        inputs = processor(
+            images=raw_image, input_boxes=input_boxes, return_tensors="tf"
+        )
 
         outputs = model(**inputs)
         scores = tf.squeeze(outputs.iou_scores)
@@ -606,18 +665,26 @@ class TFSamModelIntegrationTest(unittest.TestCase):
 
         input_points = [[[820, 1080]], [[220, 470]]]
 
-        inputs = processor(images=[raw_image, raw_dog_image], input_points=input_points, return_tensors="tf")
+        inputs = processor(
+            images=[raw_image, raw_dog_image],
+            input_points=input_points,
+            return_tensors="tf",
+        )
 
         outputs = model(**inputs)
         scores_batched = tf.squeeze(outputs.iou_scores)
 
         input_points = [[[220, 470]]]
 
-        inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="tf")
+        inputs = processor(
+            images=raw_dog_image, input_points=input_points, return_tensors="tf"
+        )
 
         outputs = model(**inputs)
         scores_single = tf.squeeze(outputs.iou_scores)
-        self.assertTrue(np.allclose(scores_batched[1, :].numpy(), scores_single.numpy(), atol=1e-4))
+        self.assertTrue(
+            np.allclose(scores_batched[1, :].numpy(), scores_single.numpy(), atol=1e-4)
+        )
 
     def test_inference_mask_generation_two_points_point_batch(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-base")
@@ -664,4 +731,6 @@ class TFSamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        self.assertTrue(np.allclose(iou_scores.numpy(), EXPECTED_IOU, atol=1e-4, rtol=1e-4))
+        self.assertTrue(
+            np.allclose(iou_scores.numpy(), EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+        )

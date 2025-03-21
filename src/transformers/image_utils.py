@@ -24,38 +24,23 @@ import numpy as np
 import requests
 from packaging import version
 
-from .utils import (
-    ExplicitEnum,
-    is_av_available,
-    is_cv2_available,
-    is_decord_available,
-    is_jax_tensor,
-    is_numpy_array,
-    is_tf_tensor,
-    is_torch_available,
-    is_torch_tensor,
-    is_torchvision_available,
-    is_vision_available,
-    is_yt_dlp_available,
-    logging,
-    requires_backends,
-    to_numpy,
-)
-from .utils.constants import (  # noqa: F401
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-)
-
+from .utils import (ExplicitEnum, is_av_available, is_cv2_available,
+                    is_decord_available, is_jax_tensor, is_numpy_array,
+                    is_tf_tensor, is_torch_available, is_torch_tensor,
+                    is_torchvision_available, is_vision_available,
+                    is_yt_dlp_available, logging, requires_backends, to_numpy)
+from .utils.constants import IMAGENET_DEFAULT_MEAN  # noqa: F401
+from .utils.constants import (IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN,
+                              IMAGENET_STANDARD_STD, OPENAI_CLIP_MEAN,
+                              OPENAI_CLIP_STD)
 
 if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
-    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
+    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse(
+        "9.1.0"
+    ):
         PILImageResampling = PIL.Image.Resampling
     else:
         PILImageResampling = PIL.Image
@@ -83,7 +68,12 @@ logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[
-    "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
+    "PIL.Image.Image",
+    np.ndarray,
+    "torch.Tensor",
+    list["PIL.Image.Image"],
+    list[np.ndarray],
+    list["torch.Tensor"],
 ]  # noqa
 
 
@@ -152,7 +142,13 @@ def get_image_type(image):
 
 
 def is_valid_image(img):
-    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
+    return (
+        is_pil_image(img)
+        or is_numpy_array(img)
+        or is_torch_tensor(img)
+        or is_tf_tensor(img)
+        or is_jax_tensor(img)
+    )
 
 
 def is_valid_list_of_images(images: list):
@@ -295,7 +291,9 @@ def make_nested_list_of_images(
         if images.ndim == 4:
             return [list(images)]
 
-    raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
+    raise ValueError(
+        "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
+    )
 
 
 def make_batched_videos(videos) -> VideoInput:
@@ -307,10 +305,17 @@ def make_batched_videos(videos) -> VideoInput:
     Returns:
         list: A list of videos.
     """
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+    if (
+        isinstance(videos, (list, tuple))
+        and isinstance(videos[0], (list, tuple))
+        and is_valid_image(videos[0][0])
+    ):
         # case 1: nested batch of videos so we flatten it
         if not is_pil_image(videos[0][0]) and videos[0][0].ndim == 4:
-            videos = [[video for batch_list in batched_videos for video in batch_list] for batched_videos in videos]
+            videos = [
+                [video for batch_list in batched_videos for video in batch_list]
+                for batched_videos in videos
+            ]
         # case 2: list of videos represented as list of video frames
         return videos
 
@@ -399,7 +404,9 @@ def get_channel_dimension_axis(
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
+def get_image_size(
+    image: np.ndarray, channel_dim: ChannelDimension = None
+) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
@@ -454,7 +461,9 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]) -> bool:
+def is_valid_annotation_coco_detection(
+    annotation: dict[str, Union[list, tuple]],
+) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -462,14 +471,17 @@ def is_valid_annotation_coco_detection(annotation: dict[str, Union[list, tuple]]
         and isinstance(annotation["annotations"], (list, tuple))
         and (
             # an image can have no annotations
-            len(annotation["annotations"]) == 0 or isinstance(annotation["annotations"][0], dict)
+            len(annotation["annotations"]) == 0
+            or isinstance(annotation["annotations"][0], dict)
         )
     ):
         return True
     return False
 
 
-def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]]) -> bool:
+def is_valid_annotation_coco_panoptic(
+    annotation: dict[str, Union[list, tuple]],
+) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -478,22 +490,29 @@ def is_valid_annotation_coco_panoptic(annotation: dict[str, Union[list, tuple]])
         and isinstance(annotation["segments_info"], (list, tuple))
         and (
             # an image can have no segments
-            len(annotation["segments_info"]) == 0 or isinstance(annotation["segments_info"][0], dict)
+            len(annotation["segments_info"]) == 0
+            or isinstance(annotation["segments_info"][0], dict)
         )
     ):
         return True
     return False
 
 
-def valid_coco_detection_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
+def valid_coco_detection_annotations(
+    annotations: Iterable[dict[str, Union[list, tuple]]],
+) -> bool:
     return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
 
 
-def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, Union[list, tuple]]]) -> bool:
+def valid_coco_panoptic_annotations(
+    annotations: Iterable[dict[str, Union[list, tuple]]],
+) -> bool:
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
-def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None) -> "PIL.Image.Image":
+def load_image(
+    image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None
+) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
 
@@ -511,7 +530,9 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
-            image = PIL.Image.open(BytesIO(requests.get(image, timeout=timeout).content))
+            image = PIL.Image.open(
+                BytesIO(requests.get(image, timeout=timeout).content)
+            )
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:
@@ -537,7 +558,9 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
-def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs):
+def default_sample_indices_fn(
+    metadata: VideoMetadata, num_frames=None, fps=None, **kwargs
+):
     """
     A default sampling function that replicates the logic used in get_uniform_frame_indices,
     while optionally handling `fps` if `num_frames` is not provided.
@@ -566,7 +589,9 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
             )
 
     if num_frames is not None:
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
+        indices = np.arange(
+            0, total_num_frames, total_num_frames / num_frames, dtype=int
+        )
     else:
         indices = np.arange(0, total_num_frames, dtype=int)
     return indices
@@ -605,7 +630,10 @@ def read_video_opencv(
     video_fps = video.get(cv2.CAP_PROP_FPS)
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames), fps=float(video_fps), duration=float(duration), video_backend="opencv"
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="opencv",
     )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
@@ -662,7 +690,10 @@ def read_video_decord(
     total_num_frames = len(vr)
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames), fps=float(video_fps), duration=float(duration), video_backend="decord"
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="decord",
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
@@ -702,10 +733,15 @@ def read_video_pyav(
 
     container = av.open(video_path)
     total_num_frames = container.streams.video[0].frames
-    video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
+    video_fps = container.streams.video[
+        0
+    ].average_rate  # should we better use `av_guess_frame_rate`?
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames), fps=float(video_fps), duration=float(duration), video_backend="pyav"
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="pyav",
     )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
@@ -827,13 +863,19 @@ def load_video(
     if sample_indices_fn is None:
 
         def sample_indices_fn_func(metadata, **fn_kwargs):
-            return default_sample_indices_fn(metadata, num_frames=num_frames, fps=fps, **fn_kwargs)
+            return default_sample_indices_fn(
+                metadata, num_frames=num_frames, fps=fps, **fn_kwargs
+            )
 
         sample_indices_fn = sample_indices_fn_func
 
-    if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
+    if video.startswith("https://www.youtube.com") or video.startswith(
+        "http://www.youtube.com"
+    ):
         if not is_yt_dlp_available():
-            raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
+            raise ImportError(
+                "To load a video from YouTube url you have  to install `yt_dlp` first."
+            )
         # Lazy import from yt_dlp
         requires_backends(load_video, ["yt_dlp"])
         from yt_dlp import YoutubeDL
@@ -847,10 +889,14 @@ def load_video(
         file_obj = BytesIO(requests.get(video).content)
     elif os.path.isfile(video):
         file_obj = video
-    elif is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
+    elif is_valid_image(video) or (
+        isinstance(video, (list, tuple)) and is_valid_image(video[0])
+    ):
         file_obj = None
     else:
-        raise TypeError("Incorrect format used for video. Should be an url linking to an video or a local path.")
+        raise TypeError(
+            "Incorrect format used for video. Should be an url linking to an video or a local path."
+        )
 
     # can also load with decord, but not cv2/torchvision
     # both will fail in case of url links
@@ -893,7 +939,10 @@ def load_images(
     """
     if isinstance(images, (list, tuple)):
         if len(images) and isinstance(images[0], (list, tuple)):
-            return [[load_image(image, timeout=timeout) for image in image_group] for image_group in images]
+            return [
+                [load_image(image, timeout=timeout) for image in image_group]
+                for image_group in images
+            ]
         else:
             return [load_image(image, timeout=timeout) for image in images]
     else:
@@ -923,7 +972,9 @@ def validate_preprocess_arguments(
 
     """
     if do_rescale and rescale_factor is None:
-        raise ValueError("`rescale_factor` must be specified if `do_rescale` is `True`.")
+        raise ValueError(
+            "`rescale_factor` must be specified if `do_rescale` is `True`."
+        )
 
     if do_pad and size_divisibility is None:
         # Here, size_divisor might be passed as the value of size
@@ -932,13 +983,17 @@ def validate_preprocess_arguments(
         )
 
     if do_normalize and (image_mean is None or image_std is None):
-        raise ValueError("`image_mean` and `image_std` must both be specified if `do_normalize` is `True`.")
+        raise ValueError(
+            "`image_mean` and `image_std` must both be specified if `do_normalize` is `True`."
+        )
 
     if do_center_crop and crop_size is None:
         raise ValueError("`crop_size` must be specified if `do_center_crop` is `True`.")
 
     if do_resize and (size is None or resample is None):
-        raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
+        raise ValueError(
+            "`size` and `resample` must be specified if `do_resize` is `True`."
+        )
 
 
 # In the future we can add a TF implementation here when we have TF models.
@@ -948,7 +1003,9 @@ class ImageFeatureExtractionMixin:
     """
 
     def _ensure_format_supported(self, image):
-        if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(image):
+        if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(
+            image
+        ):
             raise ValueError(
                 f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
                 "`torch.Tensor` are."
@@ -1161,7 +1218,9 @@ class ImageFeatureExtractionMixin:
                 if short == requested_new_short:
                     return image
 
-                new_short, new_long = requested_new_short, int(requested_new_short * long / short)
+                new_short, new_long = requested_new_short, int(
+                    requested_new_short * long / short
+                )
 
                 if max_size is not None:
                     if max_size <= requested_new_short:
@@ -1170,9 +1229,14 @@ class ImageFeatureExtractionMixin:
                             f"size for the smaller edge size = {size}"
                         )
                     if new_long > max_size:
-                        new_short, new_long = int(max_size * new_short / new_long), max_size
+                        new_short, new_long = (
+                            int(max_size * new_short / new_long),
+                            max_size,
+                        )
 
-                size = (new_short, new_long) if width <= height else (new_long, new_short)
+                size = (
+                    (new_short, new_long) if width <= height else (new_long, new_short)
+                )
 
         return image.resize(size, resample=resample)
 
@@ -1200,14 +1264,20 @@ class ImageFeatureExtractionMixin:
         if is_torch_tensor(image) or isinstance(image, np.ndarray):
             if image.ndim == 2:
                 image = self.expand_dims(image)
-            image_shape = image.shape[1:] if image.shape[0] in [1, 3] else image.shape[:2]
+            image_shape = (
+                image.shape[1:] if image.shape[0] in [1, 3] else image.shape[:2]
+            )
         else:
             image_shape = (image.size[1], image.size[0])
 
         top = (image_shape[0] - size[0]) // 2
-        bottom = top + size[0]  # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
+        bottom = (
+            top + size[0]
+        )  # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
         left = (image_shape[1] - size[1]) // 2
-        right = left + size[1]  # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
+        right = (
+            left + size[1]
+        )  # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
 
         # For PIL Images we have a method to crop directly.
         if isinstance(image, PIL.Image.Image):
@@ -1224,11 +1294,19 @@ class ImageFeatureExtractionMixin:
                 image = image.permute(2, 0, 1)
 
         # Check if cropped area is within image boundaries
-        if top >= 0 and bottom <= image_shape[0] and left >= 0 and right <= image_shape[1]:
+        if (
+            top >= 0
+            and bottom <= image_shape[0]
+            and left >= 0
+            and right <= image_shape[1]
+        ):
             return image[..., top:bottom, left:right]
 
         # Otherwise, we may need to pad if the image is too small. Oh joy...
-        new_shape = image.shape[:-2] + (max(size[0], image_shape[0]), max(size[1], image_shape[1]))
+        new_shape = image.shape[:-2] + (
+            max(size[0], image_shape[0]),
+            max(size[1], image_shape[1]),
+        )
         if isinstance(image, np.ndarray):
             new_image = np.zeros_like(image, shape=new_shape)
         elif is_torch_tensor(image):
@@ -1246,7 +1324,9 @@ class ImageFeatureExtractionMixin:
         right += left_pad
 
         new_image = new_image[
-            ..., max(0, top) : min(new_image.shape[-2], bottom), max(0, left) : min(new_image.shape[-1], right)
+            ...,
+            max(0, top) : min(new_image.shape[-2], bottom),
+            max(0, left) : min(new_image.shape[-1], right),
         ]
 
         return new_image
@@ -1268,7 +1348,16 @@ class ImageFeatureExtractionMixin:
 
         return image[::-1, :, :]
 
-    def rotate(self, image, angle, resample=None, expand=0, center=None, translate=None, fillcolor=None):
+    def rotate(
+        self,
+        image,
+        angle,
+        resample=None,
+        expand=0,
+        center=None,
+        translate=None,
+        fillcolor=None,
+    ):
         """
         Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
         counter clockwise around its centre.
@@ -1289,7 +1378,12 @@ class ImageFeatureExtractionMixin:
             image = self.to_pil_image(image)
 
         return image.rotate(
-            angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
+            angle,
+            resample=resample,
+            expand=expand,
+            center=center,
+            translate=translate,
+            fillcolor=fillcolor,
         )
 
 
@@ -1299,7 +1393,9 @@ def validate_annotations(
     annotations: list[dict],
 ) -> None:
     if annotation_format not in supported_annotation_formats:
-        raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
+        raise ValueError(
+            f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}"
+        )
 
     if annotation_format is AnnotationFormat.COCO_DETECTION:
         if not valid_coco_detection_annotations(annotations):

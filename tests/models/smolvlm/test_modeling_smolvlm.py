@@ -22,32 +22,19 @@ import pytest
 import requests
 from parameterized import parameterized
 
-from transformers import (
-    AutoProcessor,
-    is_torch_available,
-    is_vision_available,
-)
-from transformers.testing_utils import (
-    cleanup,
-    require_torch,
-    require_torch_sdpa,
-    slow,
-    torch_device,
-)
+from transformers import AutoProcessor, is_torch_available, is_vision_available
+from transformers.testing_utils import (cleanup, require_torch,
+                                        require_torch_sdpa, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        SmolVLMConfig,
-        SmolVLMForConditionalGeneration,
-        SmolVLMModel,
-    )
+    from transformers import (SmolVLMConfig, SmolVLMForConditionalGeneration,
+                              SmolVLMModel)
 
 if is_vision_available():
     from PIL import Image
@@ -102,7 +89,10 @@ class SmolVLMVisionText2TextModelTester:
         self.num_images = num_images
         self.scale_factor = scale_factor
         self.seq_length = (
-            int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (self.scale_factor**2))
+            int(
+                ((vision_config["image_size"] // vision_config["patch_size"]) ** 2)
+                / (self.scale_factor**2)
+            )
             * self.num_images
         )
         self.use_cache = use_cache
@@ -145,7 +135,12 @@ class SmolVLMVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 2
+            )
+            + 1
+        )
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.seq_length
@@ -175,7 +170,10 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=SmolVLMConfig, has_text_modality=False, common_properties=["image_token_id"]
+            self,
+            config_class=SmolVLMConfig,
+            has_text_modality=False,
+            common_properties=["image_token_id"],
         )
 
     def test_config(self):
@@ -203,7 +201,9 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict) = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -222,7 +222,9 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
             self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -230,7 +232,9 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
             self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15
+            )
 
             # Ignore copy
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
@@ -261,18 +265,26 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
             self.assertTrue(model.config.text_config.vocab_size + 10, model_vocab_size)
 
-            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                model_vocab_size, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
-            self.assertTrue(model_embed.weight.shape[0], model.config.text_config.vocab_size)
+            self.assertTrue(
+                model_embed.weight.shape[0], model.config.text_config.vocab_size
+            )
             self.assertTrue(model.config.text_config.vocab_size, model.vocab_size)
 
-            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                model_vocab_size + 13, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
             target_dimension = 128
-            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                target_dimension, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0], target_dimension)
 
             with self.assertRaisesRegex(
@@ -283,7 +295,9 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_embeddings_untied(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict) = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
 
         original_config.tie_word_embeddings = False
 
@@ -329,14 +343,24 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
+class SmolVLMForConditionalGenerationModelTest(
+    GenerationTesterMixin, ModelTesterMixin, unittest.TestCase
+):
     """
     Model tester for `SmolVLMForConditionalGeneration`.
     """
 
-    all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": SmolVLMForConditionalGeneration} if is_torch_available() else ()
+    all_model_classes = (
+        (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
+    )
+    all_generative_model_classes = (
+        (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"image-text-to-text": SmolVLMForConditionalGeneration}
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -345,7 +369,9 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
 
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SmolVLMConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=SmolVLMConfig, has_text_modality=False
+        )
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
@@ -355,15 +381,21 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    @unittest.skip(
+        reason="Contrastive search is not implemented for VLMs that do cross-attn"
+    )
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    @unittest.skip(
+        reason="Contrastive search is not implemented for VLMs that do cross-attn"
+    )
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
+    @unittest.skip(
+        reason="Contrastive search is not implemented for VLMs that do cross-attn"
+    )
     def test_contrastive_generate_low_memory(self):
         pass
 
@@ -424,13 +456,17 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip(reason="Cache position is off by one leaving out image tokens, FIXME raushan")
+    @unittest.skip(
+        reason="Cache position is off by one leaving out image tokens, FIXME raushan"
+    )
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict) = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -446,7 +482,9 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
             self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -454,7 +492,9 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
             self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15
+            )
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary - 1 and the image token should be the last token
@@ -481,18 +521,26 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
             self.assertTrue(model.config.text_config.vocab_size + 10, model_vocab_size)
 
-            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                model_vocab_size, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
-            self.assertTrue(model_embed.weight.shape[0], model.config.text_config.vocab_size)
+            self.assertTrue(
+                model_embed.weight.shape[0], model.config.text_config.vocab_size
+            )
             self.assertTrue(model.config.text_config.vocab_size, model.vocab_size)
 
-            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                model_vocab_size + 13, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
             target_dimension = 128
-            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                target_dimension, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0], target_dimension)
 
             with self.assertRaisesRegex(
@@ -503,7 +551,9 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_embeddings_untied(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict) = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
 
         original_config.tie_word_embeddings = False
 
@@ -547,7 +597,9 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
 @require_torch
 class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
+        self.processor = AutoProcessor.from_pretrained(
+            "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
+        )
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
@@ -556,7 +608,11 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             )
         )
         self.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
+                ).content
+            )
         )
         self.image3 = Image.open(
             BytesIO(
@@ -582,11 +638,17 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Create inputs
         text = "<image>In this image, we see"
         images = self.image1
-        inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
+        inputs = self.processor(
+            text=text, images=images, return_tensors="pt", padding=True
+        )
         inputs.to(device=torch_device, dtype=torch.bfloat16)
 
         generated_ids = model.generate(**inputs, max_new_tokens=9)
-        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_texts = self.processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
-        expected_generated_text = "\n\n\n\nIn this image, we see a view of the Statue of Liberty and the"
+        expected_generated_text = (
+            "\n\n\n\nIn this image, we see a view of the Statue of Liberty and the"
+        )
         self.assertEqual(generated_texts[0], expected_generated_text)

@@ -25,21 +25,19 @@ import tensorflow as tf
 import torch
 
 from transformers import BertConfig, BertForMaskedLM
-from transformers.models.bert.modeling_bert import (
-    BertIntermediate,
-    BertLayer,
-    BertOutput,
-    BertPooler,
-    BertSelfAttention,
-    BertSelfOutput,
-)
+from transformers.models.bert.modeling_bert import (BertIntermediate,
+                                                    BertLayer, BertOutput,
+                                                    BertPooler,
+                                                    BertSelfAttention,
+                                                    BertSelfOutput)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 
 
-def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pytorch_dump_path: str):
+def convert_checkpoint_to_pytorch(
+    tf_checkpoint_path: str, config_path: str, pytorch_dump_path: str
+):
     def get_masked_lm_array(name: str):
         full_name = f"masked_lm/{name}/.ATTRIBUTES/VARIABLE_VALUE"
         array = tf.train.load_variable(tf_checkpoint_path, full_name)
@@ -117,29 +115,53 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
             layer_index, "_output_dense/bias", self_output.dense.bias.data.shape
         )
 
-        self_output.LayerNorm.weight.data = get_encoder_layer_array(layer_index, "_attention_layer_norm/gamma")
-        self_output.LayerNorm.bias.data = get_encoder_layer_array(layer_index, "_attention_layer_norm/beta")
+        self_output.LayerNorm.weight.data = get_encoder_layer_array(
+            layer_index, "_attention_layer_norm/gamma"
+        )
+        self_output.LayerNorm.bias.data = get_encoder_layer_array(
+            layer_index, "_attention_layer_norm/beta"
+        )
 
         # Intermediate
         intermediate: BertIntermediate = layer.intermediate
 
-        intermediate.dense.weight.data = get_encoder_layer_array(layer_index, "_intermediate_dense/kernel")
-        intermediate.dense.bias.data = get_encoder_layer_array(layer_index, "_intermediate_dense/bias")
+        intermediate.dense.weight.data = get_encoder_layer_array(
+            layer_index, "_intermediate_dense/kernel"
+        )
+        intermediate.dense.bias.data = get_encoder_layer_array(
+            layer_index, "_intermediate_dense/bias"
+        )
 
         # Output
         bert_output: BertOutput = layer.output
 
-        bert_output.dense.weight.data = get_encoder_layer_array(layer_index, "_output_dense/kernel")
-        bert_output.dense.bias.data = get_encoder_layer_array(layer_index, "_output_dense/bias")
+        bert_output.dense.weight.data = get_encoder_layer_array(
+            layer_index, "_output_dense/kernel"
+        )
+        bert_output.dense.bias.data = get_encoder_layer_array(
+            layer_index, "_output_dense/bias"
+        )
 
-        bert_output.LayerNorm.weight.data = get_encoder_layer_array(layer_index, "_output_layer_norm/gamma")
-        bert_output.LayerNorm.bias.data = get_encoder_layer_array(layer_index, "_output_layer_norm/beta")
+        bert_output.LayerNorm.weight.data = get_encoder_layer_array(
+            layer_index, "_output_layer_norm/gamma"
+        )
+        bert_output.LayerNorm.bias.data = get_encoder_layer_array(
+            layer_index, "_output_layer_norm/beta"
+        )
 
     # Embeddings
-    model.bert.embeddings.position_embeddings.weight.data = get_encoder_array("_position_embedding_layer/embeddings")
-    model.bert.embeddings.token_type_embeddings.weight.data = get_encoder_array("_type_embedding_layer/embeddings")
-    model.bert.embeddings.LayerNorm.weight.data = get_encoder_array("_embedding_norm_layer/gamma")
-    model.bert.embeddings.LayerNorm.bias.data = get_encoder_array("_embedding_norm_layer/beta")
+    model.bert.embeddings.position_embeddings.weight.data = get_encoder_array(
+        "_position_embedding_layer/embeddings"
+    )
+    model.bert.embeddings.token_type_embeddings.weight.data = get_encoder_array(
+        "_type_embedding_layer/embeddings"
+    )
+    model.bert.embeddings.LayerNorm.weight.data = get_encoder_array(
+        "_embedding_norm_layer/gamma"
+    )
+    model.bert.embeddings.LayerNorm.bias.data = get_encoder_array(
+        "_embedding_norm_layer/beta"
+    )
 
     # LM Head
     lm_head = model.cls.predictions.transform
@@ -150,12 +172,18 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
     lm_head.LayerNorm.weight.data = get_masked_lm_array("layer_norm/gamma")
     lm_head.LayerNorm.bias.data = get_masked_lm_array("layer_norm/beta")
 
-    model.bert.embeddings.word_embeddings.weight.data = get_masked_lm_array("embedding_table")
+    model.bert.embeddings.word_embeddings.weight.data = get_masked_lm_array(
+        "embedding_table"
+    )
 
     # Pooling
     model.bert.pooler = BertPooler(config=config)
-    model.bert.pooler.dense.weight.data: BertPooler = get_encoder_array("_pooler_layer/kernel")
-    model.bert.pooler.dense.bias.data: BertPooler = get_encoder_array("_pooler_layer/bias")
+    model.bert.pooler.dense.weight.data: BertPooler = get_encoder_array(
+        "_pooler_layer/kernel"
+    )
+    model.bert.pooler.dense.bias.data: BertPooler = get_encoder_array(
+        "_pooler_layer/bias"
+    )
 
     # Export final model
     model.save_pretrained(pytorch_dump_path)
@@ -170,7 +198,10 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--tf_checkpoint_path", type=str, required=True, help="Path to the TensorFlow Token Dropping checkpoint path."
+        "--tf_checkpoint_path",
+        type=str,
+        required=True,
+        help="Path to the TensorFlow Token Dropping checkpoint path.",
     )
     parser.add_argument(
         "--bert_config_file",
@@ -185,4 +216,6 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_checkpoint_to_pytorch(args.tf_checkpoint_path, args.bert_config_file, args.pytorch_dump_path)
+    convert_checkpoint_to_pytorch(
+        args.tf_checkpoint_path, args.bert_config_file, args.pytorch_dump_path
+    )

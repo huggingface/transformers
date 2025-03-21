@@ -19,17 +19,15 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import (
-    MarkupLMProcessor,
-    MarkupLMTokenizer,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
-)
-from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
-
+from transformers import (MarkupLMProcessor, MarkupLMTokenizer,
+                          PreTrainedTokenizer, PreTrainedTokenizerBase,
+                          PreTrainedTokenizerFast)
+from transformers.models.markuplm.tokenization_markuplm import \
+    VOCAB_FILES_NAMES
+from transformers.testing_utils import (require_bs4, require_tokenizers,
+                                        require_torch, slow)
+from transformers.utils import (FEATURE_EXTRACTOR_NAME, cached_property,
+                                is_bs4_available, is_tokenizers_available)
 
 if is_bs4_available():
     from transformers import MarkupLMFeatureExtractor
@@ -54,8 +52,12 @@ class MarkupLMProcessorTest(unittest.TestCase):
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        self.tokenizer_config_file = os.path.join(self.tmpdirname, "tokenizer_config.json")
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
+        self.tokenizer_config_file = os.path.join(
+            self.tmpdirname, "tokenizer_config.json"
+        )
 
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
@@ -65,7 +67,9 @@ class MarkupLMProcessorTest(unittest.TestCase):
             fp.write(json.dumps({"tags_dict": self.tags_dict}))
 
         feature_extractor_map = {"feature_extractor_type": "MarkupLMFeatureExtractor"}
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        self.feature_extraction_file = os.path.join(
+            self.tmpdirname, FEATURE_EXTRACTOR_NAME
+        )
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
 
@@ -88,54 +92,91 @@ class MarkupLMProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = MarkupLMProcessor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
 
             processor.save_pretrained(self.tmpdirname)
             processor = MarkupLMProcessor.from_pretrained(self.tmpdirname)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (MarkupLMTokenizer, MarkupLMTokenizerFast))
+            self.assertIsInstance(
+                processor.tokenizer, (MarkupLMTokenizer, MarkupLMTokenizerFast)
+            )
 
-            self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+            self.assertEqual(
+                processor.feature_extractor.to_json_string(),
+                feature_extractor.to_json_string(),
+            )
             self.assertIsInstance(processor.feature_extractor, MarkupLMFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = MarkupLMProcessor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
+        processor = MarkupLMProcessor(
+            feature_extractor=self.get_feature_extractor(),
+            tokenizer=self.get_tokenizer(),
+        )
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
-
-        processor = MarkupLMProcessor.from_pretrained(
-            self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+        feature_extractor_add_kwargs = self.get_feature_extractor(
+            do_resize=False, size=30
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = MarkupLMProcessor.from_pretrained(
+            self.tmpdirname,
+            use_fast=False,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, MarkupLMTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, MarkupLMFeatureExtractor)
 
         # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
-
-        processor = MarkupLMProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+        tokenizer_add_kwargs = self.get_rust_tokenizer(
+            bos_token="(BOS)", eos_token="(EOS)"
+        )
+        feature_extractor_add_kwargs = self.get_feature_extractor(
+            do_resize=False, size=30
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = MarkupLMProcessor.from_pretrained(
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, MarkupLMTokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, MarkupLMFeatureExtractor)
 
     def test_model_input_names(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = MarkupLMProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MarkupLMProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         self.assertListEqual(
             processor.model_input_names,
@@ -183,7 +224,9 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
     @cached_property
     def get_tokenizers(self):
         slow_tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
-        fast_tokenizer = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", from_slow=True)
+        fast_tokenizer = MarkupLMTokenizerFast.from_pretrained(
+            "microsoft/markuplm-base", from_slow=True
+        )
         return [slow_tokenizer, fast_tokenizer]
 
     @slow
@@ -195,13 +238,21 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
         html_strings = self.get_html_strings
 
         for tokenizer in tokenizers:
-            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = MarkupLMProcessor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
 
             # not batched
             inputs = processor(html_strings[0], return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -213,12 +264,32 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
             inputs = processor(html_strings, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected = [0, 48085, 2209, 48085, 3156, 32, 6533, 19, 5, 48599, 6694, 35, 2]
+            expected = [
+                0,
+                48085,
+                2209,
+                48085,
+                3156,
+                32,
+                6533,
+                19,
+                5,
+                48599,
+                6694,
+                35,
+                2,
+            ]
             self.assertSequenceEqual(inputs.input_ids[1].tolist(), expected)
 
     @slow
@@ -229,16 +300,29 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
         tokenizers = self.get_tokenizers
 
         for tokenizer in tokenizers:
-            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = MarkupLMProcessor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
             processor.parse_html = False
 
             # not batched
             nodes = ["hello", "world", "how", "are"]
-            xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+            xpaths = [
+                "/html/body/div/li[1]/div/span",
+                "/html/body/div/li[1]/div/span",
+                "html/body",
+                "html/body/div",
+            ]
             inputs = processor(nodes=nodes, xpaths=xpaths, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = list(inputs.keys())
             for key in expected_keys:
                 self.assertIn(key, actual_keys)
@@ -254,10 +338,18 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
                 ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
                 ["html/body", "html/body/div", "html/body"],
             ]
-            inputs = processor(nodes=nodes, xpaths=xpaths, padding=True, return_tensors="pt")
+            inputs = processor(
+                nodes=nodes, xpaths=xpaths, padding=True, return_tensors="pt"
+            )
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -274,14 +366,23 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
         tokenizers = self.get_tokenizers
 
         for tokenizer in tokenizers:
-            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = MarkupLMProcessor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
             processor.parse_html = False
 
             # not batched
             nodes = ["hello", "world", "how", "are"]
-            xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+            xpaths = [
+                "/html/body/div/li[1]/div/span",
+                "/html/body/div/li[1]/div/span",
+                "html/body",
+                "html/body/div",
+            ]
             node_labels = [1, 2, 2, 1]
-            inputs = processor(nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt")
+            inputs = processor(
+                nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = [
@@ -333,12 +434,35 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_ids = [0, 4783, 13650, 354, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            expected_ids = [
+                0,
+                4783,
+                13650,
+                354,
+                2,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+            ]
             self.assertSequenceEqual(inputs.input_ids[1].tolist(), expected_ids)
 
             # verify xpath_tags_seq
             expected_xpaths_tags_seq = [[216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 50, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [109, 25, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216], [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]]  # fmt: skip
-            self.assertSequenceEqual(inputs.xpath_tags_seq[1].tolist(), expected_xpaths_tags_seq)
+            self.assertSequenceEqual(
+                inputs.xpath_tags_seq[1].tolist(), expected_xpaths_tags_seq
+            )
 
             # verify labels
             expected_labels = [-100, 6, 3, 10, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]  # fmt: skip
@@ -353,14 +477,22 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
         html_strings = self.get_html_strings
 
         for tokenizer in tokenizers:
-            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = MarkupLMProcessor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
 
             # not batched
             question = "What's his name?"
             inputs = processor(html_strings[0], questions=question, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -381,20 +513,26 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
             )
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = (
-                "<s>what's the time</s>HTML ImagesHTML images are defined with the img tag:</s><pad><pad>"
-            )
+            expected_decoding = "<s>what's the time</s>HTML ImagesHTML images are defined with the img tag:</s><pad><pad>"
             decoding = processor.decode(inputs.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify xpath_subs_seq
             expected_xpath_subs_seq = [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]  # fmt: skip
-            self.assertListEqual(inputs.xpath_subs_seq[1].tolist(), expected_xpath_subs_seq)
+            self.assertListEqual(
+                inputs.xpath_subs_seq[1].tolist(), expected_xpath_subs_seq
+            )
 
     @slow
     def test_processor_case_5(self):
@@ -404,17 +542,32 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
         tokenizers = self.get_tokenizers
 
         for tokenizer in tokenizers:
-            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = MarkupLMProcessor(
+                feature_extractor=feature_extractor, tokenizer=tokenizer
+            )
             processor.parse_html = False
 
             # not batched
             question = "What's his name?"
             nodes = ["hello", "world", "how", "are"]
-            xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
-            inputs = processor(nodes=nodes, xpaths=xpaths, questions=question, return_tensors="pt")
+            xpaths = [
+                "/html/body/div/li[1]/div/span",
+                "/html/body/div/li[1]/div/span",
+                "html/body",
+                "html/body/div",
+            ]
+            inputs = processor(
+                nodes=nodes, xpaths=xpaths, questions=question, return_tensors="pt"
+            )
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -430,10 +583,22 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
                 ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
                 ["html/body", "html/body/div", "html/body"],
             ]
-            inputs = processor(nodes=nodes, xpaths=xpaths, questions=questions, padding=True, return_tensors="pt")
+            inputs = processor(
+                nodes=nodes,
+                xpaths=xpaths,
+                questions=questions,
+                padding=True,
+                return_tensors="pt",
+            )
 
             # verify keys
-            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            expected_keys = [
+                "attention_mask",
+                "input_ids",
+                "token_type_ids",
+                "xpath_subs_seq",
+                "xpath_tags_seq",
+            ]
             actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -448,4 +613,6 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify xpath_subs_seq
             expected_xpath_subs_seq = [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [0, 0, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]  # fmt: skip
-            self.assertListEqual(inputs.xpath_subs_seq[1].tolist()[-5:], expected_xpath_subs_seq)
+            self.assertListEqual(
+                inputs.xpath_subs_seq[1].tolist()[-5:], expected_xpath_subs_seq
+            )

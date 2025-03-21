@@ -19,7 +19,6 @@ from typing import Dict, List, Optional
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -52,7 +51,9 @@ SPECIAL_CODEPOINTS: Dict[int, str] = {
 }
 
 # Maps special codepoint human-readable names to their codepoint values.
-SPECIAL_CODEPOINTS_BY_NAME: Dict[str, int] = {name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()}
+SPECIAL_CODEPOINTS_BY_NAME: Dict[str, int] = {
+    name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()
+}
 
 
 class CanineTokenizer(PreTrainedTokenizer):
@@ -81,14 +82,38 @@ class CanineTokenizer(PreTrainedTokenizer):
         model_max_length=2048,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        sep_token = (
+            AddedToken(sep_token, lstrip=False, rstrip=False)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
+        cls_token = (
+            AddedToken(cls_token, lstrip=False, rstrip=False)
+            if isinstance(cls_token, str)
+            else cls_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         # Creates a mapping for looking up the IDs of special symbols.
         self._special_codepoints: Dict[str, int] = {}
@@ -178,7 +203,10 @@ class CanineTokenizer(PreTrainedTokenizer):
         return result
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -197,7 +225,9 @@ class CanineTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         result = [1] + ([0] * len(token_ids_0)) + [1]
@@ -237,7 +267,9 @@ class CanineTokenizer(PreTrainedTokenizer):
         return result
 
     # CanineTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ):
         return ()
 
 

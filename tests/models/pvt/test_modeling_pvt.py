@@ -17,24 +17,19 @@
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import (
-    require_accelerate,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_accelerate, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
+    from transformers import (PvtConfig, PvtForImageClassification,
+                              PvtImageProcessor, PvtModel)
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
@@ -91,11 +86,15 @@ class PvtModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
         return config, pixel_values, labels
@@ -127,7 +126,9 @@ class PvtModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
@@ -135,9 +136,13 @@ class PvtModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -154,9 +159,14 @@ def prepare_img():
 
 @require_torch
 class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PvtModel, PvtForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (PvtModel, PvtForImageClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": PvtModel, "image-classification": PvtForImageClassification}
+        {
+            "image-feature-extraction": PvtModel,
+            "image-classification": PvtForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -183,7 +193,9 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Pvt does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(
+        reason="Pvt does not have get_input_embeddings method and get_output_embeddings methods"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -247,7 +259,9 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -264,7 +278,11 @@ class PvtModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification(self):
         # only resize + normalize
         image_processor = PvtImageProcessor.from_pretrained("Zetatech/pvt-tiny-224")
-        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
+        model = (
+            PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224")
+            .to(torch_device)
+            .eval()
+        )
 
         image = prepare_img()
         encoded_inputs = image_processor(images=image, return_tensors="pt")
@@ -278,11 +296,15 @@ class PvtModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_model(self):
-        model = PvtModel.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
+        model = (
+            PvtModel.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
+        )
 
         image_processor = PvtImageProcessor.from_pretrained("Zetatech/pvt-tiny-224")
         image = prepare_img()
@@ -298,10 +320,16 @@ class PvtModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
+            [
+                [-0.3086, 1.0402, 1.1816],
+                [-0.2880, 0.5781, 0.6124],
+                [0.1480, 0.6129, -0.0590],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     @require_accelerate
@@ -311,7 +339,9 @@ class PvtModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", torch_dtype=torch.float16)
+        model = PvtForImageClassification.from_pretrained(
+            "Zetatech/pvt-tiny-224", torch_dtype=torch.float16
+        )
         model.to(torch_device)
         image_processor = PvtImageProcessor(size=224)
 

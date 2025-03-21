@@ -18,18 +18,14 @@ import unittest
 
 import pytest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GPTQConfig
-from transformers.testing_utils import (
-    is_torch_available,
-    require_accelerate,
-    require_gptq,
-    require_optimum,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-)
-from transformers.utils import is_auto_gptq_available, is_gptqmodel_available, is_ipex_available
-
+from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
+                          GPTQConfig)
+from transformers.testing_utils import (is_torch_available, require_accelerate,
+                                        require_gptq, require_optimum,
+                                        require_torch_gpu,
+                                        require_torch_multi_gpu, slow)
+from transformers.utils import (is_auto_gptq_available, is_gptqmodel_available,
+                                is_ipex_available)
 
 if is_torch_available():
     import torch
@@ -85,8 +81,12 @@ class GPTQTest(unittest.TestCase):
 
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
-    EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
-    EXPECTED_OUTPUTS.add("Hello my name is John, I am a professional photographer and I")
+    EXPECTED_OUTPUTS.add(
+        "Hello my name is John and I am a professional photographer. I"
+    )
+    EXPECTED_OUTPUTS.add(
+        "Hello my name is John, I am a professional photographer and I"
+    )
     EXPECTED_OUTPUTS.add("Hello my name is John, I am a student in the University of")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a very good looking man.")
     EXPECTED_OUTPUTS.add("Hello my name is Alyson, I am a student in the")
@@ -150,7 +150,9 @@ class GPTQTest(unittest.TestCase):
 
         mem_quantized = self.quantized_model.get_memory_footprint()
 
-        self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE, places=4)
+        self.assertAlmostEqual(
+            self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE, places=4
+        )
 
     def test_device_and_dtype_assignment(self):
         r"""
@@ -171,7 +173,9 @@ class GPTQTest(unittest.TestCase):
         """
         self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
+        self.assertTrue(
+            self.quantized_model.config._pre_quantization_dtype == torch.float16
+        )
 
     def test_quantized_layers_class(self):
         """
@@ -182,7 +186,9 @@ class GPTQTest(unittest.TestCase):
             from gptqmodel.utils.importer import hf_select_quant_linear
 
             if hasattr(self.config, "quantization_config"):
-                checkpoint_format = self.config.quantization_config.get("checkpoint_format")
+                checkpoint_format = self.config.quantization_config.get(
+                    "checkpoint_format"
+                )
                 meta = self.config.quantization_config.get("meta")
             else:
                 checkpoint_format = "gptq"
@@ -198,7 +204,8 @@ class GPTQTest(unittest.TestCase):
                 backend=self.quantization_config.backend,
             )
         elif is_auto_gptq_available():
-            from auto_gptq.utils.import_utils import dynamically_import_QuantLinear as hf_select_quant_linear
+            from auto_gptq.utils.import_utils import \
+                dynamically_import_QuantLinear as hf_select_quant_linear
 
             QuantLinear = hf_select_quant_linear(
                 use_triton=False,
@@ -208,7 +215,10 @@ class GPTQTest(unittest.TestCase):
                 disable_exllama=not self.use_exllama,
                 disable_exllamav2=True,
             )
-        self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
+        self.assertTrue(
+            self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__
+            == QuantLinear
+        )
 
     def check_inference_correctness(self, model):
         r"""
@@ -220,10 +230,15 @@ class GPTQTest(unittest.TestCase):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Check the exactness of the results
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10)
+        output_sequences = model.generate(
+            input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10
+        )
 
         # Get the generation
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def check_quantized_layers_type(self, model, value):
         self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE == value)
@@ -249,7 +264,8 @@ class GPTQTest(unittest.TestCase):
                 quant_type = "cuda-old" if not self.use_exllama else "exllama"
                 if not self.use_exllama:
                     quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                        tmpdirname, quantization_config=GPTQConfig(use_exllama=False, bits=4)
+                        tmpdirname,
+                        quantization_config=GPTQConfig(use_exllama=False, bits=4),
                     )
                     if self.device_map != "cpu":
                         quantized_model_from_saved = quantized_model_from_saved.to(0)
@@ -279,7 +295,9 @@ class GPTQTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
             device_map = self.device_map or "auto"
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=device_map)
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map=device_map
+            )
             self.check_inference_correctness(quantized_model_from_saved)
 
 
@@ -293,13 +311,22 @@ class GPTQTestCUDA(GPTQTest):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if is_auto_gptq_available() and not is_gptqmodel_available() and not self.use_exllama:
+            if (
+                is_auto_gptq_available()
+                and not is_gptqmodel_available()
+                and not self.use_exllama
+            ):
                 self.check_quantized_layers_type(self.quantized_model, "cuda-old")
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                    tmpdirname, quantization_config=GPTQConfig(use_exllama=True, bits=4), device_map=self.device_map
+                    tmpdirname,
+                    quantization_config=GPTQConfig(use_exllama=True, bits=4),
+                    device_map=self.device_map,
                 )
-                self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
+                self.assertEqual(
+                    quantized_model_from_saved.config.quantization_config.bits,
+                    self.bits,
+                )
                 self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
                 self.check_inference_correctness(quantized_model_from_saved)
 
@@ -361,13 +388,21 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Check the exactness of the results
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model.generate(
+            input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10
+        )
 
         # Get the generation
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def test_quantized_layers_type(self):
-        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
+        self.assertTrue(
+            self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE
+            == "exllama"
+        )
 
     def test_generate_quality(self):
         """
@@ -384,13 +419,17 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
         self.assertTrue(inp["input_ids"].shape[1] > 4028)
         with self.assertRaises(RuntimeError) as cm:
-            self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+            self.quantized_model.generate(
+                **inp, num_beams=1, min_new_tokens=3, max_new_tokens=3
+            )
             self.assertTrue("temp_state buffer is too small" in str(cm.exception))
 
         prompt = "I am in Paris and"
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
         self.assertTrue(inp["input_ids"].shape[1] < 4028)
-        self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+        self.quantized_model.generate(
+            **inp, num_beams=1, min_new_tokens=3, max_new_tokens=3
+        )
 
 
 @slow
@@ -451,10 +490,15 @@ class GPTQTestExllamaV2(unittest.TestCase):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Check the exactness of the results
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model.generate(
+            input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10
+        )
 
         # Get the generation
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def test_generate_quality(self):
         """

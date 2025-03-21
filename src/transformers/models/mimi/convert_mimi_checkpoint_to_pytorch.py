@@ -19,26 +19,29 @@ import argparse
 import safetensors
 import torch
 
-from transformers import (
-    EncodecFeatureExtractor,
-    MimiConfig,
-    MimiModel,
-    logging,
-)
-
+from transformers import (EncodecFeatureExtractor, MimiConfig, MimiModel,
+                          logging)
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.mimi")
 
 
 def assert_param_count(model_1, model_2):
-    count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
-    count_2 = sum(p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0])
-    assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
+    count_1 = sum(
+        p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0]
+    )
+    count_2 = sum(
+        p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0]
+    )
+    assert (
+        count_1 == count_2
+    ), f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
 
 
 def param_count(model):
-    return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
+    return sum(
+        p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0]
+    )
 
 
 def _grab_best_device(use_gpu=True):
@@ -95,7 +98,11 @@ def _convert_model(
 
     # permute for sliced rotary
     def permute(w, n_heads, dim1=hidden_size, dim2=hidden_size):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+        return (
+            w.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+            .transpose(1, 2)
+            .reshape(dim1, dim2)
+        )
 
     for k, v in list(state_dict.items()):
         new_k = k if unwanted_prefix is None else k[len(unwanted_prefix) :]
@@ -112,7 +119,9 @@ def _convert_model(
             key_layer = mixed_qkv[qkv_dim : qkv_dim * 2]
             value_layer = mixed_qkv[qkv_dim * 2 :]
 
-            state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = permute(query_layer, num_heads)
+            state_dict[new_k.replace("in_proj_weight", "q_proj.weight")] = permute(
+                query_layer, num_heads
+            )
             state_dict[new_k.replace("in_proj_weight", "k_proj.weight")] = permute(
                 key_layer, num_key_value_heads, dim1=key_value_head_dim
             )
@@ -180,13 +189,31 @@ def convert_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

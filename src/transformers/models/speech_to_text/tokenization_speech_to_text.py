@@ -25,7 +25,6 @@ import sentencepiece
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
@@ -127,7 +126,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             self.lang_codes = lang_codes
             self.langs = LANGUAGES[lang_codes]
             self.lang_tokens = [f"<lang:{lang}>" for lang in self.langs]
-            self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
+            self.lang_code_to_id = {
+                lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs
+            }
             if additional_special_tokens is not None:
                 additional_special_tokens = self.lang_tokens + additional_special_tokens
             else:
@@ -193,7 +194,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
                 decoded = self.sp_model.decode(current_sub_tokens)
-                out_string += (decoded.upper() if self.do_upper_case else decoded) + token + " "
+                out_string += (
+                    (decoded.upper() if self.do_upper_case else decoded) + token + " "
+                )
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
@@ -201,7 +204,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         out_string += decoded.upper() if self.do_upper_case else decoded
         return out_string.strip()
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(
+        self, token_ids_0, token_ids_1=None
+    ) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
@@ -209,7 +214,10 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -229,14 +237,21 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         prefix_ones = [1] * len(self.prefix_tokens)
         suffix_ones = [1]
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+        return (
+            prefix_ones
+            + ([0] * len(token_ids_0))
+            + ([0] * len(token_ids_1))
+            + suffix_ones
+        )
 
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
@@ -252,19 +267,25 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
         self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         vocab_save_path = save_dir / (
-            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
+            (filename_prefix + "-" if filename_prefix else "")
+            + self.vocab_files_names["vocab_file"]
         )
         spm_save_path = save_dir / (
-            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["spm_file"]
+            (filename_prefix + "-" if filename_prefix else "")
+            + self.vocab_files_names["spm_file"]
         )
 
         save_json(self.encoder, vocab_save_path)
 
-        if os.path.abspath(self.spm_file) != os.path.abspath(spm_save_path) and os.path.isfile(self.spm_file):
+        if os.path.abspath(self.spm_file) != os.path.abspath(
+            spm_save_path
+        ) and os.path.isfile(self.spm_file):
             copyfile(self.spm_file, spm_save_path)
         elif not os.path.isfile(self.spm_file):
             with open(spm_save_path, "wb") as fi:
@@ -274,7 +295,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         return (str(vocab_save_path), str(spm_save_path))
 
 
-def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+def load_spm(
+    path: str, sp_model_kwargs: Dict[str, Any]
+) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(str(path))
     return spm

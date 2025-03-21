@@ -16,16 +16,9 @@ import argparse
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import (
-    AddedToken,
-    AutoConfig,
-    AutoTokenizer,
-    CLIPImageProcessor,
-    LlavaProcessor,
-    VipLlavaConfig,
-    VipLlavaForConditionalGeneration,
-)
-
+from transformers import (AddedToken, AutoConfig, AutoTokenizer,
+                          CLIPImageProcessor, LlavaProcessor, VipLlavaConfig,
+                          VipLlavaForConditionalGeneration)
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.": "",
@@ -55,12 +48,16 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
-def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
+def convert_vipllava_llama_to_hf(
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id
+):
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_tokens(
+        AddedToken("<image>", special=True, normalized=False), special_tokens=True
+    )
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
@@ -87,16 +84,32 @@ def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mu, covariance_matrix=1e-5 * sigma
+    )
 
     # We add an image token so we resize the model
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.model.embed_tokens.weight.data[32000:].shape[0]
+                )
+            )
+        ),
         dim=0,
     )
     model.language_model.lm_head.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.lm_head.weight.data[32000:].shape[0]
+                )
+            )
+        ),
         dim=0,
     )
 
@@ -124,7 +137,10 @@ def main():
     )
     args = parser.parse_args()
     convert_vipllava_llama_to_hf(
-        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
+        args.text_model_id,
+        args.vision_model_id,
+        args.output_hub_path,
+        args.old_state_dict_id,
     )
 
 

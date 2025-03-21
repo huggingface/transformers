@@ -20,28 +20,20 @@ import unittest
 from parameterized import parameterized
 
 from transformers import PhiConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoTokenizer,
-        PhiForCausalLM,
-        PhiForSequenceClassification,
-        PhiForTokenClassification,
-        PhiModel,
-    )
+    from transformers import (AutoTokenizer, PhiForCausalLM,
+                              PhiForSequenceClassification,
+                              PhiForTokenClassification, PhiModel)
     from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
 
 
@@ -105,19 +97,33 @@ class PhiModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return PhiConfig(
@@ -137,14 +143,24 @@ class PhiModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = PhiModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -174,7 +190,10 @@ class PhiModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -192,7 +211,9 @@ class PhiModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -248,13 +269,17 @@ class PhiModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -272,9 +297,16 @@ class PhiModelTester:
 
 
 @require_torch
-class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PhiModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
+        (
+            PhiModel,
+            PhiForCausalLM,
+            PhiForSequenceClassification,
+            PhiForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -326,12 +358,17 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = PhiForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->Phi,llama->phi
     def test_phi_sequence_classification_model_for_single_label(self):
@@ -340,12 +377,17 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = PhiForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->Phi,llama->phi
     def test_phi_sequence_classification_model_for_multi_label(self):
@@ -355,29 +397,39 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
         ).to(torch.float)
         model = PhiForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     @parameterized.expand([("linear",), ("dynamic",)])
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling_from_config with Llama->Phi
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = PhiModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = PhiModel(config)
         scaled_model.to(torch_device)
@@ -388,12 +440,18 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     # Copied from tests.models.gpt_neox.test_modeling_gpt_neox.GPTNeoXModelTest.test_model_rope_scaling with GPTNeoX->Phi
     def test_model_rope_scaling(self):
@@ -406,17 +464,25 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         x = torch.randn(
             1, dtype=torch.float32, device=torch_device
         )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
         original_rope = PhiRotaryEmbedding(config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            original_cos_short, original_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            original_sin_short, original_sin_long[:, :short_input_length, :]
+        )
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -424,12 +490,22 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         linear_scaling_rope = PhiRotaryEmbedding(config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            linear_cos_short, linear_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            linear_sin_short, linear_sin_long[:, :short_input_length, :]
+        )
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+            torch.testing.assert_close(
+                linear_cos_long[:, new_position, :],
+                original_cos_long[:, original_position, :],
+            )
+            torch.testing.assert_close(
+                linear_sin_long[:, new_position, :],
+                original_sin_long[:, original_position, :],
+            )
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -453,7 +529,9 @@ class PhiIntegrationTest(unittest.TestCase):
     def test_model_phi_1_logits(self):
         input_ids = {
             "input_ids": torch.tensor(
-                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]],
+                dtype=torch.long,
+                device=torch_device,
             )
         }
 
@@ -464,12 +542,16 @@ class PhiIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = torch.tensor([[2.2671,  6.7684, -2.0107, -1.2440, -1.5335, -2.3828,  6.9186,  6.4245, 3.1548,  0.9998,  0.0760,  4.4653,  4.9857,  4.2956,  1.2308, -1.4178, 0.1361,  0.5191, -0.5699, -2.2201, -3.0750, -3.9600, -4.5936, -3.7394, -2.7777,  6.1874, -0.4148, -1.5684, -0.5967,  0.2395], [1.7004,  4.0383,  0.0546,  0.4530, -0.3619, -0.9021,  1.8355,  1.3587, 1.2406,  2.5775, -0.8834,  5.1910,  4.2565,  4.1406,  3.0752, -0.9099, 1.1595,  0.0264,  0.3243, -1.1803, -1.3945, -2.1406, -3.9939, -1.4438, -2.9546,  3.9204,  1.0851, -1.0598, -1.7819, -0.4827]]).to(torch_device)  # fmt: skip
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4
+        )
 
     def test_model_phi_1_5_logits(self):
         input_ids = {
             "input_ids": torch.tensor(
-                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]],
+                dtype=torch.long,
+                device=torch_device,
             )
         }
 
@@ -480,12 +562,16 @@ class PhiIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = torch.tensor([[12.2922, 13.3507,  8.6963,  9.1355,  9.3502,  9.2667, 14.2027, 13.1363, 13.5446, 11.1337,  9.9279, 16.7195, 13.0768, 14.9141, 11.9965,  8.0233, 10.3129, 10.6118, 10.0204,  9.3827,  8.8344,  8.2806,  8.0153,  8.0540, 7.0964, 16.5743, 11.1256,  9.6987, 11.4770, 10.5440], [12.3323, 14.6050,  8.9986,  8.1580,  9.5654,  6.6728, 12.5966, 12.6662, 12.2784, 11.7522,  8.2039, 16.3102, 11.2203, 13.6088, 12.0125,  9.1021, 9.8216, 10.0987,  9.0926,  8.4260,  8.8009,  7.6547,  6.8075,  7.7881, 7.4501, 15.7451, 10.5053,  8.3129, 10.0027,  9.2612]]).to(torch_device)  # fmt: skip
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4
+        )
 
     def test_model_phi_2_logits(self):
         input_ids = {
             "input_ids": torch.tensor(
-                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]],
+                dtype=torch.long,
+                device=torch_device,
             )
         }
 
@@ -496,7 +582,9 @@ class PhiIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = torch.tensor([[6.4830,  6.1644,  3.4055,  2.2848,  5.4654,  2.8360,  5.5975,  5.5391, 7.3101,  4.2498,  2.5913, 10.3885,  6.4359,  8.7982,  5.6534,  0.5150, 2.7498,  3.1930,  2.4334,  1.7781,  1.5613,  1.3067,  0.8291,  0.5633, 0.6522,  9.8191,  5.5771,  2.7987,  4.2845,  3.7030], [6.0642,  7.8242,  3.4634,  1.9259,  4.3169,  2.0913,  6.0446,  3.6804, 6.6736,  4.0727,  2.1791, 11.4139,  5.6795,  7.5652,  6.2039,  2.7174, 4.3266,  3.6930,  2.8058,  2.6721,  2.3047,  2.0848,  2.0972,  2.0441, 1.3160,  9.2085,  4.5557,  3.0296,  2.6045,  2.4059]]).to(torch_device)  # fmt: skip
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3
+        )
 
     def test_phi_2_generation(self):
         model = PhiForCausalLM.from_pretrained("microsoft/phi-2")

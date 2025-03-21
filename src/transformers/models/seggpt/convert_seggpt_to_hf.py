@@ -23,9 +23,9 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SegGptConfig, SegGptForImageSegmentation, SegGptImageProcessor
+from transformers import (SegGptConfig, SegGptForImageSegmentation,
+                          SegGptImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -90,15 +90,9 @@ def rename_key(dct, old, new):
 
 # We will verify our results on spongebob images
 def prepare_input():
-    image_input_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
-    )
-    image_prompt_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
-    )
-    mask_prompt_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
-    )
+    image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+    image_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+    mask_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
 
     image_input = Image.open(requests.get(image_input_url, stream=True).raw)
     image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
@@ -119,7 +113,9 @@ def convert_seggpt_checkpoint(args):
 
     # Load original checkpoint
     checkpoint_url = "https://huggingface.co/BAAI/SegGpt/blob/main/seggpt_vit_large.pth"
-    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    original_state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu"
+    )["model"]
 
     # # Rename keys
     new_state_dict = original_state_dict.copy()
@@ -137,35 +133,84 @@ def convert_seggpt_checkpoint(args):
 
     input_img, prompt_img, prompt_mask = prepare_input()
     image_processor = SegGptImageProcessor()
-    inputs = image_processor(images=input_img, prompt_images=prompt_img, prompt_masks=prompt_mask, return_tensors="pt")
+    inputs = image_processor(
+        images=input_img,
+        prompt_images=prompt_img,
+        prompt_masks=prompt_mask,
+        return_tensors="pt",
+    )
 
     expected_prompt_pixel_values = torch.tensor(
         [
-            [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
-            [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
-            [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
+            [
+                [-0.6965, -0.6965, -0.6965],
+                [-0.6965, -0.6965, -0.6965],
+                [-0.6965, -0.6965, -0.6965],
+            ],
+            [
+                [1.6583, 1.6583, 1.6583],
+                [1.6583, 1.6583, 1.6583],
+                [1.6583, 1.6583, 1.6583],
+            ],
+            [
+                [2.3088, 2.3088, 2.3088],
+                [2.3088, 2.3088, 2.3088],
+                [2.3088, 2.3088, 2.3088],
+            ],
         ]
     )
 
     expected_pixel_values = torch.tensor(
         [
-            [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
-            [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
-            [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
+            [
+                [1.6324, 1.6153, 1.5810],
+                [1.6153, 1.5982, 1.5810],
+                [1.5810, 1.5639, 1.5639],
+            ],
+            [
+                [1.2731, 1.2556, 1.2206],
+                [1.2556, 1.2381, 1.2031],
+                [1.2206, 1.2031, 1.1681],
+            ],
+            [
+                [1.6465, 1.6465, 1.6465],
+                [1.6465, 1.6465, 1.6465],
+                [1.6291, 1.6291, 1.6291],
+            ],
         ]
     )
 
     expected_prompt_masks = torch.tensor(
         [
-            [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
-            [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
-            [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
+            [
+                [-2.1179, -2.1179, -2.1179],
+                [-2.1179, -2.1179, -2.1179],
+                [-2.1179, -2.1179, -2.1179],
+            ],
+            [
+                [-2.0357, -2.0357, -2.0357],
+                [-2.0357, -2.0357, -2.0357],
+                [-2.0357, -2.0357, -2.0357],
+            ],
+            [
+                [-1.8044, -1.8044, -1.8044],
+                [-1.8044, -1.8044, -1.8044],
+                [-1.8044, -1.8044, -1.8044],
+            ],
         ]
     )
 
-    assert torch.allclose(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, atol=1e-4)
-    assert torch.allclose(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, atol=1e-4)
-    assert torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4)
+    assert torch.allclose(
+        inputs.pixel_values[0, :, :3, :3], expected_pixel_values, atol=1e-4
+    )
+    assert torch.allclose(
+        inputs.prompt_pixel_values[0, :, :3, :3],
+        expected_prompt_pixel_values,
+        atol=1e-4,
+    )
+    assert torch.allclose(
+        inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4
+    )
 
     torch.manual_seed(2)
     outputs = model(**inputs)
@@ -174,18 +219,34 @@ def convert_seggpt_checkpoint(args):
     if verify_logits:
         expected_output = torch.tensor(
             [
-                [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
-                [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
-                [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
+                [
+                    [-2.1208, -2.1190, -2.1198],
+                    [-2.1237, -2.1228, -2.1227],
+                    [-2.1232, -2.1226, -2.1228],
+                ],
+                [
+                    [-2.0405, -2.0396, -2.0403],
+                    [-2.0434, -2.0434, -2.0433],
+                    [-2.0428, -2.0432, -2.0434],
+                ],
+                [
+                    [-1.8102, -1.8088, -1.8099],
+                    [-1.8131, -1.8126, -1.8129],
+                    [-1.8130, -1.8128, -1.8131],
+                ],
             ]
         )
-        assert torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_output, atol=1e-4)
+        assert torch.allclose(
+            outputs.pred_masks[0, :, :3, :3], expected_output, atol=1e-4
+        )
         print("Looks good!")
     else:
         print("Converted without verifying logits")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}"
+        )
         model.save_pretrained(pytorch_dump_folder_path)
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
@@ -206,7 +267,10 @@ if __name__ == "__main__":
         help="Name of the SegGpt model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--verify_logits",
@@ -214,7 +278,9 @@ if __name__ == "__main__":
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()

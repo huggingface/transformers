@@ -1,14 +1,8 @@
 from typing import List, Union
 
-from ..utils import (
-    add_end_docstrings,
-    is_torch_available,
-    is_vision_available,
-    logging,
-    requires_backends,
-)
+from ..utils import (add_end_docstrings, is_torch_available,
+                     is_vision_available, logging, requires_backends)
 from .base import Pipeline, build_pipeline_init_args
-
 
 if is_vision_available():
     from PIL import Image
@@ -16,7 +10,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -52,7 +47,11 @@ class DepthEstimationPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    def __call__(
+        self,
+        inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None,
+        **kwargs
+    ):
         """
         Predict the depth(s) of the image(s) passed as inputs.
 
@@ -89,7 +88,9 @@ class DepthEstimationPipeline(Pipeline):
         if "images" in kwargs:
             inputs = kwargs.pop("images")
         if inputs is None:
-            raise ValueError("Cannot call the depth-estimation pipeline without an inputs argument!")
+            raise ValueError(
+                "Cannot call the depth-estimation pipeline without an inputs argument!"
+            )
         return super().__call__(inputs, **kwargs)
 
     def _sanitize_parameters(self, timeout=None, parameters=None, **kwargs):
@@ -128,6 +129,8 @@ class DepthEstimationPipeline(Pipeline):
             depth = (depth - depth.min()) / (depth.max() - depth.min())
             depth = Image.fromarray((depth * 255).astype("uint8"))
 
-            formatted_outputs.append({"predicted_depth": output["predicted_depth"], "depth": depth})
+            formatted_outputs.append(
+                {"predicted_depth": output["predicted_depth"], "depth": depth}
+            )
 
         return formatted_outputs[0] if len(outputs) == 1 else formatted_outputs

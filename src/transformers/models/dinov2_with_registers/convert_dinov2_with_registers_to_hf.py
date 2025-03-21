@@ -28,15 +28,12 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import (
-    BitImageProcessor,
-    Dinov2WithRegistersConfig,
-    Dinov2WithRegistersForImageClassification,
-    Dinov2WithRegistersModel,
-)
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from transformers import (BitImageProcessor, Dinov2WithRegistersConfig,
+                          Dinov2WithRegistersForImageClassification,
+                          Dinov2WithRegistersModel)
+from transformers.image_utils import (IMAGENET_DEFAULT_MEAN,
+                                      IMAGENET_DEFAULT_STD, PILImageResampling)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -67,7 +64,9 @@ def get_dinov2_with_registers_config(model_name, image_classifier=False):
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
         config.num_labels = 1000
-        config.id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        config.id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         config.id2label = {int(k): v for k, v in config.id2label.items()}
 
     return config
@@ -129,16 +128,24 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[
+            : config.hidden_size
         ]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
         state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[
+            -config.hidden_size :
+        ]
 
 
 # We will verify our results on an image of cute cats
@@ -149,17 +156,23 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+def convert_dinov2_with_registers_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our Dinov2WithRegisters structure.
     """
 
     # define default Dinov2WithRegisters configuration
     image_classifier = "1layer" in model_name
-    config = get_dinov2_with_registers_config(model_name, image_classifier=image_classifier)
+    config = get_dinov2_with_registers_config(
+        model_name, image_classifier=image_classifier
+    )
 
     # load original model from torch hub
-    original_model = torch.hub.load("facebookresearch/dinov2", model_name.replace("_1layer", ""))
+    original_model = torch.hub.load(
+        "facebookresearch/dinov2", model_name.replace("_1layer", "")
+    )
     original_model.eval()
 
     # load state_dict of original model, remove and rename some keys
@@ -188,7 +201,9 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
             "dinov2_vitg14_reg_1layer": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_reg4_linear_head.pth",
         }
         url = model_name_to_classifier_dict_url[model_name]
-        classifier_state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
+        classifier_state_dict = torch.hub.load_state_dict_from_url(
+            url, map_location="cpu"
+        )
         model.classifier.weight = nn.Parameter(classifier_state_dict["weight"])
         model.classifier.bias = nn.Parameter(classifier_state_dict["bias"])
     else:
@@ -211,7 +226,9 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
         ]
     )
 
-    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+    original_pixel_values = transformations(image).unsqueeze(
+        0
+    )  # insert batch dimension
 
     processor = BitImageProcessor(
         size={"shortest_edge": 256},
@@ -234,7 +251,9 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
         print(model.config.id2label[class_idx])
     else:
         assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape
-        assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-3)
+        assert torch.allclose(
+            outputs.last_hidden_state[:, 0], original_outputs, atol=1e-3
+        )
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -281,11 +300,18 @@ if __name__ == "__main__":
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_dinov2_with_registers_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_dinov2_with_registers_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

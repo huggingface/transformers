@@ -22,14 +22,10 @@ import torch.utils.checkpoint
 from ...cache_utils import Cache
 from ...modeling_outputs import ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import add_start_docstrings_to_model_forward, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModelForImageTextToText
 from .configuration_shieldgemma2 import ShieldGemma2Config
-
 
 _CHECKPOINT_FOR_DOC = "google/shieldgemma-2-4b-it"
 _CONFIG_FOR_DOC = "ShieldGemma2Config"
@@ -112,7 +108,9 @@ SHIELDGEMMA2_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWithNoAttention):
+class ShieldGemma2ImageClassifierOutputWithNoAttention(
+    ImageClassifierOutputWithNoAttention
+):
     """ShieldGemma2 classifies imags as violative or not relative to a specific policy
     Args:
     """

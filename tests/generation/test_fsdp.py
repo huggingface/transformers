@@ -16,20 +16,17 @@ import argparse
 from typing import Any, Callable
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    TestCasePlus,
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    require_torch_multi_gpu,
-)
-
+from transformers.testing_utils import (TestCasePlus, execute_subprocess_async,
+                                        get_torch_dist_unique_port,
+                                        require_torch_multi_gpu)
 
 if is_torch_available():
     import functools
 
     import torch
     import torch.distributed
-    from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
+    from torch.distributed._composable.fsdp import (
+        fully_shard, register_fsdp_forward_method)
     from torch.distributed.device_mesh import init_device_mesh
     from torch.distributed.fsdp import FullyShardedDataParallel
     from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
@@ -56,19 +53,29 @@ if is_torch_available():
 
     @manage_process_group
     def fsdp_generate():
-        torch.cuda.set_device(device := torch.device(rank := torch.distributed.get_rank()))
+        torch.cuda.set_device(
+            device := torch.device(rank := torch.distributed.get_rank())
+        )
 
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        ).to(device)
 
         fsdp_model = FullyShardedDataParallel(
             model,
-            auto_wrap_policy=functools.partial(transformer_auto_wrap_policy, transformer_layer_cls={GPT2Block}),
+            auto_wrap_policy=functools.partial(
+                transformer_auto_wrap_policy, transformer_layer_cls={GPT2Block}
+            ),
             limit_all_gathers=True,
             use_orig_params=True,
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        batch = tokenizer(data[rank], return_tensors="pt", return_attention_mask=True).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        )
+        batch = tokenizer(
+            data[rank], return_tensors="pt", return_attention_mask=True
+        ).to(device)
 
         with FullyShardedDataParallel.summon_full_params(fsdp_model):
             _ = fsdp_model.module.generate(
@@ -79,9 +86,13 @@ if is_torch_available():
 
     @manage_process_group
     def fsdp2_generate():
-        torch.cuda.set_device(device := torch.device(rank := torch.distributed.get_rank()))
+        torch.cuda.set_device(
+            device := torch.device(rank := torch.distributed.get_rank())
+        )
 
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        ).to(device)
 
         mesh = init_device_mesh("cuda", (torch.distributed.get_world_size(),))
         for submodule in model.modules():
@@ -91,8 +102,12 @@ if is_torch_available():
 
         register_fsdp_forward_method(model, "generate")
 
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        batch = tokenizer(data[rank], return_tensors="pt", return_attention_mask=True).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2"
+        )
+        batch = tokenizer(
+            data[rank], return_tensors="pt", return_attention_mask=True
+        ).to(device)
 
         _ = model.generate(
             input_ids=batch["input_ids"],

@@ -1,5 +1,6 @@
 from transformers import PreTrainedTokenizerFast
 
+
 class ArlowTokenizer(PreTrainedTokenizerFast):
     vocab_files_names = {"tokenizer_file": "tokenizer.json"}
     model_input_names = ["input_ids", "attention_mask"]
@@ -30,6 +31,7 @@ class ArlowTokenizer(PreTrainedTokenizerFast):
         )
 
         self.model_type = "ArlowGPT"
+
 
 # --- Test code below ---
 

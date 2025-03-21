@@ -17,12 +17,14 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from transformers.image_utils import (IMAGENET_STANDARD_MEAN,
+                                      IMAGENET_STANDARD_STD)
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import (is_torch_available, is_torchvision_available,
+                                is_vision_available)
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -93,7 +95,9 @@ class Gemma3ImageProcessingTester:
         return self.num_channels, self.size["height"], self.size["width"]
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -109,7 +113,9 @@ class Gemma3ImageProcessingTester:
 @require_vision
 class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Gemma3ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Gemma3ImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        Gemma3ImageProcessorFast if is_torchvision_available() else None
+    )
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Gemma3
     def setUp(self):
@@ -133,14 +139,20 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_pan_and_scan"))
             self.assertTrue(hasattr(image_processing, "pan_and_scan_min_crop_size"))
             self.assertTrue(hasattr(image_processing, "pan_and_scan_max_num_crops"))
-            self.assertTrue(hasattr(image_processing, "pan_and_scan_min_ratio_to_activate"))
+            self.assertTrue(
+                hasattr(image_processing, "pan_and_scan_min_ratio_to_activate")
+            )
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=84)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=84
+            )
             self.assertEqual(image_processor.size, {"height": 84, "width": 84})
 
     def test_without_pan_and_scan(self):
@@ -149,20 +161,28 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         """
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, do_pan_and_scan=False)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, do_pan_and_scan=False
+            )
 
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=True
+            )
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
-            encoded_images = image_processor(image_inputs[0], return_tensors="pt").pixel_values
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (1, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
-            encoded_images = image_processor(image_inputs, return_tensors="pt").pixel_values
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (7, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -176,16 +196,24 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             """This function prepares a list of PIL images"""
-            image_inputs = [np.random.randint(255, size=(3, 300, 600), dtype=np.uint8)] * 3
-            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+            image_inputs = [
+                np.random.randint(255, size=(3, 300, 600), dtype=np.uint8)
+            ] * 3
+            image_inputs = [
+                Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs
+            ]
 
             # Test not batched input, 3 images because we have base image + 2 crops
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (3, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched, 9 images because we have base image + 2 crops per each item
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (9, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -194,17 +222,23 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=True
+            )
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (1, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (7, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -213,17 +247,23 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=True, numpify=True
+            )
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (1, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (7, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
@@ -232,18 +272,24 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=True, torchify=True
+            )
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
-            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs[0], return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (1, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
-            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            encoded_images = image_processing(
+                image_inputs, return_tensors="pt"
+            ).pixel_values
             expected_output_image_shape = (7, 3, 18, 18)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 

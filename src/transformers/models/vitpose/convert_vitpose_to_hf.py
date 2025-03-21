@@ -28,8 +28,8 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import VitPoseBackboneConfig, VitPoseConfig, VitPoseForPoseEstimation, VitPoseImageProcessor
-
+from transformers import (VitPoseBackboneConfig, VitPoseConfig,
+                          VitPoseForPoseEstimation, VitPoseImageProcessor)
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"patch_embed.proj": "embeddings.patch_embeddings.projection",
@@ -203,7 +203,9 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
     print(f"Fetching all parameters from the checkpoint at {filename}...")
 
     checkpoint_path = hf_hub_download(
-        repo_id="nielsr/vitpose-original-checkpoints", filename=filename, repo_type="model"
+        repo_id="nielsr/vitpose-original-checkpoints",
+        filename=filename,
+        repo_type="model",
     )
 
     print("Converting model...")
@@ -218,25 +220,36 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
         new_key = new_keys[key]
         value = original_state_dict[key]
 
-        if re.search("associate_heads", new_key) or re.search("backbone.cls_token", new_key):
+        if re.search("associate_heads", new_key) or re.search(
+            "backbone.cls_token", new_key
+        ):
             # This associated_heads is concept of auxiliary head so does not require in inference stage.
             # backbone.cls_token is optional forward function for dynamically change of size, see detail in https://github.com/ViTAE-Transformer/ViTPose/issues/34
             pass
         elif re.search("qkv", new_key):
             state_dict[new_key.replace("self.qkv", "attention.query")] = value[:dim]
-            state_dict[new_key.replace("self.qkv", "attention.key")] = value[dim : dim * 2]
+            state_dict[new_key.replace("self.qkv", "attention.key")] = value[
+                dim : dim * 2
+            ]
             state_dict[new_key.replace("self.qkv", "attention.value")] = value[-dim:]
         elif re.search("head", new_key) and not config.use_simple_decoder:
             # Pattern for deconvolution layers
             deconv_pattern = r"deconv_layers\.(0|3)\.weight"
-            new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1))//3 + 1}.weight", new_key)
+            new_key = re.sub(
+                deconv_pattern,
+                lambda m: f"deconv{int(m.group(1))//3 + 1}.weight",
+                new_key,
+            )
             # Pattern for batch normalization layers
             bn_patterns = [
                 (r"deconv_layers\.(\d+)\.weight", r"batchnorm\1.weight"),
                 (r"deconv_layers\.(\d+)\.bias", r"batchnorm\1.bias"),
                 (r"deconv_layers\.(\d+)\.running_mean", r"batchnorm\1.running_mean"),
                 (r"deconv_layers\.(\d+)\.running_var", r"batchnorm\1.running_var"),
-                (r"deconv_layers\.(\d+)\.num_batches_tracked", r"batchnorm\1.num_batches_tracked"),
+                (
+                    r"deconv_layers\.(\d+)\.num_batches_tracked",
+                    r"batchnorm\1.num_batches_tracked",
+                ),
             ]
 
             for pattern, replacement in bn_patterns:
@@ -244,7 +257,9 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
                     # Convert the layer number to the correct batch norm index
                     layer_num = int(re.search(pattern, key).group(1))
                     bn_num = layer_num // 3 + 1
-                    new_key = re.sub(pattern, replacement.replace(r"\1", str(bn_num)), new_key)
+                    new_key = re.sub(
+                        pattern, replacement.replace(r"\1", str(bn_num)), new_key
+                    )
             state_dict[new_key] = value
         else:
             state_dict[new_key] = value
@@ -261,9 +276,15 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
     # verify image processor
     image = prepare_img()
     boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
-    pixel_values = image_processor(images=image, boxes=boxes, return_tensors="pt").pixel_values
+    pixel_values = image_processor(
+        images=image, boxes=boxes, return_tensors="pt"
+    ).pixel_values
 
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image",
+        filename="vitpose_batch_data.pt",
+        repo_type="dataset",
+    )
     original_pixel_values = torch.load(filepath, map_location="cpu")["img"]
     # we allow for a small difference in the pixel values due to the original repository using cv2
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-1)
@@ -272,7 +293,10 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
 
     with torch.no_grad():
         print("Shape of original_pixel_values: ", original_pixel_values.shape)
-        print("First values of original_pixel_values: ", original_pixel_values[0, 0, :3, :3])
+        print(
+            "First values of original_pixel_values: ",
+            original_pixel_values[0, 0, :3, :3],
+        )
 
         # first forward pass
         outputs = model(original_pixel_values, dataset_index=dataset_index)
@@ -287,7 +311,9 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
         outputs_flipped = model(
             original_pixel_values_flipped,
             dataset_index=dataset_index,
-            flip_pairs=torch.tensor([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]),
+            flip_pairs=torch.tensor(
+                [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]
+            ),
         )
         output_flipped_heatmap = outputs_flipped.heatmaps
 
@@ -406,13 +432,20 @@ def main():
         help="Name of the VitPose model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to store the converted model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to store the converted model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     parser.add_argument(
-        "--check_logits", action="store_false", help="Whether or not to verify the logits of the converted model."
+        "--check_logits",
+        action="store_false",
+        help="Whether or not to verify the logits of the converted model.",
     )
 
     args = parser.parse_args()

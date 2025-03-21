@@ -21,7 +21,9 @@ from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (BatchEncoding, PaddingStrategy,
+                                        PreTokenizedInput, TextInput,
+                                        TruncationStrategy)
 from ...utils import TensorType
 
 
@@ -51,7 +53,9 @@ class FlavaProcessor(ProcessorMixin):
             )
             feature_extractor = kwargs.pop("feature_extractor")
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
+        image_processor = (
+            image_processor if image_processor is not None else feature_extractor
+        )
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -63,7 +67,11 @@ class FlavaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -90,7 +98,9 @@ class FlavaProcessor(ProcessorMixin):
         """
 
         if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
+            raise ValueError(
+                "You have to specify either text or images. Both cannot be none."
+            )
 
         if text is not None:
             encoding = self.tokenizer(
@@ -126,7 +136,9 @@ class FlavaProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**image_features), tensor_type=return_tensors
+            )
 
     def batch_decode(self, *args, **kwargs):
         """

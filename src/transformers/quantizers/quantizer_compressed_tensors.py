@@ -17,10 +17,10 @@ import os
 import re
 from typing import List
 
-from ..utils import is_compressed_tensors_available, is_torch_available, logging
+from ..utils import (is_compressed_tensors_available, is_torch_available,
+                     logging)
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
-
 
 if is_torch_available():
     import torch
@@ -52,7 +52,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         self.run_compressed = quantization_config.run_compressed
         self.quantization_config = quantization_config
 
-    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys_after_loading(
+        self, model, missing_keys: List[str], prefix: str
+    ) -> List[str]:
         """
         Update missing keys after loading the model. This is necessary for compressed tensors
         to load the model correctly. We expect weights to be present in missing keys.
@@ -71,10 +73,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         expected_missing_keys = self.compressor.get_missing_module_keys(model)
         return [
-            key for key in missing_keys if not any(re.match(f".*{pattern}", key) for pattern in expected_missing_keys)
+            key
+            for key in missing_keys
+            if not any(
+                re.match(f".*{pattern}", key) for pattern in expected_missing_keys
+            )
         ]
 
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+    def update_unexpected_keys(
+        self, model, unexpected_keys: List[str], prefix: str
+    ) -> List[str]:
         """
         Override this method if you want to adjust the `unexpected_keys`.
 
@@ -89,7 +97,11 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # We expect some unexpected keys in model
         # safetensors file for compressed models
         keys_to_ignore = self.compressor.get_unexpected_file_keys(model)
-        return [key for key in unexpected_keys if not any(re.match(f".*{pattern}", key) for pattern in keys_to_ignore)]
+        return [
+            key
+            for key in unexpected_keys
+            if not any(re.match(f".*{pattern}", key) for pattern in keys_to_ignore)
+        ]
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -99,11 +111,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         if not is_torch_available():
             # torch already should be installed as part of compressed tensors
-            raise ImportError("torch is required for using compressed-tensors quantization")
+            raise ImportError(
+                "torch is required for using compressed-tensors quantization"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            logger.info("Loading model using torch.float16 for compressed-tensors quantization")
+            logger.info(
+                "Loading model using torch.float16 for compressed-tensors quantization"
+            )
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
             logger.info(
@@ -118,15 +134,21 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         if self.run_compressed:
             if not self.is_quantization_compressed:
-                raise ValueError("`run_compressed` is only supported for quantized_compressed models")
-            apply_quantization_config(model, ct_quantization_config, run_compressed=True)
+                raise ValueError(
+                    "`run_compressed` is only supported for quantized_compressed models"
+                )
+            apply_quantization_config(
+                model, ct_quantization_config, run_compressed=True
+            )
         elif self.is_quantized and not self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
 
-        if (self.is_quantization_compressed and not self.run_compressed) or self.is_sparsification_compressed:
+        if (
+            self.is_quantization_compressed and not self.run_compressed
+        ) or self.is_sparsification_compressed:
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
 
@@ -139,7 +161,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             if self.is_quantization_compressed and not self.run_compressed:
                 from compressed_tensors.quantization import QuantizationStatus
 
-                self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
+                self.compressor.quantization_config.quantization_status = (
+                    QuantizationStatus.FROZEN
+                )
             self.compressor.decompress(model_path=cache_path, model=model)
 
     @property
@@ -154,7 +178,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.quantization_config is not None
-            and self.quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+            and self.quantization_config.quantization_config.quantization_status
+            == QuantizationStatus.COMPRESSED
         )
 
     @property
@@ -163,7 +188,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.sparsity_config is not None
-            and self.quantization_config.sparsity_config.format != CompressionFormat.dense.value
+            and self.quantization_config.sparsity_config.format
+            != CompressionFormat.dense.value
         )
 
     @property

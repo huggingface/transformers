@@ -22,7 +22,6 @@ import argparse
 
 import requests
 import torch
-
 # pip3 install salesforce-lavis
 # I'm actually installing a slightly modified version: pip3 install git+https://github.com/nielsrogge/LAVIS.git@fix_lavis_float32 (there's also the fix_lavis branch)
 # also note: to convert Vicuna checkpoints, we had to include /home/niels/python_projects/checkpoints/FastChat/vicuna-7b in lavis/configs/models/blip2/blip2_instruct_vicuna7b.yaml
@@ -30,19 +29,12 @@ import torch
 from lavis.models import load_model_and_preprocess
 from PIL import Image
 
-from transformers import (
-    AutoTokenizer,
-    BlipImageProcessor,
-    InstructBlipProcessor,
-    InstructBlipVideoConfig,
-    InstructBlipVideoForConditionalGeneration,
-    InstructBlipVideoQFormerConfig,
-    InstructBlipVideoVisionConfig,
-    LlamaConfig,
-    LlamaTokenizerFast,
-    T5Config,
-    T5TokenizerFast,
-)
+from transformers import (AutoTokenizer, BlipImageProcessor,
+                          InstructBlipProcessor, InstructBlipVideoConfig,
+                          InstructBlipVideoForConditionalGeneration,
+                          InstructBlipVideoQFormerConfig,
+                          InstructBlipVideoVisionConfig, LlamaConfig,
+                          LlamaTokenizerFast, T5Config, T5TokenizerFast)
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
@@ -99,7 +91,9 @@ def read_in_q_v_bias(state_dict, config):
         v_bias = state_dict.pop(f"visual_encoder.blocks.{i}.attn.v_bias")
 
         # next, set bias in the state dict
-        qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
+        qkv_bias = torch.cat(
+            (q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias)
+        )
         state_dict[f"vision_model.encoder.layers.{i}.self_attn.qkv.bias"] = qkv_bias
 
 
@@ -110,35 +104,51 @@ def get_blip2_config(model_name):
     # make sure the models have proper bos_token_id and eos_token_id set (important for generation)
     # seems like flan-T5 models don't have bos_token_id properly set?
     if "t5-xl" in model_name:
-        text_config = T5Config.from_pretrained("google/flan-t5-xl", dense_act_fn="gelu", bos_token_id=1).to_dict()
+        text_config = T5Config.from_pretrained(
+            "google/flan-t5-xl", dense_act_fn="gelu", bos_token_id=1
+        ).to_dict()
     elif "t5-xxl" in model_name:
-        text_config = T5Config.from_pretrained("google/flan-t5-xxl", dense_act_fn="gelu", bos_token_id=1).to_dict()
+        text_config = T5Config.from_pretrained(
+            "google/flan-t5-xxl", dense_act_fn="gelu", bos_token_id=1
+        ).to_dict()
     elif "vicuna-7b" in model_name:
-        text_config = LlamaConfig.from_pretrained("decapoda-research/llama-7b-hf", vocab_size=32001).to_dict()
+        text_config = LlamaConfig.from_pretrained(
+            "decapoda-research/llama-7b-hf", vocab_size=32001
+        ).to_dict()
     elif "vicuna-13b" in model_name:
-        text_config = LlamaConfig.from_pretrained("decapoda-research/llama-13b-hf", vocab_size=32001).to_dict()
+        text_config = LlamaConfig.from_pretrained(
+            "decapoda-research/llama-13b-hf", vocab_size=32001
+        ).to_dict()
     else:
         raise ValueError("Model name not supported")
 
     # the authors add one special "[DEC]" token to the vocab of Q-Former, hence vocab size = 30522 + 1
     qformer_config = InstructBlipVideoQFormerConfig(vocab_size=30523).to_dict()
     config = InstructBlipVideoConfig(
-        vision_config=vision_config, text_config=text_config, qformer_config=qformer_config
+        vision_config=vision_config,
+        text_config=text_config,
+        qformer_config=qformer_config,
     )
 
     return config, image_size
 
 
 @torch.no_grad()
-def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_blip2_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to Transformers design.
     """
-    qformer_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", truncation_side="left")
+    qformer_tokenizer = AutoTokenizer.from_pretrained(
+        "google-bert/bert-base-uncased", truncation_side="left"
+    )
     qformer_tokenizer.add_special_tokens({"bos_token": "[DEC]"})
 
     if "t5" in model_name:
-        tokenizer = T5TokenizerFast.from_pretrained("google/flan-t5-xl", truncation_side="left")
+        tokenizer = T5TokenizerFast.from_pretrained(
+            "google/flan-t5-xl", truncation_side="left"
+        )
     elif "vicuna" in model_name:
         # the following was used in the original implementation:
         # tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False, truncation_side="left")
@@ -147,7 +157,10 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         # tokenizer.add_special_tokens({"eos_token": "</s>"})
         # tokenizer.add_special_tokens({"unk_token": "</s>"})
         tokenizer = LlamaTokenizerFast.from_pretrained(
-            "huggyllama/llama-7b", truncation_side="left", bos_token="</s>", unk_token="</s>"
+            "huggyllama/llama-7b",
+            truncation_side="left",
+            bos_token="</s>",
+            unk_token="</s>",
         )
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
@@ -207,14 +220,18 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # create processor
     image_processor = BlipImageProcessor(
-        size={"height": image_size, "width": image_size}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
+        size={"height": image_size, "width": image_size},
+        image_mean=OPENAI_CLIP_MEAN,
+        image_std=OPENAI_CLIP_STD,
     )
     processor = InstructBlipProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
         qformer_tokenizer=qformer_tokenizer,
     )
-    inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_model_device)
+    inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+        hf_model_device
+    )
 
     # make sure processor creates exact same pixel values
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(lavis_device)
@@ -225,14 +242,24 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     hf_model.to(hf_model_device)
     with torch.no_grad():
         if "vicuna" in model_name:
-            original_logits = original_model({"image": original_pixel_values, "text_input": [prompt]}).logits
+            original_logits = original_model(
+                {"image": original_pixel_values, "text_input": [prompt]}
+            ).logits
             logits = hf_model(**inputs).logits
         else:
             original_logits = original_model(
-                {"image": original_pixel_values, "text_input": [prompt], "text_output": ["\n"]}
+                {
+                    "image": original_pixel_values,
+                    "text_input": [prompt],
+                    "text_output": ["\n"],
+                }
             ).logits
-            label_input_ids = tokenizer("\n", return_tensors="pt").input_ids.to(hf_model_device)
-            labels = label_input_ids.masked_fill(label_input_ids == tokenizer.pad_token_id, -100)
+            label_input_ids = tokenizer("\n", return_tensors="pt").input_ids.to(
+                hf_model_device
+            )
+            labels = label_input_ids.masked_fill(
+                label_input_ids == tokenizer.pad_token_id, -100
+            )
             logits = hf_model(**inputs, labels=labels).logits
 
     print("First values of original logits:", original_logits[0, :3, :3])
@@ -245,7 +272,9 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     print("Looks ok!")
 
     print("Generating with original model...")
-    original_outputs = original_model.generate({"image": original_pixel_values, "prompt": prompt}, num_beams=5)
+    original_outputs = original_model.generate(
+        {"image": original_pixel_values, "prompt": prompt}, num_beams=5
+    )
 
     # important: we need to cast the weights of the HF model to the appropriate type
     print("Generating with HF model...")
@@ -293,7 +322,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf config.json of model to convert",
     )
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
@@ -302,4 +336,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    convert_blip2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_blip2_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

@@ -20,20 +20,23 @@ import unittest
 from importlib import import_module
 
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
-from transformers.testing_utils import TestCasePlus, require_tf, require_vision, slow
+from transformers.testing_utils import (TestCasePlus, require_tf,
+                                        require_vision, slow)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
+    from transformers import (IdeficsProcessor, TFIdeficsForVisionText2Text,
+                              TFIdeficsModel)
     from transformers.modeling_tf_utils import keras
-    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
+    from transformers.models.idefics.configuration_idefics import (
+        IdeficsPerceiverConfig, IdeficsVisionConfig)
 
 if is_vision_available():
     from PIL import Image
@@ -140,9 +143,13 @@ class IdeficsModelTester:
 
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
-        self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
+        self.expected_seq_len = (
+            self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
+        )
 
-    def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False, image_expansion=0):
+    def prepare_config_and_inputs(
+        self, num_images=1, interpolate_pos_encoding=False, image_expansion=0
+    ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         pixel_values = floats_tensor(
@@ -158,10 +165,19 @@ class IdeficsModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
+        image_attention_mask = random_attention_mask(
+            [self.batch_size, self.seq_length, num_images]
+        )
 
         config = self.get_config()
-        return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
+        return (
+            config,
+            input_ids,
+            input_mask,
+            pixel_values,
+            image_attention_mask,
+            interpolate_pos_encoding,
+        )
 
     def get_config(self):
         return IdeficsConfig(
@@ -203,7 +219,8 @@ class IdeficsModelTester:
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, input_ids.shape[1], self.hidden_size),
         )
 
     def create_and_check_model_gen(
@@ -245,26 +262,35 @@ class IdeficsModelTester:
         return config, inputs_dict
 
     def prepare_pixel_values(self):
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        return floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
 
 @require_tf
 class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TFIdeficsModel, TFIdeficsForVisionText2Text) if is_tf_available() else ()
-    pipeline_model_mapping = {"feature-extraction": TFIdeficsModel} if is_tf_available() else {}
+    all_model_classes = (
+        (TFIdeficsModel, TFIdeficsForVisionText2Text) if is_tf_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFIdeficsModel} if is_tf_available() else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_onnx = False
     test_resize_embeddings = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
         # XXX: IdeficsForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same
         # as MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, so for now manually changing to do the right thing
         # as super won't do it
         if return_labels:
             inputs_dict["labels"] = tf.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int64
+                (self.model_tester.batch_size, self.model_tester.seq_length),
+                dtype=tf.int64,
             )
         return inputs_dict
 
@@ -272,14 +298,18 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         try:
             orig = self.all_model_classes
             # IdeficsModel.forward doesn't have labels input arg - only IdeficsForVisionText2Text does
-            self.all_model_classes = (TFIdeficsForVisionText2Text,) if is_tf_available() else ()
+            self.all_model_classes = (
+                (TFIdeficsForVisionText2Text,) if is_tf_available() else ()
+            )
             super().test_model_outputs_equivalence()
         finally:
             self.all_model_classes = orig
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=IdeficsConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -331,7 +361,9 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="""IDEFICS does not support retaining the gradients of the hidden states and attention""")
+    @unittest.skip(
+        reason="""IDEFICS does not support retaining the gradients of the hidden states and attention"""
+    )
     def test_retain_grad_hidden_states_attentions(self):
         return
 
@@ -339,7 +371,9 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_embeddings_out_of_bounds_raise_exception(self):
         pass
 
-    @unittest.skip(reason="IDEFICS attention weights are not extracted in scaled_dot_product_attention")
+    @unittest.skip(
+        reason="IDEFICS attention weights are not extracted in scaled_dot_product_attention"
+    )
     def test_prepare_serving_output(self):
         pass
 
@@ -383,7 +417,11 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             self.assertEqual(out_len + 1, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
@@ -394,10 +432,16 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -449,12 +493,17 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = keras.models.load_model(filepath, custom_objects={main_layer_class.__name__: main_layer_class})
+                model = keras.models.load_model(
+                    filepath,
+                    custom_objects={main_layer_class.__name__: main_layer_class},
+                )
                 assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
-    @unittest.skip(reason="IDEFICS test_keras_fit testing done in TFIdeficsForVisionText2TextTest")
+    @unittest.skip(
+        reason="IDEFICS test_keras_fit testing done in TFIdeficsForVisionText2TextTest"
+    )
     def test_keras_fit(self):
         pass
 
@@ -482,7 +531,9 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
             self,
             modality_type_vocab_size=3,
         )
-        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=IdeficsConfig, hidden_size=37
+        )
 
     @unittest.skip("We only test the model that takes in multiple images")
     def test_model(self):
@@ -492,7 +543,9 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     def test_for_token_classification(self):
         pass
 
-    @unittest.skip(reason="""IDEFICS does not support retaining the gradients of the hidden states and attention""")
+    @unittest.skip(
+        reason="""IDEFICS does not support retaining the gradients of the hidden states and attention"""
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 

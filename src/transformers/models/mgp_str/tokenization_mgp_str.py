@@ -21,7 +21,6 @@ from typing import Optional, Tuple
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
@@ -51,7 +50,15 @@ class MgpstrTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
 
-    def __init__(self, vocab_file, unk_token="[GO]", bos_token="[GO]", eos_token="[s]", pad_token="[GO]", **kwargs):
+    def __init__(
+        self,
+        vocab_file,
+        unk_token="[GO]",
+        bos_token="[GO]",
+        eos_token="[s]",
+        pad_token="[GO]",
+        **kwargs
+    ):
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.vocab = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.vocab.items()}
@@ -87,16 +94,25 @@ class MgpstrTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(
+                "Vocabulary path ({}) should be a directory".format(save_directory)
+            )
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(self.vocab, indent=2, sort_keys=True, ensure_ascii=False)
+                + "\n"
+            )
 
         return (vocab_file,)
 

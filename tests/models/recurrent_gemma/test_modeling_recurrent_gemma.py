@@ -18,20 +18,16 @@ import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_read_token,
-    require_torch,
-    require_torch_accelerator,
-    slow,
-    torch_device,
-)
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          RecurrentGemmaConfig, is_torch_available, set_seed)
+from transformers.testing_utils import (require_bitsandbytes,
+                                        require_read_token, require_torch,
+                                        require_torch_accelerator, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -108,19 +104,33 @@ class RecurrentGemmaModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return RecurrentGemmaConfig(
@@ -143,14 +153,24 @@ class RecurrentGemmaModelTester:
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->RecurrentGemma
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = RecurrentGemmaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->RecurrentGemma
     def create_and_check_model_as_decoder(
@@ -181,7 +201,10 @@ class RecurrentGemmaModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->RecurrentGemma
     def create_and_check_for_causal_lm(
@@ -200,7 +223,9 @@ class RecurrentGemmaModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->RecurrentGemma
     def create_and_check_decoder_model_past_large_inputs(
@@ -257,13 +282,17 @@ class RecurrentGemmaModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->RecurrentGemma
     def prepare_config_and_inputs_for_common(self):
@@ -322,7 +351,9 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         # We don't output attentions
         self.has_attentions = False
         self.model_tester = RecurrentGemmaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RecurrentGemmaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=RecurrentGemmaConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -378,16 +409,22 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
+    @unittest.skip(
+        reason="Rely on `past_key_values` to crop the assistant pkv. Not supported"
+    )
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason="RecurrentGemma's output different if you pad left or right. This is expected")
+    @unittest.skip(
+        reason="RecurrentGemma's output different if you pad left or right. This is expected"
+    )
     def test_left_padding_compatibility(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
+    @unittest.skip(
+        reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
@@ -405,12 +442,16 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_2b_generate(self):
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a very good day for you. You will be able to do all the work you want to do. You will be able to do all the work you want to do. You will be able to do all the work you want to do. You will be able to do all the work you want to do.']  # fmt: skip
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, low_cpu_mem_usage=True
+        ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         tokenizer.padding_side = "right"
 
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -420,7 +461,9 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         tokenizer.padding_side = "left"
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today I am going to share with you the best <strong><em>free online video editing software</em></strong>.\n\n<h2><strong>Best Free Online Video Editing Software</strong></h2>\n\n<strong>1.</strong> <strong>Wondershare Filmora</strong>\n\nWondershare Filmora is a free online video editing software that is used to edit videos.']  # fmt: skip
 
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         del model
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -442,7 +485,9 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(
+            torch_device
+        )
         output = model.generate(**inputs, max_new_tokens=128, do_sample=True)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
@@ -454,11 +499,16 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['<bos>Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking', "<bos>Hi today<pad><pad> I'm going to show you how to make a simple and easy to use <strong><em><u>"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, torch_dtype=torch.bfloat16
+            "gg-hf/recurrent-gemma-2b-hf",
+            device_map={"": torch_device},
+            load_in_8bit=True,
+            torch_dtype=torch.bfloat16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -480,5 +530,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-        output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        output_text = tokenizer.batch_decode(
+            output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
+        )
         self.assertEqual(output_text, EXPECTED_GENERATION)

@@ -9,7 +9,6 @@ from packaging.version import parse
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
-
 try:
     import tf_keras as keras
 except (ModuleNotFoundError, ImportError):
@@ -52,41 +51,59 @@ if __name__ == "__main__":
     )
 
     # Load model and tokenizer
-    model = TFAutoModelForSequenceClassification.from_pretrained(args.model_name_or_path)
+    model = TFAutoModelForSequenceClassification.from_pretrained(
+        args.model_name_or_path
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     # Load dataset
-    train_dataset, test_dataset = load_dataset("stanfordnlp/imdb", split=["train", "test"])
-    train_dataset = train_dataset.shuffle().select(range(5000))  # smaller the size for train dataset to 5k
-    test_dataset = test_dataset.shuffle().select(range(500))  # smaller the size for test dataset to 500
+    train_dataset, test_dataset = load_dataset(
+        "stanfordnlp/imdb", split=["train", "test"]
+    )
+    train_dataset = train_dataset.shuffle().select(
+        range(5000)
+    )  # smaller the size for train dataset to 5k
+    test_dataset = test_dataset.shuffle().select(
+        range(500)
+    )  # smaller the size for test dataset to 500
 
     # Preprocess train dataset
     train_dataset = train_dataset.map(
-        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"), batched=True
+        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"),
+        batched=True,
     )
-    train_dataset.set_format(type="tensorflow", columns=["input_ids", "attention_mask", "label"])
+    train_dataset.set_format(
+        type="tensorflow", columns=["input_ids", "attention_mask", "label"]
+    )
 
     train_features = {
-        x: train_dataset[x].to_tensor(default_value=0, shape=[None, tokenizer.model_max_length])
+        x: train_dataset[x].to_tensor(
+            default_value=0, shape=[None, tokenizer.model_max_length]
+        )
         for x in ["input_ids", "attention_mask"]
     }
-    tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_features, train_dataset["label"])).batch(
-        args.per_device_train_batch_size
-    )
+    tf_train_dataset = tf.data.Dataset.from_tensor_slices(
+        (train_features, train_dataset["label"])
+    ).batch(args.per_device_train_batch_size)
 
     # Preprocess test dataset
     test_dataset = test_dataset.map(
-        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"), batched=True
+        lambda e: tokenizer(e["text"], truncation=True, padding="max_length"),
+        batched=True,
     )
-    test_dataset.set_format(type="tensorflow", columns=["input_ids", "attention_mask", "label"])
+    test_dataset.set_format(
+        type="tensorflow", columns=["input_ids", "attention_mask", "label"]
+    )
 
     test_features = {
-        x: test_dataset[x].to_tensor(default_value=0, shape=[None, tokenizer.model_max_length])
+        x: test_dataset[x].to_tensor(
+            default_value=0, shape=[None, tokenizer.model_max_length]
+        )
         for x in ["input_ids", "attention_mask"]
     }
-    tf_test_dataset = tf.data.Dataset.from_tensor_slices((test_features, test_dataset["label"])).batch(
-        args.per_device_eval_batch_size
-    )
+    tf_test_dataset = tf.data.Dataset.from_tensor_slices(
+        (test_features, test_dataset["label"])
+    ).batch(args.per_device_eval_batch_size)
 
     # fine optimizer and loss
     optimizer = keras.optimizers.Adam(learning_rate=args.learning_rate)
@@ -95,7 +112,11 @@ if __name__ == "__main__":
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     start_train_time = time.time()
-    train_results = model.fit(tf_train_dataset, epochs=args.epochs, batch_size=args.per_device_train_batch_size)
+    train_results = model.fit(
+        tf_train_dataset,
+        epochs=args.epochs,
+        batch_size=args.per_device_train_batch_size,
+    )
     end_train_time = time.time() - start_train_time
 
     logger.info("*** Train ***")

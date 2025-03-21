@@ -23,29 +23,19 @@ from typing import Dict, Optional, Tuple, Union
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
-    TFImageClassifierOutputWithNoAttention,
-    TFSemanticSegmenterOutputWithNoAttention,
-)
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    TFSequenceClassificationLoss,
-    keras,
-    keras_serializable,
-    unpack_inputs,
-)
+from ...file_utils import (add_code_sample_docstrings, add_start_docstrings,
+                           add_start_docstrings_to_model_forward,
+                           replace_return_docstrings)
+from ...modeling_tf_outputs import (TFBaseModelOutput,
+                                    TFBaseModelOutputWithPooling,
+                                    TFImageClassifierOutputWithNoAttention,
+                                    TFSemanticSegmenterOutputWithNoAttention)
+from ...modeling_tf_utils import (TFPreTrainedModel,
+                                  TFSequenceClassificationLoss, keras,
+                                  keras_serializable, unpack_inputs)
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
 from .configuration_mobilevit import MobileViTConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -61,7 +51,9 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(
+    value: int, divisor: int = 8, min_value: Optional[int] = None
+) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
     original TensorFlow repo. It can be seen here:
@@ -101,7 +93,9 @@ class TFMobileViTConvLayer(keras.layers.Layer):
         self.padding = keras.layers.ZeroPadding2D(padding)
 
         if out_channels % groups != 0:
-            raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
+            raise ValueError(
+                f"Output channels ({out_channels}) are not divisible by {groups} groups."
+            )
 
         self.convolution = keras.layers.Conv2D(
             filters=out_channels,
@@ -115,7 +109,9 @@ class TFMobileViTConvLayer(keras.layers.Layer):
         )
 
         if use_normalization:
-            self.normalization = keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="normalization")
+            self.normalization = keras.layers.BatchNormalization(
+                epsilon=1e-5, momentum=0.1, name="normalization"
+            )
         else:
             self.normalization = None
 
@@ -159,10 +155,18 @@ class TFMobileViTInvertedResidual(keras.layers.Layer):
     """
 
     def __init__(
-        self, config: MobileViTConfig, in_channels: int, out_channels: int, stride: int, dilation: int = 1, **kwargs
+        self,
+        config: MobileViTConfig,
+        in_channels: int,
+        out_channels: int,
+        stride: int,
+        dilation: int = 1,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        expanded_channels = make_divisible(int(round(in_channels * config.expand_ratio)), 8)
+        expanded_channels = make_divisible(
+            int(round(in_channels * config.expand_ratio)), 8
+        )
 
         if stride not in [1, 2]:
             raise ValueError(f"Invalid stride {stride}.")
@@ -170,7 +174,11 @@ class TFMobileViTInvertedResidual(keras.layers.Layer):
         self.use_residual = (stride == 1) and (in_channels == out_channels)
 
         self.expand_1x1 = TFMobileViTConvLayer(
-            config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1, name="expand_1x1"
+            config,
+            in_channels=in_channels,
+            out_channels=expanded_channels,
+            kernel_size=1,
+            name="expand_1x1",
         )
 
         self.conv_3x3 = TFMobileViTConvLayer(
@@ -272,16 +280,25 @@ class TFMobileViTSelfAttention(keras.layers.Layer):
         scale = tf.cast(self.attention_head_size, dtype=tf.float32)
         self.scale = tf.math.sqrt(scale)
 
-        self.query = keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="query")
-        self.key = keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="key")
-        self.value = keras.layers.Dense(self.all_head_size, use_bias=config.qkv_bias, name="value")
+        self.query = keras.layers.Dense(
+            self.all_head_size, use_bias=config.qkv_bias, name="query"
+        )
+        self.key = keras.layers.Dense(
+            self.all_head_size, use_bias=config.qkv_bias, name="key"
+        )
+        self.value = keras.layers.Dense(
+            self.all_head_size, use_bias=config.qkv_bias, name="value"
+        )
 
         self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.hidden_size = hidden_size
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
         batch_size = tf.shape(x)[0]
-        x = tf.reshape(x, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+        x = tf.reshape(
+            x,
+            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
+        )
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -305,7 +322,9 @@ class TFMobileViTSelfAttention(keras.layers.Layer):
         context_layer = tf.matmul(attention_probs, value_layer)
 
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(context_layer, shape=(batch_size, -1, self.all_head_size))
+        context_layer = tf.reshape(
+            context_layer, shape=(batch_size, -1, self.all_head_size)
+        )
         return context_layer
 
     def build(self, input_shape=None):
@@ -371,7 +390,13 @@ class TFMobileViTAttention(keras.layers.Layer):
 
 
 class TFMobileViTIntermediate(keras.layers.Layer):
-    def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int, **kwargs) -> None:
+    def __init__(
+        self,
+        config: MobileViTConfig,
+        hidden_size: int,
+        intermediate_size: int,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.dense = keras.layers.Dense(intermediate_size, name="dense")
         if isinstance(config.hidden_act, str):
@@ -395,13 +420,21 @@ class TFMobileViTIntermediate(keras.layers.Layer):
 
 
 class TFMobileViTOutput(keras.layers.Layer):
-    def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int, **kwargs) -> None:
+    def __init__(
+        self,
+        config: MobileViTConfig,
+        hidden_size: int,
+        intermediate_size: int,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.dense = keras.layers.Dense(hidden_size, name="dense")
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.intermediate_size = intermediate_size
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(
+        self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False
+    ) -> tf.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = hidden_states + input_tensor
@@ -417,22 +450,40 @@ class TFMobileViTOutput(keras.layers.Layer):
 
 
 class TFMobileViTTransformerLayer(keras.layers.Layer):
-    def __init__(self, config: MobileViTConfig, hidden_size: int, intermediate_size: int, **kwargs) -> None:
+    def __init__(
+        self,
+        config: MobileViTConfig,
+        hidden_size: int,
+        intermediate_size: int,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.attention = TFMobileViTAttention(config, hidden_size, name="attention")
-        self.intermediate = TFMobileViTIntermediate(config, hidden_size, intermediate_size, name="intermediate")
-        self.mobilevit_output = TFMobileViTOutput(config, hidden_size, intermediate_size, name="output")
-        self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
-        self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
+        self.intermediate = TFMobileViTIntermediate(
+            config, hidden_size, intermediate_size, name="intermediate"
+        )
+        self.mobilevit_output = TFMobileViTOutput(
+            config, hidden_size, intermediate_size, name="output"
+        )
+        self.layernorm_before = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_before"
+        )
+        self.layernorm_after = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_after"
+        )
         self.hidden_size = hidden_size
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        attention_output = self.attention(self.layernorm_before(hidden_states), training=training)
+        attention_output = self.attention(
+            self.layernorm_before(hidden_states), training=training
+        )
         hidden_states = attention_output + hidden_states
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
-        layer_output = self.mobilevit_output(layer_output, hidden_states, training=training)
+        layer_output = self.mobilevit_output(
+            layer_output, hidden_states, training=training
+        )
         return layer_output
 
     def build(self, input_shape=None):
@@ -457,7 +508,9 @@ class TFMobileViTTransformerLayer(keras.layers.Layer):
 
 
 class TFMobileViTTransformer(keras.layers.Layer):
-    def __init__(self, config: MobileViTConfig, hidden_size: int, num_stages: int, **kwargs) -> None:
+    def __init__(
+        self, config: MobileViTConfig, hidden_size: int, num_stages: int, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
 
         self.layers = []
@@ -540,10 +593,16 @@ class TFMobileViTLayer(keras.layers.Layer):
             config, hidden_size=hidden_size, num_stages=num_stages, name="transformer"
         )
 
-        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm"
+        )
 
         self.conv_projection = TFMobileViTConvLayer(
-            config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1, name="conv_projection"
+            config,
+            in_channels=hidden_size,
+            out_channels=in_channels,
+            kernel_size=1,
+            name="conv_projection",
         )
 
         self.fusion = TFMobileViTConvLayer(
@@ -564,13 +623,19 @@ class TFMobileViTLayer(keras.layers.Layer):
         orig_width = tf.shape(features)[2]
         channels = tf.shape(features)[3]
 
-        new_height = tf.cast(tf.math.ceil(orig_height / patch_height) * patch_height, "int32")
-        new_width = tf.cast(tf.math.ceil(orig_width / patch_width) * patch_width, "int32")
+        new_height = tf.cast(
+            tf.math.ceil(orig_height / patch_height) * patch_height, "int32"
+        )
+        new_width = tf.cast(
+            tf.math.ceil(orig_width / patch_width) * patch_width, "int32"
+        )
 
         interpolate = new_width != orig_width or new_height != orig_height
         if interpolate:
             # Note: Padding can be done, but then it needs to be handled in attention function.
-            features = tf.image.resize(features, size=(new_height, new_width), method="bilinear")
+            features = tf.image.resize(
+                features, size=(new_height, new_width), method="bilinear"
+            )
 
         # number of patches along width and height
         num_patch_width = new_width // patch_width
@@ -581,7 +646,13 @@ class TFMobileViTLayer(keras.layers.Layer):
         # to the shape (batch_size * patch_area, num_patches, channels)
         features = tf.transpose(features, [0, 3, 1, 2])
         patches = tf.reshape(
-            features, (batch_size * channels * num_patch_height, patch_height, num_patch_width, patch_width)
+            features,
+            (
+                batch_size * channels * num_patch_height,
+                patch_height,
+                num_patch_width,
+                patch_width,
+            ),
         )
         patches = tf.transpose(patches, [0, 2, 1, 3])
         patches = tf.reshape(patches, (batch_size, channels, num_patches, patch_area))
@@ -614,16 +685,30 @@ class TFMobileViTLayer(keras.layers.Layer):
         features = tf.reshape(patches, (batch_size, patch_area, num_patches, -1))
         features = tf.transpose(features, perm=(0, 3, 2, 1))
         features = tf.reshape(
-            features, (batch_size * channels * num_patch_height, num_patch_width, patch_height, patch_width)
+            features,
+            (
+                batch_size * channels * num_patch_height,
+                num_patch_width,
+                patch_height,
+                patch_width,
+            ),
         )
         features = tf.transpose(features, perm=(0, 2, 1, 3))
         features = tf.reshape(
-            features, (batch_size, channels, num_patch_height * patch_height, num_patch_width * patch_width)
+            features,
+            (
+                batch_size,
+                channels,
+                num_patch_height * patch_height,
+                num_patch_width * patch_width,
+            ),
         )
         features = tf.transpose(features, perm=(0, 2, 3, 1))
 
         if info_dict["interpolate"]:
-            features = tf.image.resize(features, size=info_dict["orig_size"], method="bilinear")
+            features = tf.image.resize(
+                features, size=info_dict["orig_size"], method="bilinear"
+            )
 
         return features
 
@@ -649,7 +734,9 @@ class TFMobileViTLayer(keras.layers.Layer):
         features = self.folding(patches, info_dict)
 
         features = self.conv_projection(features, training=training)
-        features = self.fusion(tf.concat([residual, features], axis=-1), training=training)
+        features = self.fusion(
+            tf.concat([residual, features], axis=-1), training=training
+        )
         return features
 
     def build(self, input_shape=None):
@@ -776,7 +863,9 @@ class TFMobileViTEncoder(keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return TFBaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states
+        )
 
     def build(self, input_shape=None):
         if self.built:
@@ -817,7 +906,9 @@ class TFMobileViTMainLayer(keras.layers.Layer):
                 name="conv_1x1_exp",
             )
 
-        self.pooler = keras.layers.GlobalAveragePooling2D(data_format="channels_first", name="pooler")
+        self.pooler = keras.layers.GlobalAveragePooling2D(
+            data_format="channels_first", name="pooler"
+        )
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -835,9 +926,13 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -847,7 +942,10 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         embedding_output = self.conv_stem(pixel_values, training=training)
 
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         if self.expand_output:
@@ -865,13 +963,20 @@ class TFMobileViTMainLayer(keras.layers.Layer):
             pooled_output = None
 
         if not return_dict:
-            output = (last_hidden_state, pooled_output) if pooled_output is not None else (last_hidden_state,)
+            output = (
+                (last_hidden_state, pooled_output)
+                if pooled_output is not None
+                else (last_hidden_state,)
+            )
 
             # Change to NCHW output format to have uniformity in the modules
             if not self.expand_output:
                 remaining_encoder_outputs = encoder_outputs[1:]
                 remaining_encoder_outputs = tuple(
-                    [tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]]
+                    [
+                        tf.transpose(h, perm=(0, 3, 1, 2))
+                        for h in remaining_encoder_outputs[0]
+                    ]
                 )
                 remaining_encoder_outputs = (remaining_encoder_outputs,)
                 return output + remaining_encoder_outputs
@@ -880,12 +985,16 @@ class TFMobileViTMainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(
+                [tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]]
+            )
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
+            hidden_states=(
+                hidden_states if output_hidden_states else encoder_outputs.hidden_states
+            ),
         )
 
     def build(self, input_shape=None):
@@ -979,12 +1088,16 @@ MOBILEVIT_INPUTS_DOCSTRING = r"""
     MOBILEVIT_START_DOCSTRING,
 )
 class TFMobileViTModel(TFMobileViTPreTrainedModel):
-    def __init__(self, config: MobileViTConfig, expand_output: bool = True, *inputs, **kwargs):
+    def __init__(
+        self, config: MobileViTConfig, expand_output: bool = True, *inputs, **kwargs
+    ):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
         self.expand_output = expand_output
 
-        self.mobilevit = TFMobileViTMainLayer(config, expand_output=expand_output, name="mobilevit")
+        self.mobilevit = TFMobileViTMainLayer(
+            config, expand_output=expand_output, name="mobilevit"
+        )
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
@@ -1002,7 +1115,9 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
-        output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
+        output = self.mobilevit(
+            pixel_values, output_hidden_states, return_dict, training=training
+        )
         return output
 
     def build(self, input_shape=None):
@@ -1021,7 +1136,9 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
     """,
     MOBILEVIT_START_DOCSTRING,
 )
-class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceClassificationLoss):
+class TFMobileViTForImageClassification(
+    TFMobileViTPreTrainedModel, TFSequenceClassificationLoss
+):
     def __init__(self, config: MobileViTConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
 
@@ -1031,7 +1148,9 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
         # Classifier head
         self.dropout = keras.layers.Dropout(config.classifier_dropout_prob)
         self.classifier = (
-            keras.layers.Dense(config.num_labels, name="classifier") if config.num_labels > 0 else tf.identity
+            keras.layers.Dense(config.num_labels, name="classifier")
+            if config.num_labels > 0
+            else tf.identity
         )
         self.config = config
 
@@ -1057,22 +1176,33 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.mobilevit(
-            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.classifier(self.dropout(pooled_output, training=training))
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=logits)
+        )
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return TFImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
     def build(self, input_shape=None):
         if self.built:
@@ -1084,14 +1214,20 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
         if getattr(self, "classifier", None) is not None:
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
-                    self.classifier.build([None, None, self.config.neck_hidden_sizes[-1]])
+                    self.classifier.build(
+                        [None, None, self.config.neck_hidden_sizes[-1]]
+                    )
 
 
 class TFMobileViTASPPPooling(keras.layers.Layer):
-    def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int, **kwargs) -> None:
+    def __init__(
+        self, config: MobileViTConfig, in_channels: int, out_channels: int, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
 
-        self.global_pool = keras.layers.GlobalAveragePooling2D(keepdims=True, name="global_pool")
+        self.global_pool = keras.layers.GlobalAveragePooling2D(
+            keepdims=True, name="global_pool"
+        )
 
         self.conv_1x1 = TFMobileViTConvLayer(
             config,
@@ -1165,7 +1301,10 @@ class TFMobileViTASPP(keras.layers.Layer):
         )
 
         pool_layer = TFMobileViTASPPPooling(
-            config, in_channels, out_channels, name=f"convs.{len(config.atrous_rates) + 1}"
+            config,
+            in_channels,
+            out_channels,
+            name=f"convs.{len(config.atrous_rates) + 1}",
         )
         self.convs.append(pool_layer)
 
@@ -1257,7 +1396,9 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         super().__init__(config, **kwargs)
 
         self.num_labels = config.num_labels
-        self.mobilevit = TFMobileViTMainLayer(config, expand_output=False, name="mobilevit")
+        self.mobilevit = TFMobileViTMainLayer(
+            config, expand_output=False, name="mobilevit"
+        )
         self.segmentation_head = TFMobileViTDeepLabV3(config, name="segmentation_head")
 
     def hf_compute_loss(self, logits, labels):
@@ -1265,13 +1406,20 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         # `labels` is of shape (batch_size, height, width)
         label_interp_shape = shape_list(labels)[1:]
 
-        upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
+        upsampled_logits = tf.image.resize(
+            logits, size=label_interp_shape, method="bilinear"
+        )
         # compute weighted loss
-        loss_fct = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
+        loss_fct = keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction="none"
+        )
 
         def masked_loss(real, pred):
             unmasked_loss = loss_fct(real, pred)
-            mask = tf.cast(real != self.config.semantic_loss_ignore_index, dtype=unmasked_loss.dtype)
+            mask = tf.cast(
+                real != self.config.semantic_loss_ignore_index,
+                dtype=unmasked_loss.dtype,
+            )
             masked_loss = unmasked_loss * mask
             # Reduction strategy in the similar spirit with
             # https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_tf_utils.py#L210
@@ -1282,7 +1430,10 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSemanticSegmenterOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TFSemanticSegmenterOutputWithNoAttention,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         pixel_values: tf.Tensor | None = None,
@@ -1319,9 +1470,13 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         >>> logits = outputs.logits
         ```"""
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None and not self.config.num_labels > 1:
             raise ValueError("The number of labels should be greater than one")

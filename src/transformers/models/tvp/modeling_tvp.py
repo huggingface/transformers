@@ -23,14 +23,16 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...file_utils import (add_start_docstrings,
+                           add_start_docstrings_to_model_forward,
+                           replace_return_docstrings)
+from ...modeling_outputs import (BaseModelOutput, BaseModelOutputWithPooling,
+                                 ModelOutput)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
 from ...utils import logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_tvp import TvpConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -83,35 +85,51 @@ class TvpLoss(nn.Module):
 
         self.losses = losses
 
-    def loss_iou(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+    def loss_iou(
+        self, start_time, end_time, candidates_start_time, candidates_end_time, duration
+    ):
         """
         Measure the intersection over union.
         """
-        inter = torch.min(candidates_end_time, end_time) - torch.max(candidates_start_time, start_time)
-        union = torch.max(candidates_end_time, end_time) - torch.min(candidates_start_time, start_time)
+        inter = torch.min(candidates_end_time, end_time) - torch.max(
+            candidates_start_time, start_time
+        )
+        union = torch.max(candidates_end_time, end_time) - torch.min(
+            candidates_start_time, start_time
+        )
         iou = 1 - inter.clamp(min=0) / union
 
         return iou
 
-    def loss_distance(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+    def loss_distance(
+        self, start_time, end_time, candidates_start_time, candidates_end_time, duration
+    ):
         """
         Measure the distance of mid points.
         """
-        mid_candidates = torch.div(torch.add(candidates_start_time, candidates_end_time), 2.0)
+        mid_candidates = torch.div(
+            torch.add(candidates_start_time, candidates_end_time), 2.0
+        )
         mid_groundtruth = torch.div(torch.add(start_time, end_time), 2.0)
         distance_diff = torch.div(
-            torch.max(mid_candidates, mid_groundtruth) - torch.min(mid_candidates, mid_groundtruth), duration
+            torch.max(mid_candidates, mid_groundtruth)
+            - torch.min(mid_candidates, mid_groundtruth),
+            duration,
         ).clamp(min=0.2)
 
         return distance_diff
 
-    def loss_duration(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+    def loss_duration(
+        self, start_time, end_time, candidates_start_time, candidates_end_time, duration
+    ):
         """
         Measure the difference of duration.
         """
         duration_candidates = torch.sub(candidates_end_time, candidates_start_time)
         duration_groundtruth = torch.sub(end_time, start_time)
-        duration_diff = torch.square(torch.div(torch.sub(duration_candidates, duration_groundtruth), duration))
+        duration_diff = torch.square(
+            torch.div(torch.sub(duration_candidates, duration_groundtruth), duration)
+        )
         duration_diff = duration_diff.clamp(min=0.4)
 
         return duration_diff
@@ -128,12 +146,23 @@ class TvpLoss(nn.Module):
         """
         duration, start_time, end_time = labels
         candidates = torch.mul(logits, duration)
-        candidates_start_time, candidates_end_time = candidates[:, 0].float(), candidates[:, 1].float()
+        candidates_start_time, candidates_end_time = (
+            candidates[:, 0].float(),
+            candidates[:, 1].float(),
+        )
 
         losses_dict = {}
         for loss in self.losses:
             losses_dict.update(
-                {loss: self.loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)}
+                {
+                    loss: self.loss_map[loss](
+                        start_time,
+                        end_time,
+                        candidates_start_time,
+                        candidates_end_time,
+                        duration,
+                    )
+                }
             )
 
         return losses_dict
@@ -146,9 +175,13 @@ class TvpVisionModel(nn.Module):
 
         if config.backbone_config is not None:
             in_channels = config.backbone_config.hidden_sizes[-1]
-        elif hasattr(self.backbone, "config") and hasattr(self.backbone.config, "hidden_sizes"):
+        elif hasattr(self.backbone, "config") and hasattr(
+            self.backbone.config, "hidden_sizes"
+        ):
             in_channels = self.backbone.config.hidden_sizes[-1]
-        elif hasattr(self.backbone, "config") and hasattr(self.backbone.config, "hidden_size"):
+        elif hasattr(self.backbone, "config") and hasattr(
+            self.backbone.config, "hidden_size"
+        ):
             in_channels = self.backbone.config.hidden_size
         else:
             raise ValueError("Backbone config not found")
@@ -166,7 +199,9 @@ class TvpVisionModel(nn.Module):
     def forward(self, pixel_values):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         # (batch_size * num_frames, num_channels, height, width)
-        pixel_values = pixel_values.view(batch_size * num_frames, num_channels, height, width)
+        pixel_values = pixel_values.view(
+            batch_size * num_frames, num_channels, height, width
+        )
         grid_feat_outputs = self.backbone(pixel_values)["feature_maps"][0]
         grid = self.grid_encoder_conv(grid_feat_outputs)
         grid = nn.functional.max_pool2d(grid, kernel_size=2, stride=2)
@@ -187,16 +222,24 @@ class TvpVisualInputEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         # sequence embedding
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.row_position_embeddings = nn.Embedding(config.max_grid_row_position_embeddings, config.hidden_size)
-        self.col_position_embeddings = nn.Embedding(config.max_grid_col_position_embeddings, config.hidden_size)
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size
+        )
+        self.row_position_embeddings = nn.Embedding(
+            config.max_grid_row_position_embeddings, config.hidden_size
+        )
+        self.col_position_embeddings = nn.Embedding(
+            config.max_grid_col_position_embeddings, config.hidden_size
+        )
         self.token_type_embeddings = nn.Embedding(1, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.max_grid_row_position_embeddings = config.max_grid_row_position_embeddings
         self.max_grid_col_position_embeddings = config.max_grid_col_position_embeddings
 
-    def interpolate_pos_encoding(self, embedding: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embedding: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained pad weights , to be able to use the model on collection of high
         resolution images (high resolution videos).
@@ -209,17 +252,23 @@ class TvpVisualInputEmbedding(nn.Module):
         # if width dimension is to be interpolated
         if width > self.max_grid_col_position_embeddings:
             w0 = width / self.max_grid_col_position_embeddings
-        embedding = embedding.permute(0, 3, 1, 2)  # (batch_size, hidden_dim, height, width)
+        embedding = embedding.permute(
+            0, 3, 1, 2
+        )  # (batch_size, hidden_dim, height, width)
         embedding = nn.functional.interpolate(
             embedding,
             scale_factor=(h0, w0),
             mode="bicubic",
             align_corners=False,
         )
-        embedding = embedding.permute(0, 2, 3, 1)  # (batch_size, height, width, hidden_dim)
+        embedding = embedding.permute(
+            0, 2, 3, 1
+        )  # (batch_size, height, width, hidden_dim)
         return embedding
 
-    def add_2d_positional_embeddings(self, grid, interpolate_pos_encoding: bool = False):
+    def add_2d_positional_embeddings(
+        self, grid, interpolate_pos_encoding: bool = False
+    ):
         """
         Args:
             grid: (batch_size, height, width, hidden_dim)
@@ -233,7 +282,9 @@ class TvpVisualInputEmbedding(nn.Module):
         # add row-wise position embeddings
         # (height, )
         row_height = min(self.max_grid_row_position_embeddings, height)
-        row_position_ids = torch.arange(row_height, dtype=torch.long, device=grid.device)
+        row_position_ids = torch.arange(
+            row_height, dtype=torch.long, device=grid.device
+        )
         # (height, hidden_dim)
         row_position_embeddings = self.row_position_embeddings(row_position_ids)
         row_shape = (1,) * (len(grid.shape) - 3) + (row_height, 1, hidden_dim)
@@ -253,9 +304,12 @@ class TvpVisualInputEmbedding(nn.Module):
 
         # This interpolation gets triggered ONLY when the input image dim is larger in any dimenstion than the original position embeddings
         if interpolate_pos_encoding and (
-            height > self.max_grid_row_position_embeddings or width > self.max_grid_col_position_embeddings
+            height > self.max_grid_row_position_embeddings
+            or width > self.max_grid_col_position_embeddings
         ):
-            grid = grid + self.interpolate_pos_encoding(positional_embeddings, height, width)
+            grid = grid + self.interpolate_pos_encoding(
+                positional_embeddings, height, width
+            )
         else:
             grid = grid + positional_embeddings
         return grid
@@ -276,14 +330,18 @@ class TvpVisualInputEmbedding(nn.Module):
         batch_size, num_frames, height, width, num_channels = grid.shape
         # temporal mean pooling, (batch_size, height, width, hidden_size)
         grid = grid.mean(1)
-        grid = self.add_2d_positional_embeddings(grid, interpolate_pos_encoding=interpolate_pos_encoding)
+        grid = self.add_2d_positional_embeddings(
+            grid, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         # image token sequence, (batch_size, height*width, num_channels)
         visual_tokens = grid.view(batch_size, -1, num_channels)
         visual_tokens_shape = visual_tokens.shape[:-1]
         device = visual_tokens.device
 
         # image token type embeddings.
-        token_type_ids = torch.zeros(visual_tokens_shape, dtype=torch.long, device=device)
+        token_type_ids = torch.zeros(
+            visual_tokens_shape, dtype=torch.long, device=device
+        )
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = visual_tokens + token_type_embeddings
@@ -297,13 +355,21 @@ class TvpTextInputEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -331,7 +397,9 @@ class TvpTextInputEmbeddings(nn.Module):
 class TvpAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size {config.hidden_size} is not a multiple of the number of attention heads {config.num_attention_heads}"
             )
@@ -354,7 +422,9 @@ class TvpAttention(nn.Module):
         if len(heads) == 0:
             return
         mask = torch.ones(self.num_attention_heads, self.attention_head_size)
-        heads = set(heads) - self.pruned_heads  # Convert to set and remove already pruned heads
+        heads = (
+            set(heads) - self.pruned_heads
+        )  # Convert to set and remove already pruned heads
         for head in heads:
             # Compute how many pruned heads are before the head and move the index accordingly
             head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
@@ -375,7 +445,12 @@ class TvpAttention(nn.Module):
 
     def _reshape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
         return (
-            tensor.view(batch_size, sequence_length, self.num_attention_heads, self.attention_head_size)
+            tensor.view(
+                batch_size,
+                sequence_length,
+                self.num_attention_heads,
+                self.attention_head_size,
+            )
             .transpose(1, 2)
             .contiguous()
         )
@@ -416,13 +491,17 @@ class TvpAttention(nn.Module):
 
         attn_output = torch.matmul(attention_probs, value_layer)
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, sequence_length, self.all_head_size)
+        attn_output = attn_output.reshape(
+            batch_size, sequence_length, self.all_head_size
+        )
 
         attn_output = self.dense(attn_output)
         attn_output = self.dropout(attn_output)
         attn_output = self.layer_norm(attn_output + hidden_states)
         # add attentions if we output them
-        outputs = (attn_output, attention_probs) if output_attentions else (attn_output,)
+        outputs = (
+            (attn_output, attention_probs) if output_attentions else (attn_output,)
+        )
         return outputs
 
 
@@ -449,7 +528,9 @@ class TvpOutputLayer(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.layer_norm(hidden_states + input_tensor)
@@ -477,7 +558,9 @@ class TvpEncodeLayer(nn.Module):
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + outputs
@@ -488,7 +571,9 @@ class TvpEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([TvpEncodeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [TvpEncodeLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -500,10 +585,18 @@ class TvpEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         all_hidden_states = ()
         all_attentions = ()
@@ -521,7 +614,9 @@ class TvpEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, head_mask[i], output_attentions
+                )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -646,7 +741,9 @@ class TvpFrameDownPadPrompter(nn.Module):
 
     def __init__(self, config):
         if config.visual_prompter_apply not in ("add", "replace", "remove"):
-            raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
+            raise ValueError(
+                "`visual_prompter_apply` must be in (add, replace, remove)"
+            )
 
         super().__init__()
         self.visual_prompt_size = config.visual_prompt_size
@@ -655,19 +752,31 @@ class TvpFrameDownPadPrompter(nn.Module):
         self.visual_prompter_apply = config.visual_prompter_apply
 
         self.pad_down = nn.Parameter(
-            torch.randn([1, config.frame_num, 3, config.visual_prompt_size, config.max_img_size])
+            torch.randn(
+                [1, config.frame_num, 3, config.visual_prompt_size, config.max_img_size]
+            )
         )
 
     def forward(self, pixel_values):
         if self.visual_prompter_apply != "add":
             visual_prompt_mask = torch.ones(
-                [self.max_img_size, self.max_img_size], dtype=pixel_values.dtype, device=pixel_values.device
+                [self.max_img_size, self.max_img_size],
+                dtype=pixel_values.dtype,
+                device=pixel_values.device,
             )
-            visual_prompt_mask[self.max_img_size - self.visual_prompt_size : self.max_img_size, :] = 0.0
+            visual_prompt_mask[
+                self.max_img_size - self.visual_prompt_size : self.max_img_size, :
+            ] = 0.0
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply != "remove":
             prompt = torch.zeros(
-                [pixel_values.shape[0], pixel_values.shape[1], 3, self.max_img_size, self.max_img_size],
+                [
+                    pixel_values.shape[0],
+                    pixel_values.shape[1],
+                    3,
+                    self.max_img_size,
+                    self.max_img_size,
+                ],
                 device=pixel_values.device,
             )
             start_point = self.max_img_size - self.visual_prompt_size
@@ -683,7 +792,9 @@ class TvpFramePadPrompter(nn.Module):
 
     def __init__(self, config):
         if config.visual_prompter_apply not in ("add", "replace", "remove"):
-            raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
+            raise ValueError(
+                "`visual_prompter_apply` must be in (add, replace, remove)"
+            )
 
         super().__init__()
         self.num_frames = config.num_frames
@@ -691,10 +802,26 @@ class TvpFramePadPrompter(nn.Module):
         self.visual_prompter_apply = config.visual_prompter_apply
         self.base_size = config.max_img_size - config.visual_prompt_size * 2
         self.pad_up = nn.Parameter(
-            torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
+            torch.randn(
+                [
+                    1,
+                    config.num_frames,
+                    3,
+                    config.visual_prompt_size,
+                    config.max_img_size,
+                ]
+            )
         )
         self.pad_down = nn.Parameter(
-            torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
+            torch.randn(
+                [
+                    1,
+                    config.num_frames,
+                    3,
+                    config.visual_prompt_size,
+                    config.max_img_size,
+                ]
+            )
         )
         self.pad_left = nn.Parameter(
             torch.randn(
@@ -719,7 +846,9 @@ class TvpFramePadPrompter(nn.Module):
             )
         )
 
-    def interpolate_pad_encoding(self, prompt: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pad_encoding(
+        self, prompt: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained pad weights, to be able to use the model on collection of high
         resolution images (high resolution videos).
@@ -732,7 +861,9 @@ class TvpFramePadPrompter(nn.Module):
         batch, num_frames, channels, prompt_height, prompt_width = prompt.shape
 
         # reshaping the batch and num_frames dimension into a single one (i.e (b,frames,c,h,w)-->(b*frames,c,h,w)), to apply bicubic interpolation
-        prompt = prompt.reshape(batch * num_frames, channels, prompt_height, prompt_width)
+        prompt = prompt.reshape(
+            batch * num_frames, channels, prompt_height, prompt_width
+        )
         prompt = nn.functional.interpolate(
             prompt,
             scale_factor=(h0, w0),
@@ -750,12 +881,23 @@ class TvpFramePadPrompter(nn.Module):
             else (self.max_img_size, self.max_img_size)
         )
         if self.visual_prompter_apply not in ("add", "remove", "replace"):
-            raise ValueError(f"Invalid visual_prompter_apply value {self.visual_prompter_apply}")
+            raise ValueError(
+                f"Invalid visual_prompter_apply value {self.visual_prompter_apply}"
+            )
         if self.visual_prompter_apply in ("replace", "remove"):
-            visual_prompt_mask = torch.ones([height, width], dtype=pixel_values.dtype, device=pixel_values.device)
+            visual_prompt_mask = torch.ones(
+                [height, width], dtype=pixel_values.dtype, device=pixel_values.device
+            )
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply in ("replace", "add"):
-            base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size, device=pixel_values.device)
+            base = torch.zeros(
+                1,
+                self.num_frames,
+                3,
+                self.base_size,
+                self.base_size,
+                device=pixel_values.device,
+            )
 
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
@@ -773,7 +915,8 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 
 
 @add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on"
+    " top.",
     TVP_START_DOCSTRING,
 )
 class TvpModel(TvpPreTrainedModel):
@@ -788,8 +931,12 @@ class TvpModel(TvpPreTrainedModel):
         self.text_prompt = nn.Parameter(torch.randn([1, 10, config.hidden_size]))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         if config.visual_prompter_type not in TVP_PROMPTER_CLASSES_MAPPING:
-            raise ValueError("`visual_prompter_type` must be in (framedownpad, framepad)")
-        self.visual_prompter = TVP_PROMPTER_CLASSES_MAPPING[config.visual_prompter_type](config)
+            raise ValueError(
+                "`visual_prompter_type` must be in (framedownpad, framepad)"
+            )
+        self.visual_prompter = TVP_PROMPTER_CLASSES_MAPPING[
+            config.visual_prompter_type
+        ](config)
 
         self.post_init()
 
@@ -807,7 +954,9 @@ class TvpModel(TvpPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=TvpConfig)
+    @replace_return_docstrings(
+        output_type=BaseModelOutputWithPooling, config_class=TvpConfig
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -835,10 +984,14 @@ class TvpModel(TvpPreTrainedModel):
         >>> text_inputs = tokenizer("This is an example input", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
         # Add visual prompt, it compensates for the spatiotemporal information loss in 2D visual features.
         pixel_values = self.vision_model(
-            self.visual_prompter(pixel_values, interpolate_pad_encoding=interpolate_pos_encoding)
+            self.visual_prompter(
+                pixel_values, interpolate_pad_encoding=interpolate_pos_encoding
+            )
         )
         # (batch_size, sequence_length, hidden_size)
         text_embedding_output = self.embeddings(input_ids=input_ids)
@@ -849,17 +1002,25 @@ class TvpModel(TvpPreTrainedModel):
 
         if attention_mask is not None:
             # (batch_size, visual_sequence_length)
-            visual_attention_mask = attention_mask.new_ones(visual_embedding_output.shape[:2])
+            visual_attention_mask = attention_mask.new_ones(
+                visual_embedding_output.shape[:2]
+            )
             pt_mask = torch.ones(attention_mask.shape[0], 10).to(
                 device=attention_mask.device, dtype=attention_mask.dtype
             )
-            attention_mask = torch.cat([pt_mask, attention_mask, visual_attention_mask], dim=-1)
+            attention_mask = torch.cat(
+                [pt_mask, attention_mask, visual_attention_mask], dim=-1
+            )
             # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
             # ourselves in which case we just need to make it broadcastable to all heads.
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_ids.size()).to(input_ids.device)
+            attention_mask = self.get_extended_attention_mask(
+                attention_mask, input_ids.size()
+            ).to(input_ids.device)
         text_prompt = self.text_prompt.expand(text_embedding_output.shape[0], -1, -1)
         # (batch_size, sequence_length + visual_sequence_length, hidden_size)
-        embedding_output = torch.cat([text_prompt, text_embedding_output, visual_embedding_output], dim=1)
+        embedding_output = torch.cat(
+            [text_prompt, text_embedding_output, visual_embedding_output], dim=1
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -869,7 +1030,9 @@ class TvpModel(TvpPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+        last_hidden_state = (
+            encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+        )
         pooled_output = self.pooler(last_hidden_state)
         last_hidden_state = self.dropout(last_hidden_state)
         pooled_output = self.dropout(pooled_output)
@@ -913,7 +1076,9 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TvpVideoGroundingOutput, config_class=TvpConfig)
+    @replace_return_docstrings(
+        output_type=TvpVideoGroundingOutput, config_class=TvpConfig
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -944,7 +1109,9 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> text_inputs = tokenizer("This is an example input", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
         outputs = self.model(
             input_ids,
             pixel_values,

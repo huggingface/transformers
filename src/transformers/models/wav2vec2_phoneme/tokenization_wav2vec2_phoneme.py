@@ -24,16 +24,9 @@ import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
-from ...utils import (
-    ModelOutput,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-    logging,
-    requires_backends,
-    to_py_obj,
-)
-
+from ...utils import (ModelOutput, is_flax_available, is_tf_available,
+                      is_torch_available, logging, requires_backends,
+                      to_py_obj)
 
 logger = logging.get_logger(__name__)
 
@@ -161,12 +154,24 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+    def _add_tokens(
+        self,
+        new_tokens: Union[List[str], List[AddedToken]],
+        special_tokens: bool = False,
+    ) -> int:
         # Overwritten to never strip!
         to_add = []
         for token in new_tokens:
             if isinstance(token, str):
-                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalized=True, special=special_tokens))
+                to_add.append(
+                    AddedToken(
+                        token,
+                        rstrip=False,
+                        lstrip=False,
+                        normalized=True,
+                        special=special_tokens,
+                    )
+                )
             else:
                 to_add.append(token)
 
@@ -182,7 +187,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         requires_backends(self, "phonemizer")
         from phonemizer.backend import BACKENDS
 
-        self.backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
+        self.backend = BACKENDS[self.phonemizer_backend](
+            phonemizer_lang, language_switch="remove-flags"
+        )
 
     def prepare_for_tokenization(
         self,
@@ -252,13 +259,19 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     def phonemize(self, text: str, phonemizer_lang: Optional[str] = None) -> str:
         from phonemizer.separator import Separator
 
-        word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
+        word_delimiter = (
+            self.word_delimiter_token + " "
+            if self.word_delimiter_token is not None
+            else ""
+        )
         if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
             self.init_backend(phonemizer_lang)
         else:
             phonemizer_lang = self.phonemizer_lang
 
-        separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
+        separator = Separator(
+            phone=self.phone_delimiter_token, word=word_delimiter, syllable=""
+        )
         phonemes = self.backend.phonemize(
             [text],
             separator=separator,
@@ -347,7 +360,12 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
-            chars, char_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
+            chars, char_repetitions = zip(
+                *(
+                    (token, len(list(group_iter)))
+                    for token, group_iter in groupby(tokens)
+                )
+            )
         else:
             chars = tokens
             char_repetitions = len(tokens) * [1]
@@ -357,16 +375,25 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         # also filter self.word_delimiter_token if not not
         if filter_word_delimiter_token and self.word_delimiter_token is not None:
-            processed_chars = list(filter(lambda token: token != self.word_delimiter_token, processed_chars))
+            processed_chars = list(
+                filter(
+                    lambda token: token != self.word_delimiter_token, processed_chars
+                )
+            )
 
         # retrieve offsets
         char_offsets = None
         if output_char_offsets:
             word_delimiter_token_for_offsets = (
-                self.word_delimiter_token if filter_word_delimiter_token is True else None
+                self.word_delimiter_token
+                if filter_word_delimiter_token is True
+                else None
             )
             char_offsets = self._compute_offsets(
-                char_repetitions, chars, self.pad_token, word_delimiter_token=word_delimiter_token_for_offsets
+                char_repetitions,
+                chars,
+                self.pad_token,
+                word_delimiter_token=word_delimiter_token_for_offsets,
             )
 
             if len(char_offsets) != len(processed_chars):
@@ -386,13 +413,17 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
     @staticmethod
     def _compute_offsets(
-        char_repetitions: List[int], chars: List[str], ctc_token: int, word_delimiter_token: Optional[int] = None
+        char_repetitions: List[int],
+        chars: List[str],
+        ctc_token: int,
+        word_delimiter_token: Optional[int] = None,
     ) -> List[Dict[str, Union[str, int]]]:
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))
 
         offsets = [
-            {"char": t, "start_offset": s, "end_offset": e} for t, s, e in zip(chars, start_indices, end_indices)
+            {"char": t, "start_offset": s, "end_offset": e}
+            for t, s, e in zip(chars, start_indices, end_indices)
         ]
 
         # filter out CTC token
@@ -400,7 +431,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         # filter out word delimiter token if necessary
         if word_delimiter_token is not None:
-            offsets = list(filter(lambda offsets: offsets["char"] != word_delimiter_token, offsets))
+            offsets = list(
+                filter(lambda offsets: offsets["char"] != word_delimiter_token, offsets)
+            )
 
         return offsets
 
@@ -419,7 +452,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         the same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be
         called on the whole token list and not individually on added tokens
         """
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        filtered_tokens = self.convert_ids_to_tokens(
+            token_ids, skip_special_tokens=skip_special_tokens
+        )
 
         result = []
         for token in filtered_tokens:
@@ -446,7 +481,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             text = self.clean_up_tokenization(text)
 
         if output_char_offsets:
-            return Wav2Vec2PhonemeCTCTokenizerOutput(text=text, char_offsets=string_output["char_offsets"])
+            return Wav2Vec2PhonemeCTCTokenizerOutput(
+                text=text, char_offsets=string_output["char_offsets"]
+            )
         else:
             return text
 
@@ -509,7 +546,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     # we need docs for `output_char_offsets` here
     def batch_decode(
         self,
-        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        sequences: Union[
+            List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"
+        ],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
@@ -559,20 +598,29 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         ]
         if output_char_offsets:
             # transform list of dicts to dict of lists
-            return Wav2Vec2PhonemeCTCTokenizerOutput({k: [d[k] for d in batch_decoded] for k in batch_decoded[0]})
+            return Wav2Vec2PhonemeCTCTokenizerOutput(
+                {k: [d[k] for d in batch_decoded] for k in batch_decoded[0]}
+            )
 
         return batch_decoded
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False)
+                + "\n"
+            )
 
         return (vocab_file,)
 

@@ -32,15 +32,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from huggingface_hub import try_to_load_from_cache
 
-from .utils import (
-    HF_MODULES_CACHE,
-    TRANSFORMERS_DYNAMIC_MODULE_NAME,
-    cached_file,
-    extract_commit_hash,
-    is_offline_mode,
-    logging,
-)
-
+from .utils import (HF_MODULES_CACHE, TRANSFORMERS_DYNAMIC_MODULE_NAME,
+                    cached_file, extract_commit_hash, is_offline_mode, logging)
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _HF_REMOTE_CODE_LOCK = threading.Lock()
@@ -98,9 +91,13 @@ def get_relative_imports(module_file: Union[str, os.PathLike]) -> List[str]:
         content = f.read()
 
     # Imports of the form `import .xxx`
-    relative_imports = re.findall(r"^\s*import\s+\.(\S+)\s*$", content, flags=re.MULTILINE)
+    relative_imports = re.findall(
+        r"^\s*import\s+\.(\S+)\s*$", content, flags=re.MULTILINE
+    )
     # Imports of the form `from .xxx import yyy`
-    relative_imports += re.findall(r"^\s*from\s+\.(\S+)\s+import", content, flags=re.MULTILINE)
+    relative_imports += re.findall(
+        r"^\s*from\s+\.(\S+)\s+import", content, flags=re.MULTILINE
+    )
     # Unique-ify
     return list(set(relative_imports))
 
@@ -129,7 +126,9 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> List[str]
 
         module_path = Path(module_file).parent
         new_import_files = [str(module_path / m) for m in new_imports]
-        new_import_files = [f for f in new_import_files if f not in all_relative_imports]
+        new_import_files = [
+            f for f in new_import_files if f not in all_relative_imports
+        ]
         files_to_check = [f"{f}.py" for f in new_import_files]
 
         no_change = len(new_import_files) == 0
@@ -156,7 +155,10 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
 
     # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
     content = re.sub(
-        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
+        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+",
+        "",
+        content,
+        flags=re.MULTILINE,
     )
 
     # Imports of the form `import xxx`
@@ -235,8 +237,12 @@ def get_class_in_module(
         module_spec = importlib.util.spec_from_file_location(name, location=module_file)
 
         # Hash the module file and all its relative imports to check if we need to reload it
-        module_files: List[Path] = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
-        module_hash: str = hashlib.sha256(b"".join(bytes(f) + f.read_bytes() for f in module_files)).hexdigest()
+        module_files: List[Path] = [module_file] + sorted(
+            map(Path, get_relative_import_files(module_file))
+        )
+        module_hash: str = hashlib.sha256(
+            b"".join(bytes(f) + f.read_bytes() for f in module_files)
+        ).hexdigest()
 
         module: ModuleType
         if cached_module is None:
@@ -321,7 +327,9 @@ def get_cached_module_file(
             FutureWarning,
         )
         if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         token = use_auth_token
 
     if is_offline_mode() and not local_files_only:
@@ -336,7 +344,11 @@ def get_cached_module_file(
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
         cached_module = try_to_load_from_cache(
-            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
+            pretrained_model_name_or_path,
+            module_file,
+            cache_dir=cache_dir,
+            revision=_commit_hash,
+            repo_type=repo_type,
         )
 
     new_files = []
@@ -359,7 +371,9 @@ def get_cached_module_file(
             new_files.append(module_file)
 
     except EnvironmentError:
-        logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
+        logger.error(
+            f"Could not locate the {module_file} inside {pretrained_model_name_or_path}."
+        )
         raise
 
     # Check we have all the requirements in our environment
@@ -379,7 +393,9 @@ def get_cached_module_file(
             importlib.invalidate_caches()
         for module_needed in modules_needed:
             module_needed = f"{module_needed}.py"
-            module_needed_file = os.path.join(pretrained_model_name_or_path, module_needed)
+            module_needed_file = os.path.join(
+                pretrained_model_name_or_path, module_needed
+            )
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)
             ):
@@ -525,7 +541,9 @@ def get_class_from_dynamic_module(
             FutureWarning,
         )
         if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         token = use_auth_token
 
     # Catch the name of the repo if it's specified in `class_reference`
@@ -553,7 +571,9 @@ def get_class_from_dynamic_module(
     return get_class_in_module(class_name, final_module, force_reload=force_download)
 
 
-def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None) -> List[str]:
+def custom_object_save(
+    obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None
+) -> List[str]:
     """
     Save the modeling files corresponding to a custom model/configuration/tokenizer etc. in a given folder. Optionally
     adds the proper fields in a config.
@@ -590,7 +610,9 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
                     slow_tokenizer = getattr(obj, "slow_tokenizer_class")
                     slow_tok_module_name = slow_tokenizer.__module__
                     last_slow_tok_module = slow_tok_module_name.split(".")[-1]
-                    slow_tokenizer_class = f"{last_slow_tok_module}.{slow_tokenizer.__name__}"
+                    slow_tokenizer_class = (
+                        f"{last_slow_tok_module}.{slow_tokenizer.__name__}"
+                    )
             else:
                 # Slow tokenizer: no way to have the fast class
                 slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
@@ -639,7 +661,9 @@ def _raise_timeout_error(signum, frame):
 TIME_OUT_REMOTE_CODE = 15
 
 
-def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
+def resolve_trust_remote_code(
+    trust_remote_code, model_name, has_local_code, has_remote_code
+):
     if trust_remote_code is None:
         if has_local_code:
             trust_remote_code = False

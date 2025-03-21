@@ -19,7 +19,6 @@ from typing import List, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -205,7 +204,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.norm_mlp = norm_mlp
         self.scaling = scaling
         self.head_dropout = head_dropout
-        self.num_patches = (max(context_length, patch_length) - patch_length) // patch_stride + 1
+        self.num_patches = (
+            max(context_length, patch_length) - patch_length
+        ) // patch_stride + 1
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio
         self.num_forecast_mask_patches = num_forecast_mask_patches

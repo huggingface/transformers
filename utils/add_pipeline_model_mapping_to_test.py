@@ -35,7 +35,6 @@ from get_test_info import get_test_classes
 
 from tests.test_pipeline_mixin import pipeline_test_mapping
 
-
 PIPELINE_TEST_MAPPING = {}
 for task, _ in pipeline_test_mapping.items():
     PIPELINE_TEST_MAPPING[task] = {"pt": None, "tf": None}
@@ -91,9 +90,13 @@ def get_model_for_pipeline_test(test_class, task):
     if mapping is None:
         return None
 
-    config_classes = list({model_class.config_class for model_class in test_class.all_model_classes})
+    config_classes = list(
+        {model_class.config_class for model_class in test_class.all_model_classes}
+    )
     if len(config_classes) != 1:
-        raise ValueError("There should be exactly one configuration class from `test_class.all_model_classes`.")
+        raise ValueError(
+            "There should be exactly one configuration class from `test_class.all_model_classes`."
+        )
 
     # This could be a list/tuple of model classes, but it's rare.
     model_class = mapping.get(config_classes[0], None)
@@ -105,8 +108,14 @@ def get_model_for_pipeline_test(test_class, task):
 
 def get_pipeline_model_mapping(test_class):
     """Get `pipeline_model_mapping` for `test_class`."""
-    mapping = [(task, get_model_for_pipeline_test(test_class, task)) for task in pipeline_test_mapping]
-    mapping = sorted([(task, model) for task, model in mapping if model is not None], key=lambda x: x[0])
+    mapping = [
+        (task, get_model_for_pipeline_test(test_class, task))
+        for task in pipeline_test_mapping
+    ]
+    mapping = sorted(
+        [(task, model) for task, model in mapping if model is not None],
+        key=lambda x: x[0],
+    )
 
     return dict(mapping)
 
@@ -142,10 +151,17 @@ def get_pipeline_model_mapping_string(test_class):
 
 def is_valid_test_class(test_class):
     """Restrict to `XXXModelTesterMixin` and should be a subclass of `unittest.TestCase`."""
-    base_class_names = {"ModelTesterMixin", "TFModelTesterMixin", "FlaxModelTesterMixin"}
+    base_class_names = {
+        "ModelTesterMixin",
+        "TFModelTesterMixin",
+        "FlaxModelTesterMixin",
+    }
     if not issubclass(test_class, unittest.TestCase):
         return False
-    return len(base_class_names.intersection([x.__name__ for x in test_class.__bases__])) > 0
+    return (
+        len(base_class_names.intersection([x.__name__ for x in test_class.__bases__]))
+        > 0
+    )
 
 
 def find_test_class(test_file):
@@ -160,7 +176,9 @@ def find_test_class(test_file):
             break
     # Take the test class with the shortest name (just a heuristic)
     if target_test_class is None and len(test_classes) > 0:
-        target_test_class = sorted(test_classes, key=lambda x: (len(x.__name__), x.__name__))[0]
+        target_test_class = sorted(
+            test_classes, key=lambda x: (len(x.__name__), x.__name__)
+        )[0]
 
     return target_test_class
 
@@ -169,7 +187,11 @@ def find_block_ending(lines, start_idx, indent_level):
     end_idx = start_idx
     for idx, line in enumerate(lines[start_idx:]):
         indent = len(line) - len(line.lstrip())
-        if idx == 0 or indent > indent_level or (indent == indent_level and line.strip() == ")"):
+        if (
+            idx == 0
+            or indent > indent_level
+            or (indent == indent_level and line.strip() == ")")
+        ):
             end_idx = start_idx + idx
         elif idx > 0 and indent <= indent_level:
             # Outside the definition block of `pipeline_model_mapping`
@@ -254,7 +276,9 @@ def add_pipeline_model_mapping(test_class, overwrite=False):
     parent_classes = [x.__name__ for x in test_class.__bases__]
     if "PipelineTesterMixin" not in parent_classes:
         # Put `PipelineTesterMixin` just before `unittest.TestCase`
-        _parent_classes = [x for x in parent_classes if x != "TestCase"] + ["PipelineTesterMixin"]
+        _parent_classes = [x for x in parent_classes if x != "TestCase"] + [
+            "PipelineTesterMixin"
+        ]
         if "TestCase" in parent_classes:
             # Here we **assume** the original string is always with `unittest.TestCase`.
             _parent_classes.append("unittest.TestCase")
@@ -273,14 +297,20 @@ def add_pipeline_model_mapping(test_class, overwrite=False):
     line_to_add = " " * indent_level + line_to_add
     # Insert `pipeline_model_mapping` to `class_lines`.
     # (The line at `target_idx` should be kept by definition!)
-    class_lines = class_lines[: target_idx + 1] + [line_to_add] + class_lines[target_idx + 1 :]
+    class_lines = (
+        class_lines[: target_idx + 1] + [line_to_add] + class_lines[target_idx + 1 :]
+    )
     # Remove the lines that are marked to be removed
     class_lines = [x for x in class_lines if x is not None]
 
     # Move from test class to module (in order to write to the test file)
     module_lines = inspect.getsourcelines(inspect.getmodule(test_class))[0]
     # Be careful with the 1-off between line numbers and array indices
-    module_lines = module_lines[: class_start_line_no - 1] + class_lines + module_lines[class_end_line_no:]
+    module_lines = (
+        module_lines[: class_start_line_no - 1]
+        + class_lines
+        + module_lines[class_end_line_no:]
+    )
     code = "".join(module_lines)
 
     moddule_file = inspect.getsourcefile(test_class)
@@ -300,7 +330,9 @@ def add_pipeline_model_mapping_to_test_file(test_file, overwrite=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--test_file", type=str, help="A path to the test file, starting with the repository's `tests` directory."
+        "--test_file",
+        type=str,
+        help="A path to the test file, starting with the repository's `tests` directory.",
     )
     parser.add_argument(
         "--all",
@@ -315,7 +347,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not args.all and not args.test_file:
-        raise ValueError("Please specify either `test_file` or pass `--all` to check/modify all test files.")
+        raise ValueError(
+            "Please specify either `test_file` or pass `--all` to check/modify all test files."
+        )
     elif args.all and args.test_file:
         raise ValueError("Only one of `--test_file` and `--all` could be specified.")
 
@@ -331,6 +365,8 @@ if __name__ == "__main__":
 
     for test_file in test_files:
         if test_file in TEST_FILE_TO_IGNORE:
-            print(f"[SKIPPED] {test_file} is skipped as it is in `TEST_FILE_TO_IGNORE` in the file {__file__}.")
+            print(
+                f"[SKIPPED] {test_file} is skipped as it is in `TEST_FILE_TO_IGNORE` in the file {__file__}."
+            )
             continue
         add_pipeline_model_mapping_to_test_file(test_file, overwrite=args.overwrite)

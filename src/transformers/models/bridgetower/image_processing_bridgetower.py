@@ -18,24 +18,17 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import PaddingMode, center_crop, pad, resize, to_channel_dimension_format
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_batched,
-    is_scaled_image,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (PaddingMode, center_crop, pad, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (OPENAI_CLIP_MEAN, OPENAI_CLIP_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            is_batched, is_scaled_image, to_numpy_array,
+                            valid_images, validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs,
+                      is_vision_available, logging)
 
 if is_vision_available():
     import PIL
@@ -53,7 +46,9 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 # Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray,
+    output_size: Tuple[int, int],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -72,7 +67,8 @@ def make_pixel_mask(
 
 # Copied from transformers.models.vilt.image_processing_vilt.get_max_height_width
 def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: List[np.ndarray],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -239,11 +235,17 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" not in size:
-            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}"
+            )
         shorter = size["shortest_edge"]
         longer = int(1333 / 800 * shorter)
         output_size = get_resize_output_image_size(
-            image, shorter=shorter, longer=longer, size_divisor=size_divisor, input_data_format=input_data_format
+            image,
+            shorter=shorter,
+            longer=longer,
+            size_divisor=size_divisor,
+            input_data_format=input_data_format,
         )
         return resize(
             image,
@@ -363,7 +365,11 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(
+                    image=image,
+                    output_size=pad_size,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -450,7 +456,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -459,7 +467,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         # For backwards compatibility. Initial version of this processor was cropping to the "size" argument, which
         # it should default to if crop_size is undefined.
         crop_size = (
-            crop_size if crop_size is not None else (self.crop_size if self.crop_size is not None else self.size)
+            crop_size
+            if crop_size is not None
+            else (self.crop_size if self.crop_size is not None else self.size)
         )
 
         size = size if size is not None else self.size
@@ -511,31 +521,51 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         if do_center_crop:
             images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
+                self.center_crop(
+                    image=image, size=crop_size, input_data_format=input_data_format
+                )
+                for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         if do_pad:
             encoded_outputs = self.pad(
-                images, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=data_format
+                images,
+                return_pixel_mask=True,
+                return_tensors=return_tensors,
+                input_data_format=data_format,
             )
         else:
-            encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+            encoded_outputs = BatchFeature(
+                data={"pixel_values": images}, tensor_type=return_tensors
+            )
 
         return encoded_outputs
 

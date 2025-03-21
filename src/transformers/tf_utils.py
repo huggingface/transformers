@@ -21,7 +21,6 @@ from .feature_extraction_utils import BatchFeature
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -48,7 +47,9 @@ def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> list[int]:
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
-def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional[str] = None) -> tf.Tensor:
+def stable_softmax(
+    logits: tf.Tensor, axis: Optional[int] = None, name: Optional[str] = None
+) -> tf.Tensor:
     """
     Stable wrapper that returns the same output as `tf.nn.softmax`, but that works reliably with XLA on CPU. It is
     meant as a workaround for the [following issue](https://github.com/tensorflow/tensorflow/issues/55682), and will be
@@ -78,7 +79,9 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
     # models in Transformers.
 
     if weight.shape.rank != 1 or bias.shape.rank != 1 or not isinstance(axis, int):
-        raise NotImplementedError("Only 1D weight and bias tensors are supported for now, with only a single axis.")
+        raise NotImplementedError(
+            "Only 1D weight and bias tensors are supported for now, with only a single axis."
+        )
 
     # Get mean and variance on the axis to be normalized
     mean, variance = tf.nn.moments(inputs, axes=[axis], keepdims=True)
@@ -105,7 +108,13 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
 
 
 def scaled_dot_product_attention(
-    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale: float = None
+    query,
+    key,
+    value,
+    attn_mask=None,
+    dropout_p=0.0,
+    is_causal=False,
+    scale: float = None,
 ):
     """TF equivalent for torch's nn.functional.scaled_dot_product_attention"""
     if dropout_p != 0.0:
@@ -114,13 +123,19 @@ def scaled_dot_product_attention(
             "with Transformers and ping @Rocketknight1 if you need it for a port!"
         )
     if is_causal and attn_mask is not None:
-        raise ValueError("You cannot specify an attn_mask and is_causal at the same time!")
+        raise ValueError(
+            "You cannot specify an attn_mask and is_causal at the same time!"
+        )
     if is_causal:
         attn_mask = tf.ones((tf.shape(query)[-2], tf.shape(key)[-2]), dtype=tf.int32)
         attn_mask = tf.experimental.numpy.tril(attn_mask, k=0)
-    if attn_mask is not None and (attn_mask.dtype.is_integer or attn_mask.dtype.is_bool):
+    if attn_mask is not None and (
+        attn_mask.dtype.is_integer or attn_mask.dtype.is_bool
+    ):
         # Convert boolean mask to a negative logit bias
-        attn_mask = tf.where(attn_mask > 0, tf.cast(0.0, query.dtype), tf.cast(-1000.0, query.dtype))
+        attn_mask = tf.where(
+            attn_mask > 0, tf.cast(0.0, query.dtype), tf.cast(-1000.0, query.dtype)
+        )
     logits = tf.einsum("...qd, ...kd -> ...qk", query, key)
     if scale is None:
         scale = tf.cast(tf.shape(key)[-1], logits.dtype) ** -0.5
@@ -145,7 +160,9 @@ def flatten(input, start_dim=0, end_dim=-1):
 
     in_shape = tf.shape(input)
     flattened_dim = tf.math.reduce_prod(in_shape[start_dim : end_dim + 1])
-    out_shape = tf.concat([in_shape[:start_dim], [flattened_dim], in_shape[end_dim + 1 :]], axis=0)
+    out_shape = tf.concat(
+        [in_shape[:start_dim], [flattened_dim], in_shape[end_dim + 1 :]], axis=0
+    )
     return tf.reshape(input, out_shape)
 
 
@@ -160,7 +177,9 @@ def invert_attention_mask(encoder_attention_mask: tf.Tensor) -> tf.Tensor:
         `tf.Tensor`: The inverted attention mask.
     """
     if not isinstance(encoder_attention_mask, tf.Tensor):
-        encoder_attention_mask = tf.convert_to_tensor(encoder_attention_mask)  # Catches stray NumPy inputs
+        encoder_attention_mask = tf.convert_to_tensor(
+            encoder_attention_mask
+        )  # Catches stray NumPy inputs
     if encoder_attention_mask.shape.rank == 3:
         encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
     if encoder_attention_mask.shape.rank == 2:
@@ -177,7 +196,9 @@ def invert_attention_mask(encoder_attention_mask: tf.Tensor) -> tf.Tensor:
     return encoder_extended_attention_mask
 
 
-def check_embeddings_within_bounds(tensor: tf.Tensor, embed_dim: int, tensor_name: str = "input_ids") -> None:
+def check_embeddings_within_bounds(
+    tensor: tf.Tensor, embed_dim: int, tensor_name: str = "input_ids"
+) -> None:
     """
     `tf.gather`, on which TF embedding layers are based, won't check positive out of bound indices on GPU, returning
     zeros instead. This function adds a check against that dangerous silent behavior.
@@ -260,13 +281,18 @@ def load_attributes_from_hdf5_group(group, name):
     Copied from Keras to Transformers to avoid versioning issues.
     """
     if name in group.attrs:
-        data = [n.decode("utf8") if hasattr(n, "decode") else n for n in group.attrs[name]]
+        data = [
+            n.decode("utf8") if hasattr(n, "decode") else n for n in group.attrs[name]
+        ]
     else:
         data = []
         chunk_id = 0
         while "%s%d" % (name, chunk_id) in group.attrs:
             data.extend(
-                [n.decode("utf8") if hasattr(n, "decode") else n for n in group.attrs["%s%d" % (name, chunk_id)]]
+                [
+                    n.decode("utf8") if hasattr(n, "decode") else n
+                    for n in group.attrs["%s%d" % (name, chunk_id)]
+                ]
             )
             chunk_id += 1
     return data

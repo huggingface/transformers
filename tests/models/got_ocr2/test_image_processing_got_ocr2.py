@@ -18,10 +18,11 @@ import unittest
 
 from transformers.image_utils import SizeDict
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import (is_torch_available, is_torchvision_available,
+                                is_vision_available)
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -80,7 +81,9 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -96,7 +99,9 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
 @require_vision
 class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GotOcr2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = GotOcr2ImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        GotOcr2ImageProcessorFast if is_torchvision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -117,43 +122,75 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_slow_fast_equivalence_crop_to_patches(self):
-        dummy_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
+        dummy_image = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )[0]
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict, crop_to_patches=True)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict, crop_to_patches=True)
+        image_processor_slow = self.image_processing_class(
+            **self.image_processor_dict, crop_to_patches=True
+        )
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict, crop_to_patches=True
+        )
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
         torch.testing.assert_close(encoding_slow.num_patches, encoding_fast.num_patches)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertTrue(
+            torch.allclose(
+                encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1
+            )
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+            torch.mean(
+                torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)
+            ).item(),
+            1e-3,
         )
 
     def test_slow_fast_equivalence_batched_crop_to_patches(self):
         # Prepare image inputs so that we have two groups of images with equal resolution with a group of images with
         # different resolutions in between
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, torchify=True
+        )
+        dummy_images += self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )
+        dummy_images += self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, torchify=True
+        )
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict, crop_to_patches=True)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict, crop_to_patches=True)
+        image_processor_slow = self.image_processing_class(
+            **self.image_processor_dict, crop_to_patches=True
+        )
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict, crop_to_patches=True
+        )
 
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
         torch.testing.assert_close(encoding_slow.num_patches, encoding_fast.num_patches)
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertTrue(
+            torch.allclose(
+                encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1
+            )
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+            torch.mean(
+                torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)
+            ).item(),
+            1e-3,
         )
 
     def test_crop_to_patches(self):
         # test slow image processor
         image_processor = self.image_processor_list[0](**self.image_processor_dict)
-        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
+        image = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, numpify=True
+        )[0]
         processed_images = image_processor.crop_image_to_patches(
             image,
             min_patches=1,
@@ -166,7 +203,9 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # test fast image processor (process batch)
         image_processor = self.image_processor_list[1](**self.image_processor_dict)
-        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+        image = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, torchify=True
+        )[0]
         processed_images = image_processor.crop_image_to_patches(
             image.unsqueeze(0),
             min_patches=1,

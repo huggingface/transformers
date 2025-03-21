@@ -17,25 +17,17 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import (
-    PreTrainedTokenizer,
-    PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
-    UdopProcessor,
-    UdopTokenizer,
-    UdopTokenizerFast,
-)
-from transformers.testing_utils import (
-    require_pytesseract,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    slow,
-)
-from transformers.utils import cached_property, is_pytesseract_available, is_torch_available
+from transformers import (PreTrainedTokenizer, PreTrainedTokenizerBase,
+                          PreTrainedTokenizerFast, UdopProcessor,
+                          UdopTokenizer, UdopTokenizerFast)
+from transformers.testing_utils import (require_pytesseract,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        slow)
+from transformers.utils import (cached_property, is_pytesseract_available,
+                                is_torch_available)
 
 from ...test_processing_common import ProcessorTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -75,13 +67,17 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+        return self.tokenizer_class.from_pretrained(
+            self.tokenizer_pretrained_name, **kwargs
+        )
 
     def get_image_processor(self, **kwargs):
         return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(
+            self.tokenizer_pretrained_name, **kwargs
+        )
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
@@ -93,19 +89,28 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = UdopProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             processor.save_pretrained(self.tmpdirname)
             processor = UdopProcessor.from_pretrained(self.tmpdirname)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (UdopTokenizer, UdopTokenizerFast))
+            self.assertIsInstance(
+                processor.tokenizer, (UdopTokenizer, UdopTokenizerFast)
+            )
 
-            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
+            self.assertEqual(
+                processor.image_processor.to_json_string(),
+                image_processor.to_json_string(),
+            )
             self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+        processor = UdopProcessor(
+            image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
@@ -121,24 +126,41 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             size=30,
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, UdopTokenizer)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
         # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+        tokenizer_add_kwargs = self.get_rust_tokenizer(
+            bos_token="(BOS)", eos_token="(EOS)"
+        )
         image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
         processor = UdopProcessor.from_pretrained(
-            self.tmpdirname, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+            self.tmpdirname,
+            use_xlm=True,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, UdopTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
     def test_model_input_names(self):
@@ -169,7 +191,9 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding_processor["input_ids"], [21820, 296, 1])
         self.assertListEqual(encoding_processor["attention_mask"], [1, 1, 1])
         self.assertDictEqual(dict(encoding_processor), dict(encoding_tokenizer))
-        self.assertEqual(tokenizer.decode(encoding_processor["input_ids"]), expected_decoding)
+        self.assertEqual(
+            tokenizer.decode(encoding_processor["input_ids"]), expected_decoding
+        )
 
     @slow
     def test_overflowing_tokens(self):
@@ -179,10 +203,14 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # set up
         datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
-        processor = UdopProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
+        processor = UdopProcessor.from_pretrained(
+            "microsoft/udop-large", apply_ocr=False
+        )
 
         def preprocess_data(examples):
-            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            images = [
+                Image.open(path).convert("RGB") for path in examples["image_path"]
+            ]
             words = examples["words"]
             boxes = examples["bboxes"]
             word_labels = examples["ner_tags"]
@@ -216,7 +244,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True
+        )
 
         image_1 = Image.open(ds[0]["file"]).convert("RGB")
         image_2 = Image.open(ds[1]["file"]).convert("RGB")
@@ -238,7 +268,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = UdopProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             input_image_processor = image_processor(images[0], return_tensors="pt")
@@ -251,7 +283,11 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify pixel_values
             self.assertTrue(
-                torch.allclose(input_image_processor["pixel_values"], input_processor["pixel_values"], atol=1e-2)
+                torch.allclose(
+                    input_image_processor["pixel_values"],
+                    input_processor["pixel_values"],
+                    atol=1e-2,
+                )
             )
 
             # verify input_ids
@@ -273,7 +309,11 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify pixel_values
             self.assertTrue(
-                torch.allclose(input_image_processor["pixel_values"], input_processor["pixel_values"], atol=1e-2)
+                torch.allclose(
+                    input_image_processor["pixel_values"],
+                    input_processor["pixel_values"],
+                    atol=1e-2,
+                )
             )
 
             # verify input_ids
@@ -293,12 +333,16 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = UdopProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], words, boxes=boxes, return_tensors="pt")
+            input_processor = processor(
+                images[0], words, boxes=boxes, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
@@ -313,8 +357,13 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # batched
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            input_processor = processor(images, words, boxes=boxes, padding=True, return_tensors="pt")
+            boxes = [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]],
+            ]
+            input_processor = processor(
+                images, words, boxes=boxes, padding=True, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
@@ -347,16 +396,30 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = UdopProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             words = ["weirdly", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
             word_labels = [1, 2]
-            input_processor = processor(images[0], words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+            input_processor = processor(
+                images[0],
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                return_tensors="pt",
+            )
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "input_ids", "labels", "pixel_values"]
+            expected_keys = [
+                "attention_mask",
+                "bbox",
+                "input_ids",
+                "labels",
+                "pixel_values",
+            ]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -367,18 +430,34 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify labels
             expected_labels = [1, -100, 2, -100]
-            self.assertListEqual(input_processor.labels.squeeze().tolist(), expected_labels)
+            self.assertListEqual(
+                input_processor.labels.squeeze().tolist(), expected_labels
+            )
 
             # batched
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
+            boxes = [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]],
+            ]
             word_labels = [[1, 2], [6, 3, 10, 2]]
             input_processor = processor(
-                images, words, boxes=boxes, word_labels=word_labels, padding=True, return_tensors="pt"
+                images,
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                padding=True,
+                return_tensors="pt",
             )
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "input_ids", "labels", "pixel_values"]
+            expected_keys = [
+                "attention_mask",
+                "bbox",
+                "input_ids",
+                "labels",
+                "pixel_values",
+            ]
             actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
@@ -412,7 +491,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = UdopProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             question = "What's his name?"
@@ -434,7 +515,12 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             # batched
             questions = ["How old is he?", "what's the time"]
             input_processor = processor(
-                images, questions, padding="max_length", max_length=20, truncation=True, return_tensors="pt"
+                images,
+                questions,
+                padding="max_length",
+                max_length=20,
+                truncation=True,
+                return_tensors="pt",
             )
 
             # verify keys
@@ -444,7 +530,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            expected_decoding = "what's the time</s> 7 ITC Limited REPORT AND ACCOUNTS 2013 I</s>"
+            expected_decoding = (
+                "what's the time</s> 7 ITC Limited REPORT AND ACCOUNTS 2013 I</s>"
+            )
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -463,13 +551,17 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = UdopProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             question = "What's his name?"
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], question, text_pair=words, boxes=boxes, return_tensors="pt")
+            input_processor = processor(
+                images[0], question, text_pair=words, boxes=boxes, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
@@ -484,9 +576,17 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             # batched
             questions = ["How old is he?", "what's the time"]
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
+            boxes = [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]],
+            ]
             input_processor = processor(
-                images, questions, text_pair=words, boxes=boxes, padding=True, return_tensors="pt"
+                images,
+                questions,
+                text_pair=words,
+                boxes=boxes,
+                padding=True,
+                return_tensors="pt",
             )
 
             # verify keys
@@ -504,5 +604,11 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
-            expected_bbox = [[3, 9, 2, 4], [1, 1, 2, 3], [1, 1, 2, 3], [1, 1, 2, 3], [1000, 1000, 1000, 1000]]
+            expected_bbox = [
+                [3, 9, 2, 4],
+                [1, 1, 2, 3],
+                [1, 1, 2, 3],
+                [1, 1, 2, 3],
+                [1000, 1000, 1000, 1000],
+            ]
             self.assertListEqual(input_processor.bbox[1].tolist()[-5:], expected_bbox)

@@ -29,15 +29,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...pytorch_utils import (find_pruneable_heads_and_indices,
+                              prune_linear_layer)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_pvt import PvtConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -51,7 +47,9 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -64,8 +62,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -105,9 +107,19 @@ class PvtPatchEmbeddings(nn.Module):
     ):
         super().__init__()
         self.config = config
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
@@ -116,20 +128,33 @@ class PvtPatchEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.randn(1, num_patches + 1 if cls_token else num_patches, hidden_size)
         )
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, hidden_size)) if cls_token else None
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=stride, stride=patch_size)
+        self.cls_token = (
+            nn.Parameter(torch.zeros(1, 1, hidden_size)) if cls_token else None
+        )
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=stride, stride=patch_size
+        )
         self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         num_patches = height * width
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == self.config.image_size * self.config.image_size:
+        if (
+            not torch.jit.is_tracing()
+            and num_patches == self.config.image_size * self.config.image_size
+        ):
             return self.position_embeddings
         embeddings = embeddings.reshape(1, height, width, -1).permute(0, 3, 1, 2)
-        interpolated_embeddings = F.interpolate(embeddings, size=(height, width), mode="bilinear")
-        interpolated_embeddings = interpolated_embeddings.reshape(1, -1, height * width).permute(0, 2, 1)
+        interpolated_embeddings = F.interpolate(
+            embeddings, size=(height, width), mode="bilinear"
+        )
+        interpolated_embeddings = interpolated_embeddings.reshape(
+            1, -1, height * width
+        ).permute(0, 2, 1)
         return interpolated_embeddings
 
     def forward(self, pixel_values: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
@@ -145,10 +170,16 @@ class PvtPatchEmbeddings(nn.Module):
         if self.cls_token is not None:
             cls_token = self.cls_token.expand(batch_size, -1, -1)
             embeddings = torch.cat((cls_token, embeddings), dim=1)
-            position_embeddings = self.interpolate_pos_encoding(self.position_embeddings[:, 1:], height, width)
-            position_embeddings = torch.cat((self.position_embeddings[:, :1], position_embeddings), dim=1)
+            position_embeddings = self.interpolate_pos_encoding(
+                self.position_embeddings[:, 1:], height, width
+            )
+            position_embeddings = torch.cat(
+                (self.position_embeddings[:, :1], position_embeddings), dim=1
+            )
         else:
-            position_embeddings = self.interpolate_pos_encoding(self.position_embeddings, height, width)
+            position_embeddings = self.interpolate_pos_encoding(
+                self.position_embeddings, height, width
+            )
         embeddings = self.dropout(embeddings + position_embeddings)
 
         return embeddings, height, width
@@ -170,7 +201,11 @@ class PvtEfficientSelfAttention(nn.Module):
     """Efficient self-attention mechanism with reduction of the sequence [PvT paper](https://arxiv.org/abs/2102.12122)."""
 
     def __init__(
-        self, config: PvtConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
+        self,
+        config: PvtConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        sequences_reduction_ratio: float,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -185,21 +220,31 @@ class PvtEfficientSelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(
+            self.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
         self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(
+            self.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         self.sequences_reduction_ratio = sequences_reduction_ratio
         if sequences_reduction_ratio > 1:
             self.sequence_reduction = nn.Conv2d(
-                hidden_size, hidden_size, kernel_size=sequences_reduction_ratio, stride=sequences_reduction_ratio
+                hidden_size,
+                hidden_size,
+                kernel_size=sequences_reduction_ratio,
+                stride=sequences_reduction_ratio,
             )
             self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def transpose_for_scores(self, hidden_states: int) -> torch.Tensor:
-        new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_shape = hidden_states.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         hidden_states = hidden_states.view(new_shape)
         return hidden_states.permute(0, 2, 1, 3)
 
@@ -215,11 +260,15 @@ class PvtEfficientSelfAttention(nn.Module):
         if self.sequences_reduction_ratio > 1:
             batch_size, seq_len, num_channels = hidden_states.shape
             # Reshape to (batch_size, num_channels, height, width)
-            hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+            hidden_states = hidden_states.permute(0, 2, 1).reshape(
+                batch_size, num_channels, height, width
+            )
             # Apply sequence reduction
             hidden_states = self.sequence_reduction(hidden_states)
             # Reshape back to (batch_size, seq_len, num_channels)
-            hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(
+                0, 2, 1
+            )
             hidden_states = self.layer_norm(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -243,14 +292,20 @@ class PvtEfficientSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
 
 class PvtAttention(nn.Module):
     def __init__(
-        self, config: PvtConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float
+        self,
+        config: PvtConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        sequences_reduction_ratio: float,
     ):
         super().__init__()
         self.self = PvtEfficientSelfAttention(
@@ -266,7 +321,10 @@ class PvtAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -277,16 +335,24 @@ class PvtAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False
+        self,
+        hidden_states: torch.Tensor,
+        height: int,
+        width: int,
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.output(self_outputs[0])
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -338,9 +404,17 @@ class PvtLayer(nn.Module):
         self.drop_path = PvtDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = PvtFFN(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = PvtFFN(
+            config=config, in_features=hidden_size, hidden_features=mlp_hidden_size
+        )
 
-    def forward(self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        height: int,
+        width: int,
+        output_attentions: bool = False,
+    ):
         self_attention_outputs = self.attention(
             hidden_states=self.layer_norm_1(hidden_states),
             height=height,
@@ -369,7 +443,9 @@ class PvtEncoder(nn.Module):
         self.config = config
 
         # stochastic depth decay rule
-        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
+        drop_path_decays = torch.linspace(
+            0, config.drop_path_rate, sum(config.depths)
+        ).tolist()
 
         # patch embeddings
         embeddings = []
@@ -378,10 +454,16 @@ class PvtEncoder(nn.Module):
             embeddings.append(
                 PvtPatchEmbeddings(
                     config=config,
-                    image_size=config.image_size if i == 0 else self.config.image_size // (2 ** (i + 1)),
+                    image_size=(
+                        config.image_size
+                        if i == 0
+                        else self.config.image_size // (2 ** (i + 1))
+                    ),
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
-                    num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
+                    num_channels=(
+                        config.num_channels if i == 0 else config.hidden_sizes[i - 1]
+                    ),
                     hidden_size=config.hidden_sizes[i],
                     cls_token=i == config.num_encoder_blocks - 1,
                 )
@@ -412,7 +494,9 @@ class PvtEncoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(
+            config.hidden_sizes[-1], eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -427,7 +511,9 @@ class PvtEncoder(nn.Module):
         batch_size = pixel_values.shape[0]
         num_blocks = len(self.block)
         hidden_states = pixel_values
-        for idx, (embedding_layer, block_layer) in enumerate(zip(self.patch_embeddings, self.block)):
+        for idx, (embedding_layer, block_layer) in enumerate(
+            zip(self.patch_embeddings, self.block)
+        ):
             # first, obtain patch embeddings
             hidden_states, height, width = embedding_layer(hidden_states)
             # second, send embeddings through blocks
@@ -439,12 +525,20 @@ class PvtEncoder(nn.Module):
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
             if idx != num_blocks - 1:
-                hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+                hidden_states = (
+                    hidden_states.reshape(batch_size, height, width, -1)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                )
         hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -468,7 +562,9 @@ class PvtPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data, mean=0.0, std=self.config.initializer_range
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -538,7 +634,9 @@ class PvtModel(PvtPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(
+        PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -553,11 +651,19 @@ class PvtModel(PvtPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         encoder_outputs = self.encoder(
             pixel_values=pixel_values,
@@ -593,13 +699,17 @@ class PvtForImageClassification(PvtPreTrainedModel):
 
         # Classifier head
         self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(
+        PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)")
+    )
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
@@ -620,7 +730,9 @@ class PvtForImageClassification(PvtPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.pvt(
             pixel_values=pixel_values,
@@ -638,7 +750,9 @@ class PvtForImageClassification(PvtPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"

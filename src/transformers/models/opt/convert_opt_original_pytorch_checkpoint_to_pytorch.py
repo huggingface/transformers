@@ -22,7 +22,6 @@ import torch
 from transformers import OPTConfig, OPTModel
 from transformers.utils import logging
 
-
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -107,7 +106,14 @@ if __name__ == "__main__":
             " https://huggingface.co/models?other=opt_metasq"
         ),
     )
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     parser.add_argument("--hf_config", default=None, type=str, help="Define HF config.")
     args = parser.parse_args()
-    convert_opt_checkpoint(args.fairseq_path, args.pytorch_dump_folder_path, config=args.hf_config)
+    convert_opt_checkpoint(
+        args.fairseq_path, args.pytorch_dump_folder_path, config=args.hf_config
+    )

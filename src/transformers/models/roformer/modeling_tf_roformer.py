@@ -23,40 +23,26 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPooling,
-    TFCausalLMOutput,
-    TFMaskedLMOutput,
-    TFMultipleChoiceModelOutput,
-    TFQuestionAnsweringModelOutput,
-    TFSequenceClassifierOutput,
-    TFTokenClassifierOutput,
-)
-from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
-    TFMaskedLanguageModelingLoss,
-    TFModelInputType,
-    TFMultipleChoiceLoss,
-    TFPreTrainedModel,
-    TFQuestionAnsweringLoss,
-    TFSequenceClassificationLoss,
-    TFSequenceSummary,
-    TFTokenClassificationLoss,
-    get_initializer,
-    keras,
-    keras_serializable,
-    unpack_inputs,
-)
-from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...modeling_tf_outputs import (TFBaseModelOutput,
+                                    TFBaseModelOutputWithPooling,
+                                    TFCausalLMOutput, TFMaskedLMOutput,
+                                    TFMultipleChoiceModelOutput,
+                                    TFQuestionAnsweringModelOutput,
+                                    TFSequenceClassifierOutput,
+                                    TFTokenClassifierOutput)
+from ...modeling_tf_utils import (TFCausalLanguageModelingLoss,
+                                  TFMaskedLanguageModelingLoss,
+                                  TFModelInputType, TFMultipleChoiceLoss,
+                                  TFPreTrainedModel, TFQuestionAnsweringLoss,
+                                  TFSequenceClassificationLoss,
+                                  TFSequenceSummary, TFTokenClassificationLoss,
+                                  get_initializer, keras, keras_serializable,
+                                  unpack_inputs)
+from ...tf_utils import (check_embeddings_within_bounds, shape_list,
+                         stable_softmax)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_roformer import RoFormerConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -71,7 +57,9 @@ class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):
         super().__init__(**kwargs)
 
         if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
+            raise NotImplementedError(
+                f"odd embedding_dim {embedding_dim} not supported"
+            )
 
         self.embedding_dim = embedding_dim
         self.num_positions = num_positions
@@ -101,7 +89,10 @@ class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):
         the 2nd half of the vector. [dim // 2:]
         """
         position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+            [
+                [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
+                for pos in range(n_pos)
+            ]
         )
         table = np.zeros_like(position_enc)
         # index 0 is all zero
@@ -116,7 +107,12 @@ class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_shape[:2]
 
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
+        positions = tf.range(
+            past_key_values_length,
+            seq_len + past_key_values_length,
+            delta=1,
+            name="range",
+        )
         return tf.gather(self.weight, positions)
 
 
@@ -129,7 +125,9 @@ class TFRoFormerEmbeddings(keras.layers.Layer):
         self.config = config
         self.embedding_size = config.embedding_size
         self.initializer_range = config.initializer_range
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
@@ -179,7 +177,9 @@ class TFRoFormerEmbeddings(keras.layers.Layer):
         if token_type_ids is None:
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
-        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
+        token_type_embeds = tf.gather(
+            params=self.token_type_embeddings, indices=token_type_ids
+        )
         final_embeddings = inputs_embeds + token_type_embeds
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -203,13 +203,19 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
         self.query = keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+            units=self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="query",
         )
         self.key = keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+            units=self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="key",
         )
         self.value = keras.layers.Dense(
-            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+            units=self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="value",
         )
         self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
         self.rotary_value = config.rotary_value
@@ -217,7 +223,10 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+        tensor = tf.reshape(
+            tensor=tensor,
+            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
+        )
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
@@ -241,11 +250,15 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
 
         if sinusoidal_pos is not None:
             if self.rotary_value:
-                query_layer, key_layer, value_layer = self.apply_rotary_position_embeddings(
-                    sinusoidal_pos, query_layer, key_layer, value_layer
+                query_layer, key_layer, value_layer = (
+                    self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer, value_layer
+                    )
                 )
             else:
-                query_layer, key_layer = self.apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer)
+                query_layer, key_layer = self.apply_rotary_position_embeddings(
+                    sinusoidal_pos, query_layer, key_layer
+                )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
@@ -272,13 +285,21 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
-        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        attention_output = tf.reshape(
+            tensor=attention_output, shape=(batch_size, -1, self.all_head_size)
+        )
+        outputs = (
+            (attention_output, attention_probs)
+            if output_attentions
+            else (attention_output,)
+        )
 
         return outputs
 
     @staticmethod
-    def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer, value_layer=None):
+    def apply_rotary_position_embeddings(
+        sinusoidal_pos, query_layer, key_layer, value_layer=None
+    ):
         # https://kexue.fm/archives/8265
         # sin [batch_size, num_heads, sequence_length, embed_size_per_head//2]
         # cos [batch_size, num_heads, sequence_length, embed_size_per_head//2]
@@ -288,17 +309,27 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
         sin_pos = tf.repeat(sin, 2, axis=-1)
         cos_pos = tf.repeat(cos, 2, axis=-1)
         # rotate_half_query_layer [-q1,q0,-q3,q2......,-qd-1,qd-2]
-        rotate_half_query_layer = tf.stack([-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1)
-        rotate_half_query_layer = tf.reshape(rotate_half_query_layer, shape_list(query_layer))
+        rotate_half_query_layer = tf.stack(
+            [-query_layer[..., 1::2], query_layer[..., ::2]], axis=-1
+        )
+        rotate_half_query_layer = tf.reshape(
+            rotate_half_query_layer, shape_list(query_layer)
+        )
         query_layer = query_layer * cos_pos + rotate_half_query_layer * sin_pos
         # rotate_half_key_layer [-k1,k0,-k3,k2......,-kd-1,kd-2]
-        rotate_half_key_layer = tf.stack([-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1)
+        rotate_half_key_layer = tf.stack(
+            [-key_layer[..., 1::2], key_layer[..., ::2]], axis=-1
+        )
         rotate_half_key_layer = tf.reshape(rotate_half_key_layer, shape_list(key_layer))
         key_layer = key_layer * cos_pos + rotate_half_key_layer * sin_pos
         if value_layer is not None:
             # rotate_half_value_layer [-v1,v0,-v3,v2......,-vd-1,vd-2]
-            rotate_half_value_layer = tf.stack([-value_layer[..., 1::2], value_layer[..., ::2]], axis=-1)
-            rotate_half_value_layer = tf.reshape(rotate_half_value_layer, shape_list(value_layer))
+            rotate_half_value_layer = tf.stack(
+                [-value_layer[..., 1::2], value_layer[..., ::2]], axis=-1
+            )
+            rotate_half_value_layer = tf.reshape(
+                rotate_half_value_layer, shape_list(value_layer)
+            )
             value_layer = value_layer * cos_pos + rotate_half_value_layer * sin_pos
             return query_layer, key_layer, value_layer
         return query_layer, key_layer
@@ -324,13 +355,19 @@ class TFRoFormerSelfOutput(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(
+        self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False
+    ) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -379,7 +416,9 @@ class TFRoFormerAttention(keras.layers.Layer):
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
 
         return outputs
 
@@ -401,7 +440,9 @@ class TFRoFormerIntermediate(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.intermediate_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -431,13 +472,19 @@ class TFRoFormerOutput(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(
+        self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False
+    ) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -484,9 +531,13 @@ class TFRoFormerLayer(keras.layers.Layer):
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(hidden_states=attention_output)
         layer_output = self.roformer_output(
-            hidden_states=intermediate_output, input_tensor=attention_output, training=training
+            hidden_states=intermediate_output,
+            input_tensor=attention_output,
+            training=training,
         )
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+        outputs = (layer_output,) + attention_outputs[
+            1:
+        ]  # add attentions if we output them
 
         return outputs
 
@@ -513,7 +564,10 @@ class TFRoFormerEncoder(keras.layers.Layer):
             config.hidden_size // config.num_attention_heads,
             name="embed_positions",
         )
-        self.layer = [TFRoFormerLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.layer = [
+            TFRoFormerLayer(config, name=f"layer_._{i}")
+            for i in range(config.num_hidden_layers)
+        ]
 
     def call(
         self,
@@ -529,7 +583,9 @@ class TFRoFormerEncoder(keras.layers.Layer):
         all_attentions = () if output_attentions else None
 
         # [sequence_length, embed_size_per_head] -> [batch_size, num_heads, sequence_length, embed_size_per_head]
-        sinusoidal_pos = self.embed_positions(shape_list(hidden_states)[:-1])[None, None, :, :]
+        sinusoidal_pos = self.embed_positions(shape_list(hidden_states)[:-1])[
+            None, None, :, :
+        ]
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -553,10 +609,16 @@ class TFRoFormerEncoder(keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_attentions]
+                if v is not None
+            )
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
     def build(self, input_shape=None):
@@ -587,7 +649,9 @@ class TFRoFormerPredictionHeadTransform(keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -610,7 +674,9 @@ class TFRoFormerPredictionHeadTransform(keras.layers.Layer):
 
 
 class TFRoFormerLMPredictionHead(keras.layers.Layer):
-    def __init__(self, config: RoFormerConfig, input_embeddings: keras.layers.Layer, **kwargs):
+    def __init__(
+        self, config: RoFormerConfig, input_embeddings: keras.layers.Layer, **kwargs
+    ):
         super().__init__(**kwargs)
 
         self.config = config
@@ -623,7 +689,12 @@ class TFRoFormerLMPredictionHead(keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape=None):
-        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(
+            shape=(self.config.vocab_size,),
+            initializer="zeros",
+            trainable=True,
+            name="bias",
+        )
 
         if self.built:
             return
@@ -649,9 +720,15 @@ class TFRoFormerLMPredictionHead(keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
+        hidden_states = tf.reshape(
+            tensor=hidden_states, shape=[-1, self.embedding_size]
+        )
+        hidden_states = tf.matmul(
+            a=hidden_states, b=self.input_embeddings.weight, transpose_b=True
+        )
+        hidden_states = tf.reshape(
+            tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size]
+        )
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
@@ -659,10 +736,14 @@ class TFRoFormerLMPredictionHead(keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->RoFormer
 class TFRoFormerMLMHead(keras.layers.Layer):
-    def __init__(self, config: RoFormerConfig, input_embeddings: keras.layers.Layer, **kwargs):
+    def __init__(
+        self, config: RoFormerConfig, input_embeddings: keras.layers.Layer, **kwargs
+    ):
         super().__init__(**kwargs)
 
-        self.predictions = TFRoFormerLMPredictionHead(config, input_embeddings, name="predictions")
+        self.predictions = TFRoFormerLMPredictionHead(
+            config, input_embeddings, name="predictions"
+        )
 
     def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
         prediction_scores = self.predictions(hidden_states=sequence_output)
@@ -682,14 +763,18 @@ class TFRoFormerMLMHead(keras.layers.Layer):
 class TFRoFormerMainLayer(keras.layers.Layer):
     config_class = RoFormerConfig
 
-    def __init__(self, config: RoFormerConfig, add_pooling_layer: bool = True, **kwargs):
+    def __init__(
+        self, config: RoFormerConfig, add_pooling_layer: bool = True, **kwargs
+    ):
         super().__init__(**kwargs)
 
         self.config = config
 
         self.embeddings = TFRoFormerEmbeddings(config, name="embeddings")
         if config.embedding_size != config.hidden_size:
-            self.embeddings_project = keras.layers.Dense(config.hidden_size, name="embeddings_project")
+            self.embeddings_project = keras.layers.Dense(
+                config.hidden_size, name="embeddings_project"
+            )
 
         self.encoder = TFRoFormerEncoder(config, name="encoder")
 
@@ -721,7 +806,9 @@ class TFRoFormerMainLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
@@ -742,24 +829,32 @@ class TFRoFormerMainLayer(keras.layers.Layer):
             training=training,
         )
         if hasattr(self, "embeddings_project"):
-            embedding_output = self.embeddings_project(embedding_output, training=training)
+            embedding_output = self.embeddings_project(
+                embedding_output, training=training
+            )
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(attention_mask, (input_shape[0], 1, 1, input_shape[1]))
+        extended_attention_mask = tf.reshape(
+            attention_mask, (input_shape[0], 1, 1, input_shape[1])
+        )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.cast(
+            extended_attention_mask, dtype=embedding_output.dtype
+        )
         one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
         ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
+        extended_attention_mask = tf.multiply(
+            tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst
+        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -921,7 +1016,9 @@ class TFRoFormerModel(TFRoFormerPreTrainedModel):
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
@@ -962,7 +1059,10 @@ class TFRoFormerModel(TFRoFormerPreTrainedModel):
                 self.roformer.build(None)
 
 
-@add_start_docstrings("""RoFormer Model with a `language modeling` head on top.""", ROFORMER_START_DOCSTRING)
+@add_start_docstrings(
+    """RoFormer Model with a `language modeling` head on top.""",
+    ROFORMER_START_DOCSTRING,
+)
 class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -974,13 +1074,17 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
             )
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
-        self.mlm = TFRoFormerMLMHead(config, input_embeddings=self.roformer.embeddings, name="mlm___cls")
+        self.mlm = TFRoFormerMLMHead(
+            config, input_embeddings=self.roformer.embeddings, name="mlm___cls"
+        )
 
     def get_lm_head(self) -> keras.layers.Layer:
         return self.mlm.predictions
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
@@ -1018,7 +1122,11 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
         )
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=prediction_scores)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=prediction_scores)
+        )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1044,17 +1152,22 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
 
 
 @add_start_docstrings(
-    """RoFormer Model with a `language modeling` head on top for CLM fine-tuning.""", ROFORMER_START_DOCSTRING
+    """RoFormer Model with a `language modeling` head on top for CLM fine-tuning.""",
+    ROFORMER_START_DOCSTRING,
 )
 class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFRoFormerForCausalLM` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `TFRoFormerForCausalLM` as a standalone, add `is_decoder=True.`"
+            )
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
-        self.mlm = TFRoFormerMLMHead(config, input_embeddings=self.roformer.embeddings, name="mlm___cls")
+        self.mlm = TFRoFormerMLMHead(
+            config, input_embeddings=self.roformer.embeddings, name="mlm___cls"
+        )
 
     def get_lm_head(self) -> keras.layers.Layer:
         return self.mlm.predictions
@@ -1134,11 +1247,15 @@ class TFRoFormerClassificationHead(keras.layers.Layer):
         super().__init__(*inputs, **kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.out_proj = keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="out_proj",
         )
 
         if isinstance(config.hidden_act, str):
@@ -1175,7 +1292,9 @@ class TFRoFormerClassificationHead(keras.layers.Layer):
     """,
     ROFORMER_START_DOCSTRING,
 )
-class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceClassificationLoss):
+class TFRoFormerForSequenceClassification(
+    TFRoFormerPreTrainedModel, TFSequenceClassificationLoss
+):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1185,7 +1304,9 @@ class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceC
         self.classifier = TFRoFormerClassificationHead(config, name="classifier")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
@@ -1222,7 +1343,11 @@ class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceC
             training=training,
         )
         logits = self.classifier(hidden_states=outputs[0], training=training)
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=logits)
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1260,9 +1385,13 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
         super().__init__(config, *inputs, **kwargs)
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
-        self.sequence_summary = TFSequenceSummary(config, config.initializer_range, name="sequence_summary")
+        self.sequence_summary = TFSequenceSummary(
+            config, config.initializer_range, name="sequence_summary"
+        )
         self.classifier = keras.layers.Dense(
-            units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            units=1,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
         self.config = config
 
@@ -1300,15 +1429,26 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
             num_choices = shape_list(inputs_embeds)[1]
             seq_length = shape_list(inputs_embeds)[2]
 
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
+        flat_input_ids = (
+            tf.reshape(tensor=input_ids, shape=(-1, seq_length))
+            if input_ids is not None
+            else None
+        )
         flat_attention_mask = (
-            tf.reshape(tensor=attention_mask, shape=(-1, seq_length)) if attention_mask is not None else None
+            tf.reshape(tensor=attention_mask, shape=(-1, seq_length))
+            if attention_mask is not None
+            else None
         )
         flat_token_type_ids = (
-            tf.reshape(tensor=token_type_ids, shape=(-1, seq_length)) if token_type_ids is not None else None
+            tf.reshape(tensor=token_type_ids, shape=(-1, seq_length))
+            if token_type_ids is not None
+            else None
         )
         flat_inputs_embeds = (
-            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3]))
+            tf.reshape(
+                tensor=inputs_embeds,
+                shape=(-1, seq_length, shape_list(inputs_embeds)[3]),
+            )
             if inputs_embeds is not None
             else None
         )
@@ -1326,7 +1466,11 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
         logits = self.sequence_summary(inputs=outputs[0], training=training)
         logits = self.classifier(inputs=logits)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
+        )
 
         if not return_dict:
             output = (reshaped_logits,) + outputs[1:]
@@ -1362,7 +1506,9 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
     """,
     ROFORMER_START_DOCSTRING,
 )
-class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassificationLoss):
+class TFRoFormerForTokenClassification(
+    TFRoFormerPreTrainedModel, TFTokenClassificationLoss
+):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1371,12 +1517,16 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
@@ -1413,7 +1563,11 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
         sequence_output = outputs[0]
         sequence_output = self.dropout(inputs=sequence_output, training=training)
         logits = self.classifier(inputs=sequence_output)
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=logits)
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1445,7 +1599,9 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
     """,
     ROFORMER_START_DOCSTRING,
 )
-class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnsweringLoss):
+class TFRoFormerForQuestionAnswering(
+    TFRoFormerPreTrainedModel, TFQuestionAnsweringLoss
+):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1453,12 +1609,16 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
         self.qa_outputs = keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="qa_outputs",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
@@ -1508,7 +1668,9 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
 
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions, "end_position": end_positions}
-            loss = self.hf_compute_loss(labels=labels, logits=(start_logits, end_logits))
+            loss = self.hf_compute_loss(
+                labels=labels, logits=(start_logits, end_logits)
+            )
 
         if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]

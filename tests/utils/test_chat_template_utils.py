@@ -15,7 +15,8 @@
 import unittest
 from typing import List, Optional, Tuple, Union
 
-from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils import (DocstringParsingException,
+                                TypeHintParsingException, get_json_schema)
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -72,7 +73,9 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {
                 "type": "object",
-                "properties": {"x": {"type": ["integer", "number"], "description": "The input"}},
+                "properties": {
+                    "x": {"type": ["integer", "number"], "description": "The input"}
+                },
                 "required": ["x"],
             },
         }
@@ -94,7 +97,13 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {
                 "type": "object",
-                "properties": {"x": {"type": "integer", "description": "The input", "nullable": True}},
+                "properties": {
+                    "x": {
+                        "type": "integer",
+                        "description": "The input",
+                        "nullable": True,
+                    }
+                },
                 "required": ["x"],
             },
         }
@@ -114,7 +123,10 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         expected_schema = {
             "name": "fn",
             "description": "Test function",
-            "parameters": {"type": "object", "properties": {"x": {"type": "integer", "description": "The input"}}},
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+            },
         }
         self.assertEqual(schema["function"], expected_schema)
 
@@ -137,7 +149,10 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "x": {
                         "type": "array",
-                        "items": {"type": "array", "items": {"type": ["integer", "string"]}},
+                        "items": {
+                            "type": "array",
+                            "items": {"type": ["integer", "string"]},
+                        },
                         "description": "The input",
                     }
                 },
@@ -190,7 +205,11 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "x": {"type": "array", "items": {"type": ["integer", "number"]}, "description": "The input"},
+                    "x": {
+                        "type": "array",
+                        "items": {"type": ["integer", "number"]},
+                        "description": "The input",
+                    },
                     "y": {
                         "type": ["integer", "string"],
                         "nullable": True,
@@ -446,7 +465,9 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
     def test_everything_all_at_once(self):
         def fn(
-            x: str, y: Optional[List[Union[str, int]]], z: Tuple[Union[str, int], str] = (42, "hello")
+            x: str,
+            y: Optional[List[Union[str, int]]],
+            z: Tuple[Union[str, int], str] = (42, "hello"),
         ) -> Tuple[int, str]:
             """
             Test function with multiple args, and docstring args that we have to strip out.
@@ -486,7 +507,10 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     },
                     "z": {
                         "type": "array",
-                        "prefixItems": [{"type": ["integer", "string"]}, {"type": "string"}],
+                        "prefixItems": [
+                            {"type": ["integer", "string"]},
+                            {"type": "string"},
+                        ],
                         "description": "The third input. It's some kind of tuple with a default arg.",
                     },
                 },

@@ -22,7 +22,6 @@ from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -213,7 +212,9 @@ class DPTConfig(PretrainedConfig):
             self.neck_ignore_stages = neck_ignore_stages
 
             if readout_type != "project":
-                raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
+                raise ValueError(
+                    "Readout type must be 'project' when using `DPT-hybrid` mode."
+                )
 
         elif backbone is not None or backbone_config is not None:
             use_autobackbone = True
@@ -276,7 +277,9 @@ class DPTConfig(PretrainedConfig):
         self.auxiliary_loss_weight = auxiliary_loss_weight
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.semantic_classifier_dropout = semantic_classifier_dropout
-        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
+        self.pooler_output_size = (
+            pooler_output_size if pooler_output_size else hidden_size
+        )
         self.pooler_act = pooler_act
 
     def to_dict(self):
@@ -294,7 +297,11 @@ class DPTConfig(PretrainedConfig):
 
     @property
     def sub_configs(self):
-        return {"backbone_config": type(self.backbone_config)} if self.backbone_config is not None else {}
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if self.backbone_config is not None
+            else {}
+        )
 
 
 __all__ = ["DPTConfig"]

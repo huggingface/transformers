@@ -24,39 +24,26 @@ from parameterized import parameterized
 from pytest import mark
 
 from transformers import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
-from transformers.testing_utils import (
-    require_flash_attn,
-    require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
-    require_vision,
-    slow,
-    torch_device,
-)
-from transformers.utils import (
-    is_torch_available,
-    is_torch_bf16_available_on_device,
-    is_torch_fp16_available_on_device,
-    is_torch_sdpa_available,
-    is_vision_available,
-)
+from transformers.testing_utils import (require_flash_attn, require_torch,
+                                        require_torch_gpu, require_torch_sdpa,
+                                        require_vision, slow, torch_device)
+from transformers.utils import (is_torch_available,
+                                is_torch_bf16_available_on_device,
+                                is_torch_fp16_available_on_device,
+                                is_torch_sdpa_available, is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-    is_flaky,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     ids_tensor, is_flaky,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Siglip2ForImageClassification, Siglip2Model, Siglip2TextModel, Siglip2VisionModel
+    from transformers import (Siglip2ForImageClassification, Siglip2Model,
+                              Siglip2TextModel, Siglip2VisionModel)
 
 if is_torch_sdpa_available():
     from torch.nn.attention import SDPBackend, sdpa_kernel
@@ -70,7 +57,9 @@ if is_vision_available():
 class Siglip2ModelTesterMixin(ModelTesterMixin):
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -90,11 +79,21 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             # SigLip has one shared cls attr for all models, so we assign both submodels heer
             vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
 
-            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "text_model"):
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
-                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+            if hasattr(model_sdpa, "vision_model") and hasattr(
+                model_sdpa, "text_model"
+            ):
+                self.assertTrue(
+                    model_sdpa.vision_model.config._attn_implementation == vision_attn
+                )
+                self.assertTrue(
+                    model_sdpa.text_model.config._attn_implementation == text_attn
+                )
+                self.assertTrue(
+                    model_eager.vision_model.config._attn_implementation == "eager"
+                )
+                self.assertTrue(
+                    model_eager.text_model.config._attn_implementation == "eager"
+                )
 
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
@@ -102,7 +101,9 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
                 if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
+                    raise ValueError(
+                        "The eager model should not have SDPA attention layers"
+                    )
 
             has_sdpa = False
             for name, submodule in model_sdpa.named_modules():
@@ -117,15 +118,26 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
         self,
         torch_dtype: str,
         use_attention_mask_options: Tuple[bool, ...] = (True, False),
-        logit_keys: Tuple[str, ...] = ("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+        logit_keys: Tuple[str, ...] = (
+            "logits_per_image",
+            "logits_per_text",
+            "image_embeds",
+            "text_embeds",
+        ),
     ):
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(
+            torch_device
+        ):
+            self.skipTest(
+                f"float16 not supported on {torch_device} (on the specific device currently used)"
+            )
 
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(
+            torch_device
+        ):
             self.skipTest(
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
@@ -156,14 +168,18 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             return f"{msg} {current_case}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
                 # Load the model with SDPA
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch_dtype
+                )
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 # Load model with eager attention
@@ -184,7 +200,11 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                     SDPBackend.MATH,
                     [SDPBackend.FLASH_ATTENTION, SDPBackend.MATH],
                     [SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
-                    [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH],
+                    [
+                        SDPBackend.FLASH_ATTENTION,
+                        SDPBackend.EFFICIENT_ATTENTION,
+                        SDPBackend.MATH,
+                    ],
                 ]
                 for batch_size in [1, 5]
             ]
@@ -195,7 +215,9 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
 
                 # convert to torch_dtype
                 if "pixel_values" in processed_inputs:
-                    processed_inputs["pixel_values"] = processed_inputs["pixel_values"].to(torch_dtype)
+                    processed_inputs["pixel_values"] = processed_inputs[
+                        "pixel_values"
+                    ].to(torch_dtype)
 
                 # slice for different batch sizes
                 for key in processed_inputs.keys():
@@ -214,9 +236,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 processed_inputs["output_attentions"] = output_attentions
                 processed_inputs["output_hidden_states"] = True
 
-                current_case = (
-                    f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, sdpa_backend={sdpa_backend}"
-                )
+                current_case = f"padding_side=left, use_mask={use_mask}, batch_size={batch_size}, sdpa_backend={sdpa_backend}"
 
                 prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
 
@@ -237,9 +257,15 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                         eager_logits = eager_logits[:, 1:]
                         sdpa_logits = sdpa_logits[:, 1:]
 
-                    is_close = torch.allclose(eager_logits, sdpa_logits, atol=atol, rtol=rtol)
+                    is_close = torch.allclose(
+                        eager_logits, sdpa_logits, atol=atol, rtol=rtol
+                    )
                     if not is_close:
-                        fail_cases.append(get_mean_reldiff(key, current_case, sdpa_logits, eager_logits, atol, rtol))
+                        fail_cases.append(
+                            get_mean_reldiff(
+                                key, current_case, sdpa_logits, eager_logits, atol, rtol
+                            )
+                        )
 
             self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
@@ -252,10 +278,14 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
             # Prepare inputs
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             if "pixel_values" in inputs_dict:
                 inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(dtype)
 
@@ -265,7 +295,9 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 # attention_masks["attention_mask"] = inputs_dict.pop("attention_mask")
                 inputs_dict["attention_mask"] = None
             if "pixel_attention_mask" in inputs_dict:
-                attention_masks["pixel_attention_mask"] = inputs_dict.pop("pixel_attention_mask")
+                attention_masks["pixel_attention_mask"] = inputs_dict.pop(
+                    "pixel_attention_mask"
+                )
                 inputs_dict["pixel_attention_mask"] = None
 
             # Save and load model with flash attention 2 and eager attentions
@@ -287,9 +319,15 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
 
             # Choose which key to compare
-            key = [k for k in ["logits", "logits_per_image", "last_hidden_state"] if k in outputs][0]
+            key = [
+                k
+                for k in ["logits", "logits_per_image", "last_hidden_state"]
+                if k in outputs
+            ][0]
 
-            torch.testing.assert_close(outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2)
+            torch.testing.assert_close(
+                outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2
+            )
 
             # Run forward pass with attention masks
             inputs_dict.update(attention_masks)
@@ -302,19 +340,32 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
 
             # Mask out padded tokens, they are different for SDPA and Flash Attention 2
             if key == "last_hidden_state" and "pixel_attention_mask" in inputs_dict:
-                output_tensor = output_tensor * inputs_dict["pixel_attention_mask"][..., None]
-                output_tensor_fa = output_tensor_fa * inputs_dict["pixel_attention_mask"][..., None]
-            elif key == "last_hidden_state" and inputs_dict.get("attention_mask", None) is not None:
+                output_tensor = (
+                    output_tensor * inputs_dict["pixel_attention_mask"][..., None]
+                )
+                output_tensor_fa = (
+                    output_tensor_fa * inputs_dict["pixel_attention_mask"][..., None]
+                )
+            elif (
+                key == "last_hidden_state"
+                and inputs_dict.get("attention_mask", None) is not None
+            ):
                 output_tensor = output_tensor * inputs_dict["attention_mask"][..., None]
-                output_tensor_fa = output_tensor_fa * inputs_dict["attention_mask"][..., None]
+                output_tensor_fa = (
+                    output_tensor_fa * inputs_dict["attention_mask"][..., None]
+                )
 
-            torch.testing.assert_close(output_tensor, output_tensor_fa, atol=4e-2, rtol=4e-2)
+            torch.testing.assert_close(
+                output_tensor, output_tensor_fa, atol=4e-2, rtol=4e-2
+            )
 
             # Check with inference + dropout
             model.train()
             _ = model_fa(**inputs_dict, output_hidden_states=True)
 
-    @unittest.skip(reason="Siglip2 has default right padding (tested in test_flash_attn_2_inference_equivalence)")
+    @unittest.skip(
+        reason="Siglip2 has default right padding (tested in test_flash_attn_2_inference_equivalence)"
+    )
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
@@ -360,9 +411,15 @@ class Siglip2VisionModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.seq_length, self.num_channels * self.patch_size * self.patch_size]
+            [
+                self.batch_size,
+                self.seq_length,
+                self.num_channels * self.patch_size * self.patch_size,
+            ]
         )
-        pixel_attention_mask = torch.zeros(self.batch_size, self.seq_length, device=torch_device, dtype=torch.long)
+        pixel_attention_mask = torch.zeros(
+            self.batch_size, self.seq_length, device=torch_device, dtype=torch.long
+        )
 
         spatial_shapes = [
             (height, width)
@@ -371,7 +428,9 @@ class Siglip2VisionModelTester:
             if height * width <= self.seq_length
         ] * self.batch_size
         spatial_shapes = spatial_shapes[: self.batch_size]
-        spatial_shapes = torch.tensor(spatial_shapes, device=torch_device, dtype=torch.long)
+        spatial_shapes = torch.tensor(
+            spatial_shapes, device=torch_device, dtype=torch.long
+        )
 
         for i, (height, width) in enumerate(spatial_shapes):
             pixel_attention_mask[i, : height * width] = 1
@@ -394,18 +453,27 @@ class Siglip2VisionModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values, pixel_attention_mask, spatial_shapes):
+    def create_and_check_model(
+        self, config, pixel_values, pixel_attention_mask, spatial_shapes
+    ):
         model = Siglip2VisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
             result = model(pixel_values, pixel_attention_mask, spatial_shapes)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_attention_mask, spatial_shapes = self.prepare_config_and_inputs()
+        config, pixel_values, pixel_attention_mask, spatial_shapes = (
+            self.prepare_config_and_inputs()
+        )
         inputs_dict = {
             "pixel_values": pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
@@ -436,7 +504,10 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Siglip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=Siglip2VisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -487,15 +558,21 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2VisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Siglip2VisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Siglip2VisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Siglip2VisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip2 uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -596,8 +673,13 @@ class Siglip2TextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -617,7 +699,9 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Siglip2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Siglip2TextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -646,15 +730,21 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Siglip2TextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="Siglip2TextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip2 uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -690,18 +780,29 @@ class Siglip2ModelTester:
         self.parent = parent
         self.text_model_tester = Siglip2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Siglip2VisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
         vision_config, pixel_values, pixel_attention_mask, spatial_shapes = (
             self.vision_model_tester.prepare_config_and_inputs()
         )
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            pixel_values,
+            pixel_attention_mask,
+            spatial_shapes,
+        )
 
     def get_config(self):
         return Siglip2Config.from_text_vision_configs(
@@ -710,21 +811,42 @@ class Siglip2ModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        pixel_values,
+        pixel_attention_mask,
+        spatial_shapes,
     ):
         model = Siglip2Model(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, pixel_attention_mask, spatial_shapes, attention_mask)
+            result = model(
+                input_ids,
+                pixel_values,
+                pixel_attention_mask,
+                spatial_shapes,
+                attention_mask,
+            )
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes = config_and_inputs
+        (
+            config,
+            input_ids,
+            attention_mask,
+            pixel_values,
+            pixel_attention_mask,
+            spatial_shapes,
+        ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -740,7 +862,9 @@ class Siglip2ModelTester:
 @require_torch
 class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2Model,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Siglip2Model} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": Siglip2Model} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -756,7 +880,9 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = Siglip2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Siglip2Config, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Siglip2Config, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -781,7 +907,9 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip2 uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -792,7 +920,9 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = Siglip2VisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save Siglip2Config and check if we can load Siglip2TextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -819,7 +949,12 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
             torch_dtype=torch_dtype,
-            logit_keys=("logits_per_image", "logits_per_text", "image_embeds", "text_embeds"),
+            logit_keys=(
+                "logits_per_image",
+                "logits_per_text",
+                "image_embeds",
+                "text_embeds",
+            ),
             use_attention_mask_options=(False, True),
         )
 
@@ -837,7 +972,9 @@ class Siglip2ForImageClassificationModelTester(Siglip2ModelTester):
         self.seq_length = self.vision_model_tester.seq_length
 
     def prepare_config_and_inputs(self):
-        _, pixel_values, pixel_attention_mask, spatial_shapes = self.vision_model_tester.prepare_config_and_inputs()
+        _, pixel_values, pixel_attention_mask, spatial_shapes = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
         config = self.get_config()
 
         return config, pixel_values, pixel_attention_mask, spatial_shapes
@@ -854,9 +991,15 @@ class Siglip2ForImageClassificationModelTester(Siglip2ModelTester):
 
 
 @require_torch
-class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Siglip2ForImageClassificationModelTest(
+    Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (Siglip2ForImageClassification,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-classification": Siglip2ForImageClassification} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-classification": Siglip2ForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -873,27 +1016,39 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     def setUp(self):
         self.model_tester = Siglip2ForImageClassificationModelTester(self)
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support inputs_embeds")
+    @unittest.skip(
+        reason="Siglip2ForImageClassification does not support inputs_embeds"
+    )
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support inputs_embeds")
+    @unittest.skip(
+        reason="Siglip2ForImageClassification does not support inputs_embeds"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(
+        reason="Siglip2ForImageClassification does not support gradient checkpointing yet"
+    )
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(
+        reason="Siglip2ForImageClassification does not support gradient checkpointing yet"
+    )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(
+        reason="Siglip2ForImageClassification does not support gradient checkpointing yet"
+    )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="Siglip2 uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
 
@@ -903,7 +1058,9 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype, logit_keys=("logits",), use_attention_mask_options=(False,)
+            torch_dtype=torch_dtype,
+            logit_keys=("logits",),
+            use_attention_mask_options=(False,),
         )
 
     @require_torch_sdpa
@@ -922,7 +1079,12 @@ def prepare_images():
         center_y = image.height // 2
         radius = min(center_x, center_y) // 8 * 7
         draw.ellipse(
-            (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
+            (
+                center_x - radius,
+                center_y - radius,
+                center_x + radius,
+                center_y + radius,
+            ),
             fill="blue",
             outline="green",
             width=image.width // 20,
@@ -986,4 +1148,6 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         # fmt: on
 
-        torch.testing.assert_close(outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3
+        )

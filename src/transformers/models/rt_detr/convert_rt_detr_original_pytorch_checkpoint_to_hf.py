@@ -24,9 +24,9 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
+from transformers import (RTDetrConfig, RTDetrForObjectDetection,
+                          RTDetrImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -38,7 +38,9 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.num_labels = 80
     repo_id = "huggingface/label-files"
     filename = "coco-detection-mmdet-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -233,9 +235,19 @@ def create_rename_keys(config):
         )
 
     for j in range(0, 3):
-        rename_keys.append((f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight"))
+        rename_keys.append(
+            (
+                f"encoder.input_proj.{j}.0.weight",
+                f"model.encoder_input_proj.{j}.0.weight",
+            )
+        )
         for last in last_key:
-            rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
+            rename_keys.append(
+                (
+                    f"encoder.input_proj.{j}.1.{last}",
+                    f"model.encoder_input_proj.{j}.1.{last}",
+                )
+            )
 
     block_levels = 3 if config.backbone_config.layer_type != "basic" else 4
 
@@ -243,7 +255,10 @@ def create_rename_keys(config):
         # encoder layers: hybridencoder parts
         for j in range(1, block_levels):
             rename_keys.append(
-                (f"encoder.fpn_blocks.{i}.conv{j}.conv.weight", f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight")
+                (
+                    f"encoder.fpn_blocks.{i}.conv{j}.conv.weight",
+                    f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight",
+                )
             )
             for last in last_key:
                 rename_keys.append(
@@ -253,10 +268,18 @@ def create_rename_keys(config):
                     )
                 )
 
-        rename_keys.append((f"encoder.lateral_convs.{i}.conv.weight", f"model.encoder.lateral_convs.{i}.conv.weight"))
+        rename_keys.append(
+            (
+                f"encoder.lateral_convs.{i}.conv.weight",
+                f"model.encoder.lateral_convs.{i}.conv.weight",
+            )
+        )
         for last in last_key:
             rename_keys.append(
-                (f"encoder.lateral_convs.{i}.norm.{last}", f"model.encoder.lateral_convs.{i}.norm.{last}")
+                (
+                    f"encoder.lateral_convs.{i}.norm.{last}",
+                    f"model.encoder.lateral_convs.{i}.norm.{last}",
+                )
             )
 
         for j in range(3):
@@ -277,7 +300,10 @@ def create_rename_keys(config):
 
         for j in range(1, block_levels):
             rename_keys.append(
-                (f"encoder.pan_blocks.{i}.conv{j}.conv.weight", f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight")
+                (
+                    f"encoder.pan_blocks.{i}.conv{j}.conv.weight",
+                    f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight",
+                )
             )
             for last in last_key:
                 rename_keys.append(
@@ -304,11 +330,17 @@ def create_rename_keys(config):
                     )
 
         rename_keys.append(
-            (f"encoder.downsample_convs.{i}.conv.weight", f"model.encoder.downsample_convs.{i}.conv.weight")
+            (
+                f"encoder.downsample_convs.{i}.conv.weight",
+                f"model.encoder.downsample_convs.{i}.conv.weight",
+            )
         )
         for last in last_key:
             rename_keys.append(
-                (f"encoder.downsample_convs.{i}.norm.{last}", f"model.encoder.downsample_convs.{i}.norm.{last}")
+                (
+                    f"encoder.downsample_convs.{i}.norm.{last}",
+                    f"model.encoder.downsample_convs.{i}.norm.{last}",
+                )
             )
 
     for i in range(config.decoder_layers):
@@ -374,26 +406,64 @@ def create_rename_keys(config):
             )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm1.weight", f"model.decoder.layers.{i}.self_attn_layer_norm.weight")
+            (
+                f"decoder.decoder.layers.{i}.norm1.weight",
+                f"model.decoder.layers.{i}.self_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm1.bias", f"model.decoder.layers.{i}.self_attn_layer_norm.bias")
+            (
+                f"decoder.decoder.layers.{i}.norm1.bias",
+                f"model.decoder.layers.{i}.self_attn_layer_norm.bias",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm2.weight", f"model.decoder.layers.{i}.encoder_attn_layer_norm.weight")
+            (
+                f"decoder.decoder.layers.{i}.norm2.weight",
+                f"model.decoder.layers.{i}.encoder_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm2.bias", f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias")
-        )
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear1.weight", f"model.decoder.layers.{i}.fc1.weight"))
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear1.bias", f"model.decoder.layers.{i}.fc1.bias"))
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear2.weight", f"model.decoder.layers.{i}.fc2.weight"))
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear2.bias", f"model.decoder.layers.{i}.fc2.bias"))
-        rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm3.weight", f"model.decoder.layers.{i}.final_layer_norm.weight")
+            (
+                f"decoder.decoder.layers.{i}.norm2.bias",
+                f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm3.bias", f"model.decoder.layers.{i}.final_layer_norm.bias")
+            (
+                f"decoder.decoder.layers.{i}.linear1.weight",
+                f"model.decoder.layers.{i}.fc1.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.linear1.bias",
+                f"model.decoder.layers.{i}.fc1.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.linear2.weight",
+                f"model.decoder.layers.{i}.fc2.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.linear2.bias",
+                f"model.decoder.layers.{i}.fc2.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.norm3.weight",
+                f"model.decoder.layers.{i}.final_layer_norm.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.norm3.bias",
+                f"model.decoder.layers.{i}.final_layer_norm.bias",
+            )
         )
 
     for i in range(config.decoder_layers):
@@ -466,23 +536,56 @@ def create_rename_keys(config):
     # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
     rename_keys.extend(
         [
-            ("decoder.denoising_class_embed.weight", "model.denoising_class_embed.weight"),
-            ("decoder.query_pos_head.layers.0.weight", "model.decoder.query_pos_head.layers.0.weight"),
-            ("decoder.query_pos_head.layers.0.bias", "model.decoder.query_pos_head.layers.0.bias"),
-            ("decoder.query_pos_head.layers.1.weight", "model.decoder.query_pos_head.layers.1.weight"),
-            ("decoder.query_pos_head.layers.1.bias", "model.decoder.query_pos_head.layers.1.bias"),
+            (
+                "decoder.denoising_class_embed.weight",
+                "model.denoising_class_embed.weight",
+            ),
+            (
+                "decoder.query_pos_head.layers.0.weight",
+                "model.decoder.query_pos_head.layers.0.weight",
+            ),
+            (
+                "decoder.query_pos_head.layers.0.bias",
+                "model.decoder.query_pos_head.layers.0.bias",
+            ),
+            (
+                "decoder.query_pos_head.layers.1.weight",
+                "model.decoder.query_pos_head.layers.1.weight",
+            ),
+            (
+                "decoder.query_pos_head.layers.1.bias",
+                "model.decoder.query_pos_head.layers.1.bias",
+            ),
             ("decoder.enc_output.0.weight", "model.enc_output.0.weight"),
             ("decoder.enc_output.0.bias", "model.enc_output.0.bias"),
             ("decoder.enc_output.1.weight", "model.enc_output.1.weight"),
             ("decoder.enc_output.1.bias", "model.enc_output.1.bias"),
             ("decoder.enc_score_head.weight", "model.enc_score_head.weight"),
             ("decoder.enc_score_head.bias", "model.enc_score_head.bias"),
-            ("decoder.enc_bbox_head.layers.0.weight", "model.enc_bbox_head.layers.0.weight"),
-            ("decoder.enc_bbox_head.layers.0.bias", "model.enc_bbox_head.layers.0.bias"),
-            ("decoder.enc_bbox_head.layers.1.weight", "model.enc_bbox_head.layers.1.weight"),
-            ("decoder.enc_bbox_head.layers.1.bias", "model.enc_bbox_head.layers.1.bias"),
-            ("decoder.enc_bbox_head.layers.2.weight", "model.enc_bbox_head.layers.2.weight"),
-            ("decoder.enc_bbox_head.layers.2.bias", "model.enc_bbox_head.layers.2.bias"),
+            (
+                "decoder.enc_bbox_head.layers.0.weight",
+                "model.enc_bbox_head.layers.0.weight",
+            ),
+            (
+                "decoder.enc_bbox_head.layers.0.bias",
+                "model.enc_bbox_head.layers.0.bias",
+            ),
+            (
+                "decoder.enc_bbox_head.layers.1.weight",
+                "model.enc_bbox_head.layers.1.weight",
+            ),
+            (
+                "decoder.enc_bbox_head.layers.1.bias",
+                "model.enc_bbox_head.layers.1.bias",
+            ),
+            (
+                "decoder.enc_bbox_head.layers.2.weight",
+                "model.enc_bbox_head.layers.2.weight",
+            ),
+            (
+                "decoder.enc_bbox_head.layers.2.bias",
+                "model.enc_bbox_head.layers.2.bias",
+            ),
         ]
     )
 
@@ -504,35 +607,59 @@ def read_in_q_k_v(state_dict, config):
     # first: transformer encoder
     for i in range(config.encoder_layers):
         # read in weights + bias of input projection layer (in PyTorch's MultiHeadAttention, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = in_proj_weight[
-            :encoder_hidden_dim, :
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:encoder_hidden_dim]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = in_proj_weight[
-            encoder_hidden_dim : 2 * encoder_hidden_dim, :
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = in_proj_bias[
-            encoder_hidden_dim : 2 * encoder_hidden_dim
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = in_proj_weight[
-            -encoder_hidden_dim:, :
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-encoder_hidden_dim:]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = (
+            in_proj_weight[:encoder_hidden_dim, :]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = (
+            in_proj_bias[:encoder_hidden_dim]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = (
+            in_proj_weight[encoder_hidden_dim : 2 * encoder_hidden_dim, :]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = (
+            in_proj_bias[encoder_hidden_dim : 2 * encoder_hidden_dim]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = (
+            in_proj_weight[-encoder_hidden_dim:, :]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = (
+            in_proj_bias[-encoder_hidden_dim:]
+        )
     # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = (
+            in_proj_weight[:256, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[
+            :256
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = (
+            in_proj_weight[256:512, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+            256:512
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = (
+            in_proj_weight[-256:, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[
+            -256:
+        ]
 
 
 # We will verify our results on an image of cute cats
@@ -544,7 +671,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
+def convert_rt_detr_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub, repo_id
+):
     """
     Copy/paste/tweak model's weights to our RTDETR structure.
     """
@@ -564,9 +693,9 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         "rtdetr_r101vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_2x_coco_objects365_from_paddle.pth",
     }
     logger.info(f"Converting model {model_name}...")
-    state_dict = torch.hub.load_state_dict_from_url(model_name_to_checkpoint_url[model_name], map_location="cpu")[
-        "ema"
-    ]["module"]
+    state_dict = torch.hub.load_state_dict_from_url(
+        model_name_to_checkpoint_url[model_name], map_location="cpu"
+    )["ema"]["module"]
 
     # rename keys
     for src, dest in create_rename_keys(config):
@@ -595,7 +724,9 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # preprocess image
     transformations = transforms.Compose(
         [
-            transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.Resize(
+                [640, 640], interpolation=transforms.InterpolationMode.BILINEAR
+            ),
             transforms.ToTensor(),
         ]
     )
@@ -736,8 +867,16 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
+    assert torch.allclose(
+        outputs.logits[0, :3, :3],
+        expected_slice_logits.to(outputs.logits.device),
+        atol=1e-4,
+    )
+    assert torch.allclose(
+        outputs.pred_boxes[0, :3, :3],
+        expected_slice_boxes.to(outputs.pred_boxes.device),
+        atol=1e-3,
+    )
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -750,10 +889,12 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py",
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py",
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
@@ -770,13 +911,22 @@ if __name__ == "__main__":
         help="model_name of the checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the model to the hub or not.")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to push the model to the hub or not.",
+    )
     parser.add_argument(
         "--repo_id",
         type=str,
         help="repo_id where the model will be pushed to.",
     )
     args = parser.parse_args()
-    convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+    convert_rt_detr_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id
+    )

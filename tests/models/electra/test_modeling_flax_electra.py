@@ -5,20 +5,15 @@ import numpy as np
 from transformers import ElectraConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
-
+from ...test_modeling_flax_common import (FlaxModelTesterMixin, ids_tensor,
+                                          random_attention_mask)
 
 if is_flax_available():
     from transformers.models.electra.modeling_flax_electra import (
-        FlaxElectraForCausalLM,
-        FlaxElectraForMaskedLM,
-        FlaxElectraForMultipleChoice,
-        FlaxElectraForPreTraining,
-        FlaxElectraForQuestionAnswering,
-        FlaxElectraForSequenceClassification,
-        FlaxElectraForTokenClassification,
-        FlaxElectraModel,
-    )
+        FlaxElectraForCausalLM, FlaxElectraForMaskedLM,
+        FlaxElectraForMultipleChoice, FlaxElectraForPreTraining,
+        FlaxElectraForQuestionAnswering, FlaxElectraForSequenceClassification,
+        FlaxElectraForTokenClassification, FlaxElectraModel)
 
 
 class FlaxElectraModelTester:
@@ -77,7 +72,9 @@ class FlaxElectraModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         config = ElectraConfig(
             vocab_size=self.vocab_size,
@@ -99,7 +96,11 @@ class FlaxElectraModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, token_type_ids, attention_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": attention_mask,
+        }
         return config, inputs_dict
 
 
@@ -129,8 +130,12 @@ class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             if model_class_name == FlaxElectraForMaskedLM:
-                model = model_class_name.from_pretrained("google/electra-small-generator")
+                model = model_class_name.from_pretrained(
+                    "google/electra-small-generator"
+                )
             else:
-                model = model_class_name.from_pretrained("google/electra-small-discriminator")
+                model = model_class_name.from_pretrained(
+                    "google/electra-small-discriminator"
+                )
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)

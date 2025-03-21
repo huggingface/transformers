@@ -20,7 +20,8 @@ import unittest
 
 from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from transformers.models.openai.tokenization_openai import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_ftfy, require_spacy, require_tokenizers
+from transformers.testing_utils import (require_ftfy, require_spacy,
+                                        require_tokenizers)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -66,7 +67,9 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         merges = ["#version: 0.2", "l o", "lo w", "e r</w>", ""]
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
         with open(self.merges_file, "w") as fp:
@@ -85,12 +88,16 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )
 
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 # Simple input
                 s = "This is a simple input"
@@ -102,10 +109,22 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
 
                 # Simple input tests
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode,
+                    s,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode_plus,
+                    s,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Simple input
                 self.assertRaises(
@@ -117,10 +136,22 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode,
+                    p,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode_plus,
+                    p,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Pair input
                 self.assertRaises(

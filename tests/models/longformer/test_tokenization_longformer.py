@@ -19,8 +19,10 @@ import json
 import os
 import unittest
 
-from transformers import AddedToken, LongformerTokenizer, LongformerTokenizerFast
-from transformers.models.longformer.tokenization_longformer import VOCAB_FILES_NAMES
+from transformers import (AddedToken, LongformerTokenizer,
+                          LongformerTokenizerFast)
+from transformers.models.longformer.tokenization_longformer import \
+    VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -67,7 +69,9 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
@@ -87,7 +91,9 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer = self.tokenizer_class(
+            self.vocab_file, self.merges_file, **self.special_tokens_map
+        )
         text = "lower newer"
         bpe_tokens = ["l", "o", "w", "er", "\u0120", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
@@ -95,14 +101,21 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )
 
     def longformer_dict_integration_testing(self):
         tokenizer = self.get_tokenizer()
 
-        self.assertListEqual(tokenizer.encode("Hello world!", add_special_tokens=False), [0, 31414, 232, 328, 2])
         self.assertListEqual(
-            tokenizer.encode("Hello world! cécé herlolip 418", add_special_tokens=False),
+            tokenizer.encode("Hello world!", add_special_tokens=False),
+            [0, 31414, 232, 328, 2],
+        )
+        self.assertListEqual(
+            tokenizer.encode(
+                "Hello world! cécé herlolip 418", add_special_tokens=False
+            ),
             [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
         )
 
@@ -117,7 +130,10 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "sequence builders", add_special_tokens=True, add_prefix_space=False
         )
         encoded_pair_from_decode = tokenizer.encode(
-            "sequence builders", "multi-sequence build", add_special_tokens=True, add_prefix_space=False
+            "sequence builders",
+            "multi-sequence build",
+            add_special_tokens=True,
+            add_prefix_space=False,
         )
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
@@ -133,11 +149,15 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
 
         # Testing encoder arguments
-        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
+        encoded = tokenizer.encode(
+            sequence, add_special_tokens=False, add_prefix_space=False
+        )
         first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
         self.assertNotEqual(first_char, space_encoding)
 
-        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
+        encoded = tokenizer.encode(
+            sequence, add_special_tokens=False, add_prefix_space=True
+        )
         first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
         self.assertEqual(first_char, space_encoding)
 
@@ -173,14 +193,24 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
                 sentence = "A, <mask> AllenNLP sentence."
-                tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-                tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
+                tokens_r = tokenizer_r.encode_plus(
+                    sentence, add_special_tokens=True, return_token_type_ids=True
+                )
+                tokens_p = tokenizer_p.encode_plus(
+                    sentence, add_special_tokens=True, return_token_type_ids=True
+                )
 
                 # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
+                self.assertEqual(
+                    sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"])
+                )
 
                 # attention_mask should put 1 everywhere, so sum over length should be 1
                 self.assertEqual(
@@ -192,76 +222,151 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
                 # Rust correctly handles the space before the mask while python doesnt
-                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-                self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-
                 self.assertSequenceEqual(
-                    tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_p["input_ids"],
+                    [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2],
                 )
                 self.assertSequenceEqual(
-                    tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_r["input_ids"],
+                    [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2],
+                )
+
+                self.assertSequenceEqual(
+                    tokens_p_str,
+                    [
+                        "<s>",
+                        "A",
+                        ",",
+                        "<mask>",
+                        "ĠAllen",
+                        "N",
+                        "LP",
+                        "Ġsentence",
+                        ".",
+                        "</s>",
+                    ],
+                )
+                self.assertSequenceEqual(
+                    tokens_r_str,
+                    [
+                        "<s>",
+                        "A",
+                        ",",
+                        "<mask>",
+                        "ĠAllen",
+                        "N",
+                        "LP",
+                        "Ġsentence",
+                        ".",
+                        "</s>",
+                    ],
                 )
 
     def test_change_add_prefix_space_and_trim_offsets_args(self):
-        for trim_offsets, add_prefix_space in itertools.product([True, False], repeat=2):
+        for trim_offsets, add_prefix_space in itertools.product(
+            [True, False], repeat=2
+        ):
             tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                self.tmpdirname, use_fast=True, add_prefix_space=add_prefix_space, trim_offsets=trim_offsets
+                self.tmpdirname,
+                use_fast=True,
+                add_prefix_space=add_prefix_space,
+                trim_offsets=trim_offsets,
             )
 
-            pre_tokenizer_state = json.loads(tokenizer_r.backend_tokenizer.pre_tokenizer.__getstate__())
-            post_processor_state = json.loads(tokenizer_r.backend_tokenizer.post_processor.__getstate__())
+            pre_tokenizer_state = json.loads(
+                tokenizer_r.backend_tokenizer.pre_tokenizer.__getstate__()
+            )
+            post_processor_state = json.loads(
+                tokenizer_r.backend_tokenizer.post_processor.__getstate__()
+            )
 
             self.assertEqual(pre_tokenizer_state["add_prefix_space"], add_prefix_space)
 
             self.assertEqual(post_processor_state["add_prefix_space"], add_prefix_space)
             self.assertEqual(post_processor_state["trim_offsets"], trim_offsets)
 
-    def test_offsets_mapping_with_different_add_prefix_space_and_trim_space_arguments(self):
+    def test_offsets_mapping_with_different_add_prefix_space_and_trim_space_arguments(
+        self,
+    ):
         # Test which aims to verify that the offsets are well adapted to the argument `add_prefix_space` and
         # `trim_offsets`
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                text_of_1_token = "hello"  # `hello` is a token in the vocabulary of `pretrained_name`
+                text_of_1_token = (
+                    "hello"  # `hello` is a token in the vocabulary of `pretrained_name`
+                )
                 text = f"{text_of_1_token} {text_of_1_token}"
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=True
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=True,
+                    trim_offsets=True,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
                 self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (len(text_of_1_token) + 1, len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        len(text_of_1_token) + 1,
+                        len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=False, trim_offsets=True
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=False,
+                    trim_offsets=True,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
                 self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (len(text_of_1_token) + 1, len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        len(text_of_1_token) + 1,
+                        len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=False
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=True,
+                    trim_offsets=False,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
                 self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (len(text_of_1_token), len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        len(text_of_1_token),
+                        len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=False, trim_offsets=False
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=False,
+                    trim_offsets=False,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
                 self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (len(text_of_1_token), len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        len(text_of_1_token),
+                        len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )
 
                 text = f" {text}"
@@ -277,31 +382,61 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # )
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=False, trim_offsets=True
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=False,
+                    trim_offsets=True,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
-                self.assertEqual(encoding.offset_mapping[0], (1, 1 + len(text_of_1_token)))
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
+                self.assertEqual(
+                    encoding.offset_mapping[0], (1, 1 + len(text_of_1_token))
+                )
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (1 + len(text_of_1_token) + 1, 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        1 + len(text_of_1_token) + 1,
+                        1 + len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=False
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=True,
+                    trim_offsets=False,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
-                self.assertEqual(encoding.offset_mapping[0], (0, 1 + len(text_of_1_token)))
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
+                self.assertEqual(
+                    encoding.offset_mapping[0], (0, 1 + len(text_of_1_token))
+                )
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (1 + len(text_of_1_token), 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        1 + len(text_of_1_token),
+                        1 + len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, use_fast=True, add_prefix_space=False, trim_offsets=False
+                    pretrained_name,
+                    use_fast=True,
+                    add_prefix_space=False,
+                    trim_offsets=False,
                 )
-                encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
-                self.assertEqual(encoding.offset_mapping[0], (0, 1 + len(text_of_1_token)))
+                encoding = tokenizer_r(
+                    text, return_offsets_mapping=True, add_special_tokens=False
+                )
+                self.assertEqual(
+                    encoding.offset_mapping[0], (0, 1 + len(text_of_1_token))
+                )
                 self.assertEqual(
                     encoding.offset_mapping[1],
-                    (1 + len(text_of_1_token), 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
+                    (
+                        1 + len(text_of_1_token),
+                        1 + len(text_of_1_token) + 1 + len(text_of_1_token),
+                    ),
                 )

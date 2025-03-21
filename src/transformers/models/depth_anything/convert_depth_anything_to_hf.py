@@ -23,9 +23,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation, Dinov2Config, DPTImageProcessor
+from transformers import (DepthAnythingConfig, DepthAnythingForDepthEstimation,
+                          Dinov2Config, DPTImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -35,21 +35,30 @@ def get_dpt_config(model_name):
     if "small" in model_name:
         out_indices = [3, 6, 9, 12] if "v2" in model_name else [9, 10, 11, 12]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-small",
+            out_indices=out_indices,
+            apply_layernorm=True,
+            reshape_hidden_states=False,
         )
         fusion_hidden_size = 64
         neck_hidden_sizes = [48, 96, 192, 384]
     elif "base" in model_name:
         out_indices = [3, 6, 9, 12] if "v2" in model_name else [9, 10, 11, 12]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-base", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-base",
+            out_indices=out_indices,
+            apply_layernorm=True,
+            reshape_hidden_states=False,
         )
         fusion_hidden_size = 128
         neck_hidden_sizes = [96, 192, 384, 768]
     elif "large" in model_name:
         out_indices = [5, 12, 18, 24] if "v2" in model_name else [21, 22, 23, 24]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-large", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-large",
+            out_indices=out_indices,
+            apply_layernorm=True,
+            reshape_hidden_states=False,
         )
         fusion_hidden_size = 256
         neck_hidden_sizes = [256, 512, 1024, 1024]
@@ -156,16 +165,24 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"pretrained.blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"pretrained.blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            hidden_size : hidden_size * 2
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[:hidden_size]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[hidden_size : hidden_size * 2]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-hidden_size:]
+        )
 
 
 def rename_key(dct, old, new):
@@ -198,7 +215,9 @@ name_to_checkpoint = {
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
+def convert_dpt_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub, verify_logits
+):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -271,51 +290,99 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         expected_shape = torch.Size([1, 518, 686])
         if model_name == "depth-anything-small":
             expected_slice = torch.tensor(
-                [[8.8204, 8.6468, 8.6195], [8.3313, 8.6027, 8.7526], [8.6526, 8.6866, 8.7453]],
+                [
+                    [8.8204, 8.6468, 8.6195],
+                    [8.3313, 8.6027, 8.7526],
+                    [8.6526, 8.6866, 8.7453],
+                ],
             )
         elif model_name == "depth-anything-base":
             expected_slice = torch.tensor(
-                [[26.3997, 26.3004, 26.3928], [26.2260, 26.2092, 26.3427], [26.0719, 26.0483, 26.1254]],
+                [
+                    [26.3997, 26.3004, 26.3928],
+                    [26.2260, 26.2092, 26.3427],
+                    [26.0719, 26.0483, 26.1254],
+                ],
             )
         elif model_name == "depth-anything-large":
             expected_slice = torch.tensor(
-                [[87.9968, 87.7493, 88.2704], [87.1927, 87.6611, 87.3640], [86.7789, 86.9469, 86.7991]]
+                [
+                    [87.9968, 87.7493, 88.2704],
+                    [87.1927, 87.6611, 87.3640],
+                    [86.7789, 86.9469, 86.7991],
+                ]
             )
         elif model_name == "depth-anything-v2-small":
             expected_slice = torch.tensor(
-                [[2.6751, 2.6211, 2.6571], [2.5820, 2.6138, 2.6271], [2.6160, 2.6141, 2.6306]]
+                [
+                    [2.6751, 2.6211, 2.6571],
+                    [2.5820, 2.6138, 2.6271],
+                    [2.6160, 2.6141, 2.6306],
+                ]
             )
         elif model_name == "depth-anything-v2-base":
             expected_slice = torch.tensor(
-                [[4.3576, 4.3723, 4.3908], [4.3231, 4.3146, 4.3611], [4.3016, 4.3170, 4.3121]]
+                [
+                    [4.3576, 4.3723, 4.3908],
+                    [4.3231, 4.3146, 4.3611],
+                    [4.3016, 4.3170, 4.3121],
+                ]
             )
         elif model_name == "depth-anything-v2-large":
             expected_slice = torch.tensor(
-                [[162.2751, 161.8504, 162.8788], [160.3138, 160.8050, 161.9835], [159.3812, 159.9884, 160.0768]]
+                [
+                    [162.2751, 161.8504, 162.8788],
+                    [160.3138, 160.8050, 161.9835],
+                    [159.3812, 159.9884, 160.0768],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-indoor-small":
             expected_slice = torch.tensor(
-                [[1.3349, 1.2946, 1.2801], [1.2793, 1.2337, 1.2899], [1.2629, 1.2218, 1.2476]]
+                [
+                    [1.3349, 1.2946, 1.2801],
+                    [1.2793, 1.2337, 1.2899],
+                    [1.2629, 1.2218, 1.2476],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-indoor-base":
             expected_slice = torch.tensor(
-                [[1.4601, 1.3824, 1.4904], [1.5031, 1.4349, 1.4274], [1.4570, 1.4578, 1.4200]]
+                [
+                    [1.4601, 1.3824, 1.4904],
+                    [1.5031, 1.4349, 1.4274],
+                    [1.4570, 1.4578, 1.4200],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-indoor-large":
             expected_slice = torch.tensor(
-                [[1.5040, 1.5019, 1.5218], [1.5087, 1.5195, 1.5149], [1.5437, 1.5128, 1.5252]]
+                [
+                    [1.5040, 1.5019, 1.5218],
+                    [1.5087, 1.5195, 1.5149],
+                    [1.5437, 1.5128, 1.5252],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-outdoor-small":
             expected_slice = torch.tensor(
-                [[9.5804, 8.0339, 7.7386], [7.9890, 7.2464, 7.7149], [7.7021, 7.2330, 7.3304]]
+                [
+                    [9.5804, 8.0339, 7.7386],
+                    [7.9890, 7.2464, 7.7149],
+                    [7.7021, 7.2330, 7.3304],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-outdoor-base":
             expected_slice = torch.tensor(
-                [[10.2916, 9.0933, 8.8622], [9.1964, 9.3393, 9.0644], [8.9618, 9.4201, 9.2262]]
+                [
+                    [10.2916, 9.0933, 8.8622],
+                    [9.1964, 9.3393, 9.0644],
+                    [8.9618, 9.4201, 9.2262],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-outdoor-large":
             expected_slice = torch.tensor(
-                [[14.0137, 13.3627, 13.1080], [13.2522, 13.3943, 13.3705], [13.0581, 13.4505, 13.3925]]
+                [
+                    [14.0137, 13.3627, 13.1080],
+                    [13.2522, 13.3943, 13.3705],
+                    [13.0581, 13.4505, 13.3925],
+                ]
             )
         else:
             raise ValueError("Not supported")
@@ -365,4 +432,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
+    convert_dpt_checkpoint(
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.verify_logits,
+    )

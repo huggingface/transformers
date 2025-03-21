@@ -16,7 +16,6 @@ import unittest
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
-
 if is_vision_available():
     from transformers import AutoProcessor
 
@@ -37,5 +36,7 @@ class LlavaProcessorTest(unittest.TestCase):
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
         self.assertEqual(expected_prompt, formatted_prompt)

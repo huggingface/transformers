@@ -21,8 +21,8 @@ from datasets import load_dataset
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -74,7 +74,9 @@ class SegformerImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -87,7 +89,9 @@ class SegformerImageProcessingTester:
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+    dataset = load_dataset(
+        "hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True
+    )
 
     image = Image.open(dataset[0]["file"])
     map = Image.open(dataset[1]["file"])
@@ -96,7 +100,9 @@ def prepare_semantic_single_inputs():
 
 
 def prepare_semantic_batch_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
+    dataset = load_dataset(
+        "hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True
+    )
 
     image1 = Image.open(dataset[0]["file"])
     map1 = Image.open(dataset[1]["file"])
@@ -129,7 +135,9 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.size, {"height": 30, "width": 30})
         self.assertEqual(image_processor.do_reduce_labels, False)
 
@@ -143,7 +151,9 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )
         maps = []
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)

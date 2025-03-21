@@ -26,10 +26,11 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_gpt_neo import GPTNeoConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -131,15 +132,25 @@ class FlaxGPTNeoSelfAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        self.q_proj, self.k_proj, self.v_proj = dense(use_bias=False), dense(use_bias=False), dense(use_bias=False)
+        self.q_proj, self.k_proj, self.v_proj = (
+            dense(use_bias=False),
+            dense(use_bias=False),
+            dense(use_bias=False),
+        )
         self.out_proj = dense()
 
-        self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
+        self.causal_mask = make_causal_mask(
+            jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool"
+        )
         if self.attention_type == "local":
-            self.causal_mask = self.causal_mask ^ jnp.tril(self.causal_mask, -config.window_size)
+            self.causal_mask = self.causal_mask ^ jnp.tril(
+                self.causal_mask, -config.window_size
+            )
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.num_heads, self.head_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
@@ -153,9 +164,15 @@ class FlaxGPTNeoSelfAttention(nn.Module):
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
-        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+        cached_key = self.variable(
+            "cache", "cached_key", jnp.zeros, key.shape, key.dtype
+        )
+        cached_value = self.variable(
+            "cache", "cached_value", jnp.zeros, value.shape, value.dtype
+        )
+        cache_index = self.variable(
+            "cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32)
+        )
 
         if is_initialized:
             *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
@@ -198,15 +215,21 @@ class FlaxGPTNeoSelfAttention(nn.Module):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
             causal_mask = lax.dynamic_slice(
-                self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+                self.causal_mask,
+                (0, 0, mask_shift, 0),
+                (1, 1, query_length, max_decoder_length),
             )
         else:
             causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
         batch_size = hidden_states.shape[0]
-        causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+        causal_mask = jnp.broadcast_to(
+            causal_mask, (batch_size,) + causal_mask.shape[1:]
+        )
 
-        attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+        attention_mask = jnp.broadcast_to(
+            jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape
+        )
         attention_mask = combine_masks(attention_mask, causal_mask)
 
         dropout_rng = None
@@ -216,13 +239,17 @@ class FlaxGPTNeoSelfAttention(nn.Module):
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
-            key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
+            key, value, attention_mask = self._concatenate_to_cache(
+                key, value, query, attention_mask
+            )
 
         # transform boolean mask into float mask
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+            jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(
+                self.dtype
+            ),
         )
 
         # usual dot product attention
@@ -253,7 +280,9 @@ class FlaxGPTNeoAttention(nn.Module):
 
     def setup(self):
         attention_type = self.config.attention_layers[self.layer_id]
-        self.attention = FlaxGPTNeoSelfAttention(self.config, attention_type, dtype=self.dtype)
+        self.attention = FlaxGPTNeoSelfAttention(
+            self.config, attention_type, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -280,7 +309,9 @@ class FlaxGPTNeoMLP(nn.Module):
     def setup(self):
         embed_dim = self.config.hidden_size
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
-        self.c_fc = nn.Dense(self.intermediate_size, dtype=self.dtype, kernel_init=kernel_init)
+        self.c_fc = nn.Dense(
+            self.intermediate_size, dtype=self.dtype, kernel_init=kernel_init
+        )
         self.c_proj = nn.Dense(embed_dim, dtype=self.dtype, kernel_init=kernel_init)
         self.act = ACT2FN[self.config.activation_function]
         self.dropout = nn.Dropout(rate=self.config.resid_dropout)
@@ -300,11 +331,21 @@ class FlaxGPTNeoBlock(nn.Module):
 
     def setup(self):
         hidden_size = self.config.hidden_size
-        inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * hidden_size
+        inner_dim = (
+            self.config.intermediate_size
+            if self.config.intermediate_size is not None
+            else 4 * hidden_size
+        )
 
-        self.ln_1 = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
-        self.attn = FlaxGPTNeoAttention(self.config, layer_id=self.layer_id, dtype=self.dtype)
-        self.ln_2 = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.ln_1 = nn.LayerNorm(
+            epsilon=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
+        self.attn = FlaxGPTNeoAttention(
+            self.config, layer_id=self.layer_id, dtype=self.dtype
+        )
+        self.ln_2 = nn.LayerNorm(
+            epsilon=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.mlp = FlaxGPTNeoMLP(self.config, inner_dim, dtype=self.dtype)
 
     def __call__(
@@ -330,7 +371,9 @@ class FlaxGPTNeoBlock(nn.Module):
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
-        feed_forward_hidden_states = self.mlp(hidden_states, deterministic=deterministic)
+        feed_forward_hidden_states = self.mlp(
+            hidden_states, deterministic=deterministic
+        )
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
@@ -357,17 +400,30 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape
+        )
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
+        random_params = self.module.init(
+            rngs, input_ids, attention_mask, position_ids, return_dict=False
+        )["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -391,10 +447,17 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
         # init input variables to retrieve cache
         input_ids = jnp.ones((batch_size, max_length))
         attention_mask = jnp.ones_like(input_ids)
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+        )
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0),
+            input_ids,
+            attention_mask,
+            position_ids,
+            return_dict=False,
+            init_cache=True,
         )
         return unfreeze(init_variables["cache"])
 
@@ -412,19 +475,31 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         batch_size, sequence_length = input_ids.shape
 
         if position_ids is None:
             if past_key_values is not None:
-                raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
+                raise ValueError(
+                    "Make sure to provide `position_ids` when passing `past_key_values`."
+                )
 
-            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+            position_ids = jnp.broadcast_to(
+                jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones((batch_size, sequence_length))
@@ -520,7 +595,9 @@ class FlaxGPTNeoModule(nn.Module):
 
     def setup(self):
         self.embed_dim = self.config.hidden_size
-        embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
+        embedding_init = jax.nn.initializers.normal(
+            stddev=self.config.initializer_range
+        )
         self.wte = nn.Embed(
             self.config.vocab_size,
             self.embed_dim,
@@ -533,7 +610,9 @@ class FlaxGPTNeoModule(nn.Module):
         )
         self.dropout = nn.Dropout(rate=self.config.embed_dropout)
         self.h = FlaxGPTNeoBlockCollection(self.config, dtype=self.dtype)
-        self.ln_f = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.ln_f = nn.LayerNorm(
+            epsilon=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -592,7 +671,9 @@ class FlaxGPTNeoModel(FlaxGPTNeoPreTrainedModel):
     module_class = FlaxGPTNeoModule
 
 
-append_call_sample_docstring(FlaxGPTNeoModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxGPTNeoModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+)
 
 
 class FlaxGPTNeoForCausalLMModule(nn.Module):
@@ -605,7 +686,9 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
             self.config.vocab_size,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            kernel_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
 
     def __call__(
@@ -634,14 +717,20 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
 
         if self.config.tie_word_embeddings:
             shared_kernel = self.transformer.variables["params"]["wte"]["embedding"].T
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
+            lm_logits = self.lm_head.apply(
+                {"params": {"kernel": shared_kernel}}, hidden_states
+            )
         else:
             lm_logits = self.lm_head(hidden_states)
 
         if not return_dict:
             return (lm_logits,) + outputs[1:]
 
-        return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+        return FlaxCausalLMOutput(
+            logits=lm_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -654,7 +743,9 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
 class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
     module_class = FlaxGPTNeoForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
+    def prepare_inputs_for_generation(
+        self, input_ids, max_length, attention_mask: Optional[jax.Array] = None
+    ):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -665,9 +756,13 @@ class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(axis=-1) - 1
-            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+            extended_attention_mask = lax.dynamic_update_slice(
+                extended_attention_mask, attention_mask, (0, 0)
+            )
         else:
-            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+            position_ids = jnp.broadcast_to(
+                jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)
+            )
 
         return {
             "past_key_values": past_key_values,
@@ -681,7 +776,9 @@ class FlaxGPTNeoForCausalLM(FlaxGPTNeoPreTrainedModel):
         return model_kwargs
 
 
-append_call_sample_docstring(FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxGPTNeoForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC
+)
 
 
 __all__ = ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]

@@ -97,16 +97,24 @@ def copy_vison_model_and_projection(hf_model, pt_model):
     copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
 
     # copy embeds
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
+    hf_model.vision_model.embeddings.patch_embedding.weight.data = (
+        pt_model.visual.conv1.weight.data
+    )
     hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
+    hf_model.vision_model.embeddings.position_embedding.weight.data = (
+        pt_model.visual.positional_embedding.data
+    )
 
     # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
+    copy_layers(
+        hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks
+    )
 
 
 @torch.no_grad()
-def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
+def convert_clip_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, config_path=None
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -135,7 +143,9 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     )
     pixel_values = torch.randn(1, 3, 224, 224)
 
-    hf_outputs = hf_model(input_ids=input_ids, pixel_values=pixel_values, return_dict=True)
+    hf_outputs = hf_model(
+        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
+    )
     hf_logits_per_image = hf_outputs.logits_per_image
     hf_logits_per_text = hf_outputs.logits_per_text
     pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
@@ -148,9 +158,23 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to OpenAI checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to OpenAI checkpoint"
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
     args = parser.parse_args()
 
-    convert_clip_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_clip_checkpoint(
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path
+    )

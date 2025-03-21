@@ -10,12 +10,13 @@ import numpy as np
 
 from transformers import CvtConfig
 from transformers.testing_utils import require_tf, require_vision, slow
-from transformers.utils import cached_property, is_tf_available, is_vision_available
+from transformers.utils import (cached_property, is_tf_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
@@ -79,7 +80,9 @@ class TFCvtModelTester:
         self.layer_norm_eps = layer_norm_eps
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -112,9 +115,24 @@ class TFCvtModelTester:
         image_size = (self.image_size, self.image_size)
         height, width = image_size[0], image_size[1]
         for i in range(len(self.depth)):
-            height = floor(((height + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
-            width = floor(((width + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dim[-1], height, width))
+            height = floor(
+                (
+                    (height + 2 * self.patch_padding[i] - self.patch_sizes[i])
+                    / self.patch_stride[i]
+                )
+                + 1
+            )
+            width = floor(
+                (
+                    (width + 2 * self.patch_padding[i] - self.patch_sizes[i])
+                    / self.patch_stride[i]
+                )
+                + 1
+            )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.embed_dim[-1], height, width),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -136,9 +154,14 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     does not use input_ids, inputs_embeds, attention_mask and seq_length.
     """
 
-    all_model_classes = (TFCvtModel, TFCvtForImageClassification) if is_tf_available() else ()
+    all_model_classes = (
+        (TFCvtModel, TFCvtForImageClassification) if is_tf_available() else ()
+    )
     pipeline_model_mapping = (
-        {"feature-extraction": TFCvtModel, "image-classification": TFCvtForImageClassification}
+        {
+            "feature-extraction": TFCvtModel,
+            "image-classification": TFCvtForImageClassification,
+        }
         if is_tf_available()
         else {}
     )
@@ -150,7 +173,9 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = TFCvtModelTester(self)
-        self.config_tester = TFCvtConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = TFCvtConfigTester(
+            self, config_class=CvtConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.create_and_test_config_common_properties()
@@ -188,7 +213,9 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_keras_fit(self):
         super().test_keras_fit()
 
-    @unittest.skip(reason="Get `Failed to determine best cudnn convolution algo.` error after using TF 2.12+cuda 11.8")
+    @unittest.skip(
+        reason="Get `Failed to determine best cudnn convolution algo.` error after using TF 2.12+cuda 11.8"
+    )
     def test_keras_fit_mixed_precision(self):
         policy = keras.mixed_precision.Policy("mixed_float16")
         keras.mixed_precision.set_global_policy(policy)
@@ -283,4 +310,6 @@ class TFCvtModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = tf.constant([0.9285, 0.9015, -0.3150])
-        self.assertTrue(np.allclose(outputs.logits[0, :3].numpy(), expected_slice, atol=1e-4))
+        self.assertTrue(
+            np.allclose(outputs.logits[0, :3].numpy(), expected_slice, atol=1e-4)
+        )

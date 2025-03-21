@@ -23,8 +23,8 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 
 if is_torch_available():
     import torch
@@ -113,8 +113,13 @@ class BlipTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -132,7 +137,9 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=BlipTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -165,11 +172,15 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="BlipTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="BlipTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 

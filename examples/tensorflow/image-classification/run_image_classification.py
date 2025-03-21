@@ -33,31 +33,26 @@ from datasets import load_dataset
 from PIL import Image
 
 import transformers
-from transformers import (
-    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    AutoConfig,
-    AutoImageProcessor,
-    DefaultDataCollator,
-    HfArgumentParser,
-    PushToHubCallback,
-    TFAutoModelForImageClassification,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+                          AutoConfig, AutoImageProcessor, DefaultDataCollator,
+                          HfArgumentParser, PushToHubCallback,
+                          TFAutoModelForImageClassification,
+                          TFTrainingArguments, create_optimizer, set_seed)
 from transformers.keras_callbacks import KerasMetricCallback
 from transformers.modeling_tf_utils import keras
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.51.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/image-classification/requirements.txt",
+)
 
 MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -84,15 +79,23 @@ class DataTrainingArguments:
         },
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
-    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
+    train_dir: Optional[str] = field(
+        default=None, metadata={"help": "A folder containing the training data."}
+    )
+    validation_dir: Optional[str] = field(
+        default=None, metadata={"help": "A folder containing the validation data."}
+    )
     train_val_split: Optional[float] = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -127,7 +130,9 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
+        if self.dataset_name is None and (
+            self.train_dir is None and self.validation_dir is None
+        ):
             raise ValueError(
                 "You must specify either a dataset name from the hub or a train and/or validation directory."
             )
@@ -141,23 +146,38 @@ class ModelArguments:
 
     model_name_or_path: str = field(
         default="google/vit-base-patch16-224-in21k",
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
     )
     model_type: Optional[str] = field(
         default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+        metadata={
+            "help": "If training from scratch, pass a model type from the list: "
+            + ", ".join(MODEL_TYPES)
+        },
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
-    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(
+        default=None, metadata={"help": "Name or path of preprocessor config."}
+    )
     token: str = field(
         default=None,
         metadata={
@@ -179,7 +199,9 @@ class ModelArguments:
     )
     ignore_mismatched_sizes: bool = field(
         default=False,
-        metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
+        metadata={
+            "help": "Will enable to load a pretrained model whose head dimensions are different."
+        },
     )
 
 
@@ -229,21 +251,31 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/TensorFlow versions.
-    send_example_telemetry("run_image_classification", model_args, data_args, framework="tensorflow")
+    send_example_telemetry(
+        "run_image_classification", model_args, data_args, framework="tensorflow"
+    )
 
     # Checkpoints. Find the checkpoint the use when loading the model.
     checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         checkpoint = get_last_checkpoint(training_args.output_dir)
         if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -328,7 +360,9 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
+    data_args.train_val_split = (
+        None if "validation" in dataset.keys() else data_args.train_val_split
+    )
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(data_args.train_val_split)
         dataset["train"] = split["train"]
@@ -338,7 +372,10 @@ def main():
     # Write a note describing the resizing behaviour.
     if "shortest_edge" in image_processor.size:
         # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
-        image_size = (image_processor.size["shortest_edge"], image_processor.size["shortest_edge"])
+        image_size = (
+            image_processor.size["shortest_edge"],
+            image_processor.size["shortest_edge"],
+        )
     else:
         image_size = (image_processor.size["height"], image_processor.size["width"])
 
@@ -365,13 +402,17 @@ def main():
     def train_transforms(example_batch):
         """Apply _train_transforms across a batch."""
         example_batch["pixel_values"] = [
-            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]
+            _train_transforms(pil_img.convert("RGB"))
+            for pil_img in example_batch["image"]
         ]
         return example_batch
 
     def val_transforms(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]]
+        example_batch["pixel_values"] = [
+            _val_transforms(pil_img.convert("RGB"))
+            for pil_img in example_batch["image"]
+        ]
         return example_batch
 
     train_dataset = None
@@ -380,7 +421,9 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            train_dataset = train_dataset.shuffle(seed=training_args.seed).select(
+                range(data_args.max_train_samples)
+            )
         train_dataset = train_dataset.map(
             train_transforms,
             batched=True,
@@ -409,7 +452,9 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            predict_dataset = predict_dataset.select(
+                range(data_args.max_predict_samples)
+            )
         # Set the test transforms
         predict_dataset = predict_dataset.map(
             val_transforms,
@@ -449,11 +494,15 @@ def main():
             ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
         )
         num_replicas = training_args.strategy.num_replicas_in_sync
-        total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
+        total_train_batch_size = (
+            training_args.per_device_train_batch_size * num_replicas
+        )
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
 
         dataset_options = tf.data.Options()
-        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        dataset_options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.OFF
+        )
 
         if training_args.do_train:
             num_train_steps = int(len(train_dataset) * training_args.num_train_epochs)
@@ -509,7 +558,9 @@ def main():
 
         # Transformers models compute the right loss for their task by default when labels are passed, and will
         # use this for training unless you specify your own loss function in compile().
-        model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
+        model.compile(
+            optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"]
+        )
 
         push_to_hub_model_id = training_args.push_to_hub_model_id
         if not push_to_hub_model_id:
@@ -525,7 +576,11 @@ def main():
 
         callbacks = []
         if eval_dataset is not None:
-            callbacks.append(KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=eval_dataset))
+            callbacks.append(
+                KerasMetricCallback(
+                    metric_fn=compute_metrics, eval_dataset=eval_dataset
+                )
+            )
         if training_args.push_to_hub:
             callbacks.append(
                 PushToHubCallback(
@@ -548,7 +603,9 @@ def main():
         if training_args.do_eval:
             n_eval_batches = len(eval_dataset)
             eval_predictions = model.predict(eval_dataset, steps=n_eval_batches)
-            eval_labels = dataset["validation"]["labels"][: n_eval_batches * total_eval_batch_size]
+            eval_labels = dataset["validation"]["labels"][
+                : n_eval_batches * total_eval_batch_size
+            ]
             eval_metrics = compute_metrics((eval_predictions.logits, eval_labels))
             logging.info("Eval metrics:")
             for metric_name, value in eval_metrics.items():
@@ -556,13 +613,17 @@ def main():
 
         if training_args.output_dir is not None:
             os.makedirs(training_args.output_dir, exist_ok=True)
-            with open(os.path.join(training_args.output_dir, "all_results.json"), "w") as f:
+            with open(
+                os.path.join(training_args.output_dir, "all_results.json"), "w"
+            ) as f:
                 f.write(json.dumps(eval_metrics))
 
         if training_args.do_predict:
             n_predict_batches = len(predict_dataset)
             test_predictions = model.predict(predict_dataset, steps=n_predict_batches)
-            test_labels = dataset["validation"]["labels"][: n_predict_batches * total_eval_batch_size]
+            test_labels = dataset["validation"]["labels"][
+                : n_predict_batches * total_eval_batch_size
+            ]
             test_metrics = compute_metrics((test_predictions.logits, test_labels))
             logging.info("Test metrics:")
             for metric_name, value in test_metrics.items():

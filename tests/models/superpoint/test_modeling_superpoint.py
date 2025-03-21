@@ -15,20 +15,20 @@ import inspect
 import unittest
 from typing import List
 
-from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.models.superpoint.configuration_superpoint import \
+    SuperPointConfig
+from transformers.testing_utils import (is_flaky, require_torch,
+                                        require_vision, slow, torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        SuperPointForKeypointDetection,
-    )
+    from transformers import SuperPointForKeypointDetection
 
 if is_vision_available():
     from PIL import Image
@@ -68,7 +68,9 @@ class SuperPointModelTester:
 
     def prepare_config_and_inputs(self):
         # SuperPoint expects a grayscale image as input
-        pixel_values = floats_tensor([self.batch_size, 3, self.image_height, self.image_width])
+        pixel_values = floats_tensor(
+            [self.batch_size, 3, self.image_height, self.image_width]
+        )
         config = self.get_config()
         return config, pixel_values
 
@@ -112,7 +114,9 @@ class SuperPointModelTester:
 
 @require_torch
 class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SuperPointForKeypointDetection,) if is_torch_available() else ()
+    all_model_classes = (
+        (SuperPointForKeypointDetection,) if is_torch_available() else ()
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -134,7 +138,9 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @is_flaky(description="The `indices` computed with `topk()` in `top_k_keypoints` is not stable.")
+    @is_flaky(
+        description="The `indices` computed with `topk()` in `top_k_keypoints` is not stable."
+    )
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 
@@ -142,11 +148,15 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support input and output embeddings")
+    @unittest.skip(
+        reason="SuperPointForKeypointDetection does not support input and output embeddings"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not use feedforward chunking")
+    @unittest.skip(
+        reason="SuperPointForKeypointDetection does not use feedforward chunking"
+    )
     def test_feed_forward_chunking(self):
         pass
 
@@ -166,7 +176,9 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SuperPoint does not output any loss term in the forward pass")
+    @unittest.skip(
+        reason="SuperPoint does not output any loss term in the forward pass"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -198,7 +210,9 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
 
             # SuperPoint's feature maps are of shape (batch_size, num_channels, width, height)
-            for i, conv_layer_size in enumerate(self.model_tester.encoder_hidden_sizes[:-1]):
+            for i, conv_layer_size in enumerate(
+                self.model_tester.encoder_hidden_sizes[:-1]
+            ):
                 self.assertListEqual(
                     list(hidden_states[i].shape[-3:]),
                     [
@@ -253,11 +267,17 @@ def prepare_imgs():
 class SuperPointModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("magic-leap-community/superpoint") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference(self):
-        model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint").to(torch_device)
+        model = SuperPointForKeypointDetection.from_pretrained(
+            "magic-leap-community/superpoint"
+        ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
@@ -265,22 +285,28 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         expected_number_keypoints_image0 = 568
         expected_number_keypoints_image1 = 830
-        expected_max_number_keypoints = max(expected_number_keypoints_image0, expected_number_keypoints_image1)
-        expected_keypoints_shape = torch.Size((len(images), expected_max_number_keypoints, 2))
+        expected_max_number_keypoints = max(
+            expected_number_keypoints_image0, expected_number_keypoints_image1
+        )
+        expected_keypoints_shape = torch.Size(
+            (len(images), expected_max_number_keypoints, 2)
+        )
         expected_scores_shape = torch.Size(
             (
                 len(images),
                 expected_max_number_keypoints,
             )
         )
-        expected_descriptors_shape = torch.Size((len(images), expected_max_number_keypoints, 256))
+        expected_descriptors_shape = torch.Size(
+            (len(images), expected_max_number_keypoints, 256)
+        )
         # Check output shapes
         self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
         self.assertEqual(outputs.scores.shape, expected_scores_shape)
         self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
-        expected_keypoints_image0_values = torch.tensor([[0.75, 0.0188], [0.7719, 0.0188], [0.7641, 0.0333]]).to(
-            torch_device
-        )
+        expected_keypoints_image0_values = torch.tensor(
+            [[0.75, 0.0188], [0.7719, 0.0188], [0.7641, 0.0333]]
+        ).to(torch_device)
         expected_scores_image0_values = torch.tensor(
             [0.0064, 0.0139, 0.0591, 0.0727, 0.5170, 0.0175, 0.1526, 0.2057, 0.0335]
         ).to(torch_device)
@@ -296,7 +322,12 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
                 atol=1e-4,
             )
         )
-        torch.testing.assert_close(predicted_scores_image0_values, expected_scores_image0_values, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            predicted_scores_image0_values,
+            expected_scores_image0_values,
+            rtol=1e-4,
+            atol=1e-4,
+        )
         self.assertTrue(
             torch.allclose(
                 predicted_descriptors_image0_value,
@@ -305,8 +336,16 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
             )
         )
         # Check mask values
-        self.assertTrue(outputs.mask[0, expected_number_keypoints_image0 - 1].item() == 1)
+        self.assertTrue(
+            outputs.mask[0, expected_number_keypoints_image0 - 1].item() == 1
+        )
         self.assertTrue(outputs.mask[0, expected_number_keypoints_image0].item() == 0)
-        self.assertTrue(torch.all(outputs.mask[0, : expected_number_keypoints_image0 - 1]))
-        self.assertTrue(torch.all(torch.logical_not(outputs.mask[0, expected_number_keypoints_image0:])))
+        self.assertTrue(
+            torch.all(outputs.mask[0, : expected_number_keypoints_image0 - 1])
+        )
+        self.assertTrue(
+            torch.all(
+                torch.logical_not(outputs.mask[0, expected_number_keypoints_image0:])
+            )
+        )
         self.assertTrue(torch.all(outputs.mask[1]))

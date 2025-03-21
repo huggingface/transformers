@@ -21,34 +21,22 @@ import unittest
 
 import requests
 
-from transformers import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers import (AlignConfig, AlignProcessor, AlignTextConfig,
+                          AlignVisionConfig)
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AlignModel,
-        AlignTextModel,
-        AlignVisionModel,
-    )
+    from transformers import AlignModel, AlignTextModel, AlignVisionModel
 
 
 if is_vision_available():
@@ -87,7 +75,9 @@ class AlignVisionModelTester:
         self.hidden_act = hidden_act
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -114,9 +104,12 @@ class AlignVisionModelTester:
 
         patch_size = self.image_size // 4
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, config.hidden_dim, patch_size, patch_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, config.hidden_dim, patch_size, patch_size),
         )
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, config.hidden_dim))
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, config.hidden_dim)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -160,7 +153,9 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="AlignVisionModel does not support input and output embeddings")
+    @unittest.skip(
+        reason="AlignVisionModel does not support input and output embeddings"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -189,7 +184,11 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
             num_blocks = sum(config.num_block_repeats) * 4
             self.assertEqual(len(hidden_states), num_blocks)
 
@@ -289,7 +288,9 @@ class AlignTextModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         config = self.get_config()
 
@@ -316,11 +317,18 @@ class AlignTextModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            result = model(
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+            )
             result = model(input_ids, token_type_ids=token_type_ids)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -330,7 +338,11 @@ class AlignTextModelTester:
             token_type_ids,
             input_mask,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -343,7 +355,9 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlignTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AlignTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=AlignTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -380,11 +394,15 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="AlignTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="AlignTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -405,12 +423,18 @@ class AlignModelTester:
         self.parent = parent
         self.text_model_tester = AlignTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = AlignVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        test_config, input_ids, token_type_ids, input_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        test_config, input_ids, token_type_ids, input_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -418,18 +442,24 @@ class AlignModelTester:
 
     def get_config(self):
         return AlignConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
-    def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, attention_mask, pixel_values
+    ):
         model = AlignModel(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask, token_type_ids)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -448,7 +478,9 @@ class AlignModelTester:
 @require_torch
 class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AlignModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": AlignModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": AlignModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -514,7 +546,9 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         )
                     elif name == "text_projection.weight":
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -571,10 +605,14 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -602,7 +640,9 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = AlignVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save AlignConfig and check if we can load AlignTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -635,7 +675,9 @@ class AlignModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         texts = ["a photo of a cat", "a photo of a dog"]
-        inputs = processor(images=image, text=texts, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=texts, return_tensors="pt").to(
+            torch_device
+        )
 
         # forward pass
         with torch.no_grad():
@@ -651,4 +693,6 @@ class AlignModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
         expected_logits = torch.tensor([[9.7093, 3.4679]], device=torch_device)
-        torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
+        )

@@ -26,7 +26,6 @@ from PIL import Image
 
 from transformers import TextNetBackbone, TextNetConfig, TextNetImageProcessor
 
-
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
 base_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_base.config"
@@ -113,8 +112,12 @@ def prepare_config(size_config_url, size):
     return textnet_config
 
 
-def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path):
-    config_filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
+def convert_textnet_checkpoint(
+    checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path
+):
+    config_filepath = hf_hub_download(
+        repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json"
+    )
 
     with open(config_filepath) as f:
         content = json.loads(f.read())
@@ -124,22 +127,57 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     if "tiny" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(tiny_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000, 1.1221]
+            [
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.5300,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                1.1221,
+            ]
         )
     elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(small_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
+            [
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.1394,
+            ]
         )
     else:
         config = prepare_config(base_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000]
+            [
+                0.9210,
+                0.6099,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                3.2207,
+                2.6602,
+                1.8925,
+                0.0000,
+            ]
         )
 
     model = TextNetBackbone(config)
     textnet_image_processor = TextNetImageProcessor(size={"shortest_edge": size})
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
+    state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu", check_hash=True
+    )["ema"]
     state_dict_changed = OrderedDict()
     for key in state_dict:
         if "backbone" in key:
@@ -174,7 +212,11 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     with torch.no_grad():
         output = model(pixel_values)
 
-    assert torch.allclose(output["feature_maps"][-1][0][10][12][:10].detach(), expected_slice_backbone, atol=1e-3)
+    assert torch.allclose(
+        output["feature_maps"][-1][0][10][12][:10].detach(),
+        expected_slice_backbone,
+        atol=1e-3,
+    )
 
     model.save_pretrained(pytorch_dump_folder_path)
     textnet_image_processor.save_pretrained(pytorch_dump_folder_path)
@@ -197,7 +239,10 @@ if __name__ == "__main__":
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the folder to output PyTorch model.",
     )
     args = parser.parse_args()
 

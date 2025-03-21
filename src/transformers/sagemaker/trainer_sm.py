@@ -16,7 +16,6 @@ import warnings
 from ..trainer import Trainer
 from ..utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 

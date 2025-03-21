@@ -16,8 +16,8 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-
+from ...utils.backbone_utils import (
+    BackboneConfigMixin, get_aligned_output_features_output_indices)
 
 logger = logging.get_logger(__name__)
 
@@ -108,7 +108,9 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
-            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
+            raise ValueError(
+                f"layer_type={layer_type} is not one of {','.join(self.layer_types)}"
+            )
         if global_padding is not None:
             if global_padding.upper() in self.supported_padding:
                 global_padding = global_padding.upper()
@@ -127,9 +129,15 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
         self.output_stride = output_stride
         self.width_factor = width_factor
 
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        self.stage_names = ["stem"] + [
+            f"stage{idx}" for idx in range(1, len(depths) + 1)
+        ]
+        self._out_features, self._out_indices = (
+            get_aligned_output_features_output_indices(
+                out_features=out_features,
+                out_indices=out_indices,
+                stage_names=self.stage_names,
+            )
         )
 
 

@@ -9,23 +9,17 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (convert_to_rgb, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (OPENAI_CLIP_MEAN, OPENAI_CLIP_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            infer_channel_dimension_format, is_scaled_image,
+                            make_flat_list_of_images, to_numpy_array,
+                            valid_images, validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs,
+                      is_vision_available, logging)
 
 if is_vision_available():
     import PIL
@@ -135,7 +129,9 @@ class ImgprocModelImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
         return resize(
             image,
@@ -213,11 +209,15 @@ class ImgprocModelImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -258,27 +258,46 @@ class ImgprocModelImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(
+            data={"pixel_values": images}, tensor_type=return_tensors
+        )
 
         return encoded_outputs
 

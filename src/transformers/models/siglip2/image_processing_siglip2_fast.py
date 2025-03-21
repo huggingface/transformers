@@ -21,26 +21,14 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    SizeDict,
-)
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-)
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs, SizeDict)
+from ...image_utils import ImageInput, PILImageResampling
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import (TensorType, add_start_docstrings, is_torch_available,
+                      is_torchvision_available, is_torchvision_v2_available,
+                      logging)
 from .image_processing_siglip2 import get_image_size_for_max_num_patches
-
 
 if is_torch_available():
     import torch
@@ -63,7 +51,9 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
     num_channels, image_height, image_width = image.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_image = image.reshape(num_channels, num_patches_height, patch_size, num_patches_width, patch_size)
+    patched_image = image.reshape(
+        num_channels, num_patches_height, patch_size, num_patches_width, patch_size
+    )
     patched_image = patched_image.permute(1, 3, 2, 4, 0)
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
@@ -80,7 +70,9 @@ def pad_along_first_dim(
     mask = torch.ones((target_length,), dtype=torch.int32)
     if padding_length > 0:
         padding = [0, 0] * (tensor.ndim - 1) + [0, padding_length]
-        tensor = torch.nn.functional.pad(tensor, padding, mode="constant", value=pad_value)
+        tensor = torch.nn.functional.pad(
+            tensor, padding, mode="constant", value=pad_value
+        )
         mask[-padding_length:] = 0
     return tensor, mask
 
@@ -131,7 +123,9 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
             and then padded in "patch" dimension to match this number exactly.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -162,9 +156,13 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
                     max_num_patches=max_num_patches,
                 )
                 side_dict = SizeDict(height=height, width=width)
-                image = self.resize(image=image, size=side_dict, interpolation=interpolation)
+                image = self.resize(
+                    image=image, size=side_dict, interpolation=interpolation
+                )
 
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(
+                image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
 
             # (num_channels, height, width) -> (num_patches, patch_size * patch_size * num_channels)
             patches = convert_image_to_patches(image, patch_size)

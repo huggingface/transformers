@@ -19,7 +19,6 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -177,7 +176,9 @@ class PhimoeConfig(PretrainedConfig):
             if "rope_type" not in self.rope_scaling:
                 self.rope_scaling["rope_type"] = self.rope_scaling.get("type", None)
             if "original_max_position_embeddings" in self.rope_scaling:
-                self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
+                self.original_max_position_embeddings = self.rope_scaling[
+                    "original_max_position_embeddings"
+                ]
             rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
             rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
             if not isinstance(rope_scaling_short_mscale, (int, float)):

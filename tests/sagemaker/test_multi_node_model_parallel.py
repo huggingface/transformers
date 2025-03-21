@@ -9,7 +9,6 @@ from parameterized import parameterized, parameterized_class
 
 from . import is_sagemaker_available
 
-
 if is_sagemaker_available():
     from sagemaker import Session, TrainingJobAnalytics
     from sagemaker.huggingface import HuggingFace
@@ -66,7 +65,10 @@ class MultiNodeTest(unittest.TestCase):
             },
         }
 
-        distribution = {"smdistributed": {"modelparallel": smp_options}, "mpi": mpi_options}
+        distribution = {
+            "smdistributed": {"modelparallel": smp_options},
+            "mpi": mpi_options,
+        }
 
         name_extension = "trainer" if self.script == "run_glue.py" else "smtrainer"
         # creates estimator
@@ -90,7 +92,9 @@ class MultiNodeTest(unittest.TestCase):
         )
 
     def save_results_as_csv(self, job_name):
-        TrainingJobAnalytics(job_name).export_csv(f"{self.env.test_path}/{job_name}_metrics.csv")
+        TrainingJobAnalytics(job_name).export_csv(
+            f"{self.env.test_path}/{job_name}_metrics.csv"
+        )
 
     # @parameterized.expand([(2,), (4,),])
     @parameterized.expand([(1,)])
@@ -102,14 +106,22 @@ class MultiNodeTest(unittest.TestCase):
         estimator.fit()
 
         # result dataframe
-        result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
+        result_metrics_df = TrainingJobAnalytics(
+            estimator.latest_training_job.name
+        ).dataframe()
 
         # extract kpis
-        eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
-        eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+        eval_accuracy = list(
+            result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"]
+        )
+        eval_loss = list(
+            result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"]
+        )
         # get train time from SageMaker job, this includes starting, preprocessing, stopping
         train_runtime = (
-            Session().describe_training_job(estimator.latest_training_job.name).get("TrainingTimeInSeconds", 999999)
+            Session()
+            .describe_training_job(estimator.latest_training_job.name)
+            .get("TrainingTimeInSeconds", 999999)
         )
 
         # assert kpis
@@ -119,4 +131,11 @@ class MultiNodeTest(unittest.TestCase):
 
         # dump tests result into json file to share in PR
         with open(f"{estimator.latest_training_job.name}.json", "w") as outfile:
-            json.dump({"train_time": train_runtime, "eval_accuracy": eval_accuracy, "eval_loss": eval_loss}, outfile)
+            json.dump(
+                {
+                    "train_time": train_runtime,
+                    "eval_accuracy": eval_accuracy,
+                    "eval_loss": eval_loss,
+                },
+                outfile,
+            )

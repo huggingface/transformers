@@ -15,10 +15,10 @@
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..integrations import prepare_for_hqq_linear
-from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, logging
+from ..utils import (is_accelerate_available, is_hqq_available,
+                     is_torch_available, logging)
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
-
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -79,7 +79,9 @@ class HqqHfQuantizer(HfQuantizer):
                 self.torch_dtype = kwargs["torch_dtype"]
             else:
                 self.torch_dtype = torch.float32
-                logger.info("Setting torch_dtype to torch.float32 as the default value since it was not specified.")
+                logger.info(
+                    "Setting torch_dtype to torch.float32 as the default value since it was not specified."
+                )
 
         device_map = kwargs.get("device_map", None)
         if isinstance(device_map, dict):
@@ -135,7 +137,10 @@ class HqqHfQuantizer(HfQuantizer):
 
             # Append new expected layers based on _ref_keys
             _ref_keys = HQQLinear(
-                linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
+                linear_layer=None,
+                quant_config=None,
+                compute_dtype=torch.float16,
+                device="cpu",
             ).state_dict_keys() - {"bias"}
 
             # Clean-up
@@ -151,7 +156,9 @@ class HqqHfQuantizer(HfQuantizer):
                 if _module + ".weight" in loaded_keys:
                     new_keys.add(_module + ".weight")
                 else:
-                    new_keys.update({_module + "." + _ref_key for _ref_key in _ref_keys})
+                    new_keys.update(
+                        {_module + "." + _ref_key for _ref_key in _ref_keys}
+                    )
                 if _module + ".bias" in loaded_keys:
                     new_keys.add(_module + ".bias")
 
@@ -307,7 +314,9 @@ class HqqHfQuantizer(HfQuantizer):
     ):
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear -> HQQLinear conversion in create_quantized_param().
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
-        model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
+        model = prepare_for_hqq_linear(
+            model, quantization_config=self.quantization_config
+        )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_hqq_quantized = True

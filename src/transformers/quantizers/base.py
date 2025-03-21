@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin
 
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
@@ -75,7 +74,9 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
-    def update_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def update_device_map(
+        self, device_map: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
         """
         Override this method if you want to pass a override the existing device map with a new
         one. E.g. for bitsandbytes, since `accelerate` is a hard requirement, if no device_map is
@@ -99,7 +100,9 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(
+        self, model, missing_keys: List[str], prefix: str
+    ) -> List[str]:
         """
         Override this method if you want to adjust the `missing_keys`.
 
@@ -109,7 +112,9 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
-    def update_unexpected_keys(self, model, unexpected_keys: List[str], prefix: str) -> List[str]:
+    def update_unexpected_keys(
+        self, model, unexpected_keys: List[str], prefix: str
+    ) -> List[str]:
         """
         Override this method if you want to adjust the `unexpected_keys`.
 
@@ -119,7 +124,9 @@ class HfQuantizer(ABC):
         """
         return unexpected_keys
 
-    def update_missing_keys_after_loading(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys_after_loading(
+        self, model, missing_keys: List[str], prefix: str
+    ) -> List[str]:
         """
         Override this method if you want to adjust the `missing_keys` after loading the model params,
         but before the model is post-processed.
@@ -130,7 +137,9 @@ class HfQuantizer(ABC):
         """
         return missing_keys
 
-    def update_expected_keys(self, model, expected_keys: List[str], loaded_keys: List[str]) -> List[str]:
+    def update_expected_keys(
+        self, model, expected_keys: List[str], loaded_keys: List[str]
+    ) -> List[str]:
         """
         Override this method if you want to adjust the `update_expected_keys`.
 
@@ -142,7 +151,9 @@ class HfQuantizer(ABC):
         """
         return expected_keys
 
-    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
+    def get_special_dtypes_update(
+        self, model, torch_dtype: "torch.dtype"
+    ) -> Dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
         one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
@@ -161,7 +172,9 @@ class HfQuantizer(ABC):
             if any(m in name for m in self.modules_to_not_convert)
         }
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(
+        self, max_memory: Dict[str, Union[int, str]]
+    ) -> Dict[str, Union[int, str]]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 

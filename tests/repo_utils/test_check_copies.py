@@ -20,13 +20,14 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 
-
-git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+git_repo_path = os.path.abspath(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+)
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
 import check_copies  # noqa: E402
-from check_copies import convert_to_localized_md, find_code_in_transformers, is_copy_consistent  # noqa: E402
-
+from check_copies import convert_to_localized_md  # noqa: E402
+from check_copies import find_code_in_transformers, is_copy_consistent
 
 # This is the reference code that will be used in the tests.
 # If BertLMPredictionHead is changed in modeling_bert.py, this code needs to be manually updated.
@@ -271,7 +272,9 @@ def create_tmp_repo(tmp_dir):
     for model, code in models.items():
         model_subdir = model_dir / model
         model_subdir.mkdir(exist_ok=True)
-        with open(model_subdir / f"modeling_{model}.py", "w", encoding="utf-8", newline="\n") as f:
+        with open(
+            model_subdir / f"modeling_{model}.py", "w", encoding="utf-8", newline="\n"
+        ) as f:
             f.write(code)
 
 
@@ -300,15 +303,21 @@ class CopyCheckTester(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_folder:
             create_tmp_repo(tmp_folder)
             with patch_transformer_repo_path(tmp_folder):
-                code = find_code_in_transformers("models.bert.modeling_bert.BertAttention")
+                code = find_code_in_transformers(
+                    "models.bert.modeling_bert.BertAttention"
+                )
 
-        reference_code = (
-            "class BertAttention(nn.Module):\n    def __init__(self, config):\n        super().__init__()\n"
-        )
+        reference_code = "class BertAttention(nn.Module):\n    def __init__(self, config):\n        super().__init__()\n"
         self.assertEqual(code, reference_code)
 
     def test_is_copy_consistent(self):
-        path_to_check = ["src", "transformers", "models", "bertcopy", "modeling_bertcopy.py"]
+        path_to_check = [
+            "src",
+            "transformers",
+            "models",
+            "bertcopy",
+            "modeling_bertcopy.py",
+        ]
         with tempfile.TemporaryDirectory() as tmp_folder:
             # Base check
             create_tmp_repo(tmp_folder)
@@ -332,7 +341,13 @@ class CopyCheckTester(unittest.TestCase):
                     self.assertEqual(f.read(), MOCK_BERT_COPY_CODE)
 
     def test_is_copy_consistent_with_ignored_match(self):
-        path_to_check = ["src", "transformers", "models", "dummy_roberta_match", "modeling_dummy_roberta_match.py"]
+        path_to_check = [
+            "src",
+            "transformers",
+            "models",
+            "dummy_roberta_match",
+            "modeling_dummy_roberta_match.py",
+        ]
         with tempfile.TemporaryDirectory() as tmp_folder:
             # Base check
             create_tmp_repo(tmp_folder)
@@ -359,7 +374,13 @@ class CopyCheckTester(unittest.TestCase):
                 # line 6: `attr_2 = 3` in `MOCK_DUMMY_ROBERTA_CODE_NO_MATCH`.
                 # (which has a leading `\n`.)
                 self.assertEqual(
-                    diffs, [["models.dummy_bert_no_match.modeling_dummy_bert_no_match.BertDummyModel", 6]]
+                    diffs,
+                    [
+                        [
+                            "models.dummy_bert_no_match.modeling_dummy_bert_no_match.BertDummyModel",
+                            6,
+                        ]
+                    ],
                 )
 
                 _ = is_copy_consistent(file_to_check, overwrite=True)
@@ -447,7 +468,9 @@ class CopyCheckTester(unittest.TestCase):
         )
 
         num_models_equal, converted_md_list = convert_to_localized_md(
-            link_changed_md_list, link_unchanged_md_list, localized_readme["format_model_list"]
+            link_changed_md_list,
+            link_unchanged_md_list,
+            localized_readme["format_model_list"],
         )
 
         # Check if the model link is synchronized.

@@ -40,7 +40,6 @@ import os
 import re
 from typing import Any, Callable, List, Optional
 
-
 # Path is defined with the intent you should run this script from the root of the repo.
 PATH_TO_TRANSFORMERS = "src/transformers"
 
@@ -63,7 +62,10 @@ def get_indent(line: str) -> str:
 
 
 def split_code_in_indented_blocks(
-    code: str, indent_level: str = "", start_prompt: Optional[str] = None, end_prompt: Optional[str] = None
+    code: str,
+    indent_level: str = "",
+    start_prompt: Optional[str] = None,
+    end_prompt: Optional[str] = None,
 ) -> List[str]:
     """
     Split some code into its indented blocks, starting at a given level.
@@ -95,12 +97,16 @@ def split_code_in_indented_blocks(
     current_block = [lines[index]]
     index += 1
     # We split into blocks until we get to the `end_prompt` (or the end of the file).
-    while index < len(lines) and (end_prompt is None or not lines[index].startswith(end_prompt)):
+    while index < len(lines) and (
+        end_prompt is None or not lines[index].startswith(end_prompt)
+    ):
         # We have a non-empty line with the proper indent -> start of a new block
         if len(lines[index]) > 0 and get_indent(lines[index]) == indent_level:
             # Store the current block in the result and rest. There are two cases: the line is part of the block (like
             # a closing parenthesis) or not.
-            if len(current_block) > 0 and get_indent(current_block[-1]).startswith(indent_level + " "):
+            if len(current_block) > 0 and get_indent(current_block[-1]).startswith(
+                indent_level + " "
+            ):
                 # Line is part of the current block
                 current_block.append(lines[index])
                 blocks.append("\n".join(current_block))
@@ -140,7 +146,9 @@ def ignore_underscore_and_lowercase(key: Callable[[Any], str]) -> Callable[[Any]
     return _inner
 
 
-def sort_objects(objects: List[Any], key: Optional[Callable[[Any], str]] = None) -> List[Any]:
+def sort_objects(
+    objects: List[Any], key: Optional[Callable[[Any], str]] = None
+) -> List[Any]:
     """
     Sort a list of objects following the rules of isort (all uppercased first, camel-cased second and lower-cased
     last).
@@ -165,13 +173,19 @@ def sort_objects(objects: List[Any], key: Optional[Callable[[Any], str]] = None)
     # Constants are all uppercase, they go first.
     constants = [obj for obj in objects if key(obj).isupper()]
     # Classes are not all uppercase but start with a capital, they go second.
-    classes = [obj for obj in objects if key(obj)[0].isupper() and not key(obj).isupper()]
+    classes = [
+        obj for obj in objects if key(obj)[0].isupper() and not key(obj).isupper()
+    ]
     # Functions begin with a lowercase, they go last.
     functions = [obj for obj in objects if not key(obj)[0].isupper()]
 
     # Then we sort each group.
     key1 = ignore_underscore_and_lowercase(key)
-    return sorted(constants, key=key1) + sorted(classes, key=key1) + sorted(functions, key=key1)
+    return (
+        sorted(constants, key=key1)
+        + sorted(classes, key=key1)
+        + sorted(functions, key=key1)
+    )
 
 
 def sort_objects_in_import(import_statement: str) -> str:
@@ -208,7 +222,10 @@ def sort_objects_in_import(import_statement: str) -> str:
 
         # We may have to ignore one or two lines on each side.
         idx = 2 if lines[1].strip() == "[" else 1
-        keys_to_sort = [(i, _re_strip_line.search(line).groups()[0]) for i, line in enumerate(lines[idx:-idx])]
+        keys_to_sort = [
+            (i, _re_strip_line.search(line).groups()[0])
+            for i, line in enumerate(lines[idx:-idx])
+        ]
         sorted_indices = sort_objects(keys_to_sort, key=lambda x: x[1])
         sorted_lines = [lines[x[0] + idx] for x in sorted_indices]
         return "\n".join(lines[:idx] + sorted_lines + lines[-idx:])
@@ -224,7 +241,9 @@ def sort_objects_in_import(import_statement: str) -> str:
             # We will have a final empty element if the line finished with a comma.
             if len(keys[-1]) == 0:
                 keys = keys[:-1]
-            lines[1] = get_indent(lines[1]) + ", ".join([f'"{k}"' for k in sort_objects(keys)])
+            lines[1] = get_indent(lines[1]) + ", ".join(
+                [f'"{k}"' for k in sort_objects(keys)]
+            )
         return "\n".join(lines)
     else:
         # Finally we have to deal with imports fitting on one line
@@ -260,7 +279,10 @@ def sort_imports(file: str, check_only: bool = True):
 
         # Get to the start of the imports.
         line_idx = 0
-        while line_idx < len(block_lines) and "_import_structure" not in block_lines[line_idx]:
+        while (
+            line_idx < len(block_lines)
+            and "_import_structure" not in block_lines[line_idx]
+        ):
             # Skip dummy import blocks
             if "import dummy" in block_lines[line_idx]:
                 line_idx = len(block_lines)
@@ -273,11 +295,20 @@ def sort_imports(file: str, check_only: bool = True):
         internal_block_code = "\n".join(block_lines[line_idx:-1])
         indent = get_indent(block_lines[1])
         # Slit the internal block into blocks of indent level 1.
-        internal_blocks = split_code_in_indented_blocks(internal_block_code, indent_level=indent)
+        internal_blocks = split_code_in_indented_blocks(
+            internal_block_code, indent_level=indent
+        )
         # We have two categories of import key: list or _import_structure[key].append/extend
-        pattern = _re_direct_key if "_import_structure = {" in block_lines[0] else _re_indirect_key
+        pattern = (
+            _re_direct_key
+            if "_import_structure = {" in block_lines[0]
+            else _re_indirect_key
+        )
         # Grab the keys, but there is a trap: some lines are empty or just comments.
-        keys = [(pattern.search(b).groups()[0] if pattern.search(b) is not None else None) for b in internal_blocks]
+        keys = [
+            (pattern.search(b).groups()[0] if pattern.search(b) is not None else None)
+            for b in internal_blocks
+        ]
         # We only sort the lines with a key.
         keys_to_sort = [(i, key) for i, key in enumerate(keys) if key is not None]
         sorted_indices = [x[0] for x in sorted(keys_to_sort, key=lambda x: x[1])]
@@ -294,7 +325,9 @@ def sort_imports(file: str, check_only: bool = True):
                 count += 1
 
         # And we put our main block back together with its first and last line.
-        main_blocks[block_idx] = "\n".join(block_lines[:line_idx] + reorderded_blocks + [block_lines[-1]])
+        main_blocks[block_idx] = "\n".join(
+            block_lines[:line_idx] + reorderded_blocks + [block_lines[-1]]
+        )
 
     if code != "\n".join(main_blocks):
         if check_only:
@@ -315,7 +348,9 @@ def sort_imports_in_all_inits(check_only=True):
     failures = []
     for root, _, files in os.walk(PATH_TO_TRANSFORMERS):
         if "__init__.py" in files:
-            result = sort_imports(os.path.join(root, "__init__.py"), check_only=check_only)
+            result = sort_imports(
+                os.path.join(root, "__init__.py"), check_only=check_only
+            )
             if result:
                 failures = [os.path.join(root, "__init__.py")]
     if len(failures) > 0:
@@ -324,7 +359,9 @@ def sort_imports_in_all_inits(check_only=True):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check_only", action="store_true", help="Whether to only check or fix style.")
+    parser.add_argument(
+        "--check_only", action="store_true", help="Whether to only check or fix style."
+    )
     args = parser.parse_args()
 
     sort_imports_in_all_inits(check_only=args.check_only)

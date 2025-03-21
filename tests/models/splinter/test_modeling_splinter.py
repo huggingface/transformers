@@ -18,17 +18,19 @@ import copy
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (require_torch, require_torch_multi_gpu,
+                                        slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
+    from transformers import (SplinterConfig, SplinterForPreTraining,
+                              SplinterForQuestionAnswering, SplinterModel)
 
 
 class SplinterModelTester:
@@ -94,15 +96,23 @@ class SplinterModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         start_positions = None
         end_positions = None
         question_positions = None
         if self.use_labels:
-            start_positions = ids_tensor([self.batch_size, self.num_questions], self.type_sequence_label_size)
-            end_positions = ids_tensor([self.batch_size, self.num_questions], self.type_sequence_label_size)
-            question_positions = ids_tensor([self.batch_size, self.num_questions], self.num_labels)
+            start_positions = ids_tensor(
+                [self.batch_size, self.num_questions], self.type_sequence_label_size
+            )
+            end_positions = ids_tensor(
+                [self.batch_size, self.num_questions], self.type_sequence_label_size
+            )
+            question_positions = ids_tensor(
+                [self.batch_size, self.num_questions], self.num_labels
+            )
 
         config = SplinterConfig(
             vocab_size=self.vocab_size,
@@ -120,7 +130,15 @@ class SplinterModelTester:
             question_token_id=self.question_token_id,
         )
 
-        return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            start_positions,
+            end_positions,
+            question_positions,
+        )
 
     def create_and_check_model(
         self,
@@ -135,10 +153,15 @@ class SplinterModelTester:
         model = SplinterModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_question_answering(
         self,
@@ -160,8 +183,12 @@ class SplinterModelTester:
             start_positions=start_positions[:, 0],
             end_positions=end_positions[:, 0],
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_for_pretraining(
         self,
@@ -184,8 +211,14 @@ class SplinterModelTester:
             end_positions=end_positions,
             question_positions=question_positions,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.num_questions, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.num_questions, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape,
+            (self.batch_size, self.num_questions, self.seq_length),
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape,
+            (self.batch_size, self.num_questions, self.seq_length),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -218,7 +251,10 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        {
+            "feature-extraction": SplinterModel,
+            "question-answering": SplinterForQuestionAnswering,
+        }
         if is_torch_available()
         else {}
     )
@@ -236,7 +272,10 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     ):
         if pipeline_test_case_name == "QAPipelineTests":
             return True
-        elif pipeline_test_case_name == "FeatureExtractionPipelineTests" and tokenizer_name.endswith("Fast"):
+        elif (
+            pipeline_test_case_name == "FeatureExtractionPipelineTests"
+            and tokenizer_name.endswith("Fast")
+        ):
             return True
 
         return False
@@ -275,7 +314,9 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SplinterModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SplinterConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -350,7 +391,11 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
+        blacklist_non_batched_params = [
+            "head_mask",
+            "decoder_head_mask",
+            "cross_attn_head_mask",
+        ]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
@@ -383,7 +428,26 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # Input: "[CLS] Brad was born in [QUESTION] . He returned to the United Kingdom later . [SEP]"
         # Output should be the span "the United Kingdom"
         input_ids = torch.tensor(
-            [[101, 7796, 1108, 1255, 1107, 104, 119, 1124, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102]]
+            [
+                [
+                    101,
+                    7796,
+                    1108,
+                    1255,
+                    1107,
+                    104,
+                    119,
+                    1124,
+                    1608,
+                    1106,
+                    1103,
+                    1244,
+                    2325,
+                    1224,
+                    119,
+                    102,
+                ]
+            ]
         )
         output = model(input_ids)
 
@@ -401,7 +465,26 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"
         input_ids = torch.tensor(
-            [[101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102]]
+            [
+                [
+                    101,
+                    104,
+                    1108,
+                    1255,
+                    1107,
+                    104,
+                    119,
+                    7796,
+                    1608,
+                    1106,
+                    1103,
+                    1244,
+                    2325,
+                    1224,
+                    119,
+                    102,
+                ]
+            ]
         )
         question_positions = torch.tensor([[1, 5]], dtype=torch.long)
         output = model(input_ids, question_positions=question_positions)
@@ -422,7 +505,26 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"
         input_ids = torch.tensor(
-            [[101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102]]
+            [
+                [
+                    101,
+                    104,
+                    1108,
+                    1255,
+                    1107,
+                    104,
+                    119,
+                    7796,
+                    1608,
+                    1106,
+                    1103,
+                    1244,
+                    2325,
+                    1224,
+                    119,
+                    102,
+                ]
+            ]
         )
         start_positions = torch.tensor([[7, 10]], dtype=torch.long)
         end_positions = torch.tensor([7, 12], dtype=torch.long)
@@ -441,8 +543,42 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # Output should be the spans "Brad" and "the United Kingdom"
         input_ids = torch.tensor(
             [
-                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
-                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
+                [
+                    101,
+                    104,
+                    1108,
+                    1255,
+                    1107,
+                    104,
+                    119,
+                    7796,
+                    1608,
+                    1106,
+                    1103,
+                    1244,
+                    2325,
+                    1224,
+                    119,
+                    102,
+                ],
+                [
+                    101,
+                    104,
+                    1108,
+                    1255,
+                    1107,
+                    104,
+                    119,
+                    7796,
+                    1608,
+                    1106,
+                    1103,
+                    1244,
+                    2325,
+                    1224,
+                    119,
+                    102,
+                ],
             ]
         )
         start_positions = torch.tensor([[7, 10], [7, 10]], dtype=torch.long)
@@ -464,7 +600,24 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # Output should be the spans "Brad" and "the United Kingdom"
         input_ids = torch.tensor(
             [
-                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
+                [
+                    101,
+                    104,
+                    1108,
+                    1255,
+                    1107,
+                    104,
+                    119,
+                    7796,
+                    1608,
+                    1106,
+                    1103,
+                    1244,
+                    2325,
+                    1224,
+                    119,
+                    102,
+                ],
             ]
         )
         start_positions = torch.tensor([[7, 10]], dtype=torch.long)
@@ -507,8 +660,19 @@ class SplinterModelIntegrationTest(unittest.TestCase):
                 [101, 1, 2, 3, 4, 5, 104, 102],
             ]
         )
-        question_positions = torch.tensor([[1, 4, 0], [2, 4, 6], [3, 4, 0], [6, 0, 0]], dtype=torch.long)
+        question_positions = torch.tensor(
+            [[1, 4, 0], [2, 4, 6], [3, 4, 0], [6, 0, 0]], dtype=torch.long
+        )
         output_without_positions = model(input_ids)
         output_with_positions = model(input_ids, question_positions=question_positions)
-        self.assertTrue((output_without_positions.start_logits == output_with_positions.start_logits).all())
-        self.assertTrue((output_without_positions.end_logits == output_with_positions.end_logits).all())
+        self.assertTrue(
+            (
+                output_without_positions.start_logits
+                == output_with_positions.start_logits
+            ).all()
+        )
+        self.assertTrue(
+            (
+                output_without_positions.end_logits == output_with_positions.end_logits
+            ).all()
+        )

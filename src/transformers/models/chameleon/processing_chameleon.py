@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
+from ...processing_utils import (ProcessingKwargs, ProcessorMixin, TextKwargs,
+                                 Unpack, _validate_images_text_input_order)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -65,20 +66,34 @@ class ChameleonProcessor(ProcessorMixin):
     valid_kwargs = ["image_seq_length", "image_token"]
     image_processor_class = "ChameleonImageProcessor"
 
-    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        image_seq_length: int = 1024,
+        image_token: str = "<image>",
+    ):
         self.image_seq_length = image_seq_length
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token = (
+            tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        )
         self.image_start_token = (
             tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
         )  # fixed tokens for start and end, so can hardcode
-        self.image_end_token = tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+        self.image_end_token = (
+            tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+        )
 
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[ChameleonProcessorKwargs],
@@ -120,7 +135,9 @@ class ChameleonProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
         if text is None and images is None:
             raise ValueError("You must provide either text or images")
 
@@ -129,23 +146,35 @@ class ChameleonProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        return_for_text_completion = output_kwargs["text_kwargs"].pop("return_for_text_completion", False)
+        return_for_text_completion = output_kwargs["text_kwargs"].pop(
+            "return_for_text_completion", False
+        )
 
         # Replace the image token with the expanded image token sequence
         prompt_strings = []
-        one_img_tokens = self.image_start_token + (self.image_token * self.image_seq_length) + self.image_end_token
+        one_img_tokens = (
+            self.image_start_token
+            + (self.image_token * self.image_seq_length)
+            + self.image_end_token
+        )
         for sample in text:
             sample = sample.replace(self.image_token, one_img_tokens)
             if not return_for_text_completion:
-                sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
+                sample += (
+                    self.tokenizer.sep_token
+                )  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         if images is not None:
-            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+            data["pixel_values"] = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )["pixel_values"]
 
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
+        return BatchFeature(
+            data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
+        )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

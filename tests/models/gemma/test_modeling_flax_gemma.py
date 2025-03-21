@@ -20,15 +20,12 @@ from transformers.testing_utils import require_flax, require_read_token, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
-
 if is_flax_available():
     import jax
     import jax.numpy as jnp
 
     from transformers.models.gemma.modeling_flax_gemma import (
-        FlaxGemmaForCausalLM,
-        FlaxGemmaModel,
-    )
+        FlaxGemmaForCausalLM, FlaxGemmaModel)
 
 
 class FlaxGemmaModelTester:
@@ -108,7 +105,9 @@ class FlaxGemmaModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
@@ -116,7 +115,8 @@ class FlaxGemmaModelTester:
         attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
 
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
         outputs_cache = model(
             input_ids[:, :-1],
@@ -125,7 +125,9 @@ class FlaxGemmaModelTester:
             position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
@@ -135,21 +137,34 @@ class FlaxGemmaModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
         attention_mask_cache = jnp.concatenate(
-            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
+            [
+                attention_mask,
+                jnp.zeros(
+                    (
+                        attention_mask.shape[0],
+                        max_decoder_length - attention_mask.shape[1],
+                    )
+                ),
+            ],
             axis=-1,
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
         outputs_cache = model(
@@ -158,7 +173,9 @@ class FlaxGemmaModelTester:
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
@@ -168,25 +185,35 @@ class FlaxGemmaModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
 class FlaxGemmaModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxGemmaModel, FlaxGemmaForCausalLM) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxGemmaModel, FlaxGemmaForCausalLM) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxGemmaModelTester(self)
 
     def test_use_cache_forward(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
+            self.model_tester.check_use_cache_forward(
+                model_class_name, config, input_ids, attention_mask
+            )
 
     def test_use_cache_forward_with_attn_mask(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
@@ -239,8 +266,12 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         ]
         inputs = self.tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = self.model.generate(**inputs, params=self.params, max_new_tokens=20, do_sample=False)
-        output_text = self.tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
+        output = self.model.generate(
+            **inputs, params=self.params, max_new_tokens=20, do_sample=False
+        )
+        output_text = self.tokenizer.batch_decode(
+            output.sequences, skip_special_tokens=True
+        )
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -253,12 +284,18 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
 
         def generate(input_ids, attention_mask):
             outputs = self.model.generate(
-                input_ids, attention_mask=attention_mask, params=self.params, max_new_tokens=20, do_sample=False
+                input_ids,
+                attention_mask=attention_mask,
+                params=self.params,
+                max_new_tokens=20,
+                do_sample=False,
             )
             return outputs
 
         jit_generate = jax.jit(generate)
         output_sequences = jit_generate(**inputs).sequences
-        output_text = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        output_text = self.tokenizer.batch_decode(
+            output_sequences, skip_special_tokens=True
+        )
 
         self.assertEqual(output_text, EXPECTED_TEXTS)

@@ -46,7 +46,6 @@ from typing import List, Optional, Tuple, Union
 
 from transformers.utils import direct_transformers_import
 
-
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_copies.py
 TRANSFORMERS_PATH = "src/transformers"
@@ -181,7 +180,11 @@ def _is_definition_header_ending_line(line: str) -> bool:
 def _should_continue(line: str, indent: str) -> bool:
     # Helper function. Returns `True` if `line` is empty, starts with the `indent` or is the end parenthesis of a
     # class/function definition
-    return line.startswith(indent) or len(line.strip()) == 0 or _is_definition_header_ending_line(line)
+    return (
+        line.startswith(indent)
+        or len(line.strip()) == 0
+        or _is_definition_header_ending_line(line)
+    )
 
 
 def _sanity_check_splits(splits_1, splits_2, is_class, filename):
@@ -226,7 +229,9 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
         if block[0].startswith("_block_without_name_"):
             block_names_1.append("block_without_name")
         elif not block[0].startswith("_empty_block_") and (
-            not is_class or len(block_names_1) == 0 or block_names_1[-1].startswith("block_without_name")
+            not is_class
+            or len(block_names_1) == 0
+            or block_names_1[-1].startswith("block_without_name")
         ):
             block_names_1.append("block_with_name")
 
@@ -234,7 +239,9 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
         if block[0].startswith("_block_without_name_"):
             block_names_2.append("block_without_name")
         elif not block[0].startswith("_empty_block_") and (
-            not is_class or len(block_names_2) == 0 or block_names_2[-1].startswith("block_without_name")
+            not is_class
+            or len(block_names_2) == 0
+            or block_names_2[-1].startswith("block_without_name")
         ):
             block_names_2.append("block_with_name")
 
@@ -250,7 +257,9 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
             )
 
     if block_names_1 != block_names_2:
-        raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
+        raise ValueError(
+            f"In {filename}, two code blocks expected to be copies have different structures."
+        )
 
 
 def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
@@ -282,7 +291,11 @@ def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
 
 
 def split_code_into_blocks(
-    lines: List[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
+    lines: List[str],
+    start_index: int,
+    end_index: int,
+    indent: int,
+    backtrace: bool = False,
 ) -> List[Tuple[str, int, int]]:
     """
     Split the class/func block starting at `start_index` in a source code (defined by `lines`) into *inner blocks*.
@@ -329,7 +342,10 @@ def split_code_into_blocks(
 
     # Find the lines for the definition header
     index = start_index
-    if "(" in lines[start_index] and "):" not in lines[start_index] in lines[start_index]:
+    if (
+        "(" in lines[start_index]
+        and "):" not in lines[start_index] in lines[start_index]
+    ):
         while index < end_index:
             if _is_definition_header_ending_line(lines[index]):
                 break
@@ -342,7 +358,9 @@ def split_code_into_blocks(
     block_start_index, prev_block_end_index = index, index
     while index < end_index:
         # if found, it will be an inner block
-        block_found = re.search(rf"^{indent_str}((class|def)\s+\S+)(\(|\:)", lines[index])
+        block_found = re.search(
+            rf"^{indent_str}((class|def)\s+\S+)(\(|\:)", lines[index]
+        )
         if block_found:
             name = block_found.groups()[0]
 
@@ -354,7 +372,10 @@ def split_code_into_blocks(
             if index > prev_block_end_index and backtrace:
                 idx = index - 1
                 for idx in range(index - 1, prev_block_end_index - 2, -1):
-                    if not (len(lines[idx].strip()) > 0 and lines[idx].startswith(indent_str)):
+                    if not (
+                        len(lines[idx].strip()) > 0
+                        and lines[idx].startswith(indent_str)
+                    ):
                         break
                 idx += 1
                 if idx < index:
@@ -363,14 +384,19 @@ def split_code_into_blocks(
             # between the current found block and the previous found block
             if block_start_index > prev_block_end_index:
                 # give it a dummy name
-                if len("".join(lines[prev_block_end_index:block_start_index]).strip()) == 0:
+                if (
+                    len("".join(lines[prev_block_end_index:block_start_index]).strip())
+                    == 0
+                ):
                     prev_block_name = f"_empty_block_{empty_block_idx}"
                     empty_block_idx += 1
                 else:
                     prev_block_name = f"_block_without_name_{block_without_name_idx}"
                     block_without_name_idx += 1
                 # Add it as a block
-                splits.append((prev_block_name, prev_block_end_index, block_start_index))
+                splits.append(
+                    (prev_block_name, prev_block_end_index, block_start_index)
+                )
 
             # Add the current found block
             splits.append((name, block_start_index, block_end_index))
@@ -427,7 +453,9 @@ def find_code_in_transformers(
 
     # First let's find the module where our object lives.
     module = parts[i]
-    while i < len(parts) and not os.path.isfile(os.path.join(base_path, f"{module}.py")):
+    while i < len(parts) and not os.path.isfile(
+        os.path.join(base_path, f"{module}.py")
+    ):
         i += 1
         if i < len(parts):
             module = os.path.join(module, parts[i])
@@ -436,7 +464,9 @@ def find_code_in_transformers(
             f"`object_name` should begin with the name of a module of transformers but got {object_name}."
         )
 
-    with open(os.path.join(base_path, f"{module}.py"), "r", encoding="utf-8", newline="\n") as f:
+    with open(
+        os.path.join(base_path, f"{module}.py"), "r", encoding="utf-8", newline="\n"
+    ) as f:
         lines = f.readlines()
 
     # Now let's find the class / func in the code!
@@ -444,7 +474,9 @@ def find_code_in_transformers(
     line_index = 0
     for name in parts[i + 1 :]:
         while (
-            line_index < len(lines) and re.search(rf"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index]) is None
+            line_index < len(lines)
+            and re.search(rf"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index])
+            is None
         ):
             line_index += 1
         # find the target specified in the current level in `parts` -> increase `indent` so we can search the next
@@ -453,7 +485,9 @@ def find_code_in_transformers(
         line_index += 1
 
     if line_index >= len(lines):
-        raise ValueError(f" {object_name} does not match any function or class in {module}.")
+        raise ValueError(
+            f" {object_name} does not match any function or class in {module}."
+        )
 
     # `indent` is already one level deeper than the (found) class/func block's definition header
 
@@ -534,8 +568,12 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
     return lines, code, code_splits
 
 
-_re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
-_re_copy_warning_for_test_file = re.compile(r"^(\s*)#\s*Copied from\s+tests\.(\S+\.\S+)\s*($|\S.*$)")
+_re_copy_warning = re.compile(
+    r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)"
+)
+_re_copy_warning_for_test_file = re.compile(
+    r"^(\s*)#\s*Copied from\s+tests\.(\S+\.\S+)\s*($|\S.*$)"
+)
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 _re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
@@ -564,7 +602,9 @@ def run_ruff(code, check=False):
         command = ["ruff", "check", "-", "--fix", "--exit-zero"]
     else:
         command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE
+    )
     stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
 
@@ -617,14 +657,18 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
                 )
 
             try:
-                theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+                theoretical_name = re_pattern.search(theoretical_code_header).groups()[
+                    0
+                ]
             except Exception:
                 raise ValueError(
                     "Tried to split a class or function. It did not work. Error comes from: \n```\n"
                     + theoretical_code_header
                     + "\n```\n"
                 )
-            theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
+            theoretical_code_header = theoretical_code_header.replace(
+                theoretical_name, observed_obj_name
+            )
 
     # Find the first diff. Line 0 is special since we need to compare with the function/class names ignored.
     diff_index = 0
@@ -632,13 +676,17 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         return 0
 
     diff_index = 1
-    for observed_line, theoretical_line in zip(observed_code.split("\n")[1:], theoretical_code.split("\n")[1:]):
+    for observed_line, theoretical_line in zip(
+        observed_code.split("\n")[1:], theoretical_code.split("\n")[1:]
+    ):
         if observed_line != theoretical_line:
             return diff_index
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(
+    filename: str, overwrite: bool = False, buffer: dict = None
+) -> Optional[List[Tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -654,14 +702,20 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
         `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
         with the name of the object having a diff and the line number where there is the first diff.
     """
-    base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
+    base_path = (
+        TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
+    )
 
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     diffs = []
     line_index = 0
     # Not a for loop cause `lines` is going to change (if `overwrite=True`).
-    search_re = _re_copy_warning_for_test_file if filename.startswith("tests") else _re_copy_warning
+    search_re = (
+        _re_copy_warning_for_test_file
+        if filename.startswith("tests")
+        else _re_copy_warning
+    )
     while line_index < len(lines):
         search = search_re.search(lines[line_index])
         if search is None:
@@ -673,11 +727,14 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
         # Find the file lines, the object's code, and its blocks
         try:
-            target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
-                object_name, base_path, buffer=buffer
+            target_lines, theoretical_code, theoretical_code_splits = (
+                find_code_and_splits(object_name, base_path, buffer=buffer)
             )
         except Exception as exc:
-            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
+            exc.args = (
+                f"Error while trying to find source code for {filename}.\n\n"
+                + str(exc),
+            )
             raise
 
         # code replaced by the patterns
@@ -708,18 +765,28 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
             line = lines[line_index]
             # There is a special pattern `# End copy` to stop early. It's not documented cause it shouldn't really be
             # used.
-            should_continue = _should_continue(line, indent) and re.search(f"^{indent}# End copy", line) is None
+            should_continue = (
+                _should_continue(line, indent)
+                and re.search(f"^{indent}# End copy", line) is None
+            )
         # `line_index` is outside the block
         # Clean up empty lines at the end (if any).
         while len(lines[line_index - 1]) <= 1:
             line_index -= 1
 
         # Split the observed code into blocks
-        observed_code_splits = split_code_into_blocks(lines, start_index, line_index, len(indent), backtrace=True)
+        observed_code_splits = split_code_into_blocks(
+            lines, start_index, line_index, len(indent), backtrace=True
+        )
 
         is_class = lines[start_index].startswith(f"{' ' * (len(indent) - 4)}class ")
         # sanity check
-        _sanity_check_splits(theoretical_code_splits, observed_code_splits, is_class=is_class, filename=filename)
+        _sanity_check_splits(
+            theoretical_code_splits,
+            observed_code_splits,
+            is_class=is_class,
+            filename=filename,
+        )
 
         # observed code in a structured way (a dict mapping block names to blocks' code)
         observed_code_blocks = OrderedDict()
@@ -747,23 +814,37 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
                 if name in theoretical_code_blocks:
                     # in the target --> just copy the content
                     del theoretical_code_blocks[name]
-                    theoretical_code_blocks[f"_ignored_existing_block_{ignored_existing_block_index}"] = code
-                    name_mappings_1[name] = f"_ignored_existing_block_{ignored_existing_block_index}"
+                    theoretical_code_blocks[
+                        f"_ignored_existing_block_{ignored_existing_block_index}"
+                    ] = code
+                    name_mappings_1[name] = (
+                        f"_ignored_existing_block_{ignored_existing_block_index}"
+                    )
 
                     del observed_code_blocks[name]
-                    observed_code_blocks[f"_ignored_existing_block_{ignored_existing_block_index}"] = code
-                    name_mappings_2[name] = f"_ignored_existing_block_{ignored_existing_block_index}"
+                    observed_code_blocks[
+                        f"_ignored_existing_block_{ignored_existing_block_index}"
+                    ] = code
+                    name_mappings_2[name] = (
+                        f"_ignored_existing_block_{ignored_existing_block_index}"
+                    )
                     ignored_existing_block_index += 1
                 else:
                     # not in the target --> add it
-                    theoretical_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
+                    theoretical_code_blocks[
+                        f"_ignored_new_block_{ignored_new_block_index}"
+                    ] = code
                     name_mappings_1[f"_ignored_new_block_{ignored_new_block_index}"] = (
                         f"_ignored_new_block_{ignored_new_block_index}"
                     )
 
                     del observed_code_blocks[name]
-                    observed_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
-                    name_mappings_2[name] = f"_ignored_new_block_{ignored_new_block_index}"
+                    observed_code_blocks[
+                        f"_ignored_new_block_{ignored_new_block_index}"
+                    ] = code
+                    name_mappings_2[name] = (
+                        f"_ignored_new_block_{ignored_new_block_index}"
+                    )
                     ignored_new_block_index += 1
 
         # Respect the original block order:
@@ -771,7 +852,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
         #   2. in `observed_code_blocks`: the original order are kept with names modified potentially. This is necessary
         #      to compute the correct `diff_index` if `overwrite=True` and there is a diff.
         theoretical_code_blocks = {
-            name_mappings_1[orig_name]: theoretical_code_blocks[name_mappings_1[orig_name]]
+            name_mappings_1[orig_name]: theoretical_code_blocks[
+                name_mappings_1[orig_name]
+            ]
             for orig_name in name_mappings_1
         }
         observed_code_blocks = {
@@ -805,7 +888,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
                 code = code[:-1]
             for code_line in code.split("\n"):
                 orig_idx += 1
-                if code_line.strip() and not name.startswith(("_ignored_existing_block_", "_ignored_new_block_")):
+                if code_line.strip() and not name.startswith(
+                    ("_ignored_existing_block_", "_ignored_new_block_")
+                ):
                     idx += 1
                     observed_code += code_line + "\n"
                     idx_to_orig_idx_mapping_for_observed_code_lines[idx] = orig_idx
@@ -818,8 +903,14 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
             diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 # `theoretical_code_to_write` is a single string but may have several lines.
-                theoretical_code_to_write = stylify("".join(list(theoretical_code_blocks.values())))
-                lines = lines[:start_index] + [theoretical_code_to_write] + lines[line_index:]
+                theoretical_code_to_write = stylify(
+                    "".join(list(theoretical_code_blocks.values()))
+                )
+                lines = (
+                    lines[:start_index]
+                    + [theoretical_code_to_write]
+                    + lines[line_index:]
+                )
                 # Here we treat it as a single entry in `lines`.
                 line_index = start_index + 1
 
@@ -845,8 +936,12 @@ def check_copies(overwrite: bool = False, file: str = None):
     buffer = {}
 
     if file is None:
-        all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
-        all_test_files = glob.glob(os.path.join(MODEL_TEST_PATH, "**/*.py"), recursive=True)
+        all_files = glob.glob(
+            os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True
+        )
+        all_test_files = glob.glob(
+            os.path.join(MODEL_TEST_PATH, "**/*.py"), recursive=True
+        )
         all_files = list(all_files) + list(all_test_files)
     else:
         all_files = [file]
@@ -854,7 +949,10 @@ def check_copies(overwrite: bool = False, file: str = None):
     diffs = []
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite, buffer)
-        diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
+        diffs += [
+            f"- {filename}: copy does not match {d[0]} at line {d[1]}"
+            for d in new_diffs
+        ]
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
         raise Exception(
@@ -907,7 +1005,9 @@ def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     Returns:
         `str`: The model list.
     """
-    with open(os.path.join(REPO_PATH, filename), "r", encoding="utf-8", newline="\n") as f:
+    with open(
+        os.path.join(REPO_PATH, filename), "r", encoding="utf-8", newline="\n"
+    ) as f:
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
@@ -934,7 +1034,9 @@ def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     return "".join(result)
 
 
-def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> Tuple[bool, str]:
+def convert_to_localized_md(
+    model_list: str, localized_model_list: str, format_str: str
+) -> Tuple[bool, str]:
     """
     Compare the model list from the main README to the one in a localized README.
 
@@ -951,7 +1053,14 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     """
 
     def _rep(match):
-        title, model_link, paper_affiliations, paper_title_link, paper_authors, supplements = match.groups()
+        (
+            title,
+            model_link,
+            paper_affiliations,
+            paper_title_link,
+            paper_authors,
+            supplements,
+        ) = match.groups()
         return format_str.format(
             title=title,
             model_link=model_link,
@@ -981,13 +1090,20 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
                 for line in localized_model_list.strip().split("\n")
             }
         except AttributeError:
-            raise AttributeError("A model name in localized READMEs cannot be recognized.")
+            raise AttributeError(
+                "A model name in localized READMEs cannot be recognized."
+            )
 
-    model_keys = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in model_list.strip().split("\n")]
+    model_keys = [
+        re.search(r"\*\*\[([^\]]*)", line).groups()[0]
+        for line in model_list.strip().split("\n")
+    ]
 
     # We exclude keys in localized README not in the main one.
     readmes_match = not any(k not in model_keys for k in localized_model_index)
-    localized_model_index = {k: v for k, v in localized_model_index.items() if k in model_keys}
+    localized_model_index = {
+        k: v for k, v in localized_model_index.items() if k in model_keys
+    }
 
     for model in model_list.strip().split("\n"):
         title, model_link = _re_capture_title_link.search(model).groups()
@@ -1070,8 +1186,14 @@ README_TEMPLATE = (
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--file", type=str, default=None, help="A specific file to check and/or fix")
-    parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--file", type=str, default=None, help="A specific file to check and/or fix"
+    )
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Whether to fix inconsistencies.",
+    )
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite, args.file)

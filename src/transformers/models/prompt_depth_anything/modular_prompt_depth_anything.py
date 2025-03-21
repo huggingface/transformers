@@ -15,25 +15,19 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from transformers.models.depth_anything.configuration_depth_anything import DepthAnythingConfig
+from transformers.models.depth_anything.configuration_depth_anything import \
+    DepthAnythingConfig
 from transformers.models.depth_anything.modeling_depth_anything import (
-    DepthAnythingDepthEstimationHead,
-    DepthAnythingFeatureFusionLayer,
-    DepthAnythingFeatureFusionStage,
-    DepthAnythingForDepthEstimation,
-    DepthAnythingNeck,
-    DepthAnythingReassembleStage,
-)
+    DepthAnythingDepthEstimationHead, DepthAnythingFeatureFusionLayer,
+    DepthAnythingFeatureFusionStage, DepthAnythingForDepthEstimation,
+    DepthAnythingNeck, DepthAnythingReassembleStage)
 from transformers.utils.generic import torch_int
 
-from ...file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import (add_start_docstrings,
+                           add_start_docstrings_to_model_forward,
+                           replace_return_docstrings)
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-
 
 _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
@@ -92,7 +86,10 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
-                    residual, size=hidden_state.shape[2:], mode="bilinear", align_corners=False
+                    residual,
+                    size=hidden_state.shape[2:],
+                    mode="bilinear",
+                    align_corners=False,
                 )
             hidden_state = hidden_state + self.residual_layer1(residual)
 
@@ -100,7 +97,10 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
 
         if prompt_depth is not None:
             prompt_depth = nn.functional.interpolate(
-                prompt_depth, size=hidden_state.shape[2:], mode="bilinear", align_corners=False
+                prompt_depth,
+                size=hidden_state.shape[2:],
+                mode="bilinear",
+                align_corners=False,
             )
             res = self.prompt_depth_layer(prompt_depth)
             hidden_state = hidden_state + res
@@ -127,13 +127,24 @@ class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
         fused_hidden_state = None
 
         for idx, (hidden_state, layer) in enumerate(zip(hidden_states, self.layers)):
-            size = hidden_states[idx + 1].shape[2:] if idx != (len(hidden_states) - 1) else None
+            size = (
+                hidden_states[idx + 1].shape[2:]
+                if idx != (len(hidden_states) - 1)
+                else None
+            )
 
             if fused_hidden_state is None:
                 # first layer only uses the last hidden_state
-                fused_hidden_state = layer(hidden_state, size=size, prompt_depth=prompt_depth)
+                fused_hidden_state = layer(
+                    hidden_state, size=size, prompt_depth=prompt_depth
+                )
             else:
-                fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size, prompt_depth=prompt_depth)
+                fused_hidden_state = layer(
+                    fused_hidden_state,
+                    hidden_state,
+                    size=size,
+                    prompt_depth=prompt_depth,
+                )
 
             fused_hidden_states.append(fused_hidden_state)
 
@@ -141,7 +152,9 @@ class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
 
 
 class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
-    def forward(self, hidden_states: List[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height: int, patch_width: int
+    ) -> torch.Tensor:
         hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
@@ -224,17 +237,25 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
 class PromptDepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):
         super().__init__()
-        self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
+        self.projection = nn.Conv2d(
+            in_channels=config.reassemble_hidden_size,
+            out_channels=channels,
+            kernel_size=1,
+        )
 
         # up/down sampling depending on factor
         if factor > 1:
-            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+            self.resize = nn.ConvTranspose2d(
+                channels, channels, kernel_size=factor, stride=factor, padding=0
+            )
         elif factor == 1:
             self.resize = nn.Identity()
         elif factor < 1:
             # so should downsample
             stride = torch_int(1 / factor)
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=stride, padding=1)
+            self.resize = nn.Conv2d(
+                channels, channels, kernel_size=3, stride=stride, padding=1
+            )
 
     def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
@@ -264,7 +285,9 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
             raise TypeError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
-            raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
+            raise ValueError(
+                "The number of hidden states should be equal to the number of neck hidden sizes."
+            )
 
         # postprocess hidden states
         hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
@@ -285,7 +308,9 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
     @add_start_docstrings_to_model_forward(PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -334,14 +359,24 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         hidden_states = outputs.feature_maps
 
@@ -355,11 +390,15 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
             batch_size = prompt_depth.shape[0]
             depth_min = torch.min(prompt_depth.reshape(batch_size, -1), dim=1).values
             depth_max = torch.max(prompt_depth.reshape(batch_size, -1), dim=1).values
-            depth_min, depth_max = depth_min.view(batch_size, 1, 1, 1), depth_max.view(batch_size, 1, 1, 1)
+            depth_min, depth_max = depth_min.view(batch_size, 1, 1, 1), depth_max.view(
+                batch_size, 1, 1, 1
+            )
             prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
             # normalize done
 
-        hidden_states = self.neck(hidden_states, patch_height, patch_width, prompt_depth=prompt_depth)
+        hidden_states = self.neck(
+            hidden_states, patch_height, patch_width, prompt_depth=prompt_depth
+        )
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
         if prompt_depth is not None:

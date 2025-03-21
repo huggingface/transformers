@@ -23,25 +23,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-from ..gemma.modeling_gemma import (
-    GemmaAttention,
-    GemmaForCausalLM,
-    GemmaForSequenceClassification,
-    GemmaForTokenClassification,
-    GemmaMLP,
-    GemmaModel,
-    GemmaRMSNorm,
-    apply_rotary_pos_emb,
-    repeat_kv,
-)
-
+from ..gemma.modeling_gemma import (GemmaAttention, GemmaForCausalLM,
+                                    GemmaForSequenceClassification,
+                                    GemmaForTokenClassification, GemmaMLP,
+                                    GemmaModel, GemmaRMSNorm,
+                                    apply_rotary_pos_emb, repeat_kv)
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
 
@@ -233,8 +223,12 @@ def eager_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -266,7 +260,9 @@ class Gemma2Attention(GemmaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -276,22 +272,34 @@ class Gemma2Attention(GemmaAttention):
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
+            if (
+                attention_mask is not None
+                and self.config._attn_implementation == "flash_attention_2"
+            ):
                 seq_len = attention_mask.shape[-1]
-                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
+                key_states, value_states = (
+                    key_states[:, :, :seq_len, :],
+                    value_states[:, :, :seq_len, :],
+                )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -319,11 +327,19 @@ class Gemma2DecoderLayer(nn.Module):
         self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma2MLP(config)
-        self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Gemma2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_attention_layernorm = Gemma2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
-        self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = Gemma2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_feedforward_layernorm = Gemma2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         self.sliding_window = config.sliding_window
 
     def forward(
@@ -338,8 +354,12 @@ class Gemma2DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: int = 0,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
+        if (
+            self.is_sliding and attention_mask is not None
+        ):  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
             # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
@@ -351,15 +371,20 @@ class Gemma2DecoderLayer(nn.Module):
             else:
                 min_dtype = torch.finfo(attention_mask.dtype).min
                 sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+                    torch.ones_like(attention_mask, dtype=torch.bool),
+                    diagonal=-self.sliding_window,
                 )
-                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+                attention_mask = torch.where(
+                    sliding_window_mask, min_dtype, attention_mask
+                )
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
                 # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
                 offset = last_cache_position - effective_seq_len
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
                 offset = max(0, offset)
-                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
+                attention_mask = attention_mask[
+                    :, :, :, offset : offset + effective_seq_len
+                ]
 
         residual = hidden_states
 
@@ -398,7 +423,10 @@ class Gemma2Model(GemmaModel):
     def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Gemma2DecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
 
     def forward(
@@ -416,15 +444,25 @@ class Gemma2Model(GemmaModel):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -447,9 +485,13 @@ class Gemma2Model(GemmaModel):
             )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
@@ -463,10 +505,16 @@ class Gemma2Model(GemmaModel):
                 # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
                 # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
                 last_cache_position = (
-                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+                    attention_mask.shape[-1]
+                    if attention_mask.dim() == 2
+                    else cache_position[-1].item()
                 )
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # embed positions
@@ -478,7 +526,9 @@ class Gemma2Model(GemmaModel):
         # normalized
         # Gemma2 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
+        normalizer = torch.tensor(
+            self.config.hidden_size**0.5, dtype=hidden_states.dtype
+        )
         hidden_states = hidden_states * normalizer
 
         # decoder layers
@@ -555,7 +605,11 @@ class Gemma2Model(GemmaModel):
         if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
-            target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
+            target_length = (
+                attention_mask.shape[-1]
+                if attention_mask is not None
+                else input_tensor.shape[1]
+            )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
@@ -629,11 +683,19 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
                 "It is strongly recommended to train Gemma2 models with the `eager` attention implementation "
                 f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
             )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -651,7 +713,11 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
@@ -702,7 +768,9 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
-        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+        model_inputs["last_cache_position"] = (
+            attention_mask.shape[-1] if attention_mask is not None else 0
+        )
         if logits_to_keep is None:
             _ = model_inputs.pop("logits_to_keep", None)
 
@@ -718,14 +786,16 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
                 batch_size, sequence_length = model_inputs["input_ids"].shape
                 device = model_inputs["input_ids"].device
 
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
+            attention_mask = (
+                self.model._prepare_4d_causal_attention_mask_with_cache_position(
+                    attention_mask,
+                    sequence_length=sequence_length,
+                    target_length=past_key_values.get_max_cache_shape(),
+                    dtype=self.lm_head.weight.dtype,
+                    device=device,
+                    cache_position=cache_position,
+                    batch_size=batch_size,
+                )
             )
             model_inputs["attention_mask"] = attention_mask
 

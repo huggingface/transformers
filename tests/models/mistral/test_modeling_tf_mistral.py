@@ -19,24 +19,19 @@ import unittest
 import numpy as np
 
 from transformers import AutoTokenizer, MistralConfig, is_tf_available
-from transformers.testing_utils import (
-    require_tf,
-    slow,
-)
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, ids_tensor,
+                                        random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.mistral.modeling_tf_mistral import (
-        TFMistralForCausalLM,
-        TFMistralForSequenceClassification,
-        TFMistralModel,
-    )
+        TFMistralForCausalLM, TFMistralForSequenceClassification,
+        TFMistralModel)
 
 
 class TFMistralModelTester:
@@ -74,18 +69,26 @@ class TFMistralModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length], self.vocab_size)
+            input_mask = random_attention_mask(
+                [self.batch_size, self.seq_length], self.vocab_size
+            )
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = MistralConfig(
@@ -116,12 +119,22 @@ class TFMistralModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFMistralModel(config=config)
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -149,7 +162,10 @@ class TFMistralModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -165,7 +181,9 @@ class TFMistralModelTester:
     ):
         model = TFMistralForCausalLM(config=config)
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -219,13 +237,17 @@ class TFMistralModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -245,7 +267,9 @@ class TFMistralModelTester:
 @require_tf
 class TFMistralModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TFMistralModel, TFMistralForCausalLM, TFMistralForSequenceClassification) if is_tf_available() else ()
+        (TFMistralModel, TFMistralForCausalLM, TFMistralForSequenceClassification)
+        if is_tf_available()
+        else ()
     )
     all_generative_model_classes = (TFMistralForCausalLM,) if is_tf_available() else ()
     pipeline_model_mapping = (
@@ -278,7 +302,9 @@ class TFMistralModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = TFMistralModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MistralConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=MistralConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -298,10 +324,15 @@ class TFMistralModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = tf.not_equal(input_ids, 1)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = TFMistralForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_Mistral_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -309,10 +340,15 @@ class TFMistralModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = tf.not_equal(input_ids, 1)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = TFMistralForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_Mistral_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -320,16 +356,23 @@ class TFMistralModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config.problem_type = "multi_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = tf.not_equal(input_ids, 1)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = TFMistralForSequenceClassification(config)
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Mistral buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Mistral uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(
+        "Mistral uses GQA on all models so the KV cache is a non standard format"
+    )
     def test_past_key_values_format(self):
         pass
 
@@ -350,9 +393,22 @@ class TFMistralIntegrationTest(unittest.TestCase):
         out = model(input_ids).logits
         # Expected mean on dim = -1
         EXPECTED_MEAN = tf.constant(
-            [[-1.281e-04, -2.869e-04, -9.989e-05, -8.995e-05, 2.494e-04, -3.083e-04, -2.672e-04, -1.239e-04]]
+            [
+                [
+                    -1.281e-04,
+                    -2.869e-04,
+                    -9.989e-05,
+                    -8.995e-05,
+                    2.494e-04,
+                    -3.083e-04,
+                    -2.672e-04,
+                    -1.239e-04,
+                ]
+            ]
         )
-        tf.debugging.assert_near(tf.reduce_mean(out, axis=-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        tf.debugging.assert_near(
+            tf.reduce_mean(out, axis=-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2
+        )
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = tf.constant([0.1033,  0.1493, -0.0041, -0.0021, -0.1686,  0.0356,  0.0812,  0.2218, -0.1257,  0.1920,  0.0929,  0.1181,  0.0111,  0.0395, -0.0064,  0.1712, -0.0751,  0.0625, -0.2409,  0.1541, -0.1271, -0.2296, -0.0099, -0.0160, 0.0311, -0.0824, -0.1518,  0.0722,  0.0187,  0.0484])  # fmt: skip
         tf.debugging.assert_near(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
@@ -361,7 +417,9 @@ class TFMistralIntegrationTest(unittest.TestCase):
     def test_model_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is  Werk a EgyadjustPrintfigiousPDFPHPct guns Ein motor conceti barSequ内 infrastructure millretval"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", use_fast=False
+        )
         model = TFMistralForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-MistralForCausalLM", from_pt=True
         )

@@ -18,13 +18,10 @@ import unittest
 import torch
 
 from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
-from transformers.testing_utils import (
-    require_vision,
-)
+from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
 
 if is_vision_available():
     from transformers import LlavaNextImageProcessor
@@ -47,7 +44,9 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     def get_image_processor(self, **kwargs):
-        return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+        return LlavaNextProcessor.from_pretrained(
+            self.tmpdirname, **kwargs
+        ).image_processor
 
     def prepare_processor_dict(self):
         return {
@@ -74,7 +73,9 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(
+            processor_loaded.chat_template == processor_dict.get("chat_template", None)
+        )
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
@@ -90,7 +91,9 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
         self.assertEqual(expected_prompt, formatted_prompt)
 
     def test_image_token_filling(self):

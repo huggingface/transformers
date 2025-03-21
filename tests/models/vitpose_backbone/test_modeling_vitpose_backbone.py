@@ -25,7 +25,6 @@ from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-
 if is_torch_available():
     import torch
 
@@ -78,11 +77,15 @@ class VitPoseBackboneModelTester:
         self.scope = scope
 
         # in VitPoseBackbone, the seq length equals the number of patches
-        num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
+        num_patches = (image_size[0] // patch_size[0]) * (
+            image_size[1] // patch_size[1]
+        )
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]]
+        )
 
         labels = None
         if self.use_labels:
@@ -136,7 +139,10 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = VitPoseBackboneModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=VitPoseBackboneConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=VitPoseBackboneConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -147,15 +153,21 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
+    @unittest.skip(
+        reason="VitPoseBackbone does not support input and output embeddings"
+    )
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
+    @unittest.skip(
+        reason="VitPoseBackbone does not support input and output embeddings"
+    )
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
+    @unittest.skip(
+        reason="VitPoseBackbone does not support input and output embeddings"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -203,7 +215,9 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_experts = 2
         config.part_features = config.hidden_size // config.num_experts
-        inputs_dict["dataset_index"] = torch.tensor([0] * self.model_tester.batch_size, device=torch_device)
+        inputs_dict["dataset_index"] = torch.tensor(
+            [0] * self.model_tester.batch_size, device=torch_device
+        )
         super().test_torch_export(config=config, inputs_dict=inputs_dict)
 
 

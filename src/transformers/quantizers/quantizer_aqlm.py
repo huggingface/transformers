@@ -18,14 +18,13 @@ from packaging import version
 
 from .base import HfQuantizer
 
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..integrations import replace_with_aqlm_linear
-from ..utils import is_accelerate_available, is_aqlm_available, is_torch_available, logging
+from ..utils import (is_accelerate_available, is_aqlm_available,
+                     is_torch_available, logging)
 from ..utils.quantization_config import QuantizationConfigMixin
-
 
 if is_torch_available():
     import torch
@@ -48,10 +47,14 @@ class AqlmHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
-            raise ImportError("Using `aqlm` quantization requires Accelerate: `pip install accelerate`")
+            raise ImportError(
+                "Using `aqlm` quantization requires Accelerate: `pip install accelerate`"
+            )
 
         if not is_aqlm_available():
-            raise ImportError("Using `aqlm` quantization requires AQLM: `pip install aqlm[gpu,cpu]`")
+            raise ImportError(
+                "Using `aqlm` quantization requires AQLM: `pip install aqlm[gpu,cpu]`"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -84,7 +87,9 @@ class AqlmHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        aqlm_supports_training = version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.2")
+        aqlm_supports_training = version.parse(
+            importlib.metadata.version("aqlm")
+        ) >= version.parse("1.0.2")
         if aqlm_supports_training:
             return True
         else:

@@ -25,16 +25,10 @@ from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings, torch_int)
 from .configuration_seggpt import SegGptConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -107,15 +101,27 @@ class SegGptPatchEmbeddings(nn.Module):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size
+        )
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
@@ -140,16 +146,26 @@ class SegGptEmbeddings(nn.Module):
         super().__init__()
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
-        self.segment_token_input = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
-        self.segment_token_prompt = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.segment_token_input = nn.Parameter(
+            torch.zeros(1, 1, 1, config.hidden_size)
+        )
+        self.segment_token_prompt = nn.Parameter(
+            torch.zeros(1, 1, 1, config.hidden_size)
+        )
         # token for seg types
-        self.type_token_semantic = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
-        self.type_token_instance = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.type_token_semantic = nn.Parameter(
+            torch.zeros(1, 1, 1, config.hidden_size)
+        )
+        self.type_token_instance = nn.Parameter(
+            torch.zeros(1, 1, 1, config.hidden_size)
+        )
 
         self.patch_embeddings = SegGptPatchEmbeddings(config)
 
         num_positions = (config.pretrain_image_size // config.patch_size) ** 2 + 1
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_positions, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, num_positions, config.hidden_size)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
@@ -158,9 +174,15 @@ class SegGptEmbeddings(nn.Module):
         pretrain_patch_size = torch_int(num_patches**0.5)
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if torch.jit.is_tracing() or pretrain_patch_size != height or pretrain_patch_size != width:
+        if (
+            torch.jit.is_tracing()
+            or pretrain_patch_size != height
+            or pretrain_patch_size != width
+        ):
             patch_pos_embed = F.interpolate(
-                patch_pos_embed.reshape(1, pretrain_patch_size, pretrain_patch_size, -1).permute(0, 3, 1, 2),
+                patch_pos_embed.reshape(
+                    1, pretrain_patch_size, pretrain_patch_size, -1
+                ).permute(0, 3, 1, 2),
                 size=(height, width),
                 mode="bicubic",
                 align_corners=False,
@@ -184,7 +206,11 @@ class SegGptEmbeddings(nn.Module):
 
         mask_token = self.mask_token.expand(batch_size, patch_height, patch_width, -1)
         # replace the masked visual tokens by mask_token
-        w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, patch_height, patch_width, 1)
+        w = (
+            bool_masked_pos.unsqueeze(-1)
+            .type_as(mask_token)
+            .reshape(-1, patch_height, patch_width, 1)
+        )
         prompt_embeddings = prompt_embeddings * (1 - w) + mask_token * w
 
         embedding_type = embedding_type if embedding_type is not None else "instance"
@@ -206,7 +232,9 @@ class SegGptEmbeddings(nn.Module):
         elif embedding_type == "instance":
             type_embedding = self.type_token_instance
         else:
-            raise ValueError(f"Embedding type should be either 'semantic' or 'instance', but got {embedding_type}")
+            raise ValueError(
+                f"Embedding type should be either 'semantic' or 'instance', but got {embedding_type}"
+            )
 
         input_embeddings = input_embeddings + type_embedding
         prompt_embeddings = prompt_embeddings + type_embedding
@@ -222,28 +250,45 @@ class SegGptAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
 
-        input_size = (image_size[0] // config.patch_size, image_size[1] // config.patch_size)
+        input_size = (
+            image_size[0] // config.patch_size,
+            image_size[1] // config.patch_size,
+        )
         head_dim = config.hidden_size // config.num_attention_heads
 
         self.num_attention_heads = config.num_attention_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.qkv = nn.Linear(
+            config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias
+        )
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.use_relative_position_embeddings = config.use_relative_position_embeddings
         if self.use_relative_position_embeddings:
             if input_size is None:
-                raise ValueError("Input size must be provided if using relative positional encoding.")
+                raise ValueError(
+                    "Input size must be provided if using relative positional encoding."
+                )
 
             # initialize relative positional embeddings
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
-    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
+    def get_rel_pos(
+        self, q_size: int, k_size: int, rel_pos: torch.Tensor
+    ) -> torch.Tensor:
         """
         Get relative positional embeddings according to the relative positions of
             query and key sizes.
@@ -271,7 +316,9 @@ class SegGptAttention(nn.Module):
         # Scale the coords with short length if shapes for q and k are different.
         q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
         k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
-        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
+        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(
+            q_size / k_size, 1.0
+        )
 
         return rel_pos_resized[relative_coords.long()]
 
@@ -315,12 +362,18 @@ class SegGptAttention(nn.Module):
         reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
         rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = attn.reshape(batch_size, query_height, query_width, key_height, key_width)
+        attn = attn.reshape(
+            batch_size, query_height, query_width, key_height, key_width
+        )
         attn = attn + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-        attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
+        attn = attn.reshape(
+            batch_size, query_height * query_width, key_height * key_width
+        )
         return attn
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, output_attentions=False
+    ) -> torch.Tensor:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
@@ -329,29 +382,46 @@ class SegGptAttention(nn.Module):
             .permute(2, 0, 3, 1, 4)
         )
         # q, k, v with shape (batch_size * nHead, height * width, channel)
-        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+        query, key, value = qkv.reshape(
+            3, batch_size * self.num_attention_heads, height * width, -1
+        ).unbind(0)
 
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
         if self.use_relative_position_embeddings:
             attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+                attn_weights,
+                query,
+                self.rel_pos_h,
+                self.rel_pos_w,
+                (height, width),
+                (height, width),
             )
 
-        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
+        attn_weights = torch.nn.functional.softmax(
+            attn_weights, dtype=torch.float32, dim=-1
+        ).to(query.dtype)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_attention_heads, height * width, -1)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_attention_heads, height * width, -1)
+            attn_weights_reshaped = attn_weights.view(
+                batch_size, self.num_attention_heads, height * width, -1
+            )
+            attn_weights = attn_weights_reshaped.view(
+                batch_size * self.num_attention_heads, height * width, -1
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_output = (attn_weights @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
-        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+        attn_output = (attn_weights @ value).reshape(
+            batch_size, self.num_attention_heads, height, width, -1
+        )
+        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(
+            batch_size, height, width, -1
+        )
 
         attn_output = self.proj(attn_output)
 
@@ -374,7 +444,9 @@ class SegGptMlp(nn.Module):
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -387,8 +459,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -414,9 +490,15 @@ class SegGptLayer(nn.Module):
         super().__init__()
         self.attention = SegGptAttention(config)
         self.mlp = SegGptMlp(config)
-        self.drop_path = SegGptDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.drop_path = (
+            SegGptDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        )
+        self.layernorm_before = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.layernorm_after = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -426,14 +508,20 @@ class SegGptLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in SegGpt, layernorm is applied before self-attention
+            self.layernorm_before(
+                hidden_states
+            ),  # in SegGpt, layernorm is applied before self-attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         if feature_ensemble and attention_output.shape[0] // 2 >= ensemble_cond:
-            prompt, inputs = attention_output.split(attention_output.shape[1] // 2, dim=1)
+            prompt, inputs = attention_output.split(
+                attention_output.shape[1] // 2, dim=1
+            )
             if ensemble_cond == 2:
                 num_prompts = attention_output.shape[0] // 2
                 inputs = inputs.reshape(2, num_prompts, -1)
@@ -460,8 +548,13 @@ class SegGptEncoder(nn.Module):
     def __init__(self, config: SegGptConfig) -> None:
         super().__init__()
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layers = nn.ModuleList([SegGptLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
+        ]
+        self.layers = nn.ModuleList(
+            [SegGptLayer(config, dpr[i]) for i in range(config.num_hidden_layers)]
+        )
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
@@ -493,13 +586,16 @@ class SegGptEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, ensemble_cond, feature_ensemble, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, ensemble_cond, feature_ensemble, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
             if i == self.config.merge_index:
                 hidden_states = (
-                    hidden_states[: hidden_states.shape[0] // 2] + hidden_states[hidden_states.shape[0] // 2 :]
+                    hidden_states[: hidden_states.shape[0] // 2]
+                    + hidden_states[hidden_states.shape[0] // 2 :]
                 ) * 0.5
 
             if i in self.config.intermediate_hidden_state_indices:
@@ -514,7 +610,12 @@ class SegGptEncoder(nn.Module):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, all_hidden_states, all_self_attentions, intermediate_hidden_states]
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_self_attentions,
+                    intermediate_hidden_states,
+                ]
                 if v is not None
             )
         return SegGptEncoderOutput(
@@ -544,7 +645,9 @@ class SegGptLayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+            x = torch.nn.functional.layer_norm(
+                x, self.normalized_shape, self.weight, self.bias, self.eps
+            )
         elif self.data_format == "channels_first":
             input_dtype = x.dtype
             x = x.float()
@@ -566,10 +669,14 @@ class SegGptDecoderHead(nn.Module):
             padding=1,
         )
         self.layernorm = SegGptLayerNorm(
-            normalized_shape=config.decoder_hidden_size, eps=config.layer_norm_eps, data_format="channels_first"
+            normalized_shape=config.decoder_hidden_size,
+            eps=config.layer_norm_eps,
+            data_format="channels_first",
         )
         self.act_fct = ACT2FN[config.hidden_act]
-        self.head = nn.Conv2d(config.decoder_hidden_size, 3, kernel_size=1, bias=True)  # decoder to patch
+        self.head = nn.Conv2d(
+            config.decoder_hidden_size, 3, kernel_size=1, bias=True
+        )  # decoder to patch
 
     def forward(self, hidden_states: torch.FloatTensor):
         hidden_states = self.conv(hidden_states)
@@ -593,14 +700,26 @@ class SegGptDecoder(nn.Module):
         self.decoder_hidden_size = config.decoder_hidden_size
         self.config = config
 
-    def _reshape_hidden_states(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def _reshape_hidden_states(
+        self, hidden_states: torch.FloatTensor
+    ) -> torch.FloatTensor:
         batch_size, patch_height, patch_width, _ = hidden_states.shape
         hidden_states = hidden_states.reshape(
-            batch_size, patch_height, patch_width, self.patch_size, self.patch_size, self.decoder_hidden_size
+            batch_size,
+            patch_height,
+            patch_width,
+            self.patch_size,
+            self.patch_size,
+            self.decoder_hidden_size,
         )
         hidden_states = hidden_states.permute(0, 5, 1, 3, 2, 4)
         hidden_states = hidden_states.reshape(
-            shape=(batch_size, -1, patch_height * self.patch_size, patch_width * self.patch_size)
+            shape=(
+                batch_size,
+                -1,
+                patch_height * self.patch_size,
+                patch_width * self.patch_size,
+            )
         )
 
         return hidden_states
@@ -631,9 +750,9 @@ class SegGptPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
-                module.weight.dtype
-            )
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data.to(torch.float32), mean=0.0, std=std
+            ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -741,7 +860,9 @@ class SegGptModel(SegGptPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SegGptEncoderOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=SegGptEncoderOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -787,11 +908,19 @@ class SegGptModel(SegGptPreTrainedModel):
         [1, 56, 28, 1024]
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         feature_ensemble = feature_ensemble if feature_ensemble is not None else False
 
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
@@ -817,15 +946,22 @@ class SegGptModel(SegGptPreTrainedModel):
         # and reconstructed together (In-Context Painting).
         if bool_masked_pos is None:
             num_patches = self.embeddings.patch_embeddings.num_patches
-            bool_masked_pos_zeros = torch.zeros(num_patches // 2, dtype=torch.bool, device=pixel_values.device)
+            bool_masked_pos_zeros = torch.zeros(
+                num_patches // 2, dtype=torch.bool, device=pixel_values.device
+            )
             bool_masked_pos_ones = torch.ones(
-                num_patches - num_patches // 2, dtype=torch.bool, device=pixel_values.device
+                num_patches - num_patches // 2,
+                dtype=torch.bool,
+                device=pixel_values.device,
             )
             bool_masked_pos = torch.cat([bool_masked_pos_zeros, bool_masked_pos_ones])
             bool_masked_pos = bool_masked_pos.unsqueeze(0)
 
         embedding_output = self.embeddings(
-            pixel_values, prompt_pixel_values, embedding_type=embedding_type, bool_masked_pos=bool_masked_pos
+            pixel_values,
+            prompt_pixel_values,
+            embedding_type=embedding_type,
+            bool_masked_pos=bool_masked_pos,
         )
 
         encoder_outputs = self.encoder(
@@ -844,14 +980,27 @@ def patchify(tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
     patch_height = height // patch_size
     patch_width = width // patch_size
 
-    tensor = tensor.reshape(shape=(batch_size, num_channels, patch_height, patch_size, patch_width, patch_size))
+    tensor = tensor.reshape(
+        shape=(
+            batch_size,
+            num_channels,
+            patch_height,
+            patch_size,
+            patch_width,
+            patch_size,
+        )
+    )
     tensor = tensor.permute(0, 2, 4, 3, 5, 1)
-    tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
+    tensor = tensor.reshape(
+        shape=(batch_size, patch_height * patch_width, patch_size**2 * 3)
+    )
 
     return tensor
 
 
-def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
+def unpatchify(
+    tensor: torch.Tensor, patch_height: int, patch_width: int
+) -> torch.Tensor:
     batch_size = tensor.shape[0]
     patch_size = int((tensor.shape[-1] / 3) ** 0.5)
     if patch_height * patch_width != tensor.shape[1]:
@@ -859,9 +1008,13 @@ def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> tor
             f"Number of patches {tensor.shape[1]} does not match patch height ({patch_height}) and width ({patch_width})."
         )
 
-    tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
+    tensor = tensor.reshape(
+        shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3)
+    )
     tensor = tensor.permute(0, 5, 1, 3, 2, 4)
-    tensor = tensor.reshape(shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size))
+    tensor = tensor.reshape(
+        shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size)
+    )
 
     return tensor
 
@@ -900,9 +1053,15 @@ class SegGptLoss(nn.Module):
         ground_truth = torch.cat((prompt_masks, labels), dim=2)
 
         mask = bool_masked_pos[:, :, None].repeat(1, 1, self.patch_size**2 * 3)
-        mask = unpatchify(mask, ground_truth.shape[2] // self.patch_size, ground_truth.shape[3] // self.patch_size)
+        mask = unpatchify(
+            mask,
+            ground_truth.shape[2] // self.patch_size,
+            ground_truth.shape[3] // self.patch_size,
+        )
 
-        loss = F.smooth_l1_loss(pred_masks, ground_truth, reduction="none", beta=self.beta)
+        loss = F.smooth_l1_loss(
+            pred_masks, ground_truth, reduction="none", beta=self.beta
+        )
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
 
         return loss
@@ -924,7 +1083,9 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SegGptImageSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=SegGptImageSegmentationOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -970,17 +1131,29 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         [170, 297]
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if bool_masked_pos is None:
             num_patches = self.model.embeddings.patch_embeddings.num_patches
-            bool_masked_pos_zeros = torch.zeros(num_patches // 2, dtype=torch.bool, device=pixel_values.device)
+            bool_masked_pos_zeros = torch.zeros(
+                num_patches // 2, dtype=torch.bool, device=pixel_values.device
+            )
             bool_masked_pos_ones = torch.ones(
-                num_patches - num_patches // 2, dtype=torch.bool, device=pixel_values.device
+                num_patches - num_patches // 2,
+                dtype=torch.bool,
+                device=pixel_values.device,
             )
             bool_masked_pos = torch.cat([bool_masked_pos_zeros, bool_masked_pos_ones])
             bool_masked_pos = bool_masked_pos.unsqueeze(0)
@@ -998,7 +1171,9 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             return_dict=return_dict,
         )
 
-        intermediate_hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[-1]
+        intermediate_hidden_states = (
+            outputs.intermediate_hidden_states if return_dict else outputs[-1]
+        )
         intermediate_hidden_states = torch.cat(intermediate_hidden_states, dim=-1)
         pred_masks = self.decoder(intermediate_hidden_states)
 

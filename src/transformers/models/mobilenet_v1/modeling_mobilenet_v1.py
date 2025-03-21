@@ -21,11 +21,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
+from ...modeling_outputs import (BaseModelOutputWithPoolingAndNoAttention,
+                                 ImageClassifierOutputWithNoAttention)
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_mobilenet_v1 import MobileNetV1Config
-
 
 logger = logging.get_logger(__name__)
 
@@ -58,8 +59,12 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     tf_to_pt_map[prefix + "weights"] = backbone.conv_stem.convolution.weight
     tf_to_pt_map[prefix + "BatchNorm/beta"] = backbone.conv_stem.normalization.bias
     tf_to_pt_map[prefix + "BatchNorm/gamma"] = backbone.conv_stem.normalization.weight
-    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = backbone.conv_stem.normalization.running_mean
-    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = backbone.conv_stem.normalization.running_var
+    tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
+        backbone.conv_stem.normalization.running_mean
+    )
+    tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+        backbone.conv_stem.normalization.running_var
+    )
 
     for i in range(13):
         tf_index = i + 1
@@ -70,16 +75,24 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[prefix + "depthwise_weights"] = pointer.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
-        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
+            pointer.normalization.running_mean
+        )
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            pointer.normalization.running_var
+        )
 
         pointer = backbone.layer[pt_index + 1]
         prefix = f"MobilenetV1/Conv2d_{tf_index}_pointwise/"
         tf_to_pt_map[prefix + "weights"] = pointer.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = pointer.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = pointer.normalization.weight
-        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = pointer.normalization.running_mean
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = pointer.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
+            pointer.normalization.running_mean
+        )
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            pointer.normalization.running_var
+        )
 
     if isinstance(model, MobileNetV1ForImageClassification):
         prefix = "MobilenetV1/Logits/Conv2d_1c_1x1/"
@@ -131,7 +144,9 @@ def load_tf_weights_in_mobilenet_v1(model, config, tf_checkpoint_path):
                 array = np.transpose(array, (3, 2, 0, 1))
 
         if pointer.shape != array.shape:
-            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+            raise ValueError(
+                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            )
 
         logger.info(f"Initialize PyTorch weight {name} {array.shape}")
         pointer.data = torch.from_numpy(array)
@@ -190,9 +205,13 @@ class MobileNetV1ConvLayer(nn.Module):
         self.config = config
 
         if in_channels % groups != 0:
-            raise ValueError(f"Input channels ({in_channels}) are not divisible by {groups} groups.")
+            raise ValueError(
+                f"Input channels ({in_channels}) are not divisible by {groups} groups."
+            )
         if out_channels % groups != 0:
-            raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
+            raise ValueError(
+                f"Output channels ({out_channels}) are not divisible by {groups} groups."
+            )
 
         padding = 0 if config.tf_padding else int((kernel_size - 1) / 2)
 
@@ -315,7 +334,9 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
 
             if strides[i] == 2 or i == 0:
                 depth *= 2
-                out_channels = max(int(depth * config.depth_multiplier), config.min_depth)
+                out_channels = max(
+                    int(depth * config.depth_multiplier), config.min_depth
+                )
 
             self.layer.append(
                 MobileNetV1ConvLayer(
@@ -360,9 +381,13 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -385,7 +410,11 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
             pooled_output = None
 
         if not return_dict:
-            return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
+            return tuple(
+                v
+                for v in [last_hidden_state, pooled_output, all_hidden_states]
+                if v is not None
+            )
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
@@ -412,7 +441,11 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
 
         # Classifier head
         self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
-        self.classifier = nn.Linear(last_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = (
+            nn.Linear(last_hidden_size, config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -437,9 +470,15 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.mobilenet_v1(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -450,7 +489,9 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"

@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -295,11 +294,15 @@ class BlipConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `BlipTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values."
+            )
 
         self.text_config = BlipTextConfig(**text_config)
         self.vision_config = BlipVisionConfig(**vision_config)
@@ -314,7 +317,9 @@ class BlipConfig(PretrainedConfig):
         self.label_smoothing = label_smoothing
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs
+    ):
         r"""
         Instantiate a [`BlipConfig`] (or a derived class) from blip text model configuration and blip vision model
         configuration.
@@ -323,7 +328,11 @@ class BlipConfig(PretrainedConfig):
             [`BlipConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["BlipConfig", "BlipTextConfig", "BlipVisionConfig"]

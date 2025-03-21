@@ -23,9 +23,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DPTConfig, DPTForDepthEstimation, DPTForSemanticSegmentation, DPTImageProcessor
+from transformers import (DPTConfig, DPTForDepthEstimation,
+                          DPTForSemanticSegmentation, DPTImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -49,7 +49,9 @@ def get_dpt_config(checkpoint_url):
         config.num_labels = 150
         repo_id = "huggingface/label-files"
         filename = "ade20k-id2label.json"
-        id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+        id2label = json.loads(
+            Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text()
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -107,7 +109,9 @@ def rename_key(name):
     if "refinenet" in name:
         layer_idx = int(name[len("neck.refinenet") : len("neck.refinenet") + 1])
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
-        name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx-4)}")
+        name = name.replace(
+            f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx-4)}"
+        )
     if "out_conv" in name:
         name = name.replace("out_conv", "projection")
     if "resConfUnit1" in name:
@@ -120,28 +124,54 @@ def rename_key(name):
         name = name.replace("conv2", "convolution2")
     # readout blocks
     if "pretrained.act_postprocess1.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess1.0.project.0", "neck.reassemble_stage.readout_projects.0.0")
+        name = name.replace(
+            "pretrained.act_postprocess1.0.project.0",
+            "neck.reassemble_stage.readout_projects.0.0",
+        )
     if "pretrained.act_postprocess2.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess2.0.project.0", "neck.reassemble_stage.readout_projects.1.0")
+        name = name.replace(
+            "pretrained.act_postprocess2.0.project.0",
+            "neck.reassemble_stage.readout_projects.1.0",
+        )
     if "pretrained.act_postprocess3.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess3.0.project.0", "neck.reassemble_stage.readout_projects.2.0")
+        name = name.replace(
+            "pretrained.act_postprocess3.0.project.0",
+            "neck.reassemble_stage.readout_projects.2.0",
+        )
     if "pretrained.act_postprocess4.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess4.0.project.0", "neck.reassemble_stage.readout_projects.3.0")
+        name = name.replace(
+            "pretrained.act_postprocess4.0.project.0",
+            "neck.reassemble_stage.readout_projects.3.0",
+        )
     # resize blocks
     if "pretrained.act_postprocess1.3" in name:
-        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.projection")
+        name = name.replace(
+            "pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.projection"
+        )
     if "pretrained.act_postprocess1.4" in name:
-        name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_stage.layers.0.resize")
+        name = name.replace(
+            "pretrained.act_postprocess1.4", "neck.reassemble_stage.layers.0.resize"
+        )
     if "pretrained.act_postprocess2.3" in name:
-        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.projection")
+        name = name.replace(
+            "pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.projection"
+        )
     if "pretrained.act_postprocess2.4" in name:
-        name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_stage.layers.1.resize")
+        name = name.replace(
+            "pretrained.act_postprocess2.4", "neck.reassemble_stage.layers.1.resize"
+        )
     if "pretrained.act_postprocess3.3" in name:
-        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.projection")
+        name = name.replace(
+            "pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.projection"
+        )
     if "pretrained.act_postprocess4.3" in name:
-        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.projection")
+        name = name.replace(
+            "pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.projection"
+        )
     if "pretrained.act_postprocess4.4" in name:
-        name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_stage.layers.3.resize")
+        name = name.replace(
+            "pretrained.act_postprocess4.4", "neck.reassemble_stage.layers.3.resize"
+        )
     if "pretrained" in name:
         name = name.replace("pretrained", "dpt")
     if "bn" in name:
@@ -163,18 +193,24 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[: config.hidden_size]
+        )
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[config.hidden_size : config.hidden_size * 2]
+        )
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-config.hidden_size :]
+        )
 
 
 # We will verify our results on an image of cute cats
@@ -185,7 +221,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub, model_name):
+def convert_dpt_checkpoint(
+    checkpoint_url, pytorch_dump_folder_path, push_to_hub, model_name
+):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -204,7 +242,11 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    model = DPTForSemanticSegmentation(config) if "ade" in checkpoint_url else DPTForDepthEstimation(config)
+    model = (
+        DPTForSemanticSegmentation(config)
+        if "ade" in checkpoint_url
+        else DPTForDepthEstimation(config)
+    )
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -216,12 +258,24 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     encoding = image_processor(image, return_tensors="pt")
 
     # forward pass
-    outputs = model(**encoding).logits if "ade" in checkpoint_url else model(**encoding).predicted_depth
+    outputs = (
+        model(**encoding).logits
+        if "ade" in checkpoint_url
+        else model(**encoding).predicted_depth
+    )
 
     # Assert logits
-    expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])
+    expected_slice = torch.tensor(
+        [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]]
+    )
     if "ade" in checkpoint_url:
-        expected_slice = torch.tensor([[4.0480, 4.2420, 4.4360], [4.3124, 4.5693, 4.8261], [4.5768, 4.8965, 5.2163]])
+        expected_slice = torch.tensor(
+            [
+                [4.0480, 4.2420, 4.4360],
+                [4.3124, 4.5693, 4.8261],
+                [4.5768, 4.8965, 5.2163],
+            ]
+        )
     assert outputs.shape == torch.Size(expected_shape)
     assert (
         torch.allclose(outputs[0, 0, :3, :3], expected_slice, atol=1e-4)
@@ -282,4 +336,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub, args.model_name)
+    convert_dpt_checkpoint(
+        args.checkpoint_url,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.model_name,
+    )

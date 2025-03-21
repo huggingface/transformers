@@ -19,14 +19,9 @@ import tempfile
 import unittest
 
 from transformers import NllbMoeConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        require_torch_fp16, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -34,12 +29,13 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import NllbMoeForConditionalGeneration, NllbMoeModel, NllbTokenizer
-    from transformers.models.nllb_moe.modeling_nllb_moe import NllbMoeDecoder, NllbMoeEncoder, NllbMoeTop2Router
+    from transformers import (NllbMoeForConditionalGeneration, NllbMoeModel,
+                              NllbTokenizer)
+    from transformers.models.nllb_moe.modeling_nllb_moe import (
+        NllbMoeDecoder, NllbMoeEncoder, NllbMoeTop2Router)
 
 
 class NllbMoeModelTester:
@@ -111,12 +107,22 @@ class NllbMoeModelTester:
         if decoder_attention_mask is None:
             decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
         if head_mask is None:
-            head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+            head_mask = torch.ones(
+                config.encoder_layers,
+                config.encoder_attention_heads,
+                device=torch_device,
+            )
         if decoder_head_mask is None:
-            decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+            decoder_head_mask = torch.ones(
+                config.decoder_layers,
+                config.decoder_attention_heads,
+                device=torch_device,
+            )
         if cross_attn_head_mask is None:
             cross_attn_head_mask = torch.ones(
-                config.decoder_layers, config.decoder_attention_heads, device=torch_device
+                config.decoder_layers,
+                config.decoder_attention_heads,
+                device=torch_device,
             )
         return {
             "input_ids": input_ids,
@@ -131,7 +137,9 @@ class NllbMoeModelTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         # we need to clamp the input ids here to avoid having pad token in between
         # this is because for NllbMoe the position_ids are prepared such that
@@ -144,7 +152,9 @@ class NllbMoeModelTester:
         decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)
 
         config = self.get_config()
-        inputs_dict = self.prepare_nllb_moe_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = self.prepare_nllb_moe_inputs_dict(
+            config, input_ids, decoder_input_ids
+        )
         return config, inputs_dict
 
     def get_config(self):
@@ -184,7 +194,12 @@ class NllbMoeModelTester:
         head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -196,20 +211,28 @@ class NllbMoeModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = NllbMoeModel(config=config).to(torch_device).eval()
@@ -223,11 +246,14 @@ class NllbMoeModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = NllbMoeEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -241,12 +267,18 @@ class NllbMoeModelTester:
             encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
-class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
+class NllbMoeModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": NllbMoeModel,
@@ -291,13 +323,17 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.decoder_sparse_step = 0
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(config, inputs_dict)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            config, inputs_dict
+        )
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -340,7 +376,9 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model = NllbMoeForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
     def test_get_loss(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -370,26 +408,46 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         return {
             "input_ids": torch.LongTensor(
                 [
-                    [28768, 248, 6399, 9, 65972, 452, 1925, 629, 123543, 248075, 2, 256047],
+                    [
+                        28768,
+                        248,
+                        6399,
+                        9,
+                        65972,
+                        452,
+                        1925,
+                        629,
+                        123543,
+                        248075,
+                        2,
+                        256047,
+                    ],
                     [117, 7027, 7195, 202, 44778, 248075, 2, 256047, 1, 1, 1, 1],
                 ]
             ),
             "attention_mask": torch.Tensor(
-                [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]]
+                [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+                ]
             ),
             "decoder_input_ids": torch.LongTensor([[2, 256057], [2, 256057]]),
         }
 
     @cached_property
     def tokenizer(self):
-        return NllbTokenizer.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts")
+        return NllbTokenizer.from_pretrained(
+            "hf-internal-testing/random-nllb-moe-2-experts"
+        )
 
     @cached_property
     def big_model(self):
         return NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b")
 
     def inference_no_head(self):
-        model = NllbMoeModel.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts").eval()
+        model = NllbMoeModel.from_pretrained(
+            "hf-internal-testing/random-nllb-moe-2-experts"
+        ).eval()
         with torch.no_grad():
             output = model(**self.model_inputs)
         # fmt: off
@@ -398,9 +456,17 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_close(
-            output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
+            output.encoder_last_hidden_state[1, 0, :30],
+            EXPECTED_ENCODER_STATE,
+            rtol=6e-3,
+            atol=9e-3,
         )
-        torch.testing.assert_close(output.last_hidden_state[1, 0, :30], EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(
+            output.last_hidden_state[1, 0, :30],
+            EXPECTED_DECODER_STATE,
+            rtol=6e-3,
+            atol=9e-3,
+        )
 
     def test_inference_logits(self):
         r"""
@@ -408,12 +474,16 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of NLLB-MoE transformers. We only check the logits
         of the second sample of the batch, as it is padded.
         """
-        model = NllbMoeForConditionalGeneration.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts").eval()
+        model = NllbMoeForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/random-nllb-moe-2-experts"
+        ).eval()
         with torch.no_grad():
             output = model(**self.model_inputs)
 
         EXPECTED_LOGTIS = torch.Tensor([-0.3059, 0.0000, 9.3029, 0.6456, -0.9148, 1.7836, 0.6478, 0.9438, -0.5272, -0.6617, -1.2717, 0.4564, 0.1345, -0.2301, -1.0140, 1.1427, -1.5535, 0.1337, 0.2082, -0.8112, -0.3842, -0.3377, 0.1256, 0.6450, -0.0452, 0.0219, 1.4274, -0.4991, -0.2063, -0.4409,])  # fmt: skip
-        torch.testing.assert_close(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(
+            output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3
+        )
 
     @unittest.skip(reason="This requires 300GB of RAM")
     def test_large_logits(self):
@@ -428,10 +498,20 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         torch.testing.assert_close(
-            output.encoder_last_hidden_state[1, 0, :30], EXPECTED_ENCODER_STATE, rtol=6e-3, atol=9e-3
+            output.encoder_last_hidden_state[1, 0, :30],
+            EXPECTED_ENCODER_STATE,
+            rtol=6e-3,
+            atol=9e-3,
         )
-        torch.testing.assert_close(output.last_hidden_state[1, 0, :30], EXPECTED_DECODER_STATE, rtol=6e-3, atol=9e-3)
-        torch.testing.assert_close(output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(
+            output.last_hidden_state[1, 0, :30],
+            EXPECTED_DECODER_STATE,
+            rtol=6e-3,
+            atol=9e-3,
+        )
+        torch.testing.assert_close(
+            output.logits[1, 0, :30], EXPECTED_LOGTIS, rtol=6e-3, atol=9e-3
+        )
 
     @unittest.skip(reason="This requires 300GB of RAM")
     def test_seq_to_seq_generation(self):
@@ -447,8 +527,12 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             'Danius said, "Right now we are doing nothing. I have called and sent emails to his closest collaborator and received very friendly replies. For now, that is certainly enough."',
             "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage.",
         ]
-        inputs = tokenizer(FIRST_6_FLORES_200, padding=True, return_tensors="pt").to(torch_device)
-        batch_translation = model.generate(**inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"])
+        inputs = tokenizer(FIRST_6_FLORES_200, padding=True, return_tensors="pt").to(
+            torch_device
+        )
+        batch_translation = model.generate(
+            **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"]
+        )
 
         EXPECTED_FAIRSEQ_TRANSLATION = [
             '"Nous avons maintenant des souris de 4 mois non diabétiques qui étaient diabétiques", a-t-il ajouté.',
@@ -460,7 +544,9 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         ]
 
         translation = tokenizer.batch_decode(
-            batch_translation.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+            batch_translation.tolist(),
+            clean_up_tokenization_spaces=True,
+            skip_special_tokens=True,
         )
         assert translation == EXPECTED_FAIRSEQ_TRANSLATION
 
@@ -491,12 +577,16 @@ class NllbMoeRouterTest(unittest.TestCase):
         mask[1][0] = False
         mask = mask.reshape(-1)
         set_seed(0)
-        hidden_states = torch.rand((self.batch_size, self.sequence_length, self.config.hidden_size))
+        hidden_states = torch.rand(
+            (self.batch_size, self.sequence_length, self.config.hidden_size)
+        )
         classfier = torch.nn.Linear(self.config.hidden_size, self.config.num_experts)
         hf_router = NllbMoeTop2Router(self.config)
 
         _, _, hidden_dim = hidden_states.shape
-        logits = classfier(hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim))
+        logits = classfier(
+            hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim)
+        )
         top_1_mask, router_probs = hf_router.route_tokens(logits, padding_mask=mask)
         torch.argmax(top_1_mask, dim=-1)
         router_mask = router_probs.bool()
@@ -507,23 +597,38 @@ class NllbMoeRouterTest(unittest.TestCase):
             torch.nn.Linear(hidden_dim, hidden_dim),
             torch.nn.Linear(hidden_dim, hidden_dim),
         ]
-        hidden_states = hidden_states.reshape((self.batch_size * self.sequence_length), hidden_dim)
+        hidden_states = hidden_states.reshape(
+            (self.batch_size * self.sequence_length), hidden_dim
+        )
         masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
         for idx, expert in enumerate(experts):
             token_indices = router_mask[:, idx]
             combining_weights = router_probs[token_indices, idx]
             expert_output = expert(masked_hidden_states[idx, token_indices])
             expert_output *= 1 - self.config.moe_token_dropout
-            masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
-        hidden_states = masked_hidden_states.sum(dim=0).reshape(self.batch_size, self.sequence_length, hidden_dim)
+            masked_hidden_states[idx, token_indices] = torch.einsum(
+                "b,be->be", combining_weights, expert_output
+            )
+        hidden_states = masked_hidden_states.sum(dim=0).reshape(
+            self.batch_size, self.sequence_length, hidden_dim
+        )
 
         EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES = torch.Tensor([[ 7.0340e-04,  2.7997e-03, -1.3351e-02, -7.6705e-03, -3.5089e-03,3.9773e-03,  7.4593e-03,  1.2566e-02,  3.5860e-03, -2.7448e-02,-1.3731e-02, -1.0534e-02, -1.3606e-02, -1.5048e-02, -2.8914e-03,-5.0371e-03, -1.3963e-03,  6.0076e-03, -1.1380e-02, -1.4620e-02, 5.2401e-03,  8.4660e-04, -1.5319e-03, -1.6735e-02,  1.1302e-02, 3.6119e-03,  4.6084e-03, -1.3458e-02,  7.7792e-05,  1.4312e-02, 4.9107e-03, -5.0936e-03], [-4.4538e-03,  3.1026e-03,  1.4121e-04, -4.8121e-03, -5.6279e-03, 7.2493e-03,  3.9769e-03,  1.1114e-02, -1.5666e-03, -2.3477e-02, 8.7268e-03,  1.3446e-02, -2.8845e-05, -1.7287e-02,  8.7619e-03, -4.5316e-03, -1.2164e-02,  5.7461e-03, -4.5861e-03, -9.3907e-03, 2.9808e-02,  8.9206e-04, -7.6232e-04, -1.4173e-02,  3.0208e-03, 1.5310e-02,  9.7717e-03,  3.1014e-03,  7.8042e-03,  8.0197e-03, 3.4784e-03, -7.1728e-03]])  # fmt: skip
-        torch.testing.assert_close(hidden_states.mean(1), EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            hidden_states.mean(1),
+            EXPECTED_MEAN_FAIRSEQ_HIDDEN_STATES,
+            atol=1e-4,
+            rtol=1e-4,
+        )
 
     def test_batch_prioritized_routing(self):
         set_seed(0)
         config = NllbMoeConfig(
-            num_experts=4, hidden_size=32, d_ff=16, expert_capacity=4, second_expert_policy="random"
+            num_experts=4,
+            hidden_size=32,
+            d_ff=16,
+            expert_capacity=4,
+            second_expert_policy="random",
         )
         mask = torch.zeros((self.batch_size * self.sequence_length), dtype=torch.bool)
         logits = torch.rand((self.batch_size * self.sequence_length, 4))
@@ -558,7 +663,9 @@ class NllbMoeRouterTest(unittest.TestCase):
         set_seed(0)
         config.second_expert_policy = "all"
         router = NllbMoeTop2Router(config)
-        top_1_mask_all, router_probs_all = router.route_tokens(logits, padding_mask=mask)
+        top_1_mask_all, router_probs_all = router.route_tokens(
+            logits, padding_mask=mask
+        )
 
         # fmt: off
         EXPECTED_ROUTER_ALL = torch.tensor([[0.3902, 0.0000, 0.0000, 0.6098], [0.0000, 0.0000, 0.7770, 0.2230], [0.0000, 0.0000, 0.2726, 0.7274], [0.4221, 0.0000, 0.5779, 0.0000], [0.0000, 0.0000, 0.7810, 0.2190], [0.5518, 0.4482, 0.0000, 0.0000], [0.0000, 0.4060, 0.5940, 0.0000], [0.7340, 0.0000, 0.0000, 0.2660], [0.4778, 0.5222, 0.0000, 0.0000], [0.0000, 0.3984, 0.0000, 0.6016], [0.0000, 0.0548, 0.9452, 0.0000], [0.6796, 0.0000, 0.0000, 0.3204], [0.0700, 0.0000, 0.9300, 0.0000], [0.1854, 0.0000, 0.8146, 0.0000], [0.6775, 0.3225, 0.0000, 0.0000], [0.0000, 0.0000, 0.5027, 0.4973], [0.0000, 0.6577, 0.0000, 0.3423], [0.0000, 0.7767, 0.0000, 0.2233], [0.1944, 0.8056, 0.0000, 0.0000], [0.0000, 0.3073, 0.0000, 0.6927], [0.0000, 0.5655, 0.4345, 0.0000], [0.5791, 0.0000, 0.0000, 0.4209], [0.0440, 0.0000, 0.9560, 0.0000], [0.0083, 0.9917, 0.0000, 0.0000], [0.0000, 0.8395, 0.0000, 0.1605], [0.0000, 0.1458, 0.0000, 0.8542], [0.0000, 0.8534, 0.1466, 0.0000], [0.4938, 0.0000, 0.0000, 0.5062], [0.1329, 0.8671, 0.0000, 0.0000], [0.3058, 0.0000, 0.6942, 0.0000], [0.4458, 0.0000, 0.0000, 0.5542], [0.9053, 0.0947, 0.0000, 0.0000], [0.0000, 0.7563, 0.2437, 0.0000], [0.0000, 0.0000, 0.4096, 0.5904], [0.4551, 0.0000, 0.0000, 0.5449], [0.8502, 0.1498, 0.0000, 0.0000], [0.0000, 0.6312, 0.3688, 0.0000], [0.8920, 0.0000, 0.0000, 0.1080], [0.1913, 0.0000, 0.0000, 0.8087], [0.2491, 0.7509, 0.0000, 0.0000]])
@@ -570,10 +677,18 @@ class NllbMoeRouterTest(unittest.TestCase):
         # `sampling` and `random` do not affect the mask of the top_1 router
         # fmt: on
 
-        torch.testing.assert_close(router_probs_all, EXPECTED_ROUTER_ALL, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(router_probs_sp, EXPECTED_ROUTER_SP, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            router_probs_all, EXPECTED_ROUTER_ALL, rtol=1e-4, atol=1e-4
+        )
+        torch.testing.assert_close(
+            router_probs_sp, EXPECTED_ROUTER_SP, rtol=1e-4, atol=1e-4
+        )
         torch.testing.assert_close(router_probs, EXPECTED_ROUTER, rtol=1e-4, atol=1e-4)
 
-        torch.testing.assert_close(top_1_mask_all, EXPECTED_TOP_1_ALL, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(top_1_mask_sp, EXPECTED_TOP_1_SP, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            top_1_mask_all, EXPECTED_TOP_1_ALL, rtol=1e-4, atol=1e-4
+        )
+        torch.testing.assert_close(
+            top_1_mask_sp, EXPECTED_TOP_1_SP, rtol=1e-4, atol=1e-4
+        )
         torch.testing.assert_close(top_1_mask, EXPECTED_TOP_1_SP, rtol=1e-4, atol=1e-4)

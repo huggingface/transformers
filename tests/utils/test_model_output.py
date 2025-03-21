@@ -22,7 +22,6 @@ from transformers import AlbertForMaskedLM
 from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput, is_torch_available
 
-
 if is_torch_available():
     import torch
 
@@ -143,7 +142,9 @@ class ModelOutputTester(unittest.TestCase):
         self.assertFalse(pytree._is_leaf(x))
 
         expected_flat_outs = [1.0, 2.0]
-        expected_tree_spec = pytree.TreeSpec(ModelOutputTest, ["a", "c"], [pytree.LeafSpec(), pytree.LeafSpec()])
+        expected_tree_spec = pytree.TreeSpec(
+            ModelOutputTest, ["a", "c"], [pytree.LeafSpec(), pytree.LeafSpec()]
+        )
 
         actual_flat_outs, actual_tree_spec = pytree.tree_flatten(x)
         self.assertEqual(expected_flat_outs, actual_flat_outs)
@@ -169,7 +170,11 @@ class ModelOutputTester(unittest.TestCase):
         model_config = model_cls.config_class()
         model = model_cls(model_config)
 
-        input_dict = {"input_ids": torch.randint(0, 30000, (1, 512), dtype=torch.int64, requires_grad=False)}
+        input_dict = {
+            "input_ids": torch.randint(
+                0, 30000, (1, 512), dtype=torch.int64, requires_grad=False
+            )
+        }
 
         ep = torch.export.export(model, (), input_dict)
 
@@ -178,8 +183,14 @@ class ModelOutputTester(unittest.TestCase):
         buffer.seek(0)
         loaded_ep = torch.export.load(buffer)
 
-        input_dict = {"input_ids": torch.randint(0, 30000, (1, 512), dtype=torch.int64, requires_grad=False)}
-        assert torch.allclose(model(**input_dict).logits, loaded_ep(**input_dict).logits)
+        input_dict = {
+            "input_ids": torch.randint(
+                0, 30000, (1, 512), dtype=torch.int64, requires_grad=False
+            )
+        }
+        assert torch.allclose(
+            model(**input_dict).logits, loaded_ep(**input_dict).logits
+        )
 
 
 class ModelOutputTestNoDataclass(ModelOutput):

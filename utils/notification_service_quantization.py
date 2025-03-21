@@ -22,16 +22,11 @@ from typing import Dict
 
 from get_ci_error_statistics import get_jobs
 from huggingface_hub import HfApi
-from notification_service import (
-    Message,
-    handle_stacktraces,
-    handle_test_results,
-    prepare_reports,
-    retrieve_artifact,
-    retrieve_available_artifacts,
-)
+from notification_service import (Message, handle_stacktraces,
+                                  handle_test_results, prepare_reports,
+                                  retrieve_artifact,
+                                  retrieve_available_artifacts)
 from slack_sdk import WebClient
-
 
 api = HfApi()
 client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
@@ -74,7 +69,9 @@ class QuantizationMessage(Message):
         time_spent = []
         for r in all_results:
             if len(r["time_spent"]):
-                time_spent.extend([x for x in r["time_spent"].split(", ") if len(x.strip())])
+                time_spent.extend(
+                    [x for x in r["time_spent"].split(", ") if len(x.strip())]
+                )
         total_secs = 0
 
         for time in time_spent:
@@ -84,10 +81,18 @@ class QuantizationMessage(Message):
             if len(time_parts) == 1:
                 time_parts = [0, 0, time_parts[0]]
 
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
+            hours, minutes, seconds = (
+                int(time_parts[0]),
+                int(time_parts[1]),
+                float(time_parts[2]),
+            )
             total_secs += hours * 3600 + minutes * 60 + seconds
 
-        hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
+        hours, minutes, seconds = (
+            total_secs // 3600,
+            (total_secs % 3600) // 60,
+            total_secs % 60,
+        )
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
     @property
@@ -104,7 +109,11 @@ class QuantizationMessage(Message):
             },
             "accessory": {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "text": {
+                    "type": "plain_text",
+                    "text": "Check Action results",
+                    "emoji": True,
+                },
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
             },
         }
@@ -122,7 +131,9 @@ class QuantizationMessage(Message):
 
         header = "Single |  Multi | Category\n"
         failures_report = prepare_reports(
-            title="The following quantization tests had failures", header=header, reports=individual_reports
+            title="The following quantization tests had failures",
+            header=header,
+            reports=individual_reports,
         )
 
         return {"type": "section", "text": {"type": "mrkdwn", "text": failures_report}}
@@ -132,7 +143,11 @@ class QuantizationMessage(Message):
         print("Sending the following payload")
         print(json.dumps({"blocks": json.loads(payload)}))
 
-        text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
+        text = (
+            f"{self.n_failures} failures out of {self.n_tests} tests,"
+            if self.n_failures
+            else "All tests passed."
+        )
 
         self.thread_ts = client.chat_postMessage(
             channel=SLACK_REPORT_CHANNEL_ID,
@@ -170,7 +185,9 @@ class QuantizationMessage(Message):
 if __name__ == "__main__":
     setup_status = os.environ.get("SETUP_STATUS")
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
-    setup_failed = True if setup_status is not None and setup_status != "success" else False
+    setup_failed = (
+        True if setup_status is not None and setup_status != "success" else False
+    )
 
     # This env. variable is set in workflow file (under the job `send_results`).
     ci_event = os.environ["CI_EVENT"]
@@ -179,7 +196,11 @@ if __name__ == "__main__":
 
     if setup_failed:
         Message.error_out(
-            title, ci_title="", runner_not_available=False, runner_failed=False, setup_failed=setup_failed
+            title,
+            ci_title="",
+            runner_not_available=False,
+            runner_failed=False,
+            setup_failed=setup_failed,
         )
         exit(0)
 
@@ -187,7 +208,9 @@ if __name__ == "__main__":
     try:
         quantization_matrix = ast.literal_eval(arguments)
         # Need to change from elements like `quantization/bnb` to `quantization_bnb` (the ones used as artifact names).
-        quantization_matrix = [x.replace("quantization/", "quantization_") for x in quantization_matrix]
+        quantization_matrix = [
+            x.replace("quantization/", "quantization_") for x in quantization_matrix
+        ]
     except SyntaxError:
         Message.error_out(title, ci_title="")
         raise ValueError("Errored out.")
@@ -207,9 +230,12 @@ if __name__ == "__main__":
     }
 
     github_actions_jobs = get_jobs(
-        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        workflow_run_id=os.environ["GITHUB_RUN_ID"],
+        token=os.environ["ACCESS_REPO_INFO_TOKEN"],
     )
-    github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs}
+    github_actions_job_links = {
+        job["name"]: job["html_url"] for job in github_actions_jobs
+    }
 
     artifact_name_to_job_map = {}
     for job in github_actions_jobs:
@@ -220,12 +246,16 @@ if __name__ == "__main__":
                 break
 
     for quant in quantization_results.keys():
-        for artifact_path in available_artifacts[f"run_quantization_torch_gpu_{ quant }_test_reports"].paths:
+        for artifact_path in available_artifacts[
+            f"run_quantization_torch_gpu_{ quant }_test_reports"
+        ].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[artifact_path["path"]]
-                quantization_results[quant]["job_link"][artifact_path["gpu"]] = job["html_url"]
+                quantization_results[quant]["job_link"][artifact_path["gpu"]] = job[
+                    "html_url"
+                ]
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 quantization_results[quant]["failed"][artifact_path["gpu"]] += failed
                 quantization_results[quant]["success"] += success
@@ -238,18 +268,25 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path["gpu"] not in quantization_results[quant]["failures"]:
-                            quantization_results[quant]["failures"][artifact_path["gpu"]] = []
+                        if (
+                            artifact_path["gpu"]
+                            not in quantization_results[quant]["failures"]
+                        ):
+                            quantization_results[quant]["failures"][
+                                artifact_path["gpu"]
+                            ] = []
 
-                        quantization_results[quant]["failures"][artifact_path["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
-                        )
+                        quantization_results[quant]["failures"][
+                            artifact_path["gpu"]
+                        ].append({"line": line, "trace": stacktraces.pop(0)})
 
     job_name = os.getenv("CI_TEST_JOB")
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
-    with open(f"ci_results_{job_name}/quantization_results.json", "w", encoding="UTF-8") as fp:
+    with open(
+        f"ci_results_{job_name}/quantization_results.json", "w", encoding="UTF-8"
+    ) as fp:
         json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
 
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"

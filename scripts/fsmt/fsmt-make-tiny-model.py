@@ -27,18 +27,24 @@
 # It will be used then as "stas/tiny-wmt19-en-de"
 
 # Build
-from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTTokenizer
-
+from transformers import (FSMTConfig, FSMTForConditionalGeneration,
+                          FSMTTokenizer)
 
 mname = "facebook/wmt19-en-de"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 # get the correct vocab sizes, etc. from the master model
 config = FSMTConfig.from_pretrained(mname)
-config.update({
-    "d_model": 4,
-    "encoder_layers": 1, "decoder_layers": 1,
-    "encoder_ffn_dim": 4, "decoder_ffn_dim": 4,
-    "encoder_attention_heads": 1, "decoder_attention_heads": 1})
+config.update(
+    {
+        "d_model": 4,
+        "encoder_layers": 1,
+        "decoder_layers": 1,
+        "encoder_ffn_dim": 4,
+        "decoder_ffn_dim": 4,
+        "encoder_attention_heads": 1,
+        "decoder_attention_heads": 1,
+    }
+)
 
 tiny_model = FSMTForConditionalGeneration(config)
 print(f"num of params {tiny_model.num_parameters()}")
@@ -51,7 +57,7 @@ print("test output:", len(outputs.logits[0]))
 
 # Save
 mname_tiny = "tiny-wmt19-en-de"
-tiny_model.half() # makes it smaller
+tiny_model.half()  # makes it smaller
 tiny_model.save_pretrained(mname_tiny)
 tokenizer.save_pretrained(mname_tiny)
 

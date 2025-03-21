@@ -23,7 +23,6 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin
 
-
 if is_vision_available():
     from PIL import Image
 
@@ -105,11 +104,17 @@ class MllamaImageProcessingTester:
 
         One can specify whether the images are of the same resolution or not.
         """
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+        assert not (
+            numpify and torchify
+        ), "You cannot specify both numpy and PyTorch tensors at the same time"
 
         batch_size = batch_size if batch_size is not None else self.batch_size
-        min_resolution = min_resolution if min_resolution is not None else self.min_resolution
-        max_resolution = max_resolution if max_resolution is not None else self.max_resolution
+        min_resolution = (
+            min_resolution if min_resolution is not None else self.min_resolution
+        )
+        max_resolution = (
+            max_resolution if max_resolution is not None else self.max_resolution
+        )
         num_channels = num_channels if num_channels is not None else self.num_channels
         num_images = num_images if num_images is not None else self.num_images
 
@@ -124,16 +129,27 @@ class MllamaImageProcessingTester:
                     if size_divisor is not None:
                         # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
                         min_resolution = max(size_divisor, min_resolution)
-                    width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
-                images.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
+                    width, height = np.random.choice(
+                        np.arange(min_resolution, max_resolution), 2
+                    )
+                images.append(
+                    np.random.randint(
+                        255, size=(num_channels, width, height), dtype=np.uint8
+                    )
+                )
             images_list.append(images)
 
         if not numpify and not torchify:
             # PIL expects the channel dimension as last dimension
-            images_list = [[Image.fromarray(np.moveaxis(image, 0, -1)) for image in images] for images in images_list]
+            images_list = [
+                [Image.fromarray(np.moveaxis(image, 0, -1)) for image in images]
+                for images in images_list
+            ]
 
         if torchify:
-            images_list = [[torch.from_numpy(image) for image in images] for images in images_list]
+            images_list = [
+                [torch.from_numpy(image) for image in images] for images in images_list
+            ]
 
         return images_list
 
@@ -178,7 +194,9 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, numpify=True
+        )
         for sample_images in image_inputs:
             for image in sample_images:
                 self.assertIsInstance(image, np.ndarray)
@@ -192,36 +210,56 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        encoded_images = image_processing(
+            image_inputs[0], return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        )
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
         # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape(image_inputs)
+        )
         self.assertEqual(
-            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            tuple(encoded_images.shape),
+            (self.image_processor_tester.batch_size, *expected_output_image_shape),
         )
 
     def test_call_pil(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False
+        )
         for images in image_inputs:
             for image in images:
                 self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        encoded_images = image_processing(
+            image_inputs[0], return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        )
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
         # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape(image_inputs)
+        )
         self.assertEqual(
-            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            tuple(encoded_images.shape),
+            (self.image_processor_tester.batch_size, *expected_output_image_shape),
         )
 
     def test_call_channels_last(self):
@@ -233,7 +271,9 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(
             image_inputs, return_tensors="pt", input_data_format="channels_last"
         ).pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape(image_inputs)
+        )
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     def test_ambiguous_channel_pil_image(self):
@@ -241,8 +281,12 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
 
         image_inputs = [[Image.new("RGB", (1, 1))], [Image.new("RGB", (100, 1))]]
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape(image_inputs)
+        )
         self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
 
     def test_resize_impractical_aspect_ratio(self):
@@ -250,28 +294,42 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # Ensure that no error is raised even if the aspect ratio is impractical
         image_inputs = [[Image.new("RGB", (9999999, 1))]]
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape(image_inputs)
+        )
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )
 
         for images in image_inputs:
             for image in images:
                 self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        encoded_images = image_processing(
+            image_inputs[0], return_tensors="pt"
+        ).pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        )
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
         # Test batched
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = (
+            self.image_processor_tester.expected_output_image_shape(image_inputs)
+        )
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt"
+        ).pixel_values
         self.assertEqual(
             tuple(encoded_images.shape),
             (self.image_processor_tester.batch_size, *expected_output_image_shape),
@@ -287,7 +345,11 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # of empty tiles, i.e. tiles that are completely zero
             return np.all(pixel_values == 0, axis=(3, 4, 5))
 
-        image_processor_dict = {**self.image_processor_dict, "size": {"height": 50, "width": 50}, "max_image_tiles": 4}
+        image_processor_dict = {
+            **self.image_processor_dict,
+            "size": {"height": 50, "width": 50},
+            "max_image_tiles": 4,
+        }
         image_processor = self.image_processing_class(**image_processor_dict)
 
         # image fits 2x2 tiles grid (width x height)

@@ -17,13 +17,14 @@
 import unittest
 
 from transformers import RegNetConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.file_utils import (cached_property, is_torch_available,
+                                     is_vision_available)
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -69,7 +70,9 @@ class RegNetModelTester:
         self.num_stages = len(hidden_sizes)
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -97,7 +100,12 @@ class RegNetModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (
+                self.batch_size,
+                self.hidden_sizes[-1],
+                self.image_size // 32,
+                self.image_size // 32,
+            ),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -122,9 +130,14 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (RegNetModel, RegNetForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (RegNetModel, RegNetForImageClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": RegNetModel, "image-classification": RegNetForImageClassification}
+        {
+            "image-feature-extraction": RegNetModel,
+            "image-classification": RegNetForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -184,7 +197,11 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -231,11 +248,17 @@ def prepare_img():
 class RegNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/regnet-y-040") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/regnet-y-040")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = RegNetForImageClassification.from_pretrained("facebook/regnet-y-040").to(torch_device)
+        model = RegNetForImageClassification.from_pretrained(
+            "facebook/regnet-y-040"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -251,4 +274,6 @@ class RegNetModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.4180, -1.5051, -3.4836]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

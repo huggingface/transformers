@@ -19,16 +19,11 @@ import numpy as np
 
 from transformers import is_flax_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    require_flax,
-    require_sentencepiece,
-    require_tokenizers,
-    slow,
-)
+from transformers.testing_utils import (require_flax, require_sentencepiece,
+                                        require_tokenizers, slow)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
-
 
 if is_flax_available():
     import os
@@ -43,12 +38,11 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
 
-    from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING, AutoTokenizer, LongT5Config
+    from transformers import (FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+                              FLAX_MODEL_MAPPING, AutoTokenizer, LongT5Config)
     from transformers.models.longt5.modeling_flax_longt5 import (
-        FlaxLongT5ForConditionalGeneration,
-        FlaxLongT5Model,
-        shift_tokens_right,
-    )
+        FlaxLongT5ForConditionalGeneration, FlaxLongT5Model,
+        shift_tokens_right)
 
 
 class FlaxLongT5ModelTester:
@@ -107,14 +101,22 @@ class FlaxLongT5ModelTester:
         self.decoder_layers = decoder_layers
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.encoder_seq_length], self.vocab_size
+        )
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.encoder_seq_length], vocab_size=2
+            )
+            decoder_attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         config = LongT5Config(
             vocab_size=self.vocab_size,
@@ -163,8 +165,14 @@ class FlaxLongT5ModelTester:
         decoder_output = result.last_hidden_state
         encoder_output = result.encoder_last_hidden_state
 
-        self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
-        self.parent.assertEqual(decoder_output.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            encoder_output.shape,
+            (self.batch_size, self.encoder_seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            decoder_output.shape,
+            (self.batch_size, self.decoder_seq_length, self.hidden_size),
+        )
 
     def check_use_cache_forward_with_attn_mask(
         self,
@@ -186,12 +194,19 @@ class FlaxLongT5ModelTester:
         decoder_attention_mask_cache = jnp.concatenate(
             [
                 decoder_attention_mask,
-                jnp.zeros((decoder_attention_mask.shape[0], max_decoder_length - decoder_attention_mask.shape[1])),
+                jnp.zeros(
+                    (
+                        decoder_attention_mask.shape[0],
+                        max_decoder_length - decoder_attention_mask.shape[1],
+                    )
+                ),
             ],
             axis=-1,
         )
 
-        past_key_values = model.init_cache(decoder_input_ids.shape[0], max_decoder_length, encoder_outputs)
+        past_key_values = model.init_cache(
+            decoder_input_ids.shape[0], max_decoder_length, encoder_outputs
+        )
 
         outputs_cache = model.decode(
             decoder_input_ids[:, :-1],
@@ -206,9 +221,15 @@ class FlaxLongT5ModelTester:
             decoder_attention_mask=decoder_attention_mask_cache,
         )
 
-        outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
+        outputs = model.decode(
+            decoder_input_ids,
+            encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+        )
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def prepare_config_and_inputs_for_common(self):
@@ -232,7 +253,11 @@ class FlaxLongT5ModelTester:
 
 @require_flax
 class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxLongT5Model, FlaxLongT5ForConditionalGeneration) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxLongT5Model, FlaxLongT5ForConditionalGeneration)
+        if is_flax_available()
+        else ()
+    )
     is_encoder_decoder = True
 
     def setUp(self):
@@ -257,7 +282,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_use_cache_forward_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, *config_and_inputs)
+            self.model_tester.check_use_cache_forward_with_attn_mask(
+                model_class, *config_and_inputs
+            )
 
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -269,7 +296,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 @jax.jit
                 def encode_jitted(input_ids, attention_mask=None, **kwargs):
-                    return model.encode(input_ids=input_ids, attention_mask=attention_mask)
+                    return model.encode(
+                        input_ids=input_ids, attention_mask=attention_mask
+                    )
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = encode_jitted(**prepared_inputs_dict).to_tuple()
@@ -288,7 +317,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(config)
-                encoder_outputs = model.encode(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+                encoder_outputs = model.encode(
+                    inputs_dict["input_ids"], inputs_dict["attention_mask"]
+                )
 
                 prepared_inputs_dict = {
                     "decoder_input_ids": inputs_dict["decoder_input_ids"],
@@ -297,7 +328,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 }
 
                 @jax.jit
-                def decode_jitted(decoder_input_ids, decoder_attention_mask, encoder_outputs):
+                def decode_jitted(
+                    decoder_input_ids, decoder_attention_mask, encoder_outputs
+                ):
                     return model.decode(
                         decoder_input_ids=decoder_input_ids,
                         decoder_attention_mask=decoder_attention_mask,
@@ -321,7 +354,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         labels = np.arange(2, 102).reshape(5, 20)
         labels[:2, 15:] = -100
 
-        decoder_input_ids = shift_tokens_right(labels, pad_token_id, decoder_start_token_id)
+        decoder_input_ids = shift_tokens_right(
+            labels, pad_token_id, decoder_start_token_id
+        )
         np_decoder_input_ids = np.array(decoder_input_ids)
 
         padded_slice = np_decoder_input_ids[:2, (15 + 1) :]
@@ -352,7 +387,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 base_param_from_head = flatten_dict(unfreeze(head_model.params))
 
                 for key in base_param_from_head.keys():
-                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
+                    max_diff = (
+                        (base_params[key] - base_param_from_head[key]).sum().item()
+                    )
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     # overwrite since special base model prefix is used
@@ -375,7 +412,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 base_params = flatten_dict(unfreeze(base_model.params))
 
                 for key in base_params_from_head.keys():
-                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
+                    max_diff = (
+                        (base_params[key] - base_params_from_head[key]).sum().item()
+                    )
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_attention_outputs(self):
@@ -383,10 +422,18 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         seq_length = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_length)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_seq_length = getattr(
+            self.model_tester, "decoder_seq_length", seq_length
+        )
+        encoder_seq_length = getattr(
+            self.model_tester, "encoder_seq_length", seq_length
+        )
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", decoder_seq_length
+        )
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
         block_len = getattr(self.model_tester, "block_len", None)
 
         for model_class in self.all_model_classes:
@@ -394,7 +441,11 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             inputs_dict["output_hidden_states"] = False
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -402,7 +453,11 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             config.output_attentions = True
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
@@ -416,23 +471,33 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 # Question Answering model returns start_logits and end_logits
                 if model_class in get_values(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
-                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+                    correct_outlen += (
+                        1  # start_logits and end_logits instead of only 1 output
+                    )
 
                 self.assertEqual(out_len, correct_outlen)
 
                 # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(decoder_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        decoder_key_length,
+                    ],
                 )
 
                 # cross attentions
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(cross_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -456,7 +521,11 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
@@ -467,7 +536,9 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
 class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
     def setUp(self):
-        self.model_tester = FlaxLongT5ModelTester(self, encoder_attention_type="transient-global")
+        self.model_tester = FlaxLongT5ModelTester(
+            self, encoder_attention_type="transient-global"
+        )
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
     def test_attention_outputs(self):
@@ -475,10 +546,18 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
         config.return_dict = True
 
         seq_length = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_length)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_seq_length = getattr(
+            self.model_tester, "decoder_seq_length", seq_length
+        )
+        encoder_seq_length = getattr(
+            self.model_tester, "encoder_seq_length", seq_length
+        )
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", decoder_seq_length
+        )
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
         block_len = getattr(self.model_tester, "block_len", None)
         global_block_size = getattr(self.model_tester, "global_block_size", None)
         global_seq_len = encoder_seq_length // global_block_size
@@ -488,7 +567,11 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
             inputs_dict["output_hidden_states"] = False
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -496,12 +579,20 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
             config.output_attentions = True
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, block_len, 3 * block_len + global_seq_len],
+                [
+                    self.model_tester.num_attention_heads,
+                    block_len,
+                    3 * block_len + global_seq_len,
+                ],
             )
             out_len = len(outputs)
 
@@ -510,23 +601,33 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
 
                 # Question Answering model returns start_logits and end_logits
                 if model_class in get_values(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
-                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+                    correct_outlen += (
+                        1  # start_logits and end_logits instead of only 1 output
+                    )
 
                 self.assertEqual(out_len, correct_outlen)
 
                 # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(decoder_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        decoder_key_length,
+                    ],
                 )
 
                 # cross attentions
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(cross_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -550,12 +651,20 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, block_len, 3 * block_len + global_seq_len],
+                [
+                    self.model_tester.num_attention_heads,
+                    block_len,
+                    3 * block_len + global_seq_len,
+                ],
             )
 
 
@@ -655,7 +764,11 @@ class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
             early_stopping=True,
         ).sequences
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        decoded = tok.batch_decode(
+            hypotheses_batch,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
         self.assertListEqual(
             self.expected_summary(),
             decoded,

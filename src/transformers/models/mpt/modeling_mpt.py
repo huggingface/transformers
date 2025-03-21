@@ -23,20 +23,18 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (add_code_sample_docstrings, add_start_docstrings,
+                           add_start_docstrings_to_model_forward)
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import (BaseModelOutputWithPastAndCrossAttentions,
+                                 CausalLMOutputWithCrossAttentions,
+                                 QuestionAnsweringModelOutput,
+                                 SequenceClassifierOutputWithPast,
+                                 TokenClassifierOutput)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_mpt import MptConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -51,17 +49,23 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
     the alibi implementation of MPT source code that led to slightly different results than the Bloom alibi:
     https://huggingface.co/mosaicml/mpt-7b/blob/main/attention.py#L292
     """
-    alibi = torch.arange(1 - sequence_length, 1, dtype=torch.int32, device=device).view(1, 1, 1, sequence_length)
+    alibi = torch.arange(1 - sequence_length, 1, dtype=torch.int32, device=device).view(
+        1, 1, 1, sequence_length
+    )
     num_heads_power_of_2 = 2 ** math.ceil(math.log2(num_heads))
 
-    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.int64, device=device).float()
+    base = torch.arange(
+        1, num_heads_power_of_2 + 1, dtype=torch.int64, device=device
+    ).float()
     base = base * (alibi_bias_max / num_heads_power_of_2)
 
     slopes = 1.0 / torch.pow(2, base)
     slopes = slopes.view(1, num_heads_power_of_2, 1, 1)
 
     if num_heads_power_of_2 != num_heads:
-        slopes = torch.concat([slopes[:, 1::2, ...], slopes[:, ::2, ...]], dim=1)[:, :num_heads, ...]
+        slopes = torch.concat([slopes[:, 1::2, ...], slopes[:, ::2, ...]], dim=1)[
+            :, :num_heads, ...
+        ]
 
     alibi = alibi * slopes
     return alibi.squeeze(0)
@@ -101,9 +105,15 @@ class MptAttention(nn.Module):
             mixed_qkv = mixed_qkv.clamp(min=-self.clip_qkv, max=self.clip_qkv)
 
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
-        query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.reshape(
+            batch_size, seq_length, self.n_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.reshape(
+            batch_size, seq_length, self.n_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.reshape(
+            batch_size, seq_length, self.n_heads, self.head_dim
+        ).transpose(1, 2)
 
         if past_key_value is not None:
             if len(past_key_value) != 0:
@@ -113,31 +123,52 @@ class MptAttention(nn.Module):
         else:
             past_key_value = (key_states, value_states)
 
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
+        attention_scores = (
+            torch.matmul(query_states, key_states.transpose(-1, -2))
+            * self.softmax_scale
+        )
 
-        query_length = seq_length if past_key_value is None else seq_length + past_key_value[0].shape[2]
+        query_length = (
+            seq_length
+            if past_key_value is None
+            else seq_length + past_key_value[0].shape[2]
+        )
 
         if position_bias is not None:
             if len(position_bias.shape) != 3:
-                raise ValueError(f"Expecting position_bias shape to be 3 dimensions, got {len(position_bias.shape)}")
+                raise ValueError(
+                    f"Expecting position_bias shape to be 3 dimensions, got {len(position_bias.shape)}"
+                )
             key_length = key_states.shape[-2]
 
             position_bias_query_index = max(0, position_bias.size(1) - query_length)
             position_bias_key_index = max(0, position_bias.size(2) - key_length)
 
-            position_bias = position_bias[:, position_bias_query_index:, position_bias_key_index:]
+            position_bias = position_bias[
+                :, position_bias_query_index:, position_bias_key_index:
+            ]
 
             attention_scores = attention_scores + position_bias
 
         if attention_mask is not None:
-            attention_scores = attention_scores.masked_fill(attention_mask, torch.finfo(query_states.dtype).min)
+            attention_scores = attention_scores.masked_fill(
+                attention_mask, torch.finfo(query_states.dtype).min
+            )
 
         # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).to(value_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attn_dropout_p, training=self.training)
+        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).to(
+            value_states.dtype
+        )
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.attn_dropout_p, training=self.training
+        )
 
         context_states = torch.matmul(attn_weights, value_states)
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
+        context_states = (
+            context_states.permute(0, 2, 1, 3)
+            .contiguous()
+            .view(batch_size, seq_length, -1)
+        )
         attn_output = self.out_proj(context_states)
 
         return attn_output, attn_weights, past_key_value
@@ -153,12 +184,16 @@ class MptMLP(nn.Module):
         self.down_proj = nn.Linear(4 * hidden_size, hidden_size, bias=False)
         self.hidden_dropout = config.attn_config.attn_pdrop
 
-    def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, residual: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.act(self.up_proj(hidden_states))
 
         intermediate_output = self.down_proj(hidden_states)
 
-        output = F.dropout(intermediate_output, p=self.hidden_dropout, training=self.training)
+        output = F.dropout(
+            intermediate_output, p=self.hidden_dropout, training=self.training
+        )
         output = output + residual
 
         return output
@@ -370,8 +405,12 @@ class MptModel(MptPreTrainedModel):
     def get_input_embeddings(self):
         return self.wte
 
-    def build_mpt_alibi_tensor(self, num_heads, sequence_length, alibi_bias_max=8, device=None):
-        return build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max, device)
+    def build_mpt_alibi_tensor(
+        self, num_heads, sequence_length, alibi_bias_max=8, device=None
+    ):
+        return build_mpt_alibi_tensor(
+            num_heads, sequence_length, alibi_bias_max, device
+        )
 
     def set_input_embeddings(self, new_embeddings: torch.Tensor):
         self.wte = new_embeddings
@@ -394,15 +433,25 @@ class MptModel(MptPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -436,14 +485,21 @@ class MptModel(MptPreTrainedModel):
             past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
+            attention_mask = torch.ones(
+                (batch_size, seq_length_with_past), device=hidden_states.device
+            )
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
+        alibi = self.build_mpt_alibi_tensor(
+            self.num_heads, self.config.max_seq_len, device=hidden_states.device
+        )
 
         causal_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            attention_mask,
+            (batch_size, seq_length),
+            inputs_embeds,
+            past_key_values_length,
         )
         causal_mask = causal_mask.bool()
 
@@ -476,7 +532,9 @@ class MptModel(MptPreTrainedModel):
                 presents = presents + (outputs[1],)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (
+                    outputs[2 if use_cache else 1],
+                )
 
         # Add last hidden state
         hidden_states = self.norm_f(hidden_states)
@@ -485,7 +543,16 @@ class MptModel(MptPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    presents,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -544,7 +611,9 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -585,7 +654,9 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         )
 
     def _reorder_cache(
-        self, past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor
+        self,
+        past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...],
+        beam_idx: torch.LongTensor,
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
@@ -596,7 +667,9 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
         """
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
-            past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
+            past_state.device: beam_idx.to(past_state.device)
+            for layer_past in past
+            for past_state in layer_past
         }
         reordered_past = tuple(
             (
@@ -657,7 +730,9 @@ class MptForSequenceClassification(MptPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -679,13 +754,19 @@ class MptForSequenceClassification(MptPreTrainedModel):
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
         if self.config.pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(
+                logits.device, torch.int32
+            )
+            token_indices = torch.arange(
+                input_ids.shape[-1], device=logits.device, dtype=torch.int32
+            )
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
@@ -694,14 +775,18 @@ class MptForSequenceClassification(MptPreTrainedModel):
                 "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
             )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+        pooled_logits = logits[
+            torch.arange(batch_size, device=logits.device), last_non_pad_token
+        ]
 
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -744,7 +829,10 @@ class MptForTokenClassification(MptPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.transformer = MptModel(config)
-        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
+        if (
+            hasattr(config, "classifier_dropout")
+            and config.classifier_dropout is not None
+        ):
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
             classifier_dropout = config.hidden_dropout
@@ -781,7 +869,9 @@ class MptForTokenClassification(MptPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -805,7 +895,8 @@ class MptForTokenClassification(MptPreTrainedModel):
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(
-                logits.view(batch_size * seq_length, self.num_labels), labels.view(batch_size * seq_length)
+                logits.view(batch_size * seq_length, self.num_labels),
+                labels.view(batch_size * seq_length),
             )
 
         if not return_dict:
@@ -836,7 +927,9 @@ class MptForQuestionAnswering(MptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -858,7 +951,9 @@ class MptForQuestionAnswering(MptPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.transformer(
             input_ids,

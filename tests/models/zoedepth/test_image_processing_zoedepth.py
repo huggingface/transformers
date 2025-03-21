@@ -21,8 +21,8 @@ import numpy as np
 from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_vision_available():
     from transformers import ZoeDepthImageProcessor
@@ -77,7 +77,9 @@ class ZoeDepthImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.ensure_multiple_of, self.ensure_multiple_of
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -116,10 +118,14 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_pad"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_ensure_multiple_of(self):
@@ -129,7 +135,10 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         size = {"height": 380, "width": 513}
         multiple = 32
         image_processor = ZoeDepthImageProcessor(
-            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+            do_pad=False,
+            ensure_multiple_of=multiple,
+            size=size,
+            keep_aspect_ratio=False,
         )
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
@@ -144,7 +153,10 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         size = {"height": height, "width": width}
         multiple = 32
         image_processor = ZoeDepthImageProcessor(
-            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+            do_pad=False,
+            ensure_multiple_of=multiple,
+            size=size,
+            keep_aspect_ratio=False,
         )
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
@@ -158,7 +170,9 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.zeros((height, width, 3))
 
         size = {"height": 512, "width": 512}
-        image_processor = ZoeDepthImageProcessor(do_pad=False, keep_aspect_ratio=True, size=size, ensure_multiple_of=1)
+        image_processor = ZoeDepthImageProcessor(
+            do_pad=False, keep_aspect_ratio=True, size=size, ensure_multiple_of=1
+        )
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
         # As can be seen, the image is resized to the maximum size that fits in the specified size
@@ -171,14 +185,18 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
         # As can be seen, the size is respected
-        self.assertEqual(list(pixel_values.shape), [1, 3, size["height"], size["width"]])
+        self.assertEqual(
+            list(pixel_values.shape), [1, 3, size["height"], size["width"]]
+        )
 
         # Test `keep_aspect_ratio=True` with `ensure_multiple_of` set
         image = np.zeros((489, 640, 3))
 
         size = {"height": 511, "width": 511}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=multiple)
+        image_processor = ZoeDepthImageProcessor(
+            size=size, keep_aspect_ratio=True, ensure_multiple_of=multiple
+        )
 
         pixel_values = image_processor(image, return_tensors="pt").pixel_values
 

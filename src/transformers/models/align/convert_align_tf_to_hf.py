@@ -25,17 +25,10 @@ import torch
 from PIL import Image
 from tokenizer import Tokenizer
 
-from transformers import (
-    AlignConfig,
-    AlignModel,
-    AlignProcessor,
-    BertConfig,
-    BertTokenizer,
-    EfficientNetConfig,
-    EfficientNetImageProcessor,
-)
+from transformers import (AlignConfig, AlignModel, AlignProcessor, BertConfig,
+                          BertTokenizer, EfficientNetConfig,
+                          EfficientNetImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -43,7 +36,9 @@ logger = logging.get_logger(__name__)
 
 def preprocess(image):
     image = tf.image.resize(image, (346, 346))
-    image = tf.image.crop_to_bounding_box(image, (346 - 289) // 2, (346 - 289) // 2, 289, 289)
+    image = tf.image.crop_to_bounding_box(
+        image, (346 - 289) // 2, (346 - 289) // 2, 289, 289
+    )
     return image
 
 
@@ -87,7 +82,11 @@ def get_processor():
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def rename_keys(original_param_names):
     # EfficientNet image encoder
-    block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
+    block_names = [
+        v.split("_")[0].split("block")[1]
+        for v in original_param_names
+        if v.startswith("block")
+    ]
     block_names = list(set(block_names))
     block_names = sorted(block_names)
     num_blocks = len(block_names)
@@ -98,45 +97,126 @@ def rename_keys(original_param_names):
     rename_keys.append(("stem_bn/gamma:0", "embeddings.batchnorm.weight"))
     rename_keys.append(("stem_bn/beta:0", "embeddings.batchnorm.bias"))
     rename_keys.append(("stem_bn/moving_mean:0", "embeddings.batchnorm.running_mean"))
-    rename_keys.append(("stem_bn/moving_variance:0", "embeddings.batchnorm.running_var"))
+    rename_keys.append(
+        ("stem_bn/moving_variance:0", "embeddings.batchnorm.running_var")
+    )
 
     for b in block_names:
         hf_b = block_name_mapping[b]
-        rename_keys.append((f"block{b}_expand_conv/kernel:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.weight"))
-        rename_keys.append((f"block{b}_expand_bn/gamma:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.weight"))
-        rename_keys.append((f"block{b}_expand_bn/beta:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.bias"))
         rename_keys.append(
-            (f"block{b}_expand_bn/moving_mean:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean")
+            (
+                f"block{b}_expand_conv/kernel:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_conv.weight",
+            )
         )
         rename_keys.append(
-            (f"block{b}_expand_bn/moving_variance:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var")
+            (
+                f"block{b}_expand_bn/gamma:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.weight",
+            )
         )
         rename_keys.append(
-            (f"block{b}_dwconv/depthwise_kernel:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight")
-        )
-        rename_keys.append((f"block{b}_bn/gamma:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight"))
-        rename_keys.append((f"block{b}_bn/beta:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias"))
-        rename_keys.append(
-            (f"block{b}_bn/moving_mean:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean")
+            (
+                f"block{b}_expand_bn/beta:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.bias",
+            )
         )
         rename_keys.append(
-            (f"block{b}_bn/moving_variance:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var")
+            (
+                f"block{b}_expand_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_expand_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_dwconv/depthwise_kernel:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/gamma:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/beta:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var",
+            )
         )
 
-        rename_keys.append((f"block{b}_se_reduce/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight"))
-        rename_keys.append((f"block{b}_se_reduce/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.bias"))
-        rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight"))
-        rename_keys.append((f"block{b}_se_expand/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.bias"))
         rename_keys.append(
-            (f"block{b}_project_conv/kernel:0", f"encoder.blocks.{hf_b}.projection.project_conv.weight")
-        )
-        rename_keys.append((f"block{b}_project_bn/gamma:0", f"encoder.blocks.{hf_b}.projection.project_bn.weight"))
-        rename_keys.append((f"block{b}_project_bn/beta:0", f"encoder.blocks.{hf_b}.projection.project_bn.bias"))
-        rename_keys.append(
-            (f"block{b}_project_bn/moving_mean:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_mean")
+            (
+                f"block{b}_se_reduce/kernel:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight",
+            )
         )
         rename_keys.append(
-            (f"block{b}_project_bn/moving_variance:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_var")
+            (
+                f"block{b}_se_reduce/bias:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.reduce.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_se_expand/kernel:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_se_expand/bias:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.expand.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_conv/kernel:0",
+                f"encoder.blocks.{hf_b}.projection.project_conv.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/gamma:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/beta:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.running_mean",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.running_var",
+            )
         )
 
     key_mapping = {}
@@ -222,27 +302,54 @@ def rename_keys(original_param_names):
             )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/dense/kernel:0", f"{new}.encoder.layer.{i}.output.dense.weight")
+            (
+                f"{old}/encoder/layer_._{i}/output/dense/kernel:0",
+                f"{new}.encoder.layer.{i}.output.dense.weight",
+            )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/dense/bias:0", f"{new}.encoder.layer.{i}.output.dense.bias")
+            (
+                f"{old}/encoder/layer_._{i}/output/dense/bias:0",
+                f"{new}.encoder.layer.{i}.output.dense.bias",
+            )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0", f"{new}.encoder.layer.{i}.output.LayerNorm.weight")
+            (
+                f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0",
+                f"{new}.encoder.layer.{i}.output.LayerNorm.weight",
+            )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
+            (
+                f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0",
+                f"{new}.encoder.layer.{i}.output.LayerNorm.bias",
+            )
         )
 
-    rename_keys.append((f"{old}/embeddings/word_embeddings/weight:0", f"{new}.embeddings.word_embeddings.weight"))
     rename_keys.append(
-        (f"{old}/embeddings/position_embeddings/embeddings:0", f"{new}.embeddings.position_embeddings.weight")
+        (
+            f"{old}/embeddings/word_embeddings/weight:0",
+            f"{new}.embeddings.word_embeddings.weight",
+        )
     )
     rename_keys.append(
-        (f"{old}/embeddings/token_type_embeddings/embeddings:0", f"{new}.embeddings.token_type_embeddings.weight")
+        (
+            f"{old}/embeddings/position_embeddings/embeddings:0",
+            f"{new}.embeddings.position_embeddings.weight",
+        )
     )
-    rename_keys.append((f"{old}/embeddings/LayerNorm/gamma:0", f"{new}.embeddings.LayerNorm.weight"))
-    rename_keys.append((f"{old}/embeddings/LayerNorm/beta:0", f"{new}.embeddings.LayerNorm.bias"))
+    rename_keys.append(
+        (
+            f"{old}/embeddings/token_type_embeddings/embeddings:0",
+            f"{new}.embeddings.token_type_embeddings.weight",
+        )
+    )
+    rename_keys.append(
+        (f"{old}/embeddings/LayerNorm/gamma:0", f"{new}.embeddings.LayerNorm.weight")
+    )
+    rename_keys.append(
+        (f"{old}/embeddings/LayerNorm/beta:0", f"{new}.embeddings.LayerNorm.bias")
+    )
 
     rename_keys.append((f"{old}/pooler/dense/kernel:0", f"{new}.pooler.dense.weight"))
     rename_keys.append((f"{old}/pooler/dense/bias:0", f"{new}.pooler.dense.bias"))
@@ -285,14 +392,18 @@ def replace_params(hf_params, tf_params, key_mapping):
 
 
 @torch.no_grad()
-def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_model, push_to_hub):
+def convert_align_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, save_model, push_to_hub
+):
     """
     Copy/paste/tweak model's weights to our ALIGN structure.
     """
     # Load original model
     seq_length = 64
     tok = Tokenizer(seq_length)
-    original_model = align.Align("efficientnet-b7", "bert-base", 640, seq_length, tok.get_vocab_size())
+    original_model = align.Align(
+        "efficientnet-b7", "bert-base", 640, seq_length, tok.get_vocab_size()
+    )
     original_model.compile()
     original_model.load_weights(checkpoint_path)
 
@@ -316,7 +427,11 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     # Initialize processor
     processor = get_processor()
     inputs = processor(
-        images=prepare_img(), text="A picture of a cat", padding="max_length", max_length=64, return_tensors="pt"
+        images=prepare_img(),
+        text="A picture of a cat",
+        padding="max_length",
+        max_length=64,
+        return_tensors="pt",
     )
 
     # HF model inference
@@ -336,7 +451,9 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
         include_top=False,
         resample=Image.BILINEAR,
     )
-    image = tf_image_processor(images=prepare_img(), return_tensors="tf", data_format="channels_last")["pixel_values"]
+    image = tf_image_processor(
+        images=prepare_img(), return_tensors="tf", data_format="channels_last"
+    )["pixel_values"]
     text = tok(tf.constant(["A picture of a cat"]))
 
     image_features = original_model.image_encoder(image, training=False)
@@ -383,7 +500,16 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image processor to the hub",
+    )
 
     args = parser.parse_args()
-    convert_align_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)
+    convert_align_checkpoint(
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.save_model,
+        args.push_to_hub,
+    )

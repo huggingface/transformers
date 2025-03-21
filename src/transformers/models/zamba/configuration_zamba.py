@@ -19,7 +19,6 @@ import math
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -194,18 +193,26 @@ class ZambaConfig(PretrainedConfig):
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
+        self.mamba_dt_rank = (
+            math.ceil(self.hidden_size / 16)
+            if mamba_dt_rank == "auto"
+            else mamba_dt_rank
+        )
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
         self.time_step_floor = time_step_floor
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
 
-        self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
+        self.layers_block_type = self._layers_block_type(
+            num_hidden_layers, attn_layer_period, attn_layer_offset
+        )
 
         assert (
             self.mamba_expand * self.hidden_size
-        ) % self.n_mamba_heads == 0, "`intermediate_size` should be divisible by `n_mamba_heads`."
+        ) % self.n_mamba_heads == 0, (
+            "`intermediate_size` should be divisible by `n_mamba_heads`."
+        )
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -215,12 +222,17 @@ class ZambaConfig(PretrainedConfig):
             **kwargs,
         )
 
-    def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
+    def _layers_block_type(
+        self, num_hidden_layers, attn_layer_period, attn_layer_offset
+    ):
         layers = [
             "mamba",
             "mamba",
             "hybrid",
-        ] + ["hybrid" if i % attn_layer_period == attn_layer_offset else "mamba" for i in range(num_hidden_layers - 3)]
+        ] + [
+            "hybrid" if i % attn_layer_period == attn_layer_offset else "mamba"
+            for i in range(num_hidden_layers - 3)
+        ]
         return layers
 
 

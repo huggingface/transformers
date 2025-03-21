@@ -20,7 +20,6 @@ from copy import deepcopy
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -93,9 +92,13 @@ class ColPaliConfig(PretrainedConfig):
             )
 
         self.vlm_config = vlm_config
-        self.text_config = text_config = text_config if text_config is not None else vlm_config.text_config
+        self.text_config = text_config = (
+            text_config if text_config is not None else vlm_config.text_config
+        )
         if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "gemma"
+            )
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
 
         self.embedding_dim = embedding_dim

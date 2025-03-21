@@ -33,19 +33,12 @@ import tree
 from absl import app, flags, logging
 from orbax import checkpoint as obc
 
-from transformers import (
-    Gemma3Config,
-    Gemma3ForCausalLM,
-    Gemma3ForConditionalGeneration,
-    Gemma3ImageProcessor,
-    Gemma3Processor,
-    Gemma3TextConfig,
-    GemmaTokenizerFast,
-    GenerationConfig,
-    SiglipVisionConfig,
-)
+from transformers import (Gemma3Config, Gemma3ForCausalLM,
+                          Gemma3ForConditionalGeneration, Gemma3ImageProcessor,
+                          Gemma3Processor, Gemma3TextConfig,
+                          GemmaTokenizerFast, GenerationConfig,
+                          SiglipVisionConfig)
 from transformers.image_utils import PILImageResampling
-
 
 # ==== Internal Constants and Classes ====
 
@@ -96,9 +89,13 @@ _DTYPES = {"float32", "bfloat16", "float16"}
 
 _SIGLIP_BASE = "SigLiPFromPatches_0/siglip_encoder"
 _SIGLIP_EMBEDDING = "SigLiPFromPatches_0/siglip_encoder/embedding"
-_SIGLIP_TRANSFORMER_ENCODER_BLOCK = "SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_"
+_SIGLIP_TRANSFORMER_ENCODER_BLOCK = (
+    "SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_"
+)
 _SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN = len(_SIGLIP_TRANSFORMER_ENCODER_BLOCK)
-_SIGLIP_TRANSFORMER_ENCODER_NORM = "SigLiPFromPatches_0/siglip_encoder/Transformer/encoder_norm"
+_SIGLIP_TRANSFORMER_ENCODER_NORM = (
+    "SigLiPFromPatches_0/siglip_encoder/Transformer/encoder_norm"
+)
 
 _TRANSFORMER_DECODER_BLOCK = "transformer/layer_"
 _TRANSFORMER_DECODER_BLOCK_LEN = len(_TRANSFORMER_DECODER_BLOCK)
@@ -154,7 +151,10 @@ _VARIANTS = {
             num_hidden_layers=34,
             num_key_value_heads=4,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_scaling={
+                "rope_type": "linear",
+                "factor": 8.0,
+            },  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -172,7 +172,10 @@ _VARIANTS = {
             num_hidden_layers=48,
             num_key_value_heads=8,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_scaling={
+                "rope_type": "linear",
+                "factor": 8.0,
+            },  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -190,11 +193,16 @@ _VARIANTS = {
             num_key_value_heads=16,
             head_dim=128,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_scaling={
+                "rope_type": "linear",
+                "factor": 8.0,
+            },  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
-            query_pre_attn_scalar=(42 * 128 // 32),  # 1 / sqrt(hidden_size // num_attention_heads)
+            query_pre_attn_scalar=(
+                42 * 128 // 32
+            ),  # 1 / sqrt(hidden_size // num_attention_heads)
         ),
         vision_config=_VISION_CONFIG,
     ),
@@ -210,7 +218,9 @@ _CHECKPOINT_PATH = flags.DEFINE_string(
 )
 
 _INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
-    name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
+    name="include_chat_template",
+    default=False,
+    help="If true, will save the default chat template with the tokenizer",
 )
 
 _OUTPUT_PATH = flags.DEFINE_string(
@@ -265,17 +275,25 @@ def convert_siglip_weight(
     updated_weights: np.ndarray = None
 
     if path == _SIGLIP_BASE:
-        normalized_path = "vision_tower.vision_model.embeddings.position_embedding.weight"
+        normalized_path = (
+            "vision_tower.vision_model.embeddings.position_embedding.weight"
+        )
         updated_weights = weights.reshape(-1, config.hidden_size)
     elif path == _SIGLIP_EMBEDDING:
         if prop == "kernel":
-            normalized_path = "vision_tower.vision_model.embeddings.patch_embedding.weight"
+            normalized_path = (
+                "vision_tower.vision_model.embeddings.patch_embedding.weight"
+            )
             updated_weights = weights.transpose(3, 2, 0, 1)
         elif prop == "bias":
-            normalized_path = "vision_tower.vision_model.embeddings.patch_embedding.bias"
+            normalized_path = (
+                "vision_tower.vision_model.embeddings.patch_embedding.bias"
+            )
             updated_weights = weights
         else:
-            raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+            raise ValueError(
+                f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
+            )
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
         next_path_seperator_idx = encoder_block_path.find("/")
@@ -293,9 +311,13 @@ def convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
+                raise ValueError(
+                    f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`."
+                )
         elif encoder_block_path.startswith("/MlpBlock_0"):
-            normalized_path += ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
+            normalized_path += (
+                ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
+            )
 
             if prop == "kernel":
                 normalized_path += ".weight"
@@ -304,7 +326,9 @@ def convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+                raise ValueError(
+                    f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
+                )
         elif encoder_block_path.startswith("/MultiHeadDotProductAttention_0"):
             if encoder_block_path.endswith("/key"):
                 normalized_path += ".self_attn.k_proj"
@@ -315,7 +339,9 @@ def convert_siglip_weight(
             elif encoder_block_path.endswith("/value"):
                 normalized_path += ".self_attn.v_proj"
             else:
-                raise ValueError(f"Unexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0.")
+                raise ValueError(
+                    f"Unexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0."
+                )
 
             if prop == "bias":
                 normalized_path += ".bias"
@@ -324,9 +350,13 @@ def convert_siglip_weight(
                 normalized_path += ".weight"
                 updated_weights = weights.reshape(-1, config.hidden_size).transpose()
             else:
-                raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+                raise ValueError(
+                    f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
+                )
         else:
-            raise ValueError(f"Unexpected path `{path}` in SigLIP Transformer Encoder Block.")
+            raise ValueError(
+                f"Unexpected path `{path}` in SigLIP Transformer Encoder Block."
+            )
     elif path == _SIGLIP_TRANSFORMER_ENCODER_NORM:
         if prop == "scale":
             normalized_path = "vision_tower.vision_model.post_layernorm.weight"
@@ -335,7 +365,9 @@ def convert_siglip_weight(
             normalized_path = "vision_tower.vision_model.post_layernorm.bias"
             updated_weights = weights
         else:
-            raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
+            raise ValueError(
+                f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`."
+            )
     else:
         raise ValueError(f"Unexpected path `{path}`.")
 
@@ -368,11 +400,16 @@ def convert_transformer_weights(
                 pre_expansion_embeddings = weights
                 mu = np.mean(pre_expansion_embeddings, axis=0)
                 sigma = np.cov(pre_expansion_embeddings, rowvar=False, bias=True)
-                new_embeddings = np.random.multivariate_normal(mu, 1e-5 * sigma, size=64)
+                new_embeddings = np.random.multivariate_normal(
+                    mu, 1e-5 * sigma, size=64
+                )
                 weights = np.vstack([pre_expansion_embeddings, new_embeddings])
 
             converted_weights = [weights]
-        elif _VARIANT.value == _VARIANT_GEMMA_3_1B or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
+        elif _VARIANT.value == _VARIANT_GEMMA_3_1B or prop in (
+            "mm_output_embedding",
+            "mm_input_embedding_extra",
+        ):
             return zip([], [])
         else:
             raise ValueError(f"Unexpected member, {prop}, in Embedder.")
@@ -401,7 +438,9 @@ def convert_transformer_weights(
 
         if path.endswith("attn/attn_vec_einsum"):
             converted_paths = [f"{base_path}.self_attn.o_proj.weight"]
-            converted_weights = [weights.transpose(2, 0, 1).reshape(config.hidden_size, attn_head_dim)]
+            converted_weights = [
+                weights.transpose(2, 0, 1).reshape(config.hidden_size, attn_head_dim)
+            ]
         elif path.endswith("attn/_key_norm"):
             converted_paths = [f"{base_path}.self_attn.k_norm.weight"]
             converted_weights = [weights]
@@ -412,12 +451,18 @@ def convert_transformer_weights(
             ]
             k_proj_weights, v_proj_weights = weights
             converted_weights = [
-                k_proj_weights.transpose(0, 2, 1).reshape(kv_head_dim, config.hidden_size),
-                v_proj_weights.transpose(0, 2, 1).reshape(kv_head_dim, config.hidden_size),
+                k_proj_weights.transpose(0, 2, 1).reshape(
+                    kv_head_dim, config.hidden_size
+                ),
+                v_proj_weights.transpose(0, 2, 1).reshape(
+                    kv_head_dim, config.hidden_size
+                ),
             ]
         elif path.endswith("attn/q_einsum"):
             converted_paths = [f"{base_path}.self_attn.q_proj.weight"]
-            converted_weights = [weights.transpose(0, 2, 1).reshape(attn_head_dim, config.hidden_size)]
+            converted_weights = [
+                weights.transpose(0, 2, 1).reshape(attn_head_dim, config.hidden_size)
+            ]
         elif path.endswith("attn/_query_norm"):
             converted_paths = [f"{base_path}.self_attn.q_norm.weight"]
             converted_weights = [weights]
@@ -478,10 +523,14 @@ def convert(checkpoint_path: str, config: Gemma3Config) -> dict[str, torch.Tenso
             if config.vision_config is None:
                 continue
 
-            path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
+            path, weights = convert_siglip_weight(
+                config=config.vision_config, paths=paths, weights=value
+            )
             update_tree(path, weights, config.vision_config.torch_dtype)
         else:
-            for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
+            for path, weights in convert_transformer_weights(
+                config=config.text_config, paths=paths, weights=value
+            ):
                 if config.vision_config is None:
                     path = path[len("language_model.") :]
 
@@ -490,7 +539,9 @@ def convert(checkpoint_path: str, config: Gemma3Config) -> dict[str, torch.Tenso
     if config.vision_config is None:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
     else:
-        hf_tree["language_model.lm_head.weight"] = hf_tree["language_model.model.embed_tokens.weight"]
+        hf_tree["language_model.lm_head.weight"] = hf_tree[
+            "language_model.model.embed_tokens.weight"
+        ]
 
     return hf_tree
 
@@ -516,7 +567,9 @@ def main(*args):
         _VISION_DTYPE.value,
     )
     state_tree = convert(_CHECKPOINT_PATH.value, config)
-    logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
+    logging.info(
+        "Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant
+    )
 
     with accelerate.init_empty_weights():
         if variant == _VARIANT_GEMMA_3_1B:

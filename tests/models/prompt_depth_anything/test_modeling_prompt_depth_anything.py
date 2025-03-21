@@ -21,12 +21,12 @@ import requests
 from transformers import Dinov2Config, PromptDepthAnythingConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -81,13 +81,19 @@ class PromptDepthAnythingModelTester:
         self.seq_length = (self.image_size // self.patch_size) ** 2 + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
-        prompt_depth = floats_tensor([self.batch_size, 1, self.image_size // 4, self.image_size // 4])
+        prompt_depth = floats_tensor(
+            [self.batch_size, 1, self.image_size // 4, self.image_size // 4]
+        )
 
         config = self.get_config()
 
@@ -116,13 +122,18 @@ class PromptDepthAnythingModelTester:
             reshape_hidden_states=self.reshape_hidden_states,
         )
 
-    def create_and_check_for_depth_estimation(self, config, pixel_values, labels, prompt_depth):
+    def create_and_check_for_depth_estimation(
+        self, config, pixel_values, labels, prompt_depth
+    ):
         config.num_labels = self.num_labels
         model = PromptDepthAnythingForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, prompt_depth=prompt_depth)
-        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(
+            result.predicted_depth.shape,
+            (self.batch_size, self.image_size, self.image_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -132,15 +143,21 @@ class PromptDepthAnythingModelTester:
 
 
 @require_torch
-class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PromptDepthAnythingModelTest(
+    ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Prompt Depth Anything does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (PromptDepthAnythingForDepthEstimation,) if is_torch_available() else ()
+    all_model_classes = (
+        (PromptDepthAnythingForDepthEstimation,) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"depth-estimation": PromptDepthAnythingForDepthEstimation} if is_torch_available() else {}
+        {"depth-estimation": PromptDepthAnythingForDepthEstimation}
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -184,11 +201,15 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Prompt Depth Anything with AutoBackbone does not have a base model")
+    @unittest.skip(
+        reason="Prompt Depth Anything with AutoBackbone does not have a base model"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Prompt Depth Anything with AutoBackbone does not have a base model")
+    @unittest.skip(
+        reason="Prompt Depth Anything with AutoBackbone does not have a base model"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -236,9 +257,7 @@ def prepare_img():
 
 
 def prepare_prompt_depth():
-    prompt_depth_url = (
-        "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
-    )
+    prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
     prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
     return prompt_depth
 
@@ -248,7 +267,9 @@ def prepare_prompt_depth():
 @slow
 class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference_wo_prompt_depth(self):
-        image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+        image_processor = AutoImageProcessor.from_pretrained(
+            "depth-anything/prompt-depth-anything-vits-hf"
+        )
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/prompt-depth-anything-vits-hf"
         ).to(torch_device)
@@ -264,20 +285,30 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.5029, 0.5120, 0.5176], [0.4998, 0.5147, 0.5197], [0.4973, 0.5201, 0.5241]]
+            [
+                [0.5029, 0.5120, 0.5176],
+                [0.4998, 0.5147, 0.5197],
+                [0.4973, 0.5201, 0.5241],
+            ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3)
+        )
 
     def test_inference(self):
-        image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+        image_processor = AutoImageProcessor.from_pretrained(
+            "depth-anything/prompt-depth-anything-vits-hf"
+        )
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/prompt-depth-anything-vits-hf"
         ).to(torch_device)
 
         image = prepare_img()
         prompt_depth = prepare_prompt_depth()
-        inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth).to(torch_device)
+        inputs = image_processor(
+            images=image, return_tensors="pt", prompt_depth=prompt_depth
+        ).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -287,10 +318,16 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
+            [
+                [3.0100, 3.0016, 3.0219],
+                [3.0046, 3.0137, 3.0275],
+                [3.0083, 3.0191, 3.0292],
+            ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3)
+        )
 
     def test_export(self):
         for strict in [True, False]:
@@ -304,10 +341,14 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
                     .to(torch_device)
                     .eval()
                 )
-                image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+                image_processor = AutoImageProcessor.from_pretrained(
+                    "depth-anything/prompt-depth-anything-vits-hf"
+                )
                 image = prepare_img()
                 prompt_depth = prepare_prompt_depth()
-                inputs = image_processor(images=image, prompt_depth=prompt_depth, return_tensors="pt").to(torch_device)
+                inputs = image_processor(
+                    images=image, prompt_depth=prompt_depth, return_tensors="pt"
+                ).to(torch_device)
 
                 exported_program = torch.export.export(
                     model,
@@ -319,7 +360,14 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
                     exported_outputs = exported_program.module().forward(
                         inputs["pixel_values"], inputs["prompt_depth"]
                     )
-                self.assertEqual(eager_outputs.predicted_depth.shape, exported_outputs.predicted_depth.shape)
+                self.assertEqual(
+                    eager_outputs.predicted_depth.shape,
+                    exported_outputs.predicted_depth.shape,
+                )
                 self.assertTrue(
-                    torch.allclose(eager_outputs.predicted_depth, exported_outputs.predicted_depth, atol=1e-4)
+                    torch.allclose(
+                        eager_outputs.predicted_depth,
+                        exported_outputs.predicted_depth,
+                        atol=1e-4,
+                    )
                 )

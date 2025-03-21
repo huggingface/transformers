@@ -4,7 +4,6 @@ from fairseq.checkpoint_utils import load_checkpoint_to_cpu
 
 from transformers import Kosmos2Config, Kosmos2ForConditionalGeneration
 
-
 KEYS_TO_MODIFY_MAPPING = {
     "gpt_model.decoder.output_projection": "text_model.lm_head",
     "gpt_model.decoder": "text_model.model",
@@ -68,10 +67,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--kosmos2_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--kosmos2_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_kosmos2_checkpoint_to_pytorch(args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_kosmos2_checkpoint_to_pytorch(
+        args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path
+    )

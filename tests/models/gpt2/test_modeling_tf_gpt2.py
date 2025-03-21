@@ -21,21 +21,18 @@ from transformers import GPT2Config, is_tf_available
 from transformers.testing_utils import require_tf, require_tf2onnx, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import GPT2Tokenizer
     from transformers.models.gpt2.modeling_tf_gpt2 import (
-        TFGPT2DoubleHeadsModel,
-        TFGPT2ForSequenceClassification,
-        TFGPT2LMHeadModel,
-        TFGPT2Model,
-    )
+        TFGPT2DoubleHeadsModel, TFGPT2ForSequenceClassification,
+        TFGPT2LMHeadModel, TFGPT2Model)
     from transformers.tf_utils import shape_list
 
 
@@ -80,18 +77,26 @@ class TFGPT2ModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         mc_token_ids = None
         if self.use_mc_token_ids:
-            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+            mc_token_ids = ids_tensor(
+                [self.batch_size, self.num_choices], self.seq_length
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = GPT2Config(
@@ -139,8 +144,12 @@ class TFGPT2ModelTester:
             choice_labels,
         ) = self.prepare_config_and_inputs()
 
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+        encoder_hidden_states = floats_tensor(
+            [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        encoder_attention_mask = ids_tensor(
+            [self.batch_size, self.seq_length], vocab_size=2
+        )
 
         return (
             config,
@@ -155,7 +164,9 @@ class TFGPT2ModelTester:
             encoder_attention_mask,
         )
 
-    def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt2_model(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = TFGPT2Model(config=config)
         inputs = {
             "input_ids": input_ids,
@@ -169,15 +180,22 @@ class TFGPT2ModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
-    def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt2_model_past(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = TFGPT2Model(config=config)
 
         # first forward pass
         outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids, token_type_ids=token_type_ids)
-        outputs_no_past = model(input_ids, token_type_ids=token_type_ids, use_cache=False)
+        outputs_no_past = model(
+            input_ids, token_type_ids=token_type_ids, use_cache=False
+        )
 
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
@@ -192,10 +210,14 @@ class TFGPT2ModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
 
-        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            token_type_ids=next_token_types,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -203,7 +225,9 @@ class TFGPT2ModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-6
+        )
 
     def create_and_check_gpt2_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -213,7 +237,9 @@ class TFGPT2ModelTester:
         # create attention mask
         half_seq_length = self.seq_length // 2
         attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
-        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
+        attn_mask_end = tf.zeros(
+            (self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32
+        )
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
@@ -224,22 +250,32 @@ class TFGPT2ModelTester:
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
-        vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, self.seq_length), config.vocab_size
+        )
+        vector_condition = tf.range(self.seq_length) == (
+            self.seq_length - random_seq_idx_to_change
+        )
         condition = tf.transpose(
-            tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
+            tf.broadcast_to(
+                tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size)
+            )
         )
         input_ids = tf.where(condition, random_other_next_tokens, input_ids)
 
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat([attn_mask, tf.ones((shape_list(attn_mask)[0], 1), dtype=tf.int32)], axis=1)
+        attn_mask = tf.concat(
+            [attn_mask, tf.ones((shape_list(attn_mask)[0], 1), dtype=tf.int32)], axis=1
+        )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -247,7 +283,9 @@ class TFGPT2ModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-12)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-12
+        )
 
     def create_and_check_gpt2_model_past_large_inputs(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -260,7 +298,12 @@ class TFGPT2ModelTester:
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -275,7 +318,9 @@ class TFGPT2ModelTester:
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
 
         output_from_no_past = model(
-            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
+            next_input_ids,
+            token_type_ids=next_token_type_ids,
+            attention_mask=next_attention_mask,
         )["last_hidden_state"]
         output_from_past = model(
             next_tokens,
@@ -291,9 +336,13 @@ class TFGPT2ModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-3
+        )
 
-    def create_and_check_gpt2_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt2_lm_head(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = TFGPT2LMHeadModel(config=config)
         inputs = {
             "input_ids": input_ids,
@@ -301,16 +350,31 @@ class TFGPT2ModelTester:
             "token_type_ids": token_type_ids,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_gpt2_double_head(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        mc_token_ids,
+        *args,
     ):
         model = TFGPT2DoubleHeadsModel(config=config)
 
-        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_inputs_ids = tf.tile(
+            tf.expand_dims(input_ids, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_input_mask = tf.tile(
+            tf.expand_dims(input_mask, 1), (1, self.num_choices, 1)
+        )
+        multiple_choice_token_type_ids = tf.tile(
+            tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1)
+        )
 
         inputs = {
             "input_ids": multiple_choice_inputs_ids,
@@ -320,12 +384,23 @@ class TFGPT2ModelTester:
         }
         result = model(inputs)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
+            result.logits.shape,
+            (self.batch_size, self.num_choices, self.seq_length, self.vocab_size),
         )
-        self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.mc_logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def create_and_check_gpt2_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        mc_token_ids,
+        sequence_labels,
+        *args,
     ):
         config.num_labels = self.num_labels
         inputs = {
@@ -363,9 +438,16 @@ class TFGPT2ModelTester:
 
 
 @require_tf
-class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TFGPT2ModelTest(
+    TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
+        (
+            TFGPT2Model,
+            TFGPT2LMHeadModel,
+            TFGPT2ForSequenceClassification,
+            TFGPT2DoubleHeadsModel,
+        )
         if is_tf_available()
         else ()
     )
@@ -401,11 +483,15 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def test_gpt2_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_gpt2_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     def test_gpt2_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_gpt2_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_gpt2_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -417,7 +503,9 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_gpt2_for_sequence_classification(
+            *config_and_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -446,7 +534,9 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             model = model_class(config)
             model.build_in_name_scope()
 
-            onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
+            onnx_model_proto, _ = tf2onnx.convert.from_keras(
+                model, opset=self.onnx_min_opset
+            )
 
             onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
@@ -470,7 +560,10 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
 
         generation_kwargs = {
-            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "bad_words_ids": [
+                tokenizer("is").input_ids,
+                tokenizer("angry about").input_ids,
+            ],
             "no_repeat_ngram_size": 2,
             "do_sample": False,
             "repetition_penalty": 1.3,
@@ -498,13 +591,19 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         generation_kwargs = {
             "do_sample": True,
-            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "bad_words_ids": [
+                tokenizer("is").input_ids,
+                tokenizer("angry about").input_ids,
+            ],
             "no_repeat_ngram_size": 2,
             "repetition_penalty": 1.3,
             "temperature": 1.5,
             "top_k": 500,
             "top_p": 0.9,
-            "seed": [42, 0],  # seed set -> deterministic sampling sequence -> deterministic generation
+            "seed": [
+                42,
+                0,
+            ],  # seed set -> deterministic sampling sequence -> deterministic generation
         }
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
@@ -531,7 +630,10 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
 
         generation_kwargs = {
-            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "bad_words_ids": [
+                tokenizer("is").input_ids,
+                tokenizer("angry about").input_ids,
+            ],
             "no_repeat_ngram_size": 2,
             "do_sample": False,
             "num_beams": 2,
@@ -556,14 +658,15 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer.padding_side = "left"
 
         generation_kwargs = {
-            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "bad_words_ids": [
+                tokenizer("is").input_ids,
+                tokenizer("angry about").input_ids,
+            ],
             "no_repeat_ngram_size": 2,
             "do_sample": False,
             "repetition_penalty": 1.3,
         }
-        expected_output_string = (
-            "Today is a beautiful day and I am so happy to be able take part in this amazing event."
-        )
+        expected_output_string = "Today is a beautiful day and I am so happy to be able take part in this amazing event."
 
         sentences = ["Today is a beautiful day and"]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
@@ -572,7 +675,10 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertEqual(output_strings[0], expected_output_string)
 
-        sentences = ["Today is a beautiful day and", "This is a very long input that we absolutely don't care about"]
+        sentences = [
+            "Today is a beautiful day and",
+            "This is a very long input that we absolutely don't care about",
+        ]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True)
         # longer max length to capture the full length (remember: it is left padded)
         output_ids = model.generate(**input_ids, **generation_kwargs, max_length=27)
@@ -631,12 +737,16 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             input_ids = tokenizer(sentence, return_tensors="tf", padding=True)
 
             output_ids = model.generate(**input_ids, do_sample=True, seed=[7, 0])
-            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            output_strings = tokenizer.batch_decode(
+                output_ids, skip_special_tokens=True
+            )
             self.assertListEqual(output_strings, expected_output_string)
 
             xla_generate = tf.function(model.generate, jit_compile=True)
             output_ids = xla_generate(**input_ids, do_sample=True, seed=[7, 0])
-            output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            output_strings = tokenizer.batch_decode(
+                output_ids, skip_special_tokens=True
+            )
             self.assertListEqual(output_strings, expected_output_string_xla)
 
     @slow
@@ -674,7 +784,9 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         gpt2_model = TFGPT2LMHeadModel.from_pretrained("openai-community/gpt2-large")
         input_ids = gpt2_tokenizer(article, return_tensors="tf")
 
-        outputs = gpt2_model.generate(**input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        outputs = gpt2_model.generate(
+            **input_ids, penalty_alpha=0.6, top_k=4, max_length=256
+        )
 
         generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 

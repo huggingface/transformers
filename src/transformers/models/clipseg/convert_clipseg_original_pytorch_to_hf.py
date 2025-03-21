@@ -21,15 +21,10 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import (
-    CLIPSegConfig,
-    CLIPSegForImageSegmentation,
-    CLIPSegProcessor,
-    CLIPSegTextConfig,
-    CLIPSegVisionConfig,
-    CLIPTokenizer,
-    ViTImageProcessor,
-)
+from transformers import (CLIPSegConfig, CLIPSegForImageSegmentation,
+                          CLIPSegProcessor, CLIPSegTextConfig,
+                          CLIPSegVisionConfig, CLIPTokenizer,
+                          ViTImageProcessor)
 
 
 def get_clipseg_config(model_name):
@@ -73,16 +68,23 @@ def rename_key(name):
     if "token_embedding" in name:
         name = name.replace("token_embedding", "text_model.embeddings.token_embedding")
     if "positional_embedding" in name and "visual" not in name:
-        name = name.replace("positional_embedding", "text_model.embeddings.position_embedding.weight")
+        name = name.replace(
+            "positional_embedding", "text_model.embeddings.position_embedding.weight"
+        )
     if "ln_final" in name:
         name = name.replace("ln_final", "text_model.final_layer_norm")
     # vision encoder
     if "visual.class_embedding" in name:
-        name = name.replace("visual.class_embedding", "vision_model.embeddings.class_embedding")
+        name = name.replace(
+            "visual.class_embedding", "vision_model.embeddings.class_embedding"
+        )
     if "visual.conv1" in name:
         name = name.replace("visual.conv1", "vision_model.embeddings.patch_embedding")
     if "visual.positional_embedding" in name:
-        name = name.replace("visual.positional_embedding", "vision_model.embeddings.position_embedding.weight")
+        name = name.replace(
+            "visual.positional_embedding",
+            "vision_model.embeddings.position_embedding.weight",
+        )
     if "visual.ln_pre" in name:
         name = name.replace("visual.ln_pre", "vision_model.pre_layrnorm")
     if "visual.ln_post" in name:
@@ -95,7 +97,12 @@ def rename_key(name):
     # decoder
     if "trans_conv" in name:
         name = name.replace("trans_conv", "transposed_convolution")
-    if "film_mul" in name or "film_add" in name or "reduce" in name or "transposed_convolution" in name:
+    if (
+        "film_mul" in name
+        or "film_add" in name
+        or "reduce" in name
+        or "transposed_convolution" in name
+    ):
         name = "decoder." + name
     if "blocks" in name:
         name = name.replace("blocks", "decoder.layers")
@@ -127,27 +134,49 @@ def convert_state_dict(orig_state_dict, config):
                 prefix = "text_model"
 
             if "weight" in key:
-                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
-                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+                orig_state_dict[
+                    f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
-                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+                orig_state_dict[
+                    f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"
+                ] = val[-dim:]
         elif "self_attn" in key and "out_proj" not in key:
             key_split = key.split(".")
             layer_num = int(key_split[1])
             dim = config.reduce_dim
             if "weight" in key:
-                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
-                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[dim : dim * 2, :]
-                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+                orig_state_dict[
+                    f"decoder.layers.{layer_num}.self_attn.q_proj.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"decoder.layers.{layer_num}.self_attn.k_proj.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"decoder.layers.{layer_num}.self_attn.v_proj.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
-                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.q_proj.bias"] = (
+                    val[:dim]
+                )
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.k_proj.bias"] = (
+                    val[dim : dim * 2]
+                )
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.v_proj.bias"] = (
+                    val[-dim:]
+                )
         else:
             new_name = rename_key(key)
             if "visual_projection" in new_name or "text_projection" in new_name:
@@ -164,7 +193,9 @@ def prepare_img():
     return image
 
 
-def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
+def convert_clipseg_checkpoint(
+    model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub
+):
     config = get_clipseg_config(model_name)
     model = CLIPSegForImageSegmentation(config)
     model.eval()
@@ -180,7 +211,10 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-    if missing_keys != ["clip.text_model.embeddings.position_ids", "clip.vision_model.embeddings.position_ids"]:
+    if missing_keys != [
+        "clip.text_model.embeddings.position_ids",
+        "clip.vision_model.embeddings.position_ids",
+    ]:
         raise ValueError("Missing keys that are not expected: {}".format(missing_keys))
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
@@ -192,7 +226,9 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     image = prepare_img()
     text = ["a glass", "something to fill", "wood", "a jar"]
 
-    inputs = processor(text=text, images=[image] * len(text), padding="max_length", return_tensors="pt")
+    inputs = processor(
+        text=text, images=[image] * len(text), padding="max_length", return_tensors="pt"
+    )
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -202,22 +238,38 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328])
     if model_name == "clipseg-rd64-refined":
         expected_masks_slice = torch.tensor(
-            [[-10.0407, -9.9431, -10.2646], [-9.9751, -9.7064, -9.9586], [-9.6891, -9.5645, -9.9618]]
+            [
+                [-10.0407, -9.9431, -10.2646],
+                [-9.9751, -9.7064, -9.9586],
+                [-9.6891, -9.5645, -9.9618],
+            ]
         )
     elif model_name == "clipseg-rd64":
         expected_masks_slice = torch.tensor(
-            [[-7.2877, -7.2711, -7.2463], [-7.2652, -7.2780, -7.2520], [-7.2239, -7.2204, -7.2001]]
+            [
+                [-7.2877, -7.2711, -7.2463],
+                [-7.2652, -7.2780, -7.2520],
+                [-7.2239, -7.2204, -7.2001],
+            ]
         )
     elif model_name == "clipseg-rd16":
         expected_masks_slice = torch.tensor(
-            [[-6.3955, -6.4055, -6.4151], [-6.3911, -6.4033, -6.4100], [-6.3474, -6.3702, -6.3762]]
+            [
+                [-6.3955, -6.4055, -6.4151],
+                [-6.3911, -6.4033, -6.4100],
+                [-6.3474, -6.3702, -6.3762],
+            ]
         )
     else:
         raise ValueError(f"Model name {model_name} not supported.")
 
     assert torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3)
-    assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3)
-    assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
+    assert torch.allclose(
+        outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3
+    )
+    assert torch.allclose(
+        outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3
+    )
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -254,11 +306,21 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_clipseg_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_clipseg_checkpoint(
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+    )

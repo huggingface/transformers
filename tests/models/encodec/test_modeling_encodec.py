@@ -24,17 +24,13 @@ import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, EncodecConfig
-from transformers.testing_utils import (
-    is_torch_available,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (is_torch_available, require_torch,
+                                        slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -58,7 +54,11 @@ def prepare_inputs_dict(
     else:
         encoder_dict = {"input_values": input_values}
 
-    decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
+    decoder_dict = (
+        {"decoder_input_ids": decoder_input_ids}
+        if decoder_input_ids is not None
+        else {}
+    )
 
     return {**encoder_dict, **decoder_dict}
 
@@ -93,7 +93,9 @@ class EncodecModelTester:
         self.codebook_size = codebook_size
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.intermediate_size], scale=1.0
+        )
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
@@ -104,22 +106,29 @@ class EncodecModelTester:
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
         config, inputs_dict = self.prepare_config_and_inputs()
-        inputs_dict["audio_codes"] = ids_tensor([1, self.batch_size, 1, self.num_channels], self.codebook_size).type(
-            torch.int32
-        )
+        inputs_dict["audio_codes"] = ids_tensor(
+            [1, self.batch_size, 1, self.num_channels], self.codebook_size
+        ).type(torch.int32)
         inputs_dict["audio_scales"] = [None]
 
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_normalization(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.intermediate_size], scale=1.0
+        )
         config = self.get_config()
         config.normalize = True
 
-        processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
+        processor = EncodecFeatureExtractor(
+            feature_size=config.audio_channels, sampling_rate=config.sampling_rate
+        )
         input_values = list(input_values.cpu().numpy())
         inputs_dict = processor(
-            input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
+            input_values,
+            sampling_rate=config.sampling_rate,
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
 
         return config, inputs_dict
@@ -140,7 +149,8 @@ class EncodecModelTester:
         model = EncodecModel(config=config).to(torch_device).eval()
         result = model(**inputs_dict)
         self.parent.assertEqual(
-            result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
+            result.audio_values.shape,
+            (self.batch_size, self.num_channels, self.intermediate_size),
         )
 
 
@@ -151,11 +161,15 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
-    pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": EncodecModel} if is_torch_available() else {}
+    )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
         if "output_attentions" in inputs_dict:
             inputs_dict.pop("output_attentions")
         if "output_hidden_states" in inputs_dict:
@@ -165,7 +179,11 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self,
+            config_class=EncodecConfig,
+            hidden_size=37,
+            common_properties=[],
+            has_text_modality=False,
         )
 
     def test_config(self):
@@ -185,13 +203,19 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["input_values", "padding_mask", "bandwidth"]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
-    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics"
+    )
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -263,10 +287,14 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -310,7 +338,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     def test_feed_forward_chunking(self):
-        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict) = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
@@ -336,7 +366,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.eval()
 
             hidden_states_with_chunk = model(**inputs)[1]
-            torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-1, atol=1e-2)
+            torch.testing.assert_close(
+                hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-1, atol=1e-2
+            )
 
     @unittest.skip(
         reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
@@ -391,8 +423,12 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                )
 
                 self.assertTrue(isinstance(tuple_output, tuple))
                 self.assertTrue(isinstance(dict_output, dict))
@@ -400,7 +436,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
                     self.assertTrue(
                         torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
+                            set_nan_tensor_to_zero(tuple_value),
+                            set_nan_tensor_to_zero(dict_value),
+                            atol=1e-5,
                         ),
                         msg=(
                             "Tuple and dict output are not equal. Difference:"
@@ -431,7 +469,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     elif not any(x in name for x in ignore_init):
@@ -447,7 +487,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
     def test_model_forward_with_normalization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
+        config, inputs_dict = (
+            self.model_tester.prepare_config_and_inputs_for_normalization()
+        )
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
 
@@ -475,13 +517,17 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": [371955],
             "24.0": [6659962],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
         inputs = processor(
@@ -493,7 +539,9 @@ class EncodecIntegrationTest(unittest.TestCase):
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwidth for best possible reconstruction
-                encoder_outputs = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
+                encoder_outputs = model.encode(
+                    inputs["input_values"], bandwidth=float(bandwidth)
+                )
 
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
@@ -501,13 +549,19 @@ class EncodecIntegrationTest(unittest.TestCase):
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
 
                 audio_codes, scales = encoder_outputs.to_tuple()
-                input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
+                input_values_dec = model.decode(
+                    audio_codes, scales, inputs["padding_mask"]
+                )[0]
                 input_values_enc_dec = model(
-                    inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
+                    inputs["input_values"],
+                    inputs["padding_mask"],
+                    bandwidth=float(bandwidth),
                 )[-1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             # make sure shape matches
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
@@ -529,41 +583,56 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": [144259, 146765, 156435, 176871, 161971],
             "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
         model = model.eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
         # transform mono to stereo
         audio_sample = np.array([audio_sample, audio_sample])
 
-        inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        ).to(torch_device)
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(
-                    inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
+                    inputs["input_values"],
+                    inputs["padding_mask"],
+                    bandwidth=float(bandwidth),
+                    return_dict=False,
                 )
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
                 audio_codes, scales = encoder_outputs
-                input_values_dec = model.decode(audio_codes, scales, inputs["padding_mask"])[0]
+                input_values_dec = model.decode(
+                    audio_codes, scales, inputs["padding_mask"]
+                )[0]
                 input_values_enc_dec = model(
-                    inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth)
+                    inputs["input_values"],
+                    inputs["padding_mask"],
+                    bandwidth=float(bandwidth),
                 )[-1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             # make sure shape matches
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
@@ -591,27 +660,43 @@ class EncodecIntegrationTest(unittest.TestCase):
                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
-        processor = AutoProcessor.from_pretrained(model_id, chunk_length_s=1, overlap=0.01)
+        processor = AutoProcessor.from_pretrained(
+            model_id, chunk_length_s=1, overlap=0.01
+        )
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
 
         audio_samples = [
             np.array([audio_sample["array"], audio_sample["array"]])
             for audio_sample in librispeech_dummy[-2:]["audio"]
         ]
 
-        inputs = processor(raw_audio=audio_samples, sampling_rate=processor.sampling_rate, return_tensors="pt")
+        inputs = processor(
+            raw_audio=audio_samples,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        )
         input_values = inputs["input_values"].to(torch_device)
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwidth for best possible reconstruction
-                encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
-                audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
-                audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
+                encoder_outputs = model.encode(
+                    input_values, bandwidth=float(bandwidth), return_dict=False
+                )
+                audio_code_sums_0 = [
+                    a[0][0].sum().cpu().item() for a in encoder_outputs[0]
+                ]
+                audio_code_sums_1 = [
+                    a[0][1].sum().cpu().item() for a in encoder_outputs[0]
+                ]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])
@@ -619,10 +704,14 @@ class EncodecIntegrationTest(unittest.TestCase):
 
                 audio_codes, scales = encoder_outputs
                 input_values_dec = model.decode(audio_codes, scales)[0]
-                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
+                input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[
+                    -1
+                ]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             # make sure shape matches
             self.assertTrue(input_values.shape == input_values_enc_dec.shape)

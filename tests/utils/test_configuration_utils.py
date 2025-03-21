@@ -29,11 +29,9 @@ from transformers import AutoConfig, BertConfig, GPT2Config
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
 
-
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
-
 
 config_common_kwargs = {
     "return_dict": False,
@@ -101,7 +99,11 @@ class ConfigPushToHubTester(unittest.TestCase):
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = BertConfig(
-                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                vocab_size=99,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
             )
             config.push_to_hub(tmp_repo.repo_id, token=self._token)
 
@@ -113,11 +115,20 @@ class ConfigPushToHubTester(unittest.TestCase):
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             config = BertConfig(
-                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                vocab_size=99,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
             )
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                config.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_config = BertConfig.from_pretrained(tmp_repo.repo_id)
             for k, v in config.to_dict().items():
@@ -127,7 +138,11 @@ class ConfigPushToHubTester(unittest.TestCase):
     def test_push_to_hub_in_organization(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             config = BertConfig(
-                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                vocab_size=99,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
             )
             config.push_to_hub(tmp_repo.repo_id, token=self._token)
 
@@ -139,11 +154,20 @@ class ConfigPushToHubTester(unittest.TestCase):
     def test_push_to_hub_in_organization_via_save_pretrained(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
             config = BertConfig(
-                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+                vocab_size=99,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
             )
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
-                config.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                config.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_config = BertConfig.from_pretrained(tmp_repo.repo_id)
             for k, v in config.to_dict().items():
@@ -158,9 +182,13 @@ class ConfigPushToHubTester(unittest.TestCase):
             config.push_to_hub(tmp_repo.repo_id, token=self._token)
 
             # This has added the proper auto_map field to the config
-            self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
+            self.assertDictEqual(
+                config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"}
+            )
 
-            new_config = AutoConfig.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            new_config = AutoConfig.from_pretrained(
+                tmp_repo.repo_id, trust_remote_code=True
+            )
             # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
             self.assertEqual(new_config.__class__.__name__, "CustomConfig")
             self.assertEqual(new_config.attribute, 42)
@@ -180,12 +208,18 @@ class ConfigTestUtils(unittest.TestCase):
         )
         self.assertEqual(n_embd, c.n_embd, "mismatch for key: n_embd")
         self.assertEqual(resid_pdrop, c.resid_pdrop, "mismatch for key: resid_pdrop")
-        self.assertEqual(scale_attn_weights, c.scale_attn_weights, "mismatch for key: scale_attn_weights")
+        self.assertEqual(
+            scale_attn_weights,
+            c.scale_attn_weights,
+            "mismatch for key: scale_attn_weights",
+        )
         self.assertEqual(summary_type, c.summary_type, "mismatch for key: summary_type")
 
     def test_config_common_kwargs_is_complete(self):
         base_config = PretrainedConfig()
-        missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
+        missing_keys = [
+            key for key in base_config.__dict__ if key not in config_common_kwargs
+        ]
         # If this part of the test fails, you have arguments to addin config_common_kwargs above.
         self.assertListEqual(
             missing_keys,
@@ -198,7 +232,11 @@ class ConfigTestUtils(unittest.TestCase):
                 "transformers_version",
             ],
         )
-        keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
+        keys_with_defaults = [
+            key
+            for key, value in config_common_kwargs.items()
+            if value == getattr(base_config, key)
+        ]
         if len(keys_with_defaults) > 0:
             raise ValueError(
                 "The following keys are set with the default values in"
@@ -208,16 +246,21 @@ class ConfigTestUtils(unittest.TestCase):
 
     def test_nested_config_load_from_dict(self):
         config = AutoConfig.from_pretrained(
-            "hf-internal-testing/tiny-random-CLIPModel", text_config={"num_hidden_layers": 2}
+            "hf-internal-testing/tiny-random-CLIPModel",
+            text_config={"num_hidden_layers": 2},
         )
         self.assertNotIsInstance(config.text_config, dict)
         self.assertEqual(config.text_config.__class__.__name__, "CLIPTextConfig")
 
     def test_from_pretrained_subfolder(self):
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder")
+        config = BertConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-bert-subfolder"
+        )
         self.assertIsNotNone(config)
 
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
+        config = BertConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert"
+        )
         self.assertIsNotNone(config)
 
     def test_cached_files_are_used_when_internet_is_down(self):
@@ -232,7 +275,9 @@ class ConfigTestUtils(unittest.TestCase):
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch(
+            "requests.Session.request", return_value=response_mock
+        ) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -244,7 +289,10 @@ class ConfigTestUtils(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             configuration.save_pretrained(tmp_dir)
             configuration.hidden_size = 2
-            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"))
+            json.dump(
+                configuration.to_dict(),
+                open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"),
+            )
 
             # This should pick the new configuration file as the version of Transformers is > 4.0.0
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
@@ -255,7 +303,10 @@ class ConfigTestUtils(unittest.TestCase):
             configuration.configuration_files = ["config.42.0.0.json"]
             configuration.hidden_size = 768
             configuration.save_pretrained(tmp_dir)
-            shutil.move(os.path.join(tmp_dir, "config.4.0.0.json"), os.path.join(tmp_dir, "config.42.0.0.json"))
+            shutil.move(
+                os.path.join(tmp_dir, "config.4.0.0.json"),
+                os.path.join(tmp_dir, "config.42.0.0.json"),
+            )
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
             self.assertEqual(new_configuration.hidden_size, 768)
 
@@ -266,8 +317,10 @@ class ConfigTestUtils(unittest.TestCase):
         import transformers as new_transformers
 
         new_transformers.configuration_utils.__version__ = "v4.0.0"
-        new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
-            repo, return_unused_kwargs=True
+        new_configuration, kwargs = (
+            new_transformers.models.auto.AutoConfig.from_pretrained(
+                repo, return_unused_kwargs=True
+            )
         )
         self.assertEqual(new_configuration.hidden_size, 2)
         # This checks `_configuration_file` ia not kept in the kwargs by mistake.
@@ -277,11 +330,15 @@ class ConfigTestUtils(unittest.TestCase):
         import transformers as old_transformers
 
         old_transformers.configuration_utils.__version__ = "v3.0.0"
-        old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(
+            repo
+        )
         self.assertEqual(old_configuration.hidden_size, 768)
 
     def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
-        config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
+        config = BertConfig(
+            min_length=3
+        )  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertWarns(UserWarning) as cm:
                 config.save_pretrained(tmp_dir)
@@ -292,7 +349,9 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
         config = BertConfig(min_length=3)
         self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
+        config = BertConfig(
+            min_length=0
+        )  # `min_length = 0` is a default generation kwarg
         self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):

@@ -16,8 +16,8 @@ import torch.nn as nn
 
 from ..image_transforms import center_to_corners_format
 from ..utils import is_scipy_available
-from .loss_for_object_detection import HungarianMatcher, ImageLoss, _set_aux_loss, generalized_box_iou
-
+from .loss_for_object_detection import (HungarianMatcher, ImageLoss,
+                                        _set_aux_loss, generalized_box_iou)
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
@@ -52,7 +52,9 @@ def sigmoid_focal_loss(
         Loss tensor
     """
     prob = inputs.sigmoid()
-    ce_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = nn.functional.binary_cross_entropy_with_logits(
+        inputs, targets, reduction="none"
+    )
     # add modulating factor
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
@@ -90,12 +92,19 @@ class GroundingDinoHungarianMatcher(HungarianMatcher):
         batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, hidden_dim]
+        out_prob = (
+            outputs["logits"].flatten(0, 1).sigmoid()
+        )  # [batch_size * num_queries, hidden_dim]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
         label_maps = outputs["label_maps"]
 
         # First take the label map for each class in each batch and then concatenate them
-        label_maps = torch.cat([label_map[target["class_labels"]] for label_map, target in zip(label_maps, targets)])
+        label_maps = torch.cat(
+            [
+                label_map[target["class_labels"]]
+                for label_map, target in zip(label_maps, targets)
+            ]
+        )
         # Normalize label maps based on number of tokens per class
         label_maps = label_maps / label_maps.sum(dim=-1, keepdim=True)
 
@@ -105,7 +114,9 @@ class GroundingDinoHungarianMatcher(HungarianMatcher):
         # Compute the classification cost.
         alpha = 0.25
         gamma = 2.0
-        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        neg_cost_class = (
+            (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        )
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
         # Compute the classification cost by taking pos and neg cost in the appropriate index
         class_cost = (pos_cost_class - neg_cost_class) @ label_maps.t()
@@ -114,15 +125,30 @@ class GroundingDinoHungarianMatcher(HungarianMatcher):
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
 
         # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+        giou_cost = -generalized_box_iou(
+            center_to_corners_format(out_bbox), center_to_corners_format(target_bbox)
+        )
 
         # Final cost matrix
-        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        cost_matrix = (
+            self.bbox_cost * bbox_cost
+            + self.class_cost * class_cost
+            + self.giou_cost * giou_cost
+        )
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        indices = [
+            linear_sum_assignment(c[i])
+            for i, c in enumerate(cost_matrix.split(sizes, -1))
+        ]
+        return [
+            (
+                torch.as_tensor(i, dtype=torch.int64),
+                torch.as_tensor(j, dtype=torch.int64),
+            )
+            for i, j in indices
+        ]
 
 
 class GroundingDinoImageLoss(ImageLoss):
@@ -154,14 +180,20 @@ class GroundingDinoImageLoss(ImageLoss):
         # Add offsets to class_labels to select the correct label map
         class_labels = torch.cat(
             [
-                target["class_labels"][J] + len(outputs["label_maps"][i]) if i > 0 else target["class_labels"][J]
+                (
+                    target["class_labels"][J] + len(outputs["label_maps"][i])
+                    if i > 0
+                    else target["class_labels"][J]
+                )
                 for i, (target, (_, J)) in enumerate(zip(targets, indices))
             ]
         )
         label_maps = torch.cat(outputs["label_maps"], dim=0)
 
         idx = self._get_source_permutation_idx(indices)
-        target_classes_onehot = torch.zeros_like(logits, device=logits.device, dtype=torch.long)
+        target_classes_onehot = torch.zeros_like(
+            logits, device=logits.device, dtype=torch.long
+        )
         target_classes_onehot[idx] = label_maps[class_labels].to(torch.long)
 
         return target_classes_onehot
@@ -176,7 +208,9 @@ class GroundingDinoImageLoss(ImageLoss):
         if "text_mask" not in outputs:
             raise KeyError("No text_mask were found in the outputs")
 
-        target_classes_onehot = self._get_target_classes_one_hot(outputs, targets, indices)
+        target_classes_onehot = self._get_target_classes_one_hot(
+            outputs, targets, indices
+        )
         source_logits = outputs["logits"]
         text_mask = outputs["text_mask"]
 
@@ -213,7 +247,9 @@ def GroundingDinoForObjectDetectionLoss(
 ):
     # First: create the matcher
     matcher = GroundingDinoHungarianMatcher(
-        class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
+        class_cost=config.class_cost,
+        bbox_cost=config.bbox_cost,
+        giou_cost=config.giou_cost,
     )
     # Second: create the criterion
     losses = ["labels", "boxes", "cardinality"]
@@ -267,5 +303,7 @@ def GroundingDinoForObjectDetectionLoss(
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
-    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+    loss = sum(
+        loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict
+    )
     return loss, loss_dict, auxiliary_outputs

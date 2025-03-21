@@ -25,7 +25,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
     from torch import nn
@@ -76,7 +75,9 @@ class VitDetModelTester:
         self.seq_length = (self.image_size // self.patch_size) ** 2
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -110,7 +111,12 @@ class VitDetModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_size, self.num_patches_one_direction, self.num_patches_one_direction),
+            (
+                self.batch_size,
+                self.hidden_size,
+                self.num_patches_one_direction,
+                self.num_patches_one_direction,
+            ),
         )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
@@ -123,7 +129,12 @@ class VitDetModelTester:
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape),
-            [self.batch_size, self.hidden_size, self.num_patches_one_direction, self.num_patches_one_direction],
+            [
+                self.batch_size,
+                self.hidden_size,
+                self.num_patches_one_direction,
+                self.num_patches_one_direction,
+            ],
         )
 
         # verify channels
@@ -141,7 +152,12 @@ class VitDetModelTester:
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape),
-            [self.batch_size, self.hidden_size, self.num_patches_one_direction, self.num_patches_one_direction],
+            [
+                self.batch_size,
+                self.hidden_size,
+                self.num_patches_one_direction,
+                self.num_patches_one_direction,
+            ],
         )
 
         # verify channels
@@ -163,7 +179,9 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VitDetModel, VitDetBackbone) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": VitDetModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": VitDetModel} if is_torch_available() else {}
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -173,28 +191,38 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VitDetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitDetConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=VitDetConfig, has_text_modality=False, hidden_size=37
+        )
 
     @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
     def test_initialization(self):
         super().test_initialization()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(
+        reason="Does not work on the tiny model as we keep hitting edge cases."
+    )
     def test_cpu_offload(self):
         super().test_cpu_offload()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(
+        reason="Does not work on the tiny model as we keep hitting edge cases."
+    )
     def test_disk_offload_bin(self):
         super().test_disk_offload()
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(
+        reason="Does not work on the tiny model as we keep hitting edge cases."
+    )
     def test_disk_offload_safetensors(self):
         super().test_disk_offload()
 
     # TODO: Fix me (once this model gets more usage)
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(
+        reason="Does not work on the tiny model as we keep hitting edge cases."
+    )
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
@@ -286,7 +314,9 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="VitDet does not have standalone checkpoints since it used as backbone in other models")
+    @unittest.skip(
+        reason="VitDet does not have standalone checkpoints since it used as backbone in other models"
+    )
     def test_model_from_pretrained(self):
         pass
 
@@ -304,14 +334,24 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         batch_size = self.model_tester.batch_size
         # Create a dummy input tensor with non-square spatial dimensions.
         pixel_values = floats_tensor(
-            [batch_size, config.num_channels, non_square_image_size[0], non_square_image_size[1]]
+            [
+                batch_size,
+                config.num_channels,
+                non_square_image_size[0],
+                non_square_image_size[1],
+            ]
         )
 
         result = model(pixel_values)
 
         expected_height = non_square_image_size[0] / patch_size[0]
         expected_width = non_square_image_size[1] / patch_size[1]
-        expected_shape = (batch_size, config.hidden_size, expected_height, expected_width)
+        expected_shape = (
+            batch_size,
+            config.hidden_size,
+            expected_height,
+            expected_width,
+        )
 
         self.assertEqual(result.last_hidden_state.shape, expected_shape)
 

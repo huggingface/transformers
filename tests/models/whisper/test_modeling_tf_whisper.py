@@ -24,22 +24,18 @@ import unittest
 
 import numpy as np
 
-from transformers import GenerationConfig, WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
-from transformers.testing_utils import (
-    is_tf_available,
-    require_read_token,
-    require_tf,
-    require_tokenizers,
-    run_test_in_subprocess,
-    slow,
-)
+from transformers import (GenerationConfig, WhisperConfig,
+                          WhisperFeatureExtractor, WhisperProcessor)
+from transformers.testing_utils import (is_tf_available, require_read_token,
+                                        require_tf, require_tokenizers,
+                                        run_test_in_subprocess, slow)
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_datasets_available():
     import datasets
@@ -49,12 +45,10 @@ if is_datasets_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFWhisperForConditionalGeneration, TFWhisperModel, set_seed
+    from transformers import (TFWhisperForConditionalGeneration,
+                              TFWhisperModel, set_seed)
     from transformers.models.whisper.modeling_tf_whisper import (
-        TFWhisperDecoder,
-        TFWhisperEncoder,
-        sinusoidal_embedding_init,
-    )
+        TFWhisperDecoder, TFWhisperEncoder, sinusoidal_embedding_init)
 
 
 def prepare_whisper_inputs_dict(
@@ -68,13 +62,19 @@ def prepare_whisper_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if decoder_attention_mask is None:
-        decoder_attention_mask = tf.where(decoder_input_ids != config.pad_token_id, 1, 0)
+        decoder_attention_mask = tf.where(
+            decoder_input_ids != config.pad_token_id, 1, 0
+        )
     if head_mask is None:
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
-        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        decoder_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
+        cross_attn_head_mask = tf.ones(
+            (config.decoder_layers, config.decoder_attention_heads)
+        )
     return {
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
@@ -138,9 +138,13 @@ class TFWhisperModelTester:
         self.suppress_tokens = suppress_tokens
 
     def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
+        input_features = floats_tensor(
+            [self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size
+        )
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
@@ -195,7 +199,9 @@ class TFWhisperModelTester:
         decoder_input_ids = inputs_dict["decoder_input_ids"]
 
         # first forward pass
-        last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+        last_hidden_state = model(
+            input_features, decoder_input_ids=decoder_input_ids
+        ).last_hidden_state
 
         self.parent.assertTrue(last_hidden_state.shape, (13, 7, 16))
 
@@ -219,10 +225,14 @@ class TFWhisperModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = np.random.randint(0, output_from_past.shape[-1])
@@ -232,7 +242,9 @@ class TFWhisperModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(
+            np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = TFWhisperModel(config=config)
@@ -248,7 +260,9 @@ class TFWhisperModelTester:
 
         encoder_last_hidden_state_2 = encoder(inputs_dict["input_features"])[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max() < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -261,14 +275,22 @@ class TFWhisperModelTester:
             encoder_hidden_states=encoder_last_hidden_state,
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max() < 1e-3
+        )
 
 
 @require_tf
 class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TFWhisperModel, TFWhisperForConditionalGeneration) if is_tf_available() else ()
-    all_generative_model_classes = (TFWhisperForConditionalGeneration,) if is_tf_available() else ()
-    pipeline_model_mapping = {"feature-extraction": TFWhisperModel} if is_tf_available() else {}
+    all_model_classes = (
+        (TFWhisperModel, TFWhisperForConditionalGeneration) if is_tf_available() else ()
+    )
+    all_generative_model_classes = (
+        (TFWhisperForConditionalGeneration,) if is_tf_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFWhisperModel} if is_tf_available() else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False
@@ -299,7 +321,9 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_model_forward(self):
@@ -325,7 +349,9 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def _get_input_ids_and_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -361,7 +387,13 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         input_features = input_dict["input_features"]
         model = TFWhisperForConditionalGeneration(config)
         model.generate(input_features)
-        model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            input_features,
+            num_beams=4,
+            do_sample=True,
+            early_stopping=False,
+            num_return_sequences=3,
+        )
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -378,21 +410,37 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
-                ["decoder_position_ids", "head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                [
+                    "decoder_position_ids",
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                ]
+                if "head_mask"
+                and "decoder_head_mask"
+                and "cross_attn_head_mask" in arg_names
                 else ["encoder_outputs"]
             )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -414,7 +462,9 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
 
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_length)
+                decoder_seq_length = getattr(
+                    self.model_tester, "decoder_seq_length", seq_length
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -440,8 +490,12 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", encoder_key_length)
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", encoder_key_length
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -449,11 +503,19 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.return_dict = True
             model = model_class(config)
 
-            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(
+                encoder_seq_length
+            )
+            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(
+                encoder_key_length
+            )
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -462,12 +524,20 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -484,10 +554,16 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    decoder_key_length,
+                ],
             )
 
             # cross attentions
@@ -512,17 +588,27 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
 
 
 def _load_datasamples(num_samples):
-    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    ds = load_dataset(
+        "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+    )
     # automatic decoding with librispeech
     speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -542,7 +628,10 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         processed_inputs = processor(
-            audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="tf"
+            audio=input_speech,
+            text="This part of the speech",
+            add_special_tokens=False,
+            return_tensors="tf",
         )
         input_features = processed_inputs.input_features
         decoder_input_ids = processed_inputs.labels
@@ -555,7 +644,9 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
             use_cache=False,
         )
 
-        logits = logits.last_hidden_state @ tf.transpose(model.model.decoder.embed_tokens.weights[0])
+        logits = logits.last_hidden_state @ tf.transpose(
+            model.model.decoder.embed_tokens.weights[0]
+        )
 
         # fmt: off
         EXPECTED_LOGITS = tf.convert_to_tensor(
@@ -568,7 +659,9 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
         )
         # fmt: on
 
-        unittest.TestCase().assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
+        unittest.TestCase().assertTrue(
+            np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4)
+        )
     except Exception:
         error = f"{traceback.format_exc()}"
 
@@ -584,10 +677,14 @@ def _test_large_generation(in_queue, out_queue, timeout):
 
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained(
+            "openai/whisper-large"
+        )
 
         input_speech = _load_datasamples(1)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
 
         generated_ids = model.generate(
             input_features,
@@ -596,7 +693,9 @@ def _test_large_generation(in_queue, out_queue, timeout):
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
+        EXPECTED_TRANSCRIPT = (
+            " Mr. Quilter is the apostle of the middle classes and we are glad"
+        )
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
     except Exception:
         error = f"{traceback.format_exc()}"
@@ -613,7 +712,9 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
 
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained(
+            "openai/whisper-large"
+        )
 
         # update generation config
         generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
@@ -629,7 +730,9 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         input_speech = next(iter(ds))["audio"]["array"]
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
 
         generated_ids = model.generate(
             input_features,
@@ -684,10 +787,14 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
 
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained(
+            "openai/whisper-large"
+        )
 
         input_speech = _load_datasamples(4)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
         generated_ids_1 = model.generate(input_features[0:2], max_length=20)
         generated_ids_2 = model.generate(input_features[2:4], max_length=20)
         generated_ids = np.concatenate([generated_ids_1, generated_ids_2])
@@ -738,7 +845,9 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         model = TFWhisperModel.from_pretrained("openai/whisper-tiny")
         input_speech = self._load_datasamples(1)
         feature_extractor = WhisperFeatureExtractor()
-        input_features = feature_extractor(input_speech, return_tensors="tf").input_features
+        input_features = feature_extractor(
+            input_speech, return_tensors="tf"
+        ).input_features
 
         logits = model(
             input_features,
@@ -772,8 +881,12 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
 
-        head_logits = logits[0] @ tf.transpose(model.model.decoder.embed_tokens.weights[0])
-        self.assertTrue(np.allclose(head_logits[0, 0, :30], EXPECTED_GENERATION, atol=1e-4))
+        head_logits = logits[0] @ tf.transpose(
+            model.model.decoder.embed_tokens.weights[0]
+        )
+        self.assertTrue(
+            np.allclose(head_logits[0, 0, :30], EXPECTED_GENERATION, atol=1e-4)
+        )
 
     @slow
     def test_small_en_logits_librispeech(self):
@@ -783,17 +896,23 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         feaure_extractor = WhisperFeatureExtractor()
-        input_features = feaure_extractor(input_speech, return_tensors="tf").input_features
+        input_features = feaure_extractor(
+            input_speech, return_tensors="tf"
+        ).input_features
 
         logits = model(
             input_features,
-            decoder_input_ids=tf.convert_to_tensor([[model.config.decoder_start_token_id]]),
+            decoder_input_ids=tf.convert_to_tensor(
+                [[model.config.decoder_start_token_id]]
+            ),
             output_hidden_states=False,
             output_attentions=False,
             use_cache=False,
         )
 
-        logits = logits.last_hidden_state @ tf.transpose(model.model.decoder.embed_tokens.weights[0])
+        logits = logits.last_hidden_state @ tf.transpose(
+            model.model.decoder.embed_tokens.weights[0]
+        )
 
         # fmt: off
         EXPECTED_LOGITS = tf.convert_to_tensor(
@@ -810,17 +929,23 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_logits_librispeech(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_large_logits_librispeech, inputs=None)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_logits_librispeech, inputs=None
+        )
 
     @slow
     def test_tiny_en_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = TFWhisperForConditionalGeneration.from_pretrained(
+            "openai/whisper-tiny.en"
+        )
         model.config.decoder_start_token_id = 50257
 
         input_speech = self._load_datasamples(1)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
 
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
@@ -838,7 +963,9 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
         input_speech = self._load_datasamples(1)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
 
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
@@ -856,7 +983,9 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
         input_speech = self._load_datasamples(1)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
 
         xla_generate = tf.function(model.generate, jit_compile=True)
 
@@ -875,25 +1004,35 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_generation, inputs=None
+        )
 
     @slow
     @require_read_token
     def test_large_generation_multilingual(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_large_generation_multilingual, inputs=None)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_generation_multilingual, inputs=None
+        )
 
     @slow
     def test_large_batched_generation(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_large_batched_generation, inputs=None)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_batched_generation, inputs=None
+        )
 
     @slow
     def test_tiny_en_batched_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = TFWhisperForConditionalGeneration.from_pretrained(
+            "openai/whisper-tiny.en"
+        )
 
         input_speech = self._load_datasamples(4)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
         generated_ids = model.generate(input_features, max_length=20)
 
         # fmt: off
@@ -926,10 +1065,14 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_tiny_en_batched_xla_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = TFWhisperForConditionalGeneration.from_pretrained(
+            "openai/whisper-tiny.en"
+        )
 
         input_speech = self._load_datasamples(4)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        input_features = processor.feature_extractor(
+            raw_speech=input_speech, return_tensors="tf"
+        ).input_features
 
         xla_generate = tf.function(model.generate, jit_compile=True)
 
@@ -961,6 +1104,8 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        transcript_xla = processor.batch_decode(generated_ids_xla, skip_special_tokens=True)
+        transcript_xla = processor.batch_decode(
+            generated_ids_xla, skip_special_tokens=True
+        )
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
         self.assertListEqual(transcript_xla, EXPECTED_TRANSCRIPT)

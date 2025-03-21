@@ -19,7 +19,6 @@ from typing import List, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -189,7 +188,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
                 )
             self.embedding_dimension = embedding_dimension
         else:
-            self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
+            self.embedding_dimension = [
+                min(50, (cat + 1) // 2) for cat in self.cardinality
+            ]
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration

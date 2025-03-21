@@ -18,27 +18,16 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (get_resize_output_image_size, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            infer_channel_dimension_format, is_scaled_image,
+                            make_list_of_images, to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -101,7 +90,9 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
         crop_size = get_size_dict(crop_size)
         self.do_resize = do_resize
         self.size = size
@@ -111,7 +102,9 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
@@ -147,7 +140,9 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "Size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -234,11 +229,15 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size)
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -279,22 +278,38 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
             if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+                image = self.center_crop(
+                    image=image, size=crop_size, input_data_format=input_data_format
+                )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
             all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             for image in all_images
         ]
 

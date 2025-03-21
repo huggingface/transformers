@@ -23,7 +23,6 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
 if is_vision_available():
     from transformers import ChameleonImageProcessor
 
@@ -40,5 +39,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = LlamaTokenizer(vocab_file=SAMPLE_VOCAB)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        processor = self.processor_class(image_processor=image_processor, tokenizer=tokenizer)
+        processor = self.processor_class(
+            image_processor=image_processor, tokenizer=tokenizer
+        )
         processor.save_pretrained(self.tmpdirname)

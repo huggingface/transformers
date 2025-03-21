@@ -21,18 +21,12 @@ from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-    TextKwargs,
-    Unpack,
-    _validate_images_text_input_order,
-)
+from ...processing_utils import (ImagesKwargs, ProcessingKwargs,
+                                 ProcessorMixin, TextKwargs, Unpack,
+                                 _validate_images_text_input_order)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
 from ...utils.deprecation import deprecate_kwarg
-
 
 if is_torch_available():
     import torch
@@ -70,19 +64,25 @@ class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
 
 
 # copied from m4.training.packing
-def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_classes=-1):
+def incremental_to_binary_attention_mask(
+    incremental_mask, return_tensors, num_classes=-1
+):
     # Set elements >= num_classes to -1
     if num_classes != -1:
         if return_tensors == "pt":
             incremental_mask[incremental_mask >= num_classes] = -1
         elif return_tensors == "tf":
-            incremental_mask = tf.where(incremental_mask >= num_classes, -1, incremental_mask)
+            incremental_mask = tf.where(
+                incremental_mask >= num_classes, -1, incremental_mask
+            )
 
     # Create mask for negative values
     if return_tensors == "pt":
         negatives = incremental_mask == -1
         incremental_mask[negatives] = 0
-        attn_mask = torch.nn.functional.one_hot(incremental_mask, num_classes=num_classes)
+        attn_mask = torch.nn.functional.one_hot(
+            incremental_mask, num_classes=num_classes
+        )
         attn_mask[negatives, :] = 0
     elif return_tensors == "tf":
         negatives = tf.equal(incremental_mask, -1)
@@ -168,18 +168,26 @@ def image_attention_mask_for_packed_input_ids_tf(input_ids, tokenizer):
                 count += 1
                 indices = [[batch_idx, idx]]
                 updates = [count]
-                image_attention_mask = tf.tensor_scatter_nd_update(image_attention_mask, indices, updates)
-                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+                image_attention_mask = tf.tensor_scatter_nd_update(
+                    image_attention_mask, indices, updates
+                )
+                next_image_attention_mask = tf.tensor_scatter_nd_update(
+                    next_image_attention_mask, indices, updates
+                )
             elif token_id == eod_token_id and not seen_eod:
                 seen_eod = True
                 count = 0
                 indices = [[batch_idx, idx]]
                 updates = [count]
-                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+                next_image_attention_mask = tf.tensor_scatter_nd_update(
+                    next_image_attention_mask, indices, updates
+                )
             if seen_eod and token_id != eod_token_id:
                 indices = [[batch_idx, idx]]
                 updates = [-1]
-                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+                next_image_attention_mask = tf.tensor_scatter_nd_update(
+                    next_image_attention_mask, indices, updates
+                )
     return image_attention_mask, next_image_attention_mask
 
 
@@ -215,7 +223,14 @@ class IdeficsProcessor(ProcessorMixin):
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
+    def __init__(
+        self,
+        image_processor,
+        tokenizer=None,
+        image_size=224,
+        add_end_of_utterance_token=None,
+        **kwargs,
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -237,14 +252,19 @@ class IdeficsProcessor(ProcessorMixin):
 
         self.tokenizer_was_trained_with_end_of_utterance_token = (
             True
-            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
+            if "<end_of_utterance>"
+            in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
             else False
         )
 
-    @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
+    @deprecate_kwarg(
+        old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True
+    )
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]] = None,
+        images: Union[
+            ImageInput, List[ImageInput], str, List[str], List[List[str]]
+        ] = None,
         text: Union[
             TextInput,
             PreTokenizedInput,
@@ -340,7 +360,9 @@ class IdeficsProcessor(ProcessorMixin):
 
         """
         if images is None and text is None:
-            raise ValueError("You need to specify either `text` or `images` and `text`.")
+            raise ValueError(
+                "You need to specify either `text` or `images` and `text`."
+            )
         # check if images and text inputs are reversed for BC
         images, text = _validate_images_text_input_order(images, text)
 
@@ -362,7 +384,9 @@ class IdeficsProcessor(ProcessorMixin):
                 )
             # Check that only text is present in the prompts
             if not all(isinstance(i, str) for i in text):
-                raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
+                raise ValueError(
+                    "When using the image-text-to-text behavior, the prompts should only contain text."
+                )
             if isinstance(images[0], (list, tuple)):
                 # if nested images, nest text as well
                 text = [[i] for i in text]
@@ -375,11 +399,15 @@ class IdeficsProcessor(ProcessorMixin):
         )
 
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
-        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
+        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop(
+            "add_end_of_utterance_token", None
+        )
 
         # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
-            add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
+            add_end_of_utterance_token = (
+                self.tokenizer_was_trained_with_end_of_utterance_token
+            )
         # turn non-batched prompts into batched
         if not any(isinstance(i, (list, tuple)) for i in prompts):
             prompts = [prompts]
@@ -430,7 +458,9 @@ class IdeficsProcessor(ProcessorMixin):
             if add_eos_token:
                 full_text += self.tokenizer.eos_token
 
-            image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
+            image_objects = self.image_processor(
+                image_objects, **output_kwargs["images_kwargs"]
+            )
 
             all_prompts.append(full_text)
             all_images.append(image_objects)
@@ -450,7 +480,9 @@ class IdeficsProcessor(ProcessorMixin):
         output_images = []
         output_attention_masks = []
 
-        for text_single, attention_mask, extracted_images in zip(all_texts, all_attention_masks, all_images):
+        for text_single, attention_mask, extracted_images in zip(
+            all_texts, all_attention_masks, all_images
+        ):
             padded_input_ids = text_single
             image_count = padded_input_ids.count(self.image_token_id)
             local_max_num_images = min(image_count, max_num_images)
@@ -459,7 +491,9 @@ class IdeficsProcessor(ProcessorMixin):
 
             if len(current_images) > 0:
                 if return_tensors == "pt":
-                    padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
+                    padded_image_tensor = torch.zeros(
+                        max_num_images, *current_images.size()[1:]
+                    )
                     padded_image_tensor[: current_images.size(0)] = current_images
                 elif return_tensors == "tf":
                     # Assuming current_images is a TensorFlow tensor
@@ -468,25 +502,35 @@ class IdeficsProcessor(ProcessorMixin):
                     # Create a shape for the padded_image_tensor
                     padded_shape = tf.concat([[max_num_images], image_shape], axis=0)
                     # Create the padded_image_tensor of zeros
-                    padded_image_tensor = tf.zeros(padded_shape, dtype=current_images.dtype)
+                    padded_image_tensor = tf.zeros(
+                        padded_shape, dtype=current_images.dtype
+                    )
                     # Get the number of images (assuming current_images has shape [num_images, height, width, channels])
                     num_images = tf.shape(current_images)[0]
                     # Update the padded_image_tensor with the values from current_images
                     indices = tf.reshape(tf.range(num_images), (-1, 1))
                     updates = current_images
-                    padded_image_tensor = tf.tensor_scatter_nd_update(padded_image_tensor, indices, updates)
+                    padded_image_tensor = tf.tensor_scatter_nd_update(
+                        padded_image_tensor, indices, updates
+                    )
             else:
                 if return_tensors == "pt":
-                    padded_image_tensor = torch.zeros(max_num_images, *self.default_image_dims)
+                    padded_image_tensor = torch.zeros(
+                        max_num_images, *self.default_image_dims
+                    )
                 elif return_tensors == "tf":
-                    padded_image_tensor = tf.zeros((max_num_images, *self.default_image_dims))
+                    padded_image_tensor = tf.zeros(
+                        (max_num_images, *self.default_image_dims)
+                    )
 
             output_images.append(padded_image_tensor)
             if return_tensors == "pt":
                 output_input_ids.append(torch.tensor(padded_input_ids))
                 output_attention_masks.append(torch.tensor(attention_mask))
             elif return_tensors == "tf":
-                output_input_ids.append(tf.convert_to_tensor(padded_input_ids, dtype=tf.int32))
+                output_input_ids.append(
+                    tf.convert_to_tensor(padded_input_ids, dtype=tf.int32)
+                )
                 output_attention_masks.append(attention_mask)
 
         if return_tensors == "pt":
@@ -509,11 +553,15 @@ class IdeficsProcessor(ProcessorMixin):
             # in full language mode we set the image mask to all-0s
             if return_tensors == "pt":
                 image_attention_mask = torch.zeros(
-                    output_input_ids.shape[0], output_input_ids.shape[1], 1, dtype=torch.bool
+                    output_input_ids.shape[0],
+                    output_input_ids.shape[1],
+                    1,
+                    dtype=torch.bool,
                 )
             elif return_tensors == "tf":
                 image_attention_mask = tf.zeros(
-                    (output_input_ids.shape[0], output_input_ids.shape[1], 1), dtype=tf.bool
+                    (output_input_ids.shape[0], output_input_ids.shape[1], 1),
+                    dtype=tf.bool,
                 )
         return BatchFeature(
             data={

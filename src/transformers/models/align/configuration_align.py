@@ -16,13 +16,11 @@
 
 from typing import TYPE_CHECKING, List
 
-
 if TYPE_CHECKING:
     pass
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -320,11 +318,15 @@ class AlignConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the AlignTextConfig with default values.")
+            logger.info(
+                "text_config is None. Initializing the AlignTextConfig with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. Initializing the AlignVisionConfig with default values.")
+            logger.info(
+                "vision_config is None. Initializing the AlignVisionConfig with default values."
+            )
 
         self.text_config = AlignTextConfig(**text_config)
         self.vision_config = AlignVisionConfig(**vision_config)
@@ -334,7 +336,9 @@ class AlignConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: AlignTextConfig, vision_config: AlignVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: AlignTextConfig, vision_config: AlignVisionConfig, **kwargs
+    ):
         r"""
         Instantiate a [`AlignConfig`] (or a derived class) from align text model configuration and align vision model
         configuration.
@@ -343,7 +347,11 @@ class AlignConfig(PretrainedConfig):
             [`AlignConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["AlignTextConfig", "AlignVisionConfig", "AlignConfig"]

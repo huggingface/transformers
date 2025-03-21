@@ -23,11 +23,11 @@ from transformers.testing_utils import require_flax, slow
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
-
 if is_flax_available():
     import jax
 
-    from transformers.models.vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
+    from transformers.models.vit.modeling_flax_vit import (
+        FlaxViTForImageClassification, FlaxViTModel)
 
 
 class FlaxViTModelTester:
@@ -74,7 +74,9 @@ class FlaxViTModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         config = ViTConfig(
             image_size=self.image_size,
@@ -100,20 +102,29 @@ class FlaxViTModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values):
         config.num_labels = self.type_sequence_label_size
         model = FlaxViTForImageClassification(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
         model = FlaxViTForImageClassification(config)
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
 
     def prepare_config_and_inputs_for_common(self):
@@ -128,11 +139,15 @@ class FlaxViTModelTester:
 
 @require_flax
 class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxViTModel, FlaxViTForImageClassification) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxViTModel, FlaxViTForImageClassification) if is_flax_available() else ()
+    )
 
     def setUp(self) -> None:
         self.model_tester = FlaxViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=ViTConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()

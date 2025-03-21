@@ -23,24 +23,16 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import (
-    Data2VecTextConfig,
-    Data2VecTextForMaskedLM,
-    Data2VecTextForSequenceClassification,
-    Data2VecTextModel,
-)
-from transformers.models.bert.modeling_bert import (
-    BertIntermediate,
-    BertLayer,
-    BertOutput,
-    BertSelfAttention,
-    BertSelfOutput,
-)
-
+from transformers import (Data2VecTextConfig, Data2VecTextForMaskedLM,
+                          Data2VecTextForSequenceClassification,
+                          Data2VecTextModel)
+from transformers.models.bert.modeling_bert import (BertIntermediate,
+                                                    BertLayer, BertOutput,
+                                                    BertSelfAttention,
+                                                    BertSelfOutput)
 # IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
 # File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
 from transformers.utils import logging
-
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
@@ -53,12 +45,16 @@ SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
 def convert_data2vec_checkpoint_to_pytorch(
-    data2vec_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
+    data2vec_checkpoint_path: str,
+    pytorch_dump_folder_path: str,
+    classification_head: bool,
 ):
     """
     Copy/paste/tweak data2vec's weights to our BERT structure.
     """
-    data2vec_checkpoint_dir, data2vec_checkpoint_file_name = os.path.split(data2vec_checkpoint_path)
+    data2vec_checkpoint_dir, data2vec_checkpoint_file_name = os.path.split(
+        data2vec_checkpoint_path
+    )
     data2vec = Data2VecTextModel.from_pretrained(
         data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name
     )
@@ -76,26 +72,42 @@ def convert_data2vec_checkpoint_to_pytorch(
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
     )
     if classification_head:
-        config.num_labels = data2vec.model.classification_heads["mnli"].out_proj.weight.shape[0]
+        config.num_labels = data2vec.model.classification_heads[
+            "mnli"
+        ].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = Data2VecTextForSequenceClassification(config) if classification_head else Data2VecTextForMaskedLM(config)
+    model = (
+        Data2VecTextForSequenceClassification(config)
+        if classification_head
+        else Data2VecTextForMaskedLM(config)
+    )
     model.eval()
 
     # Now let's copy all the weights.
     # Embeddings
-    model.data2vec_text.embeddings.word_embeddings.weight = data2vec_sent_encoder.embed_tokens.weight
-    model.data2vec_text.embeddings.position_embeddings.weight = data2vec_sent_encoder.embed_positions.weight
+    model.data2vec_text.embeddings.word_embeddings.weight = (
+        data2vec_sent_encoder.embed_tokens.weight
+    )
+    model.data2vec_text.embeddings.position_embeddings.weight = (
+        data2vec_sent_encoder.embed_positions.weight
+    )
     model.data2vec_text.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.data2vec_text.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c data2vec doesn't use them.
-    model.data2vec_text.embeddings.LayerNorm.weight = data2vec_sent_encoder.layernorm_embedding.weight
-    model.data2vec_text.embeddings.LayerNorm.bias = data2vec_sent_encoder.layernorm_embedding.bias
+    model.data2vec_text.embeddings.LayerNorm.weight = (
+        data2vec_sent_encoder.layernorm_embedding.weight
+    )
+    model.data2vec_text.embeddings.LayerNorm.bias = (
+        data2vec_sent_encoder.layernorm_embedding.bias
+    )
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
         layer: BertLayer = model.data2vec_text.encoder.layer[i]
-        data2vec_layer: TransformerSentenceEncoderLayer = data2vec_sent_encoder.layers[i]
+        data2vec_layer: TransformerSentenceEncoderLayer = data2vec_sent_encoder.layers[
+            i
+        ]
 
         # self attention
         self_attn: BertSelfAttention = layer.attention.self
@@ -128,7 +140,8 @@ def convert_data2vec_checkpoint_to_pytorch(
         # self-attention output
         self_output: BertSelfOutput = layer.attention.output
         assert (
-            self_output.dense.weight.shape == data2vec_layer.self_attn.out_proj.weight.shape
+            self_output.dense.weight.shape
+            == data2vec_layer.self_attn.out_proj.weight.shape
         ), f"Shape for self_output.dense.weight should be {data2vec_layer.self_attn.out_proj.weight.shape}"
         self_output.dense.weight = data2vec_layer.self_attn.out_proj.weight
         self_output.dense.bias = data2vec_layer.self_attn.out_proj.bias
@@ -155,25 +168,39 @@ def convert_data2vec_checkpoint_to_pytorch(
         # end of layer
 
     if classification_head:
-        model.classifier.dense.weight = data2vec.model.classification_heads["mnli"].dense.weight
-        model.classifier.dense.bias = data2vec.model.classification_heads["mnli"].dense.bias
-        model.classifier.out_proj.weight = data2vec.model.classification_heads["mnli"].out_proj.weight
-        model.classifier.out_proj.bias = data2vec.model.classification_heads["mnli"].out_proj.bias
+        model.classifier.dense.weight = data2vec.model.classification_heads[
+            "mnli"
+        ].dense.weight
+        model.classifier.dense.bias = data2vec.model.classification_heads[
+            "mnli"
+        ].dense.bias
+        model.classifier.out_proj.weight = data2vec.model.classification_heads[
+            "mnli"
+        ].out_proj.weight
+        model.classifier.out_proj.bias = data2vec.model.classification_heads[
+            "mnli"
+        ].out_proj.bias
     else:
         # LM Head
         model.lm_head.dense.weight = data2vec_model.encoder.lm_head.dense.weight
         model.lm_head.dense.bias = data2vec_model.encoder.lm_head.dense.bias
-        model.lm_head.layer_norm.weight = data2vec_model.encoder.lm_head.layer_norm.weight
+        model.lm_head.layer_norm.weight = (
+            data2vec_model.encoder.lm_head.layer_norm.weight
+        )
         model.lm_head.layer_norm.bias = data2vec_model.encoder.lm_head.layer_norm.bias
         model.lm_head.decoder.weight = data2vec_model.encoder.lm_head.weight
         model.lm_head.decoder.bias = data2vec_model.encoder.lm_head.bias
 
     # Let's check that we get the same results.
-    input_ids: torch.Tensor = data2vec.encode(SAMPLE_TEXT).unsqueeze(0)  # batch of size 1
+    input_ids: torch.Tensor = data2vec.encode(SAMPLE_TEXT).unsqueeze(
+        0
+    )  # batch of size 1
 
     our_output = model(input_ids)[0]
     if classification_head:
-        their_output = data2vec.model.classification_heads["mnli"](data2vec.extract_features(input_ids))
+        their_output = data2vec.model.classification_heads["mnli"](
+            data2vec.extract_features(input_ids)
+        )
     else:
         their_output = data2vec_model(input_ids)[0]
     print(our_output.shape, their_output.shape)
@@ -193,13 +220,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
-        "--classification_head", action="store_true", help="Whether to convert a final classification head."
+        "--classification_head",
+        action="store_true",
+        help="Whether to convert a final classification head.",
     )
     args = parser.parse_args()
     convert_data2vec_checkpoint_to_pytorch(

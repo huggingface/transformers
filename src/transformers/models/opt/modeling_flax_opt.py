@@ -28,10 +28,10 @@ from jax import lax
 from jax.random import PRNGKey
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxMaskedLMOutput
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring)
 from ...utils import add_start_docstrings, logging
 from .configuration_opt import OPTConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -137,11 +137,14 @@ class FlaxOPTAttention(nn.Module):
 
         if self.causal:
             self.causal_mask = make_causal_mask(
-                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"), dtype="bool"
+                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"),
+                dtype="bool",
             )
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.num_heads, self.head_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
@@ -155,9 +158,15 @@ class FlaxOPTAttention(nn.Module):
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
-        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+        cached_key = self.variable(
+            "cache", "cached_key", jnp.zeros, key.shape, key.dtype
+        )
+        cached_value = self.variable(
+            "cache", "cached_value", jnp.zeros, value.shape, value.dtype
+        )
+        cache_index = self.variable(
+            "cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32)
+        )
 
         if is_initialized:
             *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
@@ -216,15 +225,21 @@ class FlaxOPTAttention(nn.Module):
                 mask_shift = self.variables["cache"]["cache_index"]
                 max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
                 causal_mask = lax.dynamic_slice(
-                    self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+                    self.causal_mask,
+                    (0, 0, mask_shift, 0),
+                    (1, 1, query_length, max_decoder_length),
                 )
             else:
                 causal_mask = self.causal_mask[:, :, :query_length, :key_length]
-            causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+            causal_mask = jnp.broadcast_to(
+                causal_mask, (batch_size,) + causal_mask.shape[1:]
+            )
 
         # combine masks if needed
         if attention_mask is not None and self.causal:
-            attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+            attention_mask = jnp.broadcast_to(
+                jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape
+            )
             attention_mask = combine_masks(attention_mask, causal_mask)
         elif self.causal:
             attention_mask = causal_mask
@@ -244,7 +259,9 @@ class FlaxOPTAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(
+                    self.dtype
+                ),
             )
         else:
             attention_bias = None
@@ -297,7 +314,9 @@ class FlaxOPTDecoderLayer(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
+            self.embed_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -409,7 +428,10 @@ class FlaxOPTLearnedPositionalEmbedding(nn.Embed):
     def setup(self):
         self.offset = 2
         self.embedding = self.param(
-            "embedding", self.embedding_init, (self.num_embeddings + self.offset, self.features), self.param_dtype
+            "embedding",
+            self.embedding_init,
+            (self.num_embeddings + self.offset, self.features),
+            self.param_dtype,
         )
 
     def __call__(self, positions):
@@ -455,7 +477,10 @@ class FlaxOPTDecoder(nn.Module):
         # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
-        if self.config.do_layer_norm_before and not self.config._remove_final_layer_norm:
+        if (
+            self.config.do_layer_norm_before
+            and not self.config._remove_final_layer_norm
+        ):
             self.final_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         else:
             self.final_layer_norm = None
@@ -529,15 +554,26 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
 
         batch_size, sequence_length = input_ids.shape
-        position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+        position_ids = jnp.broadcast_to(
+            jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
+        )
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
@@ -573,10 +609,17 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         # init input variables to retrieve cache
         input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         attention_mask = jnp.ones_like(input_ids, dtype="i4")
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+        )
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0),
+            input_ids,
+            attention_mask,
+            position_ids,
+            return_dict=False,
+            init_cache=True,
         )
         return unfreeze(init_variables["cache"])
 
@@ -593,11 +636,19 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         dropout_rng: PRNGKey = None,
         deterministic: bool = True,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -693,7 +744,9 @@ class FlaxOPTModel(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTModule
 
 
-append_call_sample_docstring(FlaxOPTModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxOPTModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+)
 
 
 @add_start_docstrings(
@@ -738,8 +791,12 @@ class FlaxOPTForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.model.variables["params"]["decoder"]["embed_tokens"]["embedding"]
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+            shared_embedding = self.model.variables["params"]["decoder"][
+                "embed_tokens"
+            ]["embedding"]
+            lm_logits = self.lm_head.apply(
+                {"params": {"kernel": shared_embedding.T}}, hidden_states
+            )
         else:
             lm_logits = self.lm_head(hidden_states)
 
@@ -763,7 +820,9 @@ class FlaxOPTForCausalLMModule(nn.Module):
 class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
+    def prepare_inputs_for_generation(
+        self, input_ids, max_length, attention_mask: Optional[jax.Array] = None
+    ):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -775,9 +834,13 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
 
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(axis=1) - 1
-            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+            extended_attention_mask = lax.dynamic_update_slice(
+                extended_attention_mask, attention_mask, (0, 0)
+            )
         else:
-            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+            position_ids = jnp.broadcast_to(
+                jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)
+            )
 
         return {
             "past_key_values": past_key_values,

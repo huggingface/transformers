@@ -18,24 +18,21 @@ import copy
 import unittest
 
 from transformers import PretrainedConfig, SwiftFormerConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SwiftFormerForImageClassification, SwiftFormerModel
+    from transformers import (SwiftFormerForImageClassification,
+                              SwiftFormerModel)
 
 
 if is_vision_available():
@@ -72,7 +69,9 @@ class SwiftFormerModelTester:
         self.embed_dims = embed_dims
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -104,7 +103,9 @@ class SwiftFormerModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7)
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -118,7 +119,9 @@ class SwiftFormerModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -135,9 +138,16 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (SwiftFormerModel, SwiftFormerForImageClassification)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
+        {
+            "image-feature-extraction": SwiftFormerModel,
+            "image-classification": SwiftFormerForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -238,7 +248,12 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         def _config_zero_init(config):
             configs_no_init = copy.deepcopy(config)
             for key in configs_no_init.__dict__.keys():
-                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+                if (
+                    "_range" in key
+                    or "_std" in key
+                    or "initializer_factor" in key
+                    or "layer_scale" in key
+                ):
                     setattr(configs_no_init, key, 1e-10)
                 if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
                     no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -270,11 +285,17 @@ def prepare_img():
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
+        return (
+            ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = SwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs").to(torch_device)
+        model = SwiftFormerForImageClassification.from_pretrained(
+            "MBZUAI/swiftformer-xs"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -288,5 +309,9 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(
+            torch_device
+        )
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

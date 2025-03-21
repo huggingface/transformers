@@ -22,7 +22,8 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import TimesformerConfig, TimesformerForVideoClassification, VideoMAEImageProcessor
+from transformers import (TimesformerConfig, TimesformerForVideoClassification,
+                          VideoMAEImageProcessor)
 
 
 def get_timesformer_config(model_name):
@@ -47,7 +48,9 @@ def get_timesformer_config(model_name):
         filename = "something-something-v2-id2label.json"
     else:
         raise ValueError("Model name should either contain 'k400', 'k600' or 'ssv2'.")
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -65,7 +68,9 @@ def rename_key(name):
     if "time_embed" in name:
         name = name.replace("time_embed", "timesformer.embeddings.time_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "timesformer.embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "timesformer.embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "timesformer.embeddings.norm")
     if "blocks" in name:
@@ -129,13 +134,17 @@ def convert_state_dict(orig_state_dict, config):
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
     file = hf_hub_download(
-        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+        repo_id="hf-internal-testing/spaghetti-video",
+        filename="eating_spaghetti.npy",
+        repo_type="dataset",
     )
     video = np.load(file)
     return list(video)
 
 
-def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub):
+def convert_timesformer_checkpoint(
+    checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub
+):
     config = get_timesformer_config(model_name)
 
     model = TimesformerForVideoClassification(config)
@@ -156,7 +165,9 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     model.eval()
 
     # verify model on basic input
-    image_processor = VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+    image_processor = VideoMAEImageProcessor(
+        image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5]
+    )
     video = prepare_video()
     inputs = image_processor(video[:8], return_tensors="pt")
 
@@ -242,12 +253,22 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--model_name", default="timesformer-base-finetuned-k400", type=str, help="Name of the model.")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--model_name",
+        default="timesformer-base-finetuned-k400",
+        type=str,
+        help="Name of the model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
     convert_timesformer_checkpoint(
-        args.checkpoint_url, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub
+        args.checkpoint_url,
+        args.pytorch_dump_folder_path,
+        args.model_name,
+        args.push_to_hub,
     )

@@ -4,21 +4,12 @@ import datasets
 import torch
 
 from tests.trainer.test_trainer import StoreLossCallback
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    set_seed,
-)
-from transformers.testing_utils import (
-    TestCasePlus,
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    require_torch_multi_gpu,
-)
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          DataCollatorForLanguageModeling, HfArgumentParser,
+                          Trainer, TrainingArguments, set_seed)
+from transformers.testing_utils import (TestCasePlus, execute_subprocess_async,
+                                        get_torch_dist_unique_port,
+                                        require_torch_multi_gpu)
 
 
 class TestTrainerDistributedLoss(TestCasePlus):
@@ -46,7 +37,9 @@ class TestTrainerDistributedLoss(TestCasePlus):
         with open(f"{output_dir}/fixed_losses.json") as f:
             fixed_loss = json.load(f)
 
-        broken_diff = [abs(base_loss[i] - broken_loss[i]) for i in range(len(base_loss))]
+        broken_diff = [
+            abs(base_loss[i] - broken_loss[i]) for i in range(len(base_loss))
+        ]
         fixed_diff = [abs(base_loss[i] - fixed_loss[i]) for i in range(len(base_loss))]
         sum_base = sum(base_loss)
         sum_broken = sum(broken_diff)
@@ -67,7 +60,9 @@ def run_distributed_training(training_args):
     tokenizer.pad_token = tokenizer.eos_token
 
     def tokenize_function(examples):
-        return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
+        return tokenizer(
+            examples["text"], max_length=16, padding="max_length", truncation=True
+        )
 
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
 

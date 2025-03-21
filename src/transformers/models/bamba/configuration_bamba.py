@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -175,7 +174,9 @@ class BambaConfig(PretrainedConfig):
             mamba_d_head = mamba_intermediate // mamba_n_heads
 
         if mamba_d_head * mamba_n_heads != mamba_intermediate:
-            raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
+            raise ValueError(
+                "The dimensions for the Mamba head state do not match the model intermediate_size"
+            )
 
         self.mamba_n_heads = mamba_n_heads
         self.mamba_d_head = mamba_d_head
@@ -198,7 +199,11 @@ class BambaConfig(PretrainedConfig):
     @property
     def layers_block_type(self):
         return [
-            "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
+            (
+                "attention"
+                if (self.attn_layer_indices and i in self.attn_layer_indices)
+                else "mamba"
+            )
             for i in range(self.num_hidden_layers)
         ]
 

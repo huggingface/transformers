@@ -21,16 +21,11 @@ import unittest
 import pytest
 
 from transformers import M2M100Config, is_torch_available
-from transformers.testing_utils import (
-    require_flash_attn,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    require_torch_fp16,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_flash_attn,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        require_torch_fp16, require_torch_gpu,
+                                        slow, torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -38,12 +33,13 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import M2M100ForConditionalGeneration, M2M100Model, M2M100Tokenizer
-    from transformers.models.m2m_100.modeling_m2m_100 import M2M100Decoder, M2M100Encoder
+    from transformers import (M2M100ForConditionalGeneration, M2M100Model,
+                              M2M100Tokenizer)
+    from transformers.models.m2m_100.modeling_m2m_100 import (M2M100Decoder,
+                                                              M2M100Encoder)
 
 
 def prepare_m2m_100_inputs_dict(
@@ -61,11 +57,17 @@ def prepare_m2m_100_inputs_dict(
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+        head_mask = torch.ones(
+            config.encoder_layers, config.encoder_attention_heads, device=torch_device
+        )
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -123,7 +125,9 @@ class M2M100ModelTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         # we need to clamp the input ids here to avoid having pad token in between
         # this is because for M2M100 the position_ids are prepared such that
@@ -170,7 +174,12 @@ class M2M100ModelTester:
         head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -182,20 +191,28 @@ class M2M100ModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = M2M100Model(config=config).to(torch_device).eval()
@@ -209,11 +226,14 @@ class M2M100ModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = M2M100Encoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -227,11 +247,15 @@ class M2M100ModelTester:
             encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
-class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class M2M100ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             M2M100Model,
@@ -287,12 +311,16 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -335,7 +363,9 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model = M2M100ForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
@@ -362,39 +392,71 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
 
     def test_inference_no_head(self):
         model = M2M100Model.from_pretrained("facebook/m2m100_418M").to(torch_device)
-        input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
-        decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
-        inputs_dict = prepare_m2m_100_inputs_dict(model.config, input_ids, decoder_input_ids)
+        input_ids = _long_tensor(
+            [[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]]
+        )
+        decoder_input_ids = _long_tensor(
+            [[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]]
+        )
+        inputs_dict = prepare_m2m_100_inputs_dict(
+            model.config, input_ids, decoder_input_ids
+        )
         with torch.no_grad():
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[-0.7780, -0.1676, 0.1038], [-6.7556, -1.3992, 0.0567], [-7.5383, -0.5920, -0.2779]], device=torch_device
+            [
+                [-0.7780, -0.1676, 0.1038],
+                [-6.7556, -1.3992, 0.0567],
+                [-7.5383, -0.5920, -0.2779],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_inference_head(self):
-        model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
+        model = M2M100ForConditionalGeneration.from_pretrained(
+            "facebook/m2m100_418M"
+        ).to(torch_device)
 
         # change to intended input
-        input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
-        decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
-        inputs_dict = prepare_m2m_100_inputs_dict(model.config, input_ids, decoder_input_ids)
+        input_ids = _long_tensor(
+            [[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]]
+        )
+        decoder_input_ids = _long_tensor(
+            [[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]]
+        )
+        inputs_dict = prepare_m2m_100_inputs_dict(
+            model.config, input_ids, decoder_input_ids
+        )
         with torch.no_grad():
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, model.config.vocab_size))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[-1.0448, -1.0411, 3.7992], [-3.2191, -3.2386, -1.3451], [-3.6210, -3.5993, 0.4925]], device=torch_device
+            [
+                [-1.0448, -1.0411, 3.7992],
+                [-3.2191, -3.2386, -1.3451],
+                [-3.6210, -3.5993, 0.4925],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_seq_to_seq_generation(self):
-        model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
-        tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")
+        model = M2M100ForConditionalGeneration.from_pretrained(
+            "facebook/m2m100_418M"
+        ).to(torch_device)
+        tokenizer = M2M100Tokenizer.from_pretrained(
+            "facebook/m2m100_418M", src_lang="fr", tgt_lang="en"
+        )
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
@@ -423,7 +485,9 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         ]
 
         generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+            hypotheses_batch.tolist(),
+            clean_up_tokenization_spaces=True,
+            skip_special_tokens=True,
         )
         assert generated == expected_en
 
@@ -439,7 +503,9 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
             "facebook/m2m100_418M", attn_implementation="flash_attention_2"
         ).to(torch_device)
 
-        tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")
+        tokenizer = M2M100Tokenizer.from_pretrained(
+            "facebook/m2m100_418M", src_lang="fr", tgt_lang="en"
+        )
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
@@ -468,6 +534,8 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         ]
 
         generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+            hypotheses_batch.tolist(),
+            clean_up_tokenization_spaces=True,
+            skip_special_tokens=True,
         )
         assert generated == expected_en

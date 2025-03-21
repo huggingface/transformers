@@ -13,8 +13,8 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
-
+from ....utils import (OptionalDependencyNotAvailable, _LazyModule,
+                       is_torch_available, is_vision_available)
 
 _import_structure = {"configuration_van": ["VanConfig"]}
 
@@ -40,13 +40,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_van import (
-            VanForImageClassification,
-            VanModel,
-            VanPreTrainedModel,
-        )
+        from .modeling_van import (VanForImageClassification, VanModel,
+                                   VanPreTrainedModel)
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure
+    )

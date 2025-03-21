@@ -18,16 +18,13 @@ import copy
 import unittest
 
 from transformers import MoonshineConfig, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import (cleanup, require_torch, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -84,12 +81,20 @@ class MoonshineModelTester:
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id]], device=torch_device)
+        decoder_input_ids = torch.tensor(
+            self.batch_size * [[self.decoder_start_token_id]], device=torch_device
+        )
         decoder_attention_mask = decoder_input_ids.ne(self.pad_token_id)
 
         config = self.get_config()
 
-        return config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask
+        return (
+            config,
+            input_values,
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+        )
 
     def get_config(self):
         return MoonshineConfig(
@@ -115,7 +120,8 @@ class MoonshineModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.hidden_size),
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -126,7 +132,9 @@ class MoonshineModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.bool
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
 
@@ -135,7 +143,9 @@ class MoonshineModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0.0
 
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
+        batch_outputs = model(
+            input_values, attention_mask=attention_mask
+        ).last_hidden_state
 
         for i in range(input_values.shape[0]):
             input_slice = input_values[i : i + 1, : input_lengths[i]]
@@ -150,13 +160,19 @@ class MoonshineModelTester:
         model.to(torch_device)
         model.train()
 
-        outputs = model(input_values, attention_mask=attention_mask, output_attentions=True)
+        outputs = model(
+            input_values, attention_mask=attention_mask, output_attentions=True
+        )
         self.parent.assertTrue(len(outputs.attentions) > 0)
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask = (
-            self.prepare_config_and_inputs()
-        )
+        (
+            config,
+            input_values,
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+        ) = self.prepare_config_and_inputs()
         inputs_dict = {
             "input_values": input_values,
             "attention_mask": attention_mask,
@@ -168,7 +184,11 @@ class MoonshineModelTester:
 
 @require_torch
 class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MoonshineModel, MoonshineForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (MoonshineModel, MoonshineForConditionalGeneration)
+        if is_torch_available()
+        else ()
+    )
     # Doesn't run generation tests. TODO (eustache): remove this line and then make CI green
     all_generative_model_classes = ()
     pipeline_model_mapping = (
@@ -197,7 +217,9 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         decoder_key_length = getattr(self.model_tester, "decoder_key_length", 1)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -207,12 +229,20 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
-            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)
+            subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(
+                encoder_seq_length
+            )
+            subsampled_encoder_key_length = model._get_feat_extract_output_lengths(
+                encoder_key_length
+            )
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -223,12 +253,20 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -245,10 +283,16 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    decoder_key_length,
+                ],
             )
 
             # cross attentions
@@ -276,12 +320,20 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
 
     # Copied from tests.models.whisper.test_modeling_whisper.WhisperModelTest.test_hidden_states_output
@@ -294,10 +346,16 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -384,7 +442,9 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
             self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -392,7 +452,9 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
             self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15
+            )
 
             # make sure that decoder_input_ids are resized
             if "decoder_input_ids" in inputs_dict:
@@ -461,14 +523,20 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 @require_torch
 class MoonshineModelIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.processor_tiny = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
-        self.processor_base = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
+        self.processor_tiny = AutoProcessor.from_pretrained(
+            "UsefulSensors/moonshine-tiny"
+        )
+        self.processor_base = AutoProcessor.from_pretrained(
+            "UsefulSensors/moonshine-base"
+        )
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -476,12 +544,16 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_logits_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-tiny"
+        )
         model.to(torch_device)
 
         inputs = self.processor_tiny(self._load_datasamples(1), return_tensors="pt")
         inputs.to(torch_device)
-        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+        outputs = model.generate(
+            **inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True
+        )
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor([
@@ -490,16 +562,22 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
             -8.0796, -7.3300, -7.3672, -6.8765, -7.6876, -7.2682, -6.9866, -6.7457, -7.6855, -7.3050,
         ])
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0][0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0][0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_base_logits_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-base"
+        )
         model.to(torch_device)
 
         inputs = self.processor_base(self._load_datasamples(1), return_tensors="pt")
         inputs.to(torch_device)
-        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+        outputs = model.generate(
+            **inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True
+        )
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor([
@@ -508,16 +586,24 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
             -7.9310, -8.1024, -7.8699, -7.8231, -8.0752, -7.9764, -7.8127, -8.0536, -7.9492, -7.9290,
         ])
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0][0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0][0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_tiny_logits_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-tiny"
+        )
         model.to(torch_device)
 
-        inputs = self.processor_tiny(self._load_datasamples(4), return_tensors="pt", padding=True)
+        inputs = self.processor_tiny(
+            self._load_datasamples(4), return_tensors="pt", padding=True
+        )
         inputs.to(torch_device)
-        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+        outputs = model.generate(
+            **inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True
+        )
         # fmt: off
         EXPECTED_LOGITS = torch.tensor([
             [-8.0109,  5.0241,  4.5979, -6.8125, -7.1675, -7.8783, -7.2152, -7.5188, -7.9077, -7.7394],
@@ -526,16 +612,24 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
             [-10.8078, 4.0030, -0.0633, -5.0505, -5.3906, -5.4590, -5.2420, -5.4746, -5.2665, -5.3158]
         ])
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_base_logits_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-base"
+        )
         model.to(torch_device)
 
-        inputs = self.processor_base(self._load_datasamples(4), return_tensors="pt", padding=True)
+        inputs = self.processor_base(
+            self._load_datasamples(4), return_tensors="pt", padding=True
+        )
         inputs.to(torch_device)
-        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+        outputs = model.generate(
+            **inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True
+        )
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor([
@@ -546,46 +640,60 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
         ])
 
         # fmt: on
-        torch.testing.assert_close(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_tiny_generation_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-tiny"
+        )
         model.to(torch_device)
 
         audio_array = self._load_datasamples(1)
         inputs = self.processor_tiny(audio_array, return_tensors="pt")
         inputs.to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=20)
-        transcript = self.processor_tiny.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        transcript = self.processor_tiny.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )[0]
 
         EXPECTED_TRANSCRIPT = "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_base_generation_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-base"
+        )
         model.to(torch_device)
 
         audio_array = self._load_datasamples(1)
         inputs = self.processor_base(audio_array, return_tensors="pt")
         inputs.to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=20)
-        transcript = self.processor_base.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        transcript = self.processor_base.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )[0]
 
         EXPECTED_TRANSCRIPT = "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_tiny_generation_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-tiny"
+        )
         model.to(torch_device)
 
         audio_array = self._load_datasamples(4)
         inputs = self.processor_tiny(audio_array, return_tensors="pt", padding=True)
         inputs.to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=20)
-        transcript = self.processor_tiny.batch_decode(generated_ids, skip_special_tokens=True)
+        transcript = self.processor_tiny.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
@@ -600,14 +708,18 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_base_generation_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained(
+            "UsefulSensors/moonshine-base"
+        )
         model.to(torch_device)
 
         audio_array = self._load_datasamples(4)
         inputs = self.processor_base(audio_array, return_tensors="pt", padding=True)
         inputs.to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=20)
-        transcript = self.processor_base.batch_decode(generated_ids, skip_special_tokens=True)
+        transcript = self.processor_base.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [

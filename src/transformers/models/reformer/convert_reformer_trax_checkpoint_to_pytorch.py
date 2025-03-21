@@ -24,16 +24,19 @@ from torch import nn
 from transformers import ReformerConfig, ReformerModelWithLMHead
 from transformers.utils import logging
 
-
 logging.set_verbosity_info()
 
 
 def set_param(torch_layer, weight, bias=None):
     # set parameter of one layer
-    assert torch_layer.weight.shape == weight.shape, f"{torch_layer} layer.weight does not match"
+    assert (
+        torch_layer.weight.shape == weight.shape
+    ), f"{torch_layer} layer.weight does not match"
     torch_layer.weight = nn.Parameter(weight)
     if bias is not None:
-        assert torch_layer.bias.shape == bias.shape, f"{torch_layer} layer.bias does not match"
+        assert (
+            torch_layer.bias.shape == bias.shape
+        ), f"{torch_layer} layer.bias does not match"
         torch_layer.bias = nn.Parameter(bias)
 
 
@@ -98,7 +101,9 @@ def set_block_weights_in_torch(weights, torch_block, hidden_size):
     if len(attn_weights) < 4:
         set_layer_weights_in_torch_lsh(attn_weights, torch_block.attention, hidden_size)
     else:
-        set_layer_weights_in_torch_local(attn_weights, torch_block.attention, hidden_size)
+        set_layer_weights_in_torch_local(
+            attn_weights, torch_block.attention, hidden_size
+        )
 
     # intermediate weighs
     intermediate_weights = weights[2][0][1][2]
@@ -153,7 +158,9 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
             assert (
                 position_embeddings.weights[emb_idx].shape == emb_weights.shape
             ), f"{position_embeddings[emb_idx]} emb does not match"
-            position_embeddings.weights[emb_idx] = nn.Parameter(torch.tensor(emb_weights))
+            position_embeddings.weights[emb_idx] = nn.Parameter(
+                torch.tensor(emb_weights)
+            )
 
     trax_layer_weights = weights[5]
     assert len(torch_model_reformer.encoder.layers) * 4 == len(
@@ -182,7 +189,9 @@ def set_model_weights_in_torch(weights, torch_model, hidden_size):
     )
 
 
-def convert_trax_checkpoint_to_pytorch(trax_model_pkl_path, config_file, pytorch_dump_path):
+def convert_trax_checkpoint_to_pytorch(
+    trax_model_pkl_path, config_file, pytorch_dump_path
+):
     # Initialise PyTorch model
     config = ReformerConfig.from_json_file(config_file)
     print(f"Building PyTorch model from configuration: {config}")
@@ -220,7 +229,13 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_trax_checkpoint_to_pytorch(args.trax_model_pkl_path, args.config_file, args.pytorch_dump_path)
+    convert_trax_checkpoint_to_pytorch(
+        args.trax_model_pkl_path, args.config_file, args.pytorch_dump_path
+    )

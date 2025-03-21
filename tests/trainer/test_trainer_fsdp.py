@@ -15,36 +15,24 @@
 from typing import Dict
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    execute_subprocess_async,
-    get_torch_dist_unique_port,
-    require_accelerate,
-    require_fp8,
-    require_fsdp,
-    require_torch_multi_accelerator,
-    run_first,
-    torch_device,
-)
-
+from transformers.testing_utils import (TestCasePlus, backend_device_count,
+                                        execute_subprocess_async,
+                                        get_torch_dist_unique_port,
+                                        require_accelerate, require_fp8,
+                                        require_fsdp,
+                                        require_torch_multi_accelerator,
+                                        run_first, torch_device)
 
 if is_torch_available():
     import torch
     import torch.distributed
     import torch.utils.data
 
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        DataCollatorForSeq2Seq,
-        EvalPrediction,
-        GenerationConfig,
-        HfArgumentParser,
-        PreTrainedTokenizerBase,
-        Seq2SeqTrainer,
-        Seq2SeqTrainingArguments,
-    )
+    from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                              DataCollatorForSeq2Seq, EvalPrediction,
+                              GenerationConfig, HfArgumentParser,
+                              PreTrainedTokenizerBase, Seq2SeqTrainer,
+                              Seq2SeqTrainingArguments)
 
     class DummyTextDataset(torch.utils.data.Dataset[str]):
         def __init__(self, tokenizer: PreTrainedTokenizerBase) -> None:
@@ -53,7 +41,12 @@ if is_torch_available():
                 "The quick brown fox jumps over the lazy dog.",
             ]
             self.data = [
-                {k: v.squeeze(0) for k, v in tokenizer(item, return_tensors="pt", return_attention_mask=True).items()}
+                {
+                    k: v.squeeze(0)
+                    for k, v in tokenizer(
+                        item, return_tensors="pt", return_attention_mask=True
+                    ).items()
+                }
                 for item in data
             ]
             for item in self.data:

@@ -27,14 +27,10 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
 if is_vision_available():
     from PIL import Image
 
-    from transformers import (
-        AutoProcessor,
-        Idefics2Processor,
-    )
+    from transformers import AutoProcessor, Idefics2Processor
 
 
 @require_torch
@@ -45,7 +41,9 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b", image_seq_len=2)
+        processor = Idefics2Processor.from_pretrained(
+            "HuggingFaceM4/idefics2-8b", image_seq_len=2
+        )
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -57,7 +55,11 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
         )
         self.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
+                ).content
+            )
         )
         self.image3 = Image.open(
             BytesIO(
@@ -71,8 +73,12 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.fake_image_token = processor.fake_image_token.content
 
         self.bos_token_id = processor.tokenizer.convert_tokens_to_ids(self.bos_token)
-        self.image_token_id = processor.tokenizer.convert_tokens_to_ids(self.image_token)
-        self.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(self.fake_image_token)
+        self.image_token_id = processor.tokenizer.convert_tokens_to_ids(
+            self.image_token
+        )
+        self.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(
+            self.fake_image_token
+        )
         self.image_seq_len = processor.image_seq_len
 
     def get_tokenizer(self, **kwargs):
@@ -339,6 +345,6 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         if batch_size == 1:
             return ["lower newer <image>"]
-        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
-            batch_size - 2
-        )
+        return ["lower newer <image>", "<image> upper older longer string"] + [
+            "<image> lower newer"
+        ] * (batch_size - 2)

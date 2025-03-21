@@ -23,16 +23,15 @@ from pathlib import Path
 
 import transformers
 import transformers.models.auto
-from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from transformers.models.auto.configuration_auto import (CONFIG_MAPPING,
+                                                         AutoConfig)
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
 
-
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
-
 
 SAMPLE_ROBERTA_CONFIG = get_tests_dir("fixtures/dummy-config.json")
 
@@ -94,35 +93,47 @@ class AutoConfigTest(unittest.TestCase):
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+            EnvironmentError,
+            "bert-base is not a local folder and is not a valid model identifier",
         ):
             _ = AutoConfig.from_pretrained("bert-base")
 
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+            EnvironmentError,
+            r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)",
         ):
             _ = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
     def test_from_pretrained_dynamic_config(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
-            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model")
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model"
+            )
         # If remote code is disabled, we can't load this config.
         with self.assertRaises(ValueError):
-            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model", trust_remote_code=False
+            )
 
-        config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+        config = AutoConfig.from_pretrained(
+            "hf-internal-testing/test_dynamic_model", trust_remote_code=True
+        )
         self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
         # Test the dynamic module is loaded only once.
-        reloaded_config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+        reloaded_config = AutoConfig.from_pretrained(
+            "hf-internal-testing/test_dynamic_model", trust_remote_code=True
+        )
         self.assertIs(config.__class__, reloaded_config.__class__)
 
         # Test config can be reloaded.
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
-            reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
+            reloaded_config = AutoConfig.from_pretrained(
+                tmp_dir, trust_remote_code=True
+            )
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
         # The configuration file is cached in the snapshot directory. So the module file is not changed after dumping
@@ -132,7 +143,9 @@ class AutoConfigTest(unittest.TestCase):
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_config = AutoConfig.from_pretrained(
-            "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
+            "hf-internal-testing/test_dynamic_model",
+            trust_remote_code=True,
+            force_download=True,
         )
         self.assertIsNot(config.__class__, reloaded_config.__class__)
 
@@ -143,15 +156,21 @@ class AutoConfigTest(unittest.TestCase):
         try:
             AutoConfig.register("new-model", NewModelConfigLocal)
             # If remote code is not set, the default is to use local
-            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model")
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model"
+            )
             self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
 
             # If remote code is disabled, we load the local one.
-            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model", trust_remote_code=False
+            )
             self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
 
             # If remote is enabled, we load from the Hub
-            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            config = AutoConfig.from_pretrained(
+                "hf-internal-testing/test_dynamic_model", trust_remote_code=True
+            )
             self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
         finally:

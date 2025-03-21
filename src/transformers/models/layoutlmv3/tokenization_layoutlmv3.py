@@ -22,16 +22,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_base import (
-    BatchEncoding,
-    EncodedInput,
-    PreTokenizedInput,
-    TextInput,
-    TextInputPair,
-    TruncationStrategy,
-)
+from ...tokenization_utils_base import (BatchEncoding, EncodedInput,
+                                        PreTokenizedInput, TextInput,
+                                        TextInputPair, TruncationStrategy)
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -153,7 +147,9 @@ def bytes_to_unicode():
     tables between utf-8 bytes and unicode strings.
     """
     bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
@@ -276,15 +272,43 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         only_label_first_subword=True,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        sep_token = (
+            AddedToken(sep_token, lstrip=False, rstrip=False)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
+        cls_token = (
+            AddedToken(cls_token, lstrip=False, rstrip=False)
+            if isinstance(cls_token, str)
+            else cls_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -300,7 +324,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.add_prefix_space = add_prefix_space
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.pat = re.compile(
+            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        )
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -406,28 +432,41 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
+        text = bytearray([self.byte_decoder[c] for c in text]).decode(
+            "utf-8", errors=self.errors
+        )
         return text
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
         merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["merges_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False)
+                + "\n"
+            )
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+            for bpe_tokens, token_index in sorted(
+                self.bpe_ranks.items(), key=lambda kv: kv[1]
+            ):
                 if index != token_index:
                     logger.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
@@ -467,7 +506,10 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -486,7 +528,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is None:
@@ -524,16 +568,27 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if (
             (is_split_into_words or add_prefix_space)
             and (len(text) > 0 and not text[0].isspace())
-            and sum([text.startswith(no_split_token) for no_split_token in self.added_tokens_encoder]) == 0
+            and sum(
+                [
+                    text.startswith(no_split_token)
+                    for no_split_token in self.added_tokens_encoder
+                ]
+            )
+            == 0
         ):
             text = " " + text
         return (text, kwargs)
 
-    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
+        LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    )
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.__call__
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -596,7 +651,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError(
+                    "text input must of type `str` (single example) or `List[str]` (batch of examples). "
+                )
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
                     "Words must be of type `List[str]` (single pretokenized example), "
@@ -613,20 +670,30 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             is_batched = isinstance(text, (list, tuple))
         else:
-            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            is_batched = (
+                isinstance(text, (list, tuple))
+                and text
+                and isinstance(text[0], (list, tuple))
+            )
 
         words = text if text_pair is None else text_pair
         if boxes is None:
             raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
             if len(words) != len(boxes):
-                raise ValueError("You must provide words and boxes for an equal amount of examples")
+                raise ValueError(
+                    "You must provide words and boxes for an equal amount of examples"
+                )
             for words_example, boxes_example in zip(words, boxes):
                 if len(words_example) != len(boxes_example):
-                    raise ValueError("You must provide as many words as there are bounding boxes")
+                    raise ValueError(
+                        "You must provide as many words as there are bounding boxes"
+                    )
         else:
             if len(words) != len(boxes):
-                raise ValueError("You must provide as many words as there are bounding boxes")
+                raise ValueError(
+                    "You must provide as many words as there are bounding boxes"
+                )
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -634,7 +701,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
                     f" {len(text_pair)}."
                 )
-            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            batch_text_or_text_pairs = (
+                list(zip(text, text_pair)) if text_pair is not None else text
+            )
             is_pair = bool(text_pair is not None)
             return self.batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
@@ -682,7 +751,10 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
 
-    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
+        LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    )
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.batch_encode_plus
     def batch_encode_plus(
         self,
@@ -712,13 +784,15 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> BatchEncoding:
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         return self._batch_encode_plus(
@@ -802,7 +876,10 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
+        LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    )
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer._batch_prepare_for_model
     def _batch_prepare_for_model(
         self,
@@ -927,7 +1004,10 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         return encoded_inputs["input_ids"]
 
-    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
+        LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    )
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.encode_plus
     def encode_plus(
         self,
@@ -965,13 +1045,15 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         return self._encode_plus(
@@ -1052,7 +1134,10 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @add_end_docstrings(LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
+        LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    )
     def prepare_for_model(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -1097,13 +1182,15 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         tokens = []
@@ -1131,7 +1218,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                     token_boxes.extend([box] * len(word_tokens))
                     if self.only_label_first_subword:
                         # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                        labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
+                        labels.extend(
+                            [label] + [self.pad_token_label] * (len(word_tokens) - 1)
+                        )
                     else:
                         labels.extend([label] * len(word_tokens))
         else:
@@ -1167,13 +1256,21 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         pair = bool(pair_ids is not None)
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
-        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        total_len = (
+            len_ids
+            + len_pair_ids
+            + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        )
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
         overflowing_token_boxes = []
         overflowing_labels = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and max_length
+            and total_len > max_length
+        ):
             (
                 ids,
                 token_boxes,
@@ -1221,7 +1318,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
             token_boxes = [self.cls_token_box] + token_boxes + [self.sep_token_box]
             if pair_token_boxes:
-                pair_token_boxes = [self.sep_token_box] + pair_token_boxes + [self.sep_token_box]
+                pair_token_boxes = (
+                    [self.sep_token_box] + pair_token_boxes + [self.sep_token_box]
+                )
             token_boxes = token_boxes + pair_token_boxes if pair else token_boxes
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
@@ -1237,7 +1336,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
             if add_special_tokens:
-                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(
+                    ids, pair_ids
+                )
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
@@ -1245,7 +1346,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             encoded_inputs["labels"] = labels
 
         # Check lengths
-        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            encoded_inputs["input_ids"], max_length, verbose
+        )
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -1262,7 +1365,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs,
+            tensor_type=return_tensors,
+            prepend_batch_axis=prepend_batch_axis,
         )
 
         return batch_outputs
@@ -1367,7 +1472,10 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 else:
                     pair_ids = pair_ids[:-1]
                     pair_token_boxes = pair_token_boxes[:-1]
-        elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+        elif (
+            truncation_strategy == TruncationStrategy.ONLY_SECOND
+            and pair_ids is not None
+        ):
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 overflowing_tokens = pair_ids[-window_len:]
@@ -1438,10 +1546,17 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = (
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(required_input) != max_length
+        )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
@@ -1449,35 +1564,58 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [self.pad_token_type_id] * difference
                     )
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    encoded_inputs["bbox"] = (
+                        encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    )
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    encoded_inputs["labels"] = (
+                        encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs[self.model_input_names[0]] = (
+                    required_input + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        self.pad_token_type_id
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = [self.pad_token_box] * difference + encoded_inputs["bbox"]
+                    encoded_inputs["bbox"] = [
+                        self.pad_token_box
+                    ] * difference + encoded_inputs["bbox"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
+                    encoded_inputs["labels"] = [
+                        self.pad_token_label
+                    ] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [
+                    self.pad_token_id
+                ] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 

@@ -3,10 +3,10 @@ import unittest
 import warnings
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import require_compressed_tensors, require_torch
+from transformers.testing_utils import (require_compressed_tensors,
+                                        require_torch)
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import CompressedTensorsConfig
-
 
 if is_torch_available():
     import torch
@@ -31,11 +31,17 @@ class StackCompressedModelTest(unittest.TestCase):
         ),
     ]
     # Flatten the list for tests that require a single list of stubs.
-    model_stubs = [stub for pair in compressed_uncompressed_model_stubs for stub in pair]
+    model_stubs = [
+        stub for pair in compressed_uncompressed_model_stubs for stub in pair
+    ]
 
     # For the outputs matching test, use the sparse-only pair.
-    sparse_compressed_model = "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-compressed"
-    sparse_uncompressed_model = "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-uncompressed"
+    sparse_compressed_model = (
+        "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-compressed"
+    )
+    sparse_uncompressed_model = (
+        "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-uncompressed"
+    )
 
     prompt = "Paris is the capital of which country?"
 
@@ -58,10 +64,16 @@ class StackCompressedModelTest(unittest.TestCase):
                 obj = getattr(obj, attr)
             return obj
 
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
+        from compressed_tensors.quantization.utils import \
+            iter_named_leaf_modules
 
-        for compressed_model, uncompressed_model in self.compressed_uncompressed_model_stubs:
-            with self.subTest(compressed_model=compressed_model, uncompressed_model=uncompressed_model):
+        for (
+            compressed_model,
+            uncompressed_model,
+        ) in self.compressed_uncompressed_model_stubs:
+            with self.subTest(
+                compressed_model=compressed_model, uncompressed_model=uncompressed_model
+            ):
                 uncompressed = AutoModelForCausalLM.from_pretrained(
                     uncompressed_model,
                     device_map="auto",
@@ -85,7 +97,9 @@ class StackCompressedModelTest(unittest.TestCase):
                             )
                         else:
                             self.assertTrue(
-                                torch.allclose(submodule.weight, comp_decomp_obj.weight, atol=0.2),
+                                torch.allclose(
+                                    submodule.weight, comp_decomp_obj.weight, atol=0.2
+                                ),
                                 f"Weight mismatch for module '{name}' in quantized-only or stacked model.",
                             )
 
@@ -104,7 +118,9 @@ class StackCompressedModelTest(unittest.TestCase):
             quantization_config=CompressedTensorsConfig(run_compressed=False),
         )
 
-        output_uncompressed = uncompressed.generate(input_ids.to(uncompressed.device), max_new_tokens=100)
+        output_uncompressed = uncompressed.generate(
+            input_ids.to(uncompressed.device), max_new_tokens=100
+        )
 
         decompressed = AutoModelForCausalLM.from_pretrained(
             self.sparse_compressed_model,
@@ -112,7 +128,9 @@ class StackCompressedModelTest(unittest.TestCase):
             torch_dtype="auto",
             quantization_config=CompressedTensorsConfig(run_compressed=False),
         )
-        output_decompressed = decompressed.generate(input_ids.to(decompressed.device), max_new_tokens=100)
+        output_decompressed = decompressed.generate(
+            input_ids.to(decompressed.device), max_new_tokens=100
+        )
 
         self.assertEqual(
             tokenizer.decode(output_uncompressed[0]),
@@ -133,7 +151,9 @@ class StackCompressedModelTest(unittest.TestCase):
                         model_stub,
                         device_map="auto",
                         torch_dtype="auto",
-                        quantization_config=CompressedTensorsConfig(run_compressed=False),
+                        quantization_config=CompressedTensorsConfig(
+                            run_compressed=False
+                        ),
                     )
                     for warning in caught_warnings:
                         self.assertNotIn(
@@ -164,8 +184,10 @@ class RunCompressedTest(unittest.TestCase):
         gc.collect()
 
     def test_default_run_compressed__True(self):
-        from compressed_tensors.linear.compressed_linear import CompressedLinear
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
+        from compressed_tensors.linear.compressed_linear import \
+            CompressedLinear
+        from compressed_tensors.quantization.utils import \
+            iter_named_leaf_modules
 
         for stub in self.stubs:
             model = AutoModelForCausalLM.from_pretrained(
@@ -183,9 +205,13 @@ class RunCompressedTest(unittest.TestCase):
             assert compressed_linear_counts > 0
 
     def test_default_run_compressed__False(self):
-        from compressed_tensors.linear.compressed_linear import CompressedLinear
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
-        from transformers.utils.quantization_config import CompressedTensorsConfig
+        from compressed_tensors.linear.compressed_linear import \
+            CompressedLinear
+        from compressed_tensors.quantization.utils import \
+            iter_named_leaf_modules
+
+        from transformers.utils.quantization_config import \
+            CompressedTensorsConfig
 
         quantization_config = CompressedTensorsConfig(run_compressed=False)
 
@@ -209,7 +235,8 @@ class RunCompressedTest(unittest.TestCase):
         """Check that run_compressed=True/False output are the same"""
 
         from transformers import AutoTokenizer
-        from transformers.utils.quantization_config import CompressedTensorsConfig
+        from transformers.utils.quantization_config import \
+            CompressedTensorsConfig
 
         quantization_config = CompressedTensorsConfig(run_compressed=False)
 
@@ -220,12 +247,18 @@ class RunCompressedTest(unittest.TestCase):
             model_run_compressed__True = AutoModelForCausalLM.from_pretrained(
                 stub,
             )
-            output_rc_true = model_run_compressed__True.generate(input_ids, max_new_tokens=100)
+            output_rc_true = model_run_compressed__True.generate(
+                input_ids, max_new_tokens=100
+            )
 
             model_run_compressed__False = AutoModelForCausalLM.from_pretrained(
                 stub,
                 quantization_config=quantization_config,
             )
-            output_rc_false = model_run_compressed__False.generate(input_ids, max_new_tokens=100)
+            output_rc_false = model_run_compressed__False.generate(
+                input_ids, max_new_tokens=100
+            )
 
-            assert tokenizer.decode(output_rc_true[0]) == tokenizer.decode(output_rc_false[0])
+            assert tokenizer.decode(output_rc_true[0]) == tokenizer.decode(
+                output_rc_false[0]
+            )

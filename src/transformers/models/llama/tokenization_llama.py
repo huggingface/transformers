@@ -30,7 +30,6 @@ from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 
@@ -145,10 +144,26 @@ class LlamaTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
+        bos_token = (
+            AddedToken(bos_token, normalized=False, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, normalized=False, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, normalized=False, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, normalized=False, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         if legacy is None:
             logger.warning_once(
@@ -198,7 +213,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model_pb2 = import_protobuf(
+                f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)"
+            )
             model = model_pb2.ModelProto.FromString(sp_model)
             normalizer_spec = model_pb2.NormalizerSpec()
             normalizer_spec.add_dummy_prefix = False
@@ -244,7 +261,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         tokens = super().tokenize(text, **kwargs)
 
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+        if (
+            len(tokens) > 1
+            and tokens[0] == SPIECE_UNDERLINE
+            and tokens[1] in self.all_special_tokens
+        ):
             tokens = tokens[1:]
         return tokens
 
@@ -265,7 +286,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        return (
+            tokens[self.unk_token_length :]
+            if len(tokens) >= self.unk_token_length
+            else tokens
+        )
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -294,14 +319,21 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 prev_is_special = True
                 current_sub_tokens = []
             else:
-                if prev_is_special and i == 1 and self.add_prefix_space and not token.startswith(SPIECE_UNDERLINE):
+                if (
+                    prev_is_special
+                    and i == 1
+                    and self.add_prefix_space
+                    and not token.startswith(SPIECE_UNDERLINE)
+                ):
                     out_string += " "
                 current_sub_tokens.append(token)
                 prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
-    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -316,10 +348,14 @@ class LlamaTokenizer(PreTrainedTokenizer):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -340,7 +376,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return output
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -359,7 +398,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         bos_token_id = [1] if self.add_bos_token else []

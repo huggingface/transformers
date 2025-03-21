@@ -23,20 +23,17 @@ from transformers import LayoutLMConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, ids_tensor,
+                                        random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.layoutlm.modeling_tf_layoutlm import (
-        TFLayoutLMForMaskedLM,
-        TFLayoutLMForQuestionAnswering,
-        TFLayoutLMForSequenceClassification,
-        TFLayoutLMForTokenClassification,
-        TFLayoutLMModel,
-    )
+        TFLayoutLMForMaskedLM, TFLayoutLMForQuestionAnswering,
+        TFLayoutLMForSequenceClassification, TFLayoutLMForTokenClassification,
+        TFLayoutLMModel)
 
 
 class TFLayoutLMModelTester:
@@ -94,7 +91,9 @@ class TFLayoutLMModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         # convert bbox to numpy since TF does not support item assignment
-        bbox = ids_tensor([self.batch_size, self.seq_length, 4], self.range_bbox).numpy()
+        bbox = ids_tensor(
+            [self.batch_size, self.seq_length, 4], self.range_bbox
+        ).numpy()
         # Ensure that bbox is legal
         for i in range(bbox.shape[0]):
             for j in range(bbox.shape[1]):
@@ -114,14 +113,20 @@ class TFLayoutLMModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = LayoutLMConfig(
@@ -138,53 +143,133 @@ class TFLayoutLMModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            bbox,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def create_and_check_model(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFLayoutLMModel(config=config)
 
-        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, bbox, token_type_ids=token_type_ids)
         result = model(input_ids, bbox)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFLayoutLMForMaskedLM(config=config)
 
-        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model(
+            input_ids,
+            bbox,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = TFLayoutLMForSequenceClassification(config=config)
 
-        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = TFLayoutLMForTokenClassification(config=config)
 
-        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        result = model(
+            input_ids,
+            bbox,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = TFLayoutLMForQuestionAnswering(config=config)
 
-        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        result = model(
+            input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -237,7 +322,9 @@ class TFLayoutLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = TFLayoutLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=LayoutLMConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -252,7 +339,9 @@ class TFLayoutLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -294,29 +383,48 @@ class TFLayoutLMModelIntegrationTest(unittest.TestCase):
     def test_forward_pass_no_head(self):
         model = TFLayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
-        input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
+        input_ids, attention_mask, bbox, token_type_ids, labels = (
+            prepare_layoutlm_batch_inputs()
+        )
 
         # forward pass
-        outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        outputs = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )
 
         # test the sequence output on [0, :3, :3]
         expected_slice = tf.convert_to_tensor(
-            [[0.1785, -0.1947, -0.0425], [-0.3254, -0.2807, 0.2553], [-0.5391, -0.3322, 0.3364]],
+            [
+                [0.1785, -0.1947, -0.0425],
+                [-0.3254, -0.2807, 0.2553],
+                [-0.5391, -0.3322, 0.3364],
+            ],
         )
 
-        self.assertTrue(np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(
+            np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3)
+        )
 
         # test the pooled output on [1, :3]
         expected_slice = tf.convert_to_tensor([-0.6580, -0.0214, 0.8552])
 
-        self.assertTrue(np.allclose(outputs.pooler_output[1, :3], expected_slice, atol=1e-3))
+        self.assertTrue(
+            np.allclose(outputs.pooler_output[1, :3], expected_slice, atol=1e-3)
+        )
 
     @slow
     def test_forward_pass_sequence_classification(self):
         # initialize model with randomly initialized sequence classification head
-        model = TFLayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased", num_labels=2)
+        model = TFLayoutLMForSequenceClassification.from_pretrained(
+            "microsoft/layoutlm-base-uncased", num_labels=2
+        )
 
-        input_ids, attention_mask, bbox, token_type_ids, _ = prepare_layoutlm_batch_inputs()
+        input_ids, attention_mask, bbox, token_type_ids, _ = (
+            prepare_layoutlm_batch_inputs()
+        )
 
         # forward pass
         outputs = model(
@@ -340,13 +448,21 @@ class TFLayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_token_classification(self):
         # initialize model with randomly initialized token classification head
-        model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased", num_labels=13)
+        model = TFLayoutLMForTokenClassification.from_pretrained(
+            "microsoft/layoutlm-base-uncased", num_labels=13
+        )
 
-        input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
+        input_ids, attention_mask, bbox, token_type_ids, labels = (
+            prepare_layoutlm_batch_inputs()
+        )
 
         # forward pass
         outputs = model(
-            input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            labels=labels,
         )
 
         # test the shape of the logits
@@ -357,12 +473,21 @@ class TFLayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_question_answering(self):
         # initialize model with randomly initialized token classification head
-        model = TFLayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
+        model = TFLayoutLMForQuestionAnswering.from_pretrained(
+            "microsoft/layoutlm-base-uncased"
+        )
 
-        input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
+        input_ids, attention_mask, bbox, token_type_ids, labels = (
+            prepare_layoutlm_batch_inputs()
+        )
 
         # forward pass
-        outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        outputs = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )
 
         # test the shape of the logits
         expected_shape = tf.convert_to_tensor((2, 25))

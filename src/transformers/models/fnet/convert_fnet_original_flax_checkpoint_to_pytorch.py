@@ -22,11 +22,12 @@ from flax.training.checkpoints import restore_checkpoint
 from transformers import FNetConfig, FNetForPreTraining
 from transformers.utils import logging
 
-
 logging.set_verbosity_info()
 
 
-def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, fnet_config_file, save_path):
+def convert_flax_checkpoint_to_pytorch(
+    flax_checkpoint_path, fnet_config_file, save_path
+):
     # Initialise PyTorch model
     config = FNetConfig.from_json_file(fnet_config_file)
     print(f"Building PyTorch model from configuration: {config}")
@@ -66,37 +67,71 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, fnet_config_file, s
 
     # Encoder Layers
     for layer in range(config.num_hidden_layers):
-        new_state_dict[f"fnet.encoder.layer.{layer}.fourier.output.LayerNorm.weight"] = torch.tensor(
-            pretrained_model_params["encoder"][f"encoder_{layer}"]["mixing_layer_norm"]["scale"]
+        new_state_dict[
+            f"fnet.encoder.layer.{layer}.fourier.output.LayerNorm.weight"
+        ] = torch.tensor(
+            pretrained_model_params["encoder"][f"encoder_{layer}"]["mixing_layer_norm"][
+                "scale"
+            ]
         )
-        new_state_dict[f"fnet.encoder.layer.{layer}.fourier.output.LayerNorm.bias"] = torch.tensor(
-            pretrained_model_params["encoder"][f"encoder_{layer}"]["mixing_layer_norm"]["bias"]
+        new_state_dict[f"fnet.encoder.layer.{layer}.fourier.output.LayerNorm.bias"] = (
+            torch.tensor(
+                pretrained_model_params["encoder"][f"encoder_{layer}"][
+                    "mixing_layer_norm"
+                ]["bias"]
+            )
         )
 
-        new_state_dict[f"fnet.encoder.layer.{layer}.intermediate.dense.weight"] = torch.tensor(
-            pretrained_model_params["encoder"][f"feed_forward_{layer}"]["intermediate"]["kernel"]
-        ).T
-        new_state_dict[f"fnet.encoder.layer.{layer}.intermediate.dense.bias"] = torch.tensor(
-            pretrained_model_params["encoder"][f"feed_forward_{layer}"]["intermediate"]["bias"]
+        new_state_dict[f"fnet.encoder.layer.{layer}.intermediate.dense.weight"] = (
+            torch.tensor(
+                pretrained_model_params["encoder"][f"feed_forward_{layer}"][
+                    "intermediate"
+                ]["kernel"]
+            ).T
+        )
+        new_state_dict[f"fnet.encoder.layer.{layer}.intermediate.dense.bias"] = (
+            torch.tensor(
+                pretrained_model_params["encoder"][f"feed_forward_{layer}"][
+                    "intermediate"
+                ]["bias"]
+            )
         )
 
-        new_state_dict[f"fnet.encoder.layer.{layer}.output.dense.weight"] = torch.tensor(
-            pretrained_model_params["encoder"][f"feed_forward_{layer}"]["output"]["kernel"]
-        ).T
+        new_state_dict[f"fnet.encoder.layer.{layer}.output.dense.weight"] = (
+            torch.tensor(
+                pretrained_model_params["encoder"][f"feed_forward_{layer}"]["output"][
+                    "kernel"
+                ]
+            ).T
+        )
         new_state_dict[f"fnet.encoder.layer.{layer}.output.dense.bias"] = torch.tensor(
-            pretrained_model_params["encoder"][f"feed_forward_{layer}"]["output"]["bias"]
+            pretrained_model_params["encoder"][f"feed_forward_{layer}"]["output"][
+                "bias"
+            ]
         )
 
-        new_state_dict[f"fnet.encoder.layer.{layer}.output.LayerNorm.weight"] = torch.tensor(
-            pretrained_model_params["encoder"][f"encoder_{layer}"]["output_layer_norm"]["scale"]
+        new_state_dict[f"fnet.encoder.layer.{layer}.output.LayerNorm.weight"] = (
+            torch.tensor(
+                pretrained_model_params["encoder"][f"encoder_{layer}"][
+                    "output_layer_norm"
+                ]["scale"]
+            )
         )
-        new_state_dict[f"fnet.encoder.layer.{layer}.output.LayerNorm.bias"] = torch.tensor(
-            pretrained_model_params["encoder"][f"encoder_{layer}"]["output_layer_norm"]["bias"]
+        new_state_dict[f"fnet.encoder.layer.{layer}.output.LayerNorm.bias"] = (
+            torch.tensor(
+                pretrained_model_params["encoder"][f"encoder_{layer}"][
+                    "output_layer_norm"
+                ]["bias"]
+            )
         )
 
     # Pooler Layers
-    new_state_dict["fnet.pooler.dense.weight"] = torch.tensor(pretrained_model_params["encoder"]["pooler"]["kernel"]).T
-    new_state_dict["fnet.pooler.dense.bias"] = torch.tensor(pretrained_model_params["encoder"]["pooler"]["bias"])
+    new_state_dict["fnet.pooler.dense.weight"] = torch.tensor(
+        pretrained_model_params["encoder"]["pooler"]["kernel"]
+    ).T
+    new_state_dict["fnet.pooler.dense.bias"] = torch.tensor(
+        pretrained_model_params["encoder"]["pooler"]["bias"]
+    )
 
     # Masked LM Layers
     new_state_dict["cls.predictions.transform.dense.weight"] = torch.tensor(
@@ -117,7 +152,9 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, fnet_config_file, s
     new_state_dict["cls.predictions.decoder.bias"] = torch.tensor(
         pretrained_model_params["predictions_output"]["output_bias"]
     )
-    new_state_dict["cls.predictions.bias"] = torch.tensor(pretrained_model_params["predictions_output"]["output_bias"])
+    new_state_dict["cls.predictions.bias"] = torch.tensor(
+        pretrained_model_params["predictions_output"]["output_bias"]
+    )
 
     # Seq Relationship Layers
     new_state_dict["cls.seq_relationship.weight"] = torch.tensor(
@@ -139,7 +176,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--flax_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--flax_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--fnet_config_file",
@@ -151,6 +192,14 @@ if __name__ == "__main__":
             "This specifies the model architecture."
         ),
     )
-    parser.add_argument("--save_path", default=None, type=str, required=True, help="Path to the output model.")
+    parser.add_argument(
+        "--save_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output model.",
+    )
     args = parser.parse_args()
-    convert_flax_checkpoint_to_pytorch(args.flax_checkpoint_path, args.fnet_config_file, args.save_path)
+    convert_flax_checkpoint_to_pytorch(
+        args.flax_checkpoint_path, args.fnet_config_file, args.save_path
+    )

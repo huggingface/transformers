@@ -27,11 +27,10 @@ from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
 
-
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
-from ...utils import logging, requires_backends
 
+from ...utils import logging, requires_backends
 
 logger = logging.get_logger(__name__)
 
@@ -100,17 +99,23 @@ class SiglipTokenizer(PreTrainedTokenizer):
         requires_backends(self, "protobuf")
 
         pad_token = (
-            AddedToken(pad_token, rstrip=True, lstrip=True, normalized=False, special=True)
+            AddedToken(
+                pad_token, rstrip=True, lstrip=True, normalized=False, special=True
+            )
             if isinstance(pad_token, str)
             else pad_token
         )
         unk_token = (
-            AddedToken(unk_token, rstrip=True, lstrip=True, normalized=False, special=True)
+            AddedToken(
+                unk_token, rstrip=True, lstrip=True, normalized=False, special=True
+            )
             if isinstance(unk_token, str)
             else unk_token
         )
         eos_token = (
-            AddedToken(eos_token, rstrip=True, lstrip=True, normalized=False, special=True)
+            AddedToken(
+                eos_token, rstrip=True, lstrip=True, normalized=False, special=True
+            )
             if isinstance(eos_token, str)
             else eos_token
         )
@@ -160,7 +165,10 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -179,7 +187,9 @@ class SiglipTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         # normal case: some special tokens
@@ -282,7 +292,8 @@ class SiglipTokenizer(PreTrainedTokenizer):
         """
         if keep_punctuation_exact_string:
             text = keep_punctuation_exact_string.join(
-                self.remove_punctuation(part) for part in text.split(keep_punctuation_exact_string)
+                self.remove_punctuation(part)
+                for part in text.split(keep_punctuation_exact_string)
             )
         else:
             text = self.remove_punctuation(text)
@@ -291,13 +302,21 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
         return text
 
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+    def tokenize(
+        self, text: "TextInput", add_special_tokens=False, **kwargs
+    ) -> List[str]:
         """
         Converts a string to a list of tokens.
         """
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        tokens = super().tokenize(
+            SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs
+        )
 
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+        if (
+            len(tokens) > 1
+            and tokens[0] == SPIECE_UNDERLINE
+            and tokens[1] in self.all_special_tokens
+        ):
             tokens = tokens[1:]
         return tokens
 
@@ -324,7 +343,11 @@ class SiglipTokenizer(PreTrainedTokenizer):
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        return (
+            tokens[self.unk_token_length :]
+            if len(tokens) >= self.unk_token_length
+            else tokens
+        )
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
@@ -357,15 +380,21 @@ class SiglipTokenizer(PreTrainedTokenizer):
         return out_string.strip()
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:

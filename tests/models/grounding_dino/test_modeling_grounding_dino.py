@@ -22,32 +22,24 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import (
-    GroundingDinoConfig,
-    SwinConfig,
-    is_torch_available,
-    is_vision_available,
-)
+from transformers import (GroundingDinoConfig, SwinConfig, is_torch_available,
+                          is_vision_available)
 from transformers.file_utils import cached_property
-from transformers.testing_utils import (
-    is_flaky,
-    require_timm,
-    require_torch,
-    require_torch_accelerator,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (is_flaky, require_timm, require_torch,
+                                        require_torch_accelerator,
+                                        require_vision, slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
+    from transformers import (GroundingDinoConfig,
+                              GroundingDinoForObjectDetection,
+                              GroundingDinoModel)
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -148,13 +140,19 @@ class GroundingDinoModelTester:
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
+        pixel_mask = torch.ones(
+            [self.batch_size, self.image_size, self.image_size], device=torch_device
+        )
 
         # When using `GroundingDino` the text input template is '{label1}. {label2}. {label3. ... {labelN}.'
         # Therefore to avoid errors when running tests with `labels` `input_ids` have to follow this structure.
         # Otherwise when running `build_label_maps` it will throw an error when trying to split the input_ids into segments.
-        input_ids = torch.tensor([101, 3869, 1012, 11420, 3869, 1012, 102], device=torch_device)
+        input_ids = torch.tensor(
+            [101, 3869, 1012, 11420, 3869, 1012, 102], device=torch_device
+        )
         input_ids = input_ids.unsqueeze(0).expand(self.batch_size, -1)
 
         labels = None
@@ -166,8 +164,15 @@ class GroundingDinoModelTester:
                 target["class_labels"] = torch.randint(
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
-                target["boxes"] = generate_fake_bounding_boxes(self.n_targets).to(torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
+                target["boxes"] = generate_fake_bounding_boxes(self.n_targets).to(
+                    torch_device
+                )
+                target["masks"] = torch.rand(
+                    self.n_targets,
+                    self.image_size,
+                    self.image_size,
+                    device=torch_device,
+                )
                 labels.append(target)
 
         config = self.get_config()
@@ -213,53 +218,94 @@ class GroundingDinoModelTester:
         )
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_mask, input_ids, labels = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "input_ids": input_ids}
+        config, pixel_values, pixel_mask, input_ids, labels = (
+            self.prepare_config_and_inputs()
+        )
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "pixel_mask": pixel_mask,
+            "input_ids": input_ids,
+        }
         return config, inputs_dict
 
-    def create_and_check_model(self, config, pixel_values, pixel_mask, input_ids, labels):
+    def create_and_check_model(
+        self, config, pixel_values, pixel_mask, input_ids, labels
+    ):
         model = GroundingDinoModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
+        result = model(
+            pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids
+        )
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.num_queries, self.hidden_size),
+        )
 
-    def create_and_check_object_detection_head_model(self, config, pixel_values, pixel_mask, input_ids, labels):
+    def create_and_check_object_detection_head_model(
+        self, config, pixel_values, pixel_mask, input_ids, labels
+    ):
         model = GroundingDinoForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
+        result = model(
+            pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids
+        )
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, config.max_text_len))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.num_queries, config.max_text_len),
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids, labels=labels)
+        result = model(
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            input_ids=input_ids,
+            labels=labels,
+        )
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, config.max_text_len))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.num_queries, config.max_text_len),
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
 
 @require_torch
 class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GroundingDinoModel, GroundingDinoForObjectDetection) if is_torch_available() else ()
+    all_model_classes = (
+        (GroundingDinoModel, GroundingDinoForObjectDetection)
+        if is_torch_available()
+        else ()
+    )
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
     pipeline_model_mapping = (
-        {"image-feature-extraction": GroundingDinoModel, "zero-shot-object-detection": GroundingDinoForObjectDetection}
+        {
+            "image-feature-extraction": GroundingDinoModel,
+            "zero-shot-object-detection": GroundingDinoForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class.__name__ == "GroundingDinoForObjectDetection":
@@ -267,10 +313,15 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 for i in range(self.model_tester.batch_size):
                     target = {}
                     target["class_labels"] = torch.ones(
-                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                        size=(self.model_tester.n_targets,),
+                        device=torch_device,
+                        dtype=torch.long,
                     )
                     target["boxes"] = torch.ones(
-                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                        self.model_tester.n_targets,
+                        4,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     target["masks"] = torch.ones(
                         self.model_tester.n_targets,
@@ -290,7 +341,11 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             self,
             config_class=GroundingDinoConfig,
             has_text_modality=False,
-            common_properties=["d_model", "encoder_attention_heads", "decoder_attention_heads"],
+            common_properties=[
+                "d_model",
+                "encoder_attention_heads",
+                "decoder_attention_heads",
+            ],
         )
 
     def test_config(self):
@@ -302,7 +357,9 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def test_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_object_detection_head_model(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Grounding DINO does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -371,10 +428,16 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions[0]
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_queries,
+                ],
             )
 
             # cross attentions
@@ -426,7 +489,9 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             hidden_states = outputs.encoder_vision_hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -453,7 +518,9 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             self.assertIsInstance(hidden_states, (list, tuple))
             self.assertEqual(len(hidden_states), expected_num_layers)
             seq_len = getattr(self.model_tester, "seq_length", None)
-            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+            decoder_seq_length = getattr(
+                self.model_tester, "decoder_seq_length", seq_len
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -513,7 +580,9 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["pixel_values", "input_ids"]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_different_timm_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -622,16 +691,24 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             # These are all the pointers of shared tensors.
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
-            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
+            tied_weight_keys = (
+                model_tied._tied_weights_keys
+                if model_tied._tied_weights_keys is not None
+                else []
+            )
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 if not any(re.search(key, p) for group in tied_params for p in group):
-                    raise ValueError(f"{key} is not a tied weight key for {model_class}.")
+                    raise ValueError(
+                        f"{key} is not a tied weight key for {model_class}."
+                    )
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
                 for i in range(len(tied_params)):
-                    tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
+                    tied_params[i] = [
+                        p for p in tied_params[i] if re.search(key, p) is None
+                    ]
 
             # GroundingDino when sharing weights also uses the shared ones in GroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
@@ -662,45 +739,73 @@ def prepare_text():
 class GroundingDinoModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny") if is_vision_available() else None
+        return (
+            AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_object_detection_head(self):
-        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
+        model = GroundingDinoForObjectDetection.from_pretrained(
+            "IDEA-Research/grounding-dino-tiny"
+        ).to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
         text = prepare_text()
-        encoding = processor(images=image, text=text, return_tensors="pt").to(torch_device)
+        encoding = processor(images=image, text=text, return_tensors="pt").to(
+            torch_device
+        )
 
         with torch.no_grad():
             outputs = model(**encoding)
 
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.d_model))
+        expected_shape_logits = torch.Size(
+            (1, model.config.num_queries, model.config.d_model)
+        )
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_boxes = torch.tensor(
-            [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
+            [
+                [0.7674, 0.4136, 0.4572],
+                [0.2566, 0.5463, 0.4760],
+                [0.2585, 0.5442, 0.4641],
+            ]
         ).to(torch_device)
         expected_logits = torch.tensor(
-            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
+            [
+                [-4.8913, -0.1900, -0.2161],
+                [-4.9653, -0.3719, -0.3950],
+                [-5.9599, -3.3765, -3.3104],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3
+        )
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4
+        )
 
         # verify postprocessing
         results = processor.image_processor.post_process_object_detection(
             outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
         expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
-        expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
+        expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(
+            torch_device
+        )
 
         self.assertEqual(len(results["scores"]), 2)
-        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            results["scores"], expected_scores, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2
+        )
 
         # verify grounded postprocessing
         expected_labels = ["a cat", "a cat"]
@@ -712,8 +817,12 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             target_sizes=[(image.height, image.width)],
         )[0]
 
-        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            results["scores"], expected_scores, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2
+        )
         self.assertListEqual(results["text_labels"], expected_labels)
 
     @require_torch_accelerator
@@ -725,7 +834,9 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         encoding = processor(images=image, text=text, return_tensors="pt")
 
         # 1. run model on CPU
-        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny")
+        model = GroundingDinoForObjectDetection.from_pretrained(
+            "IDEA-Research/grounding-dino-tiny"
+        )
 
         with torch.no_grad():
             cpu_outputs = model(**encoding)
@@ -738,12 +849,20 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # 3. assert equivalence
         for key in cpu_outputs.keys():
-            torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3
+            )
 
         expected_logits = torch.tensor(
-            [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
+            [
+                [-4.8915, -0.1900, -0.2161],
+                [-4.9658, -0.3716, -0.3948],
+                [-5.9596, -3.3763, -3.3103],
+            ]
         )
-        torch.testing.assert_close(cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3
+        )
 
         # assert postprocessing
         results_cpu = processor.image_processor.post_process_object_detection(
@@ -754,12 +873,18 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             gpu_outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
 
-        torch.testing.assert_close(results_cpu["scores"], result_gpu["scores"].cpu(), rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(results_cpu["boxes"], result_gpu["boxes"].cpu(), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            results_cpu["scores"], result_gpu["scores"].cpu(), rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            results_cpu["boxes"], result_gpu["boxes"].cpu(), rtol=1e-3, atol=1e-3
+        )
 
     @is_flaky()
     def test_cross_attention_mask(self):
-        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
+        model = GroundingDinoForObjectDetection.from_pretrained(
+            "IDEA-Research/grounding-dino-tiny"
+        ).to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -767,12 +892,19 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         text2 = "a remote control."
         text_batched = [text1, text2]
 
-        encoding1 = processor(images=image, text=text1, return_tensors="pt").to(torch_device)
-        encoding2 = processor(images=image, text=text2, return_tensors="pt").to(torch_device)
+        encoding1 = processor(images=image, text=text1, return_tensors="pt").to(
+            torch_device
+        )
+        encoding2 = processor(images=image, text=text2, return_tensors="pt").to(
+            torch_device
+        )
         # If we batch the text and cross attention masking is working the batched result should be equal to
         # The singe text result
         encoding_batched = processor(
-            images=[image] * len(text_batched), text=text_batched, padding="longest", return_tensors="pt"
+            images=[image] * len(text_batched),
+            text=text_batched,
+            padding="longest",
+            return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
@@ -780,19 +912,33 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             outputs2 = model(**encoding2)
             outputs_batched = model(**encoding_batched)
 
-        torch.testing.assert_close(outputs1.logits, outputs_batched.logits[:1], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs1.logits, outputs_batched.logits[:1], rtol=1e-3, atol=1e-3
+        )
         # For some reason 12 elements are > 1e-3, but the rest are fine
-        self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
+        self.assertTrue(
+            torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3)
+        )
 
     def test_grounding_dino_loss(self):
         ds = load_dataset("EduardoPacheco/aquarium-sample", split="train")
         image_processor = self.default_processor.image_processor
         tokenizer = self.default_processor.tokenizer
-        id2label = {0: "fish", 1: "jellyfish", 2: "penguins", 3: "sharks", 4: "puffins", 5: "stingrays", 6: "starfish"}
+        id2label = {
+            0: "fish",
+            1: "jellyfish",
+            2: "penguins",
+            3: "sharks",
+            4: "puffins",
+            5: "stingrays",
+            6: "starfish",
+        }
         prompt = ". ".join(id2label.values()) + "."
 
         text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
-        image_inputs = image_processor(images=ds["image"], annotations=ds["annotations"], return_tensors="pt")
+        image_inputs = image_processor(
+            images=ds["image"], annotations=ds["annotations"], return_tensors="pt"
+        )
 
         # Passing auxiliary_loss=True to compare with the expected loss
         model = GroundingDinoForObjectDetection.from_pretrained(
@@ -832,6 +978,10 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor(32482.2305)
 
         for key in expected_loss_dict:
-            self.assertTrue(torch.allclose(outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3))
+            self.assertTrue(
+                torch.allclose(
+                    outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3
+                )
+            )
 
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-3))

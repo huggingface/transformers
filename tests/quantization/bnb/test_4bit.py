@@ -19,30 +19,17 @@ import unittest
 
 from packaging import version
 
-from transformers import (
-    AutoConfig,
-    AutoModel,
-    AutoModelForCausalLM,
-    AutoModelForSeq2SeqLM,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    pipeline,
-)
+from transformers import (AutoConfig, AutoModel, AutoModelForCausalLM,
+                          AutoModelForSeq2SeqLM,
+                          AutoModelForSequenceClassification, AutoTokenizer,
+                          BitsAndBytesConfig, pipeline)
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
-    apply_skip_if_not_implemented,
-    backend_empty_cache,
-    is_bitsandbytes_available,
-    is_torch_available,
-    require_accelerate,
-    require_bitsandbytes,
-    require_torch,
+    apply_skip_if_not_implemented, backend_empty_cache,
+    is_bitsandbytes_available, is_torch_available, require_accelerate,
+    require_bitsandbytes, require_torch,
     require_torch_gpu_if_bnb_not_multi_backend_enabled,
-    require_torch_multi_accelerator,
-    slow,
-    torch_device,
-)
+    require_torch_multi_accelerator, slow, torch_device)
 
 
 def get_some_linear_layer(model):
@@ -74,7 +61,9 @@ if is_torch_available():
                 nn.Linear(module.in_features, rank, bias=False),
                 nn.Linear(rank, module.out_features, bias=False),
             )
-            small_std = (2.0 / (5 * min(module.in_features, module.out_features))) ** 0.5
+            small_std = (
+                2.0 / (5 * min(module.in_features, module.out_features))
+            ) ** 0.5
             nn.init.normal_(self.adapter[0].weight, std=small_std)
             nn.init.zeros_(self.adapter[1].weight)
             self.adapter.to(module.weight.device)
@@ -100,13 +89,13 @@ class Base4bitTest(unittest.TestCase):
     model_name = "bigscience/bloom-1b7"
 
     # Constant values
-    EXPECTED_RELATIVE_DIFFERENCE = (
-        2.109659552692574  # This was obtained on a RTX Titan so the number might slightly change
-    )
+    EXPECTED_RELATIVE_DIFFERENCE = 2.109659552692574  # This was obtained on a RTX Titan so the number might slightly change
 
     input_text = "Hello my name is"
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
+    EXPECTED_OUTPUTS.add(
+        "Hello my name is John and I am a professional photographer. I"
+    )
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, I am a student at the University")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am 25 years old.")
@@ -126,7 +115,9 @@ class Bnb4BitTest(Base4bitTest):
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(
             self.model_name, torch_dtype=torch.float16, device_map="auto"
         )
-        self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
+        self.model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_4bit=True, device_map="auto"
+        )
 
     def tearDown(self):
         r"""
@@ -173,7 +164,9 @@ class Bnb4BitTest(Base4bitTest):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_4bit = self.model_4bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE, delta=1e-5)
+        self.assertAlmostEqual(
+            mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE, delta=1e-5
+        )
         linear = get_some_linear_layer(self.model_4bit)
         self.assertTrue(linear.weight.__class__ == Params4bit)
 
@@ -207,9 +200,13 @@ class Bnb4BitTest(Base4bitTest):
         """
         model_id = "RWKV/rwkv-4-169m-pile"
 
-        quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_use_double_quant=True)
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_use_double_quant=True
+        )
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, quantization_config=quantization_config
+        )
         tok = AutoTokenizer.from_pretrained(model_id)
 
         text = "Hello my name is"
@@ -225,10 +222,14 @@ class Bnb4BitTest(Base4bitTest):
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = self.model_4bit.generate(
-            input_ids=encoded_input["input_ids"].to(self.model_4bit.device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(self.model_4bit.device),
+            max_new_tokens=10,
         )
 
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def test_generate_quality_config(self):
         r"""
@@ -243,10 +244,14 @@ class Bnb4BitTest(Base4bitTest):
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_4bit_from_config.generate(
-            input_ids=encoded_input["input_ids"].to(model_4bit_from_config.device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(model_4bit_from_config.device),
+            max_new_tokens=10,
         )
 
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def test_generate_quality_dequantize(self):
         r"""
@@ -262,13 +267,19 @@ class Bnb4BitTest(Base4bitTest):
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model_4bit.generate(
-            input_ids=encoded_input["input_ids"].to(model_4bit.device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(model_4bit.device),
+            max_new_tokens=10,
         )
 
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_sequences[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
     def test_device_assignment(self):
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse(
+            "0.43.2"
+        ):
             self.skipTest(reason="This test requires bitsandbytes >= 0.43.2")
 
         mem_before = self.model_4bit.get_memory_footprint()
@@ -293,7 +304,9 @@ class Bnb4BitTest(Base4bitTest):
         """
 
         # Moving with `to` or `cuda` is not supported with versions < 0.43.2.
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse(
+            "0.43.2"
+        ):
             with self.assertRaises(ValueError):
                 # Tries with `str`
                 self.model_4bit.to("cpu")
@@ -325,7 +338,8 @@ class Bnb4BitTest(Base4bitTest):
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
         _ = self.model_fp16.generate(
-            input_ids=encoded_input["input_ids"].to(self.model_fp16.device), max_new_tokens=10
+            input_ids=encoded_input["input_ids"].to(self.model_fp16.device),
+            max_new_tokens=10,
         )
 
         if torch_device in ["cuda", "xpu"]:
@@ -345,8 +359,13 @@ class Bnb4BitTest(Base4bitTest):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small", load_in_4bit=True, device_map="auto")
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            "google-t5/t5-small", load_in_4bit=True, device_map="auto"
+        )
+        self.assertTrue(
+            model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype
+            == torch.float32
+        )
 
     def test_bnb_4bit_wrong_config(self):
         r"""
@@ -366,7 +385,9 @@ class Bnb4BitT5Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model_name = "google-t5/t5-small"
-        cls.dense_act_model_name = "google/flan-t5-small"  # flan-t5 uses dense-act instead of dense-relu-dense
+        cls.dense_act_model_name = (
+            "google/flan-t5-small"  # flan-t5 uses dense-act instead of dense-relu-dense
+        )
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.input_text = "Translate in German: Hello, my dog is cute"
 
@@ -390,15 +411,21 @@ class Bnb4BitT5Test(unittest.TestCase):
         T5ForConditionalGeneration._keep_in_fp32_modules = None
 
         # test with `google-t5/t5-small`
-        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.model_name, load_in_4bit=True, device_map="auto"
+        )
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(
+            model.device
+        )
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_4bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(
+            model.device
+        )
         _ = model.generate(**encoded_input)
         T5ForConditionalGeneration._keep_in_fp32_modules = modules
 
@@ -411,19 +438,29 @@ class Bnb4BitT5Test(unittest.TestCase):
         from transformers import T5ForConditionalGeneration
 
         # test with `google-t5/t5-small`
-        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.model_name, load_in_4bit=True, device_map="auto"
+        )
 
         # there was a bug with decoders - this test checks that it is fixed
-        self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear4bit))
+        self.assertTrue(
+            isinstance(
+                model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear4bit
+            )
+        )
 
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(
+            model.device
+        )
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_4bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(
+            model.device
+        )
         _ = model.generate(**encoded_input)
 
 
@@ -437,13 +474,17 @@ class Classes4BitModelTest(Base4bitTest):
 
         # Different types of model
 
-        self.base_model = AutoModel.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
+        self.base_model = AutoModel.from_pretrained(
+            self.model_name, load_in_4bit=True, device_map="auto"
+        )
         # Sequence classification model
         self.sequence_model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name, load_in_4bit=True, device_map="auto"
         )
         # CausalLM model
-        self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
+        self.model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_4bit=True, device_map="auto"
+        )
         # Seq2seq model
         self.seq_to_seq_model = AutoModelForSeq2SeqLM.from_pretrained(
             self.seq_to_seq_name, load_in_4bit=True, device_map="auto"
@@ -469,12 +510,18 @@ class Classes4BitModelTest(Base4bitTest):
         """
         from bitsandbytes.nn import Params4bit
 
-        self.assertTrue(self.base_model.h[-1].mlp.dense_4h_to_h.weight.__class__ == Params4bit)
+        self.assertTrue(
+            self.base_model.h[-1].mlp.dense_4h_to_h.weight.__class__ == Params4bit
+        )
 
         # Other heads should be nn.Parameter
         self.assertTrue(self.model_4bit.lm_head.weight.__class__ == torch.nn.Parameter)
-        self.assertTrue(self.sequence_model.score.weight.__class__ == torch.nn.Parameter)
-        self.assertTrue(self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter)
+        self.assertTrue(
+            self.sequence_model.score.weight.__class__ == torch.nn.Parameter
+        )
+        self.assertTrue(
+            self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter
+        )
 
 
 @apply_skip_if_not_implemented
@@ -507,7 +554,9 @@ class Pipeline4BitTest(Base4bitTest):
                 "device_map": "auto",
                 "load_in_4bit": True,
                 # float16 isn't supported on CPU, use bfloat16 instead
-                "torch_dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
+                "torch_dtype": (
+                    torch.bfloat16 if torch_device == "cpu" else torch.float16
+                ),
             },
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
@@ -573,7 +622,10 @@ class Bnb4bitTestMultiGpu(Base4bitTest):
         output_parallel = model_parallel.generate(
             input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10
         )
-        self.assertIn(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertIn(
+            self.tokenizer.decode(output_parallel[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUTS,
+        )
 
 
 @apply_skip_if_not_implemented
@@ -583,18 +635,26 @@ class Bnb4BitTestTraining(Base4bitTest):
         super().setUp()
 
     def test_training(self):
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse(
+            "0.37.0"
+        ):
             self.skipTest(reason="This test requires bitsandbytes >= 0.37.0")
 
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
         if torch.cuda.is_available():
-            self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+            self.assertEqual(
+                set(model.hf_device_map.values()), {torch.cuda.current_device()}
+            )
         elif torch.xpu.is_available():
-            self.assertEqual(set(model.hf_device_map.values()), {f"xpu:{torch.xpu.current_device()}"})
+            self.assertEqual(
+                set(model.hf_device_map.values()), {f"xpu:{torch.xpu.current_device()}"}
+            )
         else:
-            self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
+            self.assertTrue(
+                all(param.device.type == "cpu" for param in model.parameters())
+            )
 
         for param in model.parameters():
             param.requires_grad = False  # freeze the model - train adapters later
@@ -626,7 +686,10 @@ class Bnb4BitTestTraining(Base4bitTest):
 
 
 @apply_skip_if_not_implemented
-@unittest.skipIf(torch_device == "xpu", reason="XPU has precision issue on gpt model, will test it once fixed")
+@unittest.skipIf(
+    torch_device == "xpu",
+    reason="XPU has precision issue on gpt model, will test it once fixed",
+)
 class Bnb4BitGPT2Test(Bnb4BitTest):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 3.3191854854152187
@@ -652,7 +715,9 @@ class BaseSerializationTest(unittest.TestCase):
         gc.collect()
         backend_empty_cache(torch_device)
 
-    def test_serialization(self, quant_type="nf4", double_quant=True, safe_serialization=True):
+    def test_serialization(
+        self, quant_type="nf4", double_quant=True, safe_serialization=True
+    ):
         r"""
         Test whether it is possible to serialize a model in 4-bit. Uses most typical params as default.
         See ExtendedSerializationTest class for more params combinations.
@@ -678,16 +743,22 @@ class BaseSerializationTest(unittest.TestCase):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_1 = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
+            model_1 = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map=torch_device
+            )
 
         # checking quantized linear module weight
         linear = get_some_linear_layer(model_1)
         self.assertTrue(linear.weight.__class__ == bnb.nn.Params4bit)
         self.assertTrue(hasattr(linear.weight, "quant_state"))
-        self.assertTrue(linear.weight.quant_state.__class__ == bnb.functional.QuantState)
+        self.assertTrue(
+            linear.weight.quant_state.__class__ == bnb.functional.QuantState
+        )
 
         # checking memory footpring
-        self.assertAlmostEqual(model_0.get_memory_footprint() / model_1.get_memory_footprint(), 1, places=2)
+        self.assertAlmostEqual(
+            model_0.get_memory_footprint() / model_1.get_memory_footprint(), 1, places=2
+        )
 
         # Matching all parameters and their quant_state items:
         d0 = dict(model_0.named_parameters())
@@ -717,7 +788,9 @@ class BaseSerializationTest(unittest.TestCase):
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         out_0 = model_0(**encoded_input)
         out_1 = model_1(**encoded_input)
-        torch.testing.assert_close(out_0["logits"], out_1["logits"], rtol=0.05, atol=0.05)
+        torch.testing.assert_close(
+            out_0["logits"], out_1["logits"], rtol=0.05, atol=0.05
+        )
 
         # comparing generate() outputs
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
@@ -740,27 +813,41 @@ class ExtendedSerializationTest(BaseSerializationTest):
     """
 
     def test_nf4_single_unsafe(self):
-        self.test_serialization(quant_type="nf4", double_quant=False, safe_serialization=False)
+        self.test_serialization(
+            quant_type="nf4", double_quant=False, safe_serialization=False
+        )
 
     def test_nf4_single_safe(self):
-        self.test_serialization(quant_type="nf4", double_quant=False, safe_serialization=True)
+        self.test_serialization(
+            quant_type="nf4", double_quant=False, safe_serialization=True
+        )
 
     def test_nf4_double_unsafe(self):
-        self.test_serialization(quant_type="nf4", double_quant=True, safe_serialization=False)
+        self.test_serialization(
+            quant_type="nf4", double_quant=True, safe_serialization=False
+        )
 
     # nf4 double safetensors quantization is tested in test_serialization() method from the parent class
 
     def test_fp4_single_unsafe(self):
-        self.test_serialization(quant_type="fp4", double_quant=False, safe_serialization=False)
+        self.test_serialization(
+            quant_type="fp4", double_quant=False, safe_serialization=False
+        )
 
     def test_fp4_single_safe(self):
-        self.test_serialization(quant_type="fp4", double_quant=False, safe_serialization=True)
+        self.test_serialization(
+            quant_type="fp4", double_quant=False, safe_serialization=True
+        )
 
     def test_fp4_double_unsafe(self):
-        self.test_serialization(quant_type="fp4", double_quant=True, safe_serialization=False)
+        self.test_serialization(
+            quant_type="fp4", double_quant=True, safe_serialization=False
+        )
 
     def test_fp4_double_safe(self):
-        self.test_serialization(quant_type="fp4", double_quant=True, safe_serialization=True)
+        self.test_serialization(
+            quant_type="fp4", double_quant=True, safe_serialization=True
+        )
 
 
 class BloomSerializationTest(BaseSerializationTest):
@@ -794,12 +881,18 @@ class LlamaSerializationTest(BaseSerializationTest):
 @apply_skip_if_not_implemented
 class Bnb4BitTestBasicConfigTest(unittest.TestCase):
     def test_load_in_4_and_8_bit_fails(self):
-        with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
-            AutoModelForCausalLM.from_pretrained("facebook/opt-125m", load_in_4bit=True, load_in_8bit=True)
+        with self.assertRaisesRegex(
+            ValueError, "load_in_4bit and load_in_8bit are both True"
+        ):
+            AutoModelForCausalLM.from_pretrained(
+                "facebook/opt-125m", load_in_4bit=True, load_in_8bit=True
+            )
 
     def test_set_load_in_8_bit(self):
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-        with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
+        with self.assertRaisesRegex(
+            ValueError, "load_in_4bit and load_in_8bit are both True"
+        ):
             quantization_config.load_in_8bit = True
 
 
@@ -815,7 +908,9 @@ class Bnb4bitCompile(unittest.TestCase):
     def setUp(self):
         # Models and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
+        self.model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_4bit=True
+        )
 
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")

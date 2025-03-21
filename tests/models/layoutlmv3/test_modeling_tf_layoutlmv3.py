@@ -28,24 +28,22 @@ from transformers.testing_utils import require_tf, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        LayoutLMv3Config,
-        TFLayoutLMv3ForQuestionAnswering,
-        TFLayoutLMv3ForSequenceClassification,
-        TFLayoutLMv3ForTokenClassification,
-        TFLayoutLMv3Model,
-    )
+    from transformers import (TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+                              TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+                              TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+                              TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+                              LayoutLMv3Config,
+                              TFLayoutLMv3ForQuestionAnswering,
+                              TFLayoutLMv3ForSequenceClassification,
+                              TFLayoutLMv3ForTokenClassification,
+                              TFLayoutLMv3Model)
 
 if is_vision_available():
     from PIL import Image
@@ -136,7 +134,9 @@ class TFLayoutLMv3ModelTester:
                     bbox[i, j, 0] = tmp_coordinate
         bbox = tf.constant(bbox)
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         input_mask = None
         if self.use_input_mask:
@@ -144,13 +144,19 @@ class TFLayoutLMv3ModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.text_seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.text_seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.text_seq_length], self.num_labels
+            )
 
         config = LayoutLMv3Config(
             vocab_size=self.vocab_size,
@@ -170,9 +176,20 @@ class TFLayoutLMv3ModelTester:
             patch_size=self.patch_size,
         )
 
-        return config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        return (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+        )
 
-    def create_and_check_model(self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask):
+    def create_and_check_model(
+        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask
+    ):
         model = TFLayoutLMv3Model(config=config)
 
         # text + image
@@ -187,22 +204,34 @@ class TFLayoutLMv3ModelTester:
         )
         result = model(input_ids, bbox=bbox, pixel_values=pixel_values, training=False)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
         # text only
         result = model(input_ids, training=False)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.text_seq_length, self.hidden_size),
         )
 
         # image only
         result = model({"pixel_values": pixel_values}, training=False)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.image_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.image_seq_length, self.hidden_size),
         )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
     ):
         config.num_labels = self.num_labels
         model = TFLayoutLMv3ForSequenceClassification(config=config)
@@ -218,7 +247,14 @@ class TFLayoutLMv3ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        token_labels,
     ):
         config.num_labels = self.num_labels
         model = TFLayoutLMv3ForTokenClassification(config=config)
@@ -231,10 +267,20 @@ class TFLayoutLMv3ModelTester:
             labels=token_labels,
             training=False,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.text_seq_length, self.num_labels),
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
     ):
         config.num_labels = 2
         model = TFLayoutLMv3ForQuestionAnswering(config=config)
@@ -248,12 +294,18 @@ class TFLayoutLMv3ModelTester:
             end_positions=sequence_labels,
             training=False,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _) = config_and_inputs
+        (config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _) = (
+            config_and_inputs
+        )
         inputs_dict = {
             "input_ids": input_ids,
             "bbox": bbox,
@@ -277,7 +329,10 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         else ()
     )
     pipeline_model_mapping = (
-        {"document-question-answering": TFLayoutLMv3ForQuestionAnswering, "feature-extraction": TFLayoutLMv3Model}
+        {
+            "document-question-answering": TFLayoutLMv3ForQuestionAnswering,
+            "feature-extraction": TFLayoutLMv3Model,
+        }
         if is_tf_available()
         else {}
     )
@@ -304,30 +359,48 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
-                k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
-                if isinstance(v, tf.Tensor) and v.ndim > 0
-                else v
+                k: (
+                    tf.tile(
+                        tf.expand_dims(v, 1),
+                        (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1),
+                    )
+                    if isinstance(v, tf.Tensor) and v.ndim > 0
+                    else v
+                )
                 for k, v in inputs_dict.items()
             }
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["labels"] = tf.ones(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
             elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
-                inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-                inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["start_positions"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
+                inputs_dict["end_positions"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
+            elif model_class in get_values(
+                TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            ):
+                inputs_dict["labels"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
             elif model_class in get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING):
                 inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.text_seq_length), dtype=tf.int32
+                    (self.model_tester.batch_size, self.model_tester.text_seq_length),
+                    dtype=tf.int32,
                 )
 
         return inputs_dict
 
     def setUp(self):
         self.model_tester = TFLayoutLMv3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=LayoutLMv3Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -338,21 +411,32 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             model = model_class(config)
             if getattr(model, "hf_compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
                 added_label = prepared_for_class[
-                    sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
+                    sorted(
+                        prepared_for_class.keys() - inputs_dict.keys(), reverse=True
+                    )[0]
                 ]
                 expected_loss_size = added_label.shape.as_list()[:1]
 
                 # Test that model correctly compute the loss with kwargs
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
                 input_ids = prepared_for_class.pop("input_ids")
 
                 loss = model(input_ids, **prepared_for_class)[0]
-                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                self.assertTrue(
+                    loss.shape.as_list() == expected_loss_size
+                    or loss.shape.as_list() == [1]
+                )
 
                 # Test that model correctly compute the loss when we mask some positions
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
                 input_ids = prepared_for_class.pop("input_ids")
                 if "labels" in prepared_for_class:
                     labels = prepared_for_class["labels"].numpy()
@@ -360,16 +444,26 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
                         labels[0] = -100
                         prepared_for_class["labels"] = tf.convert_to_tensor(labels)
                         loss = model(input_ids, **prepared_for_class)[0]
-                        self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                        self.assertTrue(
+                            loss.shape.as_list() == expected_loss_size
+                            or loss.shape.as_list() == [1]
+                        )
                         self.assertTrue(not np.any(np.isnan(loss.numpy())))
 
                 # Test that model correctly compute the loss with a dict
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
                 loss = model(prepared_for_class)[0]
-                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                self.assertTrue(
+                    loss.shape.as_list() == expected_loss_size
+                    or loss.shape.as_list() == [1]
+                )
 
                 # Test that model correctly compute the loss with a tuple
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                prepared_for_class = self._prepare_for_class(
+                    inputs_dict.copy(), model_class, return_labels=True
+                )
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
@@ -397,7 +491,10 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
                 # Send to model
                 loss = model(tuple_input[:-1])[0]
 
-                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                self.assertTrue(
+                    loss.shape.as_list() == expected_loss_size
+                    or loss.shape.as_list() == [1]
+                )
 
     def test_model(self):
         (
@@ -410,7 +507,9 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             _,
             _,
         ) = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(config, input_ids, bbox, pixel_values, token_type_ids, input_mask)
+        self.model_tester.create_and_check_model(
+            config, input_ids, bbox, pixel_values, token_type_ids, input_mask
+        )
 
     def test_model_various_embeddings(self):
         (
@@ -425,7 +524,9 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         ) = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config.position_embedding_type = type
-            self.model_tester.create_and_check_model(config, input_ids, bbox, pixel_values, token_type_ids, input_mask)
+            self.model_tester.create_and_check_model(
+                config, input_ids, bbox, pixel_values, token_type_ids, input_mask
+            )
 
     def test_for_sequence_classification(self):
         (
@@ -439,7 +540,13 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             _,
         ) = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(
-            config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
         )
 
     def test_for_token_classification(self):
@@ -454,7 +561,13 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             token_labels,
         ) = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(
-            config, input_ids, bbox, pixel_values, token_type_ids, input_mask, token_labels
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            token_labels,
         )
 
     def test_for_question_answering(self):
@@ -469,7 +582,13 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             _,
         ) = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(
-            config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
         )
 
     @slow
@@ -489,7 +608,9 @@ def prepare_img():
 class TFLayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
+        return (
+            LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
+        )
 
     @slow
     def test_inference_no_head(self):
@@ -503,14 +624,22 @@ class TFLayoutLMv3ModelIntegrationTest(unittest.TestCase):
         bbox = tf.expand_dims(tf.constant([[1, 2, 3, 4], [5, 6, 7, 8]]), axis=0)
 
         # forward pass
-        outputs = model(input_ids=input_ids, bbox=bbox, pixel_values=pixel_values, training=False)
+        outputs = model(
+            input_ids=input_ids, bbox=bbox, pixel_values=pixel_values, training=False
+        )
 
         # verify the logits
         expected_shape = (1, 199, 768)
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = tf.constant(
-            [[-0.0529, 0.3618, 0.1632], [-0.1587, -0.1667, -0.0400], [-0.1557, -0.1671, -0.0505]]
+            [
+                [-0.0529, 0.3618, 0.1632],
+                [-0.1587, -0.1667, -0.0400],
+                [-0.1557, -0.1671, -0.0505],
+            ]
         )
 
-        self.assertTrue(np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(
+            np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        )

@@ -23,7 +23,6 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
 if is_vision_available():
     from transformers import Gemma3ImageProcessor
 
@@ -51,9 +50,13 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
+        tokenizer = GemmaTokenizer(
+            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
+        )
         processor_kwargs = self.prepare_processor_dict()
-        processor = Gemma3Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
+        processor = Gemma3Processor(
+            image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
@@ -75,9 +78,10 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         if batch_size == 1:
             return ["lower newer <start_of_image>"]
-        return ["lower newer <start_of_image>", "<start_of_image> upper older longer string"] + [
-            "<start_of_image> lower newer"
-        ] * (batch_size - 2)
+        return [
+            "lower newer <start_of_image>",
+            "<start_of_image> upper older longer string",
+        ] + ["<start_of_image> lower newer"] * (batch_size - 2)
 
     # Override as Gemma3 needs images to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size: Optional[int] = None):
@@ -91,7 +95,9 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         text_multi_images = f"{processor.boi_token}{processor.boi_token}Dummy text!"
         text_single_image = f"{processor.boi_token}Dummy text!"
         text_no_image = "Dummy text!"
@@ -104,15 +110,24 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # We can't be sure what is users intention: if user wants one image per text OR two images for first text and no image for second text
         with self.assertRaises(ValueError):
-            _ = processor(text=[text_single_image, text_single_image], images=[image, image], return_tensors="np")
+            _ = processor(
+                text=[text_single_image, text_single_image],
+                images=[image, image],
+                return_tensors="np",
+            )
 
         # The users is expected to be explicit about which image belong to which text by nesting the images list
-        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="np")
+        out_multiimages = processor(
+            text=text_multi_images, images=[image, image], return_tensors="np"
+        )
         out_batch_oneimage = processor(
-            text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="np"
+            text=[text_single_image, text_single_image],
+            images=[[image], [image]],
+            return_tensors="np",
         )
         self.assertListEqual(
-            out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
+            out_batch_oneimage[self.images_input_name].tolist(),
+            out_multiimages[self.images_input_name].tolist(),
         )
 
     def test_pan_and_scan(self):

@@ -22,30 +22,22 @@ import pytest
 from datasets import load_dataset
 
 from transformers import UniSpeechConfig, is_torch_available
-from transformers.testing_utils import is_flaky, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import (is_flaky, require_soundfile,
+                                        require_torch, slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        UniSpeechForCTC,
-        UniSpeechForPreTraining,
-        UniSpeechForSequenceClassification,
-        UniSpeechModel,
-        Wav2Vec2FeatureExtractor,
-        Wav2Vec2Processor,
-    )
+    from transformers import (UniSpeechForCTC, UniSpeechForPreTraining,
+                              UniSpeechForSequenceClassification,
+                              UniSpeechModel, Wav2Vec2FeatureExtractor,
+                              Wav2Vec2Processor)
 
 
 class UniSpeechModelTester:
@@ -143,7 +135,8 @@ class UniSpeechModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.hidden_size),
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -154,7 +147,9 @@ class UniSpeechModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.bool
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
 
@@ -163,7 +158,9 @@ class UniSpeechModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0.0
 
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
+        batch_outputs = model(
+            input_values, attention_mask=attention_mask
+        ).last_hidden_state
 
         for i in range(input_values.shape[0]):
             input_slice = input_values[i : i + 1, : input_lengths[i]]
@@ -180,11 +177,17 @@ class UniSpeechModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.long
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -192,10 +195,14 @@ class UniSpeechModelTester:
             attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        sum_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        mean_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
 
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
@@ -208,7 +215,9 @@ class UniSpeechModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.long
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
         labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
@@ -218,7 +227,9 @@ class UniSpeechModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0
 
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        masked_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
         unmasked_loss = model(input_values, labels=labels).loss.item()
 
         self.parent.assertTrue(isinstance(masked_loss, float))
@@ -237,8 +248,12 @@ class UniSpeechModelTester:
         input_values = input_values[:3]
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -285,8 +300,13 @@ class UniSpeechModelTester:
         input_values = input_values[:3]
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2),
+            model.config.vocab_size + 100,
+        )
 
         with pytest.raises(ValueError):
             model(input_values, labels=labels)
@@ -298,9 +318,16 @@ class UniSpeechModelTester:
 
 
 @require_torch
-class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class UniSpeechRobustModelTest(
+    ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (UniSpeechForCTC, UniSpeechModel, UniSpeechForSequenceClassification, UniSpeechForPreTraining)
+        (
+            UniSpeechForCTC,
+            UniSpeechModel,
+            UniSpeechForSequenceClassification,
+            UniSpeechForPreTraining,
+        )
         if is_torch_available()
         else ()
     )
@@ -318,9 +345,14 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     def setUp(self):
         self.model_tester = UniSpeechModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
+            self,
+            conv_stride=(3, 3, 3),
+            feat_extract_norm="layer",
+            do_stable_layer_norm=True,
         )
-        self.config_tester = ConfigTester(self, config_class=UniSpeechConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=UniSpeechConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -395,11 +427,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         input_values = inputs_dict["input_values"]
 
         input_lengths = torch.tensor(
-            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+            [input_values.shape[1] for _ in range(input_values.shape[0])],
+            dtype=torch.long,
+            device=torch_device,
         )
         output_lengths = model._get_feat_extract_output_lengths(input_lengths)
 
-        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        labels = ids_tensor(
+            (input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size
+        )
         inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
         inputs_dict["labels"] = labels
 
@@ -442,7 +478,9 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -464,12 +502,17 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             module.bias.data.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
-        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+        if (
+            hasattr(module, "masked_spec_embed")
+            and module.masked_spec_embed is not None
+        ):
             module.masked_spec_embed.data.fill_(3)
 
     def test_mask_feature_prob_ctc(self):
         model = UniSpeechForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", mask_feature_prob=0.2, mask_feature_length=2
+            "hf-internal-testing/tiny-random-unispeech",
+            mask_feature_prob=0.2,
+            mask_feature_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -477,10 +520,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -492,7 +540,9 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     def test_mask_time_prob_ctc(self):
         model = UniSpeechForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", mask_time_prob=0.2, mask_time_length=2
+            "hf-internal-testing/tiny-random-unispeech",
+            mask_time_prob=0.2,
+            mask_time_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -500,10 +550,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -527,10 +582,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         )
 
         batch_duration_in_seconds = [6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -555,7 +615,9 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 @slow
 class UniSpeechModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -564,14 +626,20 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "anton-l/superb_dummy", task, split="test", trust_remote_code=True
+        )
 
         return ds[:num_samples]
 
     def test_inference_pretraining(self):
-        model = UniSpeechForPreTraining.from_pretrained("microsoft/unispeech-large-1500h-cv")
+        model = UniSpeechForPreTraining.from_pretrained(
+            "microsoft/unispeech-large-1500h-cv"
+        )
         model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-xlsr-53")
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-large-xlsr-53"
+        )
         input_speech = self._load_datasamples(2)
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
@@ -584,7 +652,9 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
             )
 
         # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
+        cosine_sim = torch.cosine_similarity(
+            outputs.projected_states, outputs.projected_quantized_states, dim=-1
+        )
 
         # pretrained model should have learned a high cosine similarity
         self.assertTrue(cosine_sim.mean() > 0.5)
@@ -597,4 +667,6 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        torch.testing.assert_close(cosine_sim[:, :5], expected_cosine_sim_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            cosine_sim[:, :5], expected_cosine_sim_slice, rtol=1e-3, atol=1e-3
+        )

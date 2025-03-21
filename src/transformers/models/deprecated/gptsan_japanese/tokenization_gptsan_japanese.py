@@ -24,16 +24,10 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ....tokenization_utils import PreTrainedTokenizer
-from ....tokenization_utils_base import (
-    BatchEncoding,
-    PreTokenizedInput,
-    PreTokenizedInputPair,
-    TextInput,
-    TextInputPair,
-    TruncationStrategy,
-)
+from ....tokenization_utils_base import (BatchEncoding, PreTokenizedInput,
+                                         PreTokenizedInputPair, TextInput,
+                                         TextInputPair, TruncationStrategy)
 from ....utils import PaddingStrategy, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -50,7 +44,10 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     ids_to_tokens = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as f:
         token = f.readlines()
-    token = [[t.rstrip("\n")] if (t == ",\n" or "," not in t) else t.rstrip("\n").split(",") for t in token]
+    token = [
+        [t.rstrip("\n")] if (t == ",\n" or "," not in t) else t.rstrip("\n").split(",")
+        for t in token
+    ]
     for idx, b in enumerate(token):
         ids_to_tokens[idx] = b
         raw_vocab[",".join(b)] = idx
@@ -164,7 +161,9 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
                 " pretrained model use `tokenizer = GPTSanJapaneseTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_clean_text = do_clean_text
-        self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
+        self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = (
+            load_vocab_and_emoji(vocab_file, emoji_file)
+        )
         self.subword_tokenizer = SubWordJapaneseTokenizer(
             vocab=self.vocab, ids_to_tokens=self.ids_to_tokens, emoji=self.emoji
         )
@@ -207,7 +206,9 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
                 byte_tokens.append(int(word[6:-2]))
             else:
                 if len(byte_tokens) > 0:
-                    words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
+                    words.append(
+                        bytearray(byte_tokens).decode("utf-8", errors="replace")
+                    )
                     byte_tokens = []
                 if word[:7] == "<|emoji" and word[-2:] == "|>":
                     words.append(self.emoji["emoji_inv"][word])
@@ -237,21 +238,31 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         text = "".join(words)
         return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["vocab_file"],
             )
             emoji_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["emoji_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["emoji_file"],
             )
         else:
             vocab_file = (
-                (filename_prefix + "-" if filename_prefix else "") + save_directory + VOCAB_FILES_NAMES["vocab_file"]
+                (filename_prefix + "-" if filename_prefix else "")
+                + save_directory
+                + VOCAB_FILES_NAMES["vocab_file"]
             )
             emoji_file = (
-                (filename_prefix + "-" if filename_prefix else "") + save_directory + VOCAB_FILES_NAMES["emoji_file"]
+                (filename_prefix + "-" if filename_prefix else "")
+                + save_directory
+                + VOCAB_FILES_NAMES["emoji_file"]
             )
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token_index, token in self.ids_to_tokens.items():
@@ -303,11 +314,15 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             total_len = len(token_ids_0 + token_ids_1)
         return prefix_len * [1] + (total_len - prefix_len) * [0]
 
-    def prepare_for_tokenization(self, text, prefix_text=None, add_sep_token=None, **kwargs):
+    def prepare_for_tokenization(
+        self, text, prefix_text=None, add_sep_token=None, **kwargs
+    ):
         # GPTSAN inserts extra SEP tokens in Prefix-LM in addition to SOT for text generation.
         # SOT at the beginning of the text, and SEP at the separator between the Prefix part and the rest.
         if add_sep_token is None:
-            add_sep_token = self.sep_token not in text  # If insert un-prefix position explicitly
+            add_sep_token = (
+                self.sep_token not in text
+            )  # If insert un-prefix position explicitly
         prepared = self.bos_token if self.bos_token in self.vocab else ""
         prepared += prefix_text if prefix_text is not None else ""
         if add_sep_token:
@@ -318,7 +333,10 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+            List[PreTokenizedInputPair],
         ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -338,7 +356,9 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> BatchEncoding:
         # This tokenizer converts input text pairs into Prefix input and subsequent input
-        if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(tuple(batch_text_or_text_pairs[0]), list):
+        if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(
+            tuple(batch_text_or_text_pairs[0]), list
+        ):
             # As a single text with an explicit un-prefix position
             batch_prefix_texts = []
             for pref, txt in batch_text_or_text_pairs:
@@ -399,9 +419,15 @@ class SubWordJapaneseTokenizer:
         self.ids_to_tokens = ids_to_tokens  # same as bpe
         self.emoji = emoji
         self.maxlen = np.max([len(w) for w in self.vocab.keys()])
-        self.content_repatter1 = re.compile(r"(https?|ftp)(:\/\/[-_\.!~*\'()a-zA-Z0-9;\/?:\@&=\+$,%#]+)")
-        self.content_repatter2 = re.compile(r"[A-Za-z0-9\._+]*@[\-_0-9A-Za-z]+(\.[A-Za-z]+)*")
-        self.content_repatter3 = re.compile(r"[\(]{0,1}[0-9]{2,4}[\)\-\(]{0,1}[0-9]{2,4}[\)\-]{0,1}[0-9]{3,4}")
+        self.content_repatter1 = re.compile(
+            r"(https?|ftp)(:\/\/[-_\.!~*\'()a-zA-Z0-9;\/?:\@&=\+$,%#]+)"
+        )
+        self.content_repatter2 = re.compile(
+            r"[A-Za-z0-9\._+]*@[\-_0-9A-Za-z]+(\.[A-Za-z]+)*"
+        )
+        self.content_repatter3 = re.compile(
+            r"[\(]{0,1}[0-9]{2,4}[\)\-\(]{0,1}[0-9]{2,4}[\)\-]{0,1}[0-9]{3,4}"
+        )
         self.content_repatter4 = re.compile(
             r"([12]\d{3}[/\-年])*(0?[1-9]|1[0-2])[/\-月]((0?[1-9]|[12][0-9]|3[01])日?)*(\d{1,2}|:|\d{1,2}時|\d{1,2}分|\(日\)|\(月\)|\(火\)|\(水\)|\(木\)|\(金\)|\(土\)|㈰|㈪|㈫|㈬|㈭|㈮|㈯)*"
         )

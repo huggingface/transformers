@@ -18,20 +18,23 @@ import collections
 import unittest
 
 from transformers import DinatConfig
-from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (require_natten, require_torch,
+                                        require_vision, slow, torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DinatBackbone, DinatForImageClassification, DinatModel
+    from transformers import (DinatBackbone, DinatForImageClassification,
+                              DinatModel)
 
 if is_vision_available():
     from PIL import Image
@@ -95,7 +98,9 @@ class DinatModelTester:
         self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -135,11 +140,14 @@ class DinatModelTester:
         model.eval()
         result = model(pixel_values)
 
-        expected_height = expected_width = (config.image_size // config.patch_size) // (2 ** (len(config.depths) - 1))
+        expected_height = expected_width = (config.image_size // config.patch_size) // (
+            2 ** (len(config.depths) - 1)
+        )
         expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, expected_height, expected_width, expected_dim)
+            result.last_hidden_state.shape,
+            (self.batch_size, expected_height, expected_width, expected_dim),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -155,7 +163,9 @@ class DinatModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -167,7 +177,10 @@ class DinatModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], 16, 16])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, model.channels[0], 16, 16],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -181,7 +194,10 @@ class DinatModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], 4, 4])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, model.channels[-1], 4, 4],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -206,7 +222,10 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": DinatModel, "image-classification": DinatForImageClassification}
+        {
+            "image-feature-extraction": DinatModel,
+            "image-classification": DinatForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -221,7 +240,10 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = DinatModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=DinatConfig, embed_dim=37, common_properties=["patch_size", "num_channels"]
+            self,
+            config_class=DinatConfig,
+            embed_dim=37,
+            common_properties=["patch_size", "num_channels"],
         )
 
     def test_config(self):
@@ -257,7 +279,9 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_attention_outputs(self):
-        self.skipTest(reason="Dinat's attention operation is handled entirely by NATTEN.")
+        self.skipTest(
+            reason="Dinat's attention operation is handled entirely by NATTEN."
+        )
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
@@ -270,7 +294,9 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         hidden_states = outputs.hidden_states
 
         expected_num_layers = getattr(
-            self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
+            self.model_tester,
+            "expected_num_hidden_layers",
+            len(self.model_tester.depths) + 1,
         )
         self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -295,7 +321,9 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
             reshaped_hidden_states = (
-                reshaped_hidden_states[0].view(batch_size, num_channels, height, width).permute(0, 2, 3, 1)
+                reshaped_hidden_states[0]
+                .view(batch_size, num_channels, height, width)
+                .permute(0, 2, 3, 1)
             )
             self.assertListEqual(
                 list(reshaped_hidden_states.shape[-3:]),
@@ -313,13 +341,17 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+            self.check_hidden_states_output(
+                inputs_dict, config, model_class, image_size
+            )
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
 
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+            self.check_hidden_states_output(
+                inputs_dict, config, model_class, image_size
+            )
 
     @slow
     def test_model_from_pretrained(self):
@@ -348,11 +380,17 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class DinatModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("shi-labs/dinat-mini-in1k-224") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("shi-labs/dinat-mini-in1k-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = DinatForImageClassification.from_pretrained("shi-labs/dinat-mini-in1k-224").to(torch_device)
+        model = DinatForImageClassification.from_pretrained(
+            "shi-labs/dinat-mini-in1k-224"
+        ).to(torch_device)
         image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -366,7 +404,9 @@ class DinatModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([-0.1545, -0.7667, 0.4642]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
 
 @require_torch

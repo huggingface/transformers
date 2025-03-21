@@ -18,9 +18,9 @@ import re
 import unicodedata
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import (PreTrainedTokenizer, _is_control,
+                                   _is_punctuation, _is_whitespace)
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -162,7 +162,11 @@ class BasicTokenizer:
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        never_split = (
+            self.never_split.union(set(never_split))
+            if never_split
+            else self.never_split
+        )
         text = self._clean_text(text)
 
         # This was added on November 1st, 2018 for the multilingual and Chinese
@@ -203,7 +207,9 @@ class BasicTokenizer:
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if not self.do_split_on_punc or (never_split is not None and text in never_split):
+        if not self.do_split_on_punc or (
+            never_split is not None and text in never_split
+        ):
             return [text]
         chars = list(text)
         i = 0
@@ -537,7 +543,10 @@ class HerbertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -557,7 +566,9 @@ class HerbertTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is not None:
@@ -595,23 +606,34 @@ class HerbertTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
         merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["merges_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False)
+                + "\n"
+            )
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+            for bpe_tokens, token_index in sorted(
+                self.bpe_ranks.items(), key=lambda kv: kv[1]
+            ):
                 if index != token_index:
                     logger.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."

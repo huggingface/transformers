@@ -28,16 +28,12 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ....activations import ACT2FN
 from ....modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ....utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ....pytorch_utils import (find_pruneable_heads_and_indices,
+                               prune_linear_layer)
+from ....utils import (ModelOutput, add_start_docstrings,
+                       add_start_docstrings_to_model_forward, logging,
+                       replace_return_docstrings)
 from .configuration_tvlt import TvltConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -147,12 +143,16 @@ def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
     """Generate noise for audio masking."""
 
     batch_size, seq_len = pixel_values.shape[:2]
-    noise = torch.rand((batch_size, seq_len), device=pixel_values.device)  # noise in [0, 1]
+    noise = torch.rand(
+        (batch_size, seq_len), device=pixel_values.device
+    )  # noise in [0, 1]
     len_keep = int(seq_len * (1 - mask_ratio))
     return noise, len_keep
 
 
-def generate_audio_mask_noise(audio_values, audio_mask=None, mask_ratio=0.75, mask_type="patch-level", freq_len=8):
+def generate_audio_mask_noise(
+    audio_values, audio_mask=None, mask_ratio=0.75, mask_type="patch-level", freq_len=8
+):
     """Generate noise for audio masking."""
 
     batch_size, seq_len = audio_values.shape[:2]
@@ -165,7 +165,9 @@ def generate_audio_mask_noise(audio_values, audio_mask=None, mask_ratio=0.75, ma
             .view(batch_size, seq_len)
         )  # noise in [0, 1]
     elif mask_type == "patch-level":
-        noise = torch.rand(batch_size, seq_len, device=audio_values.device)  # noise in [0, 1]
+        noise = torch.rand(
+            batch_size, seq_len, device=audio_values.device
+        )  # noise in [0, 1]
     len_keep = int(seq_len * (1 - mask_ratio))
     return noise, len_keep
 
@@ -184,7 +186,9 @@ def random_masking(sequence, noise, len_keep, attention_masks=None):
 
     # keep the first subset
     ids_keep = ids_shuffle[:, :len_keep]
-    sequence_masked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, hidden_dim))
+    sequence_masked = torch.gather(
+        sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, hidden_dim)
+    )
 
     # generate the binary mask: 0 is keep, 1 is remove
     label_masks = torch.ones([batch_size, seq_len], device=sequence.device)
@@ -209,8 +213,12 @@ class TvltPixelEmbeddings(nn.Module):
         self.num_patches_per_image = self.patch_embeddings.num_patches_per_image
 
         self.type_embed_v = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.temporal_embed = nn.Parameter(torch.zeros(1, config.num_frames, config.hidden_size))
-        self.pos_embed_v = nn.Parameter(torch.zeros(1, self.num_patches_per_image, config.hidden_size))
+        self.temporal_embed = nn.Parameter(
+            torch.zeros(1, config.num_frames, config.hidden_size)
+        )
+        self.pos_embed_v = nn.Parameter(
+            torch.zeros(1, self.num_patches_per_image, config.hidden_size)
+        )
 
         self.config = config
 
@@ -220,7 +228,9 @@ class TvltPixelEmbeddings(nn.Module):
 
         embeddings = self.patch_embeddings(pixel_values)
         embeddings += self.pos_embed_v.repeat(1, num_frames, 1)
-        embeddings += torch.repeat_interleave(self.temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1)
+        embeddings += torch.repeat_interleave(
+            self.temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1
+        )
         embeddings += self.type_embed_v
 
         return embeddings, attention_masks
@@ -237,8 +247,14 @@ class TvltAudioEmbeddings(nn.Module):
 
         self.type_embed_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.num_freq_patches = config.frequency_length // config.audio_patch_size[1]
-        self.pos_embed_a = nn.Parameter(torch.zeros(1, self.num_patches // self.num_freq_patches, config.hidden_size))
-        self.freq_embed = nn.Parameter(torch.zeros(1, self.num_freq_patches, config.hidden_size))
+        self.pos_embed_a = nn.Parameter(
+            torch.zeros(
+                1, self.num_patches // self.num_freq_patches, config.hidden_size
+            )
+        )
+        self.freq_embed = nn.Parameter(
+            torch.zeros(1, self.num_freq_patches, config.hidden_size)
+        )
 
         self.num_freq_patches = config.frequency_length // config.audio_patch_size[1]
         self.config = config
@@ -249,7 +265,9 @@ class TvltAudioEmbeddings(nn.Module):
 
         num_time_patches = embeddings.size(1) // self.num_freq_patches
         embeddings += self.freq_embed.repeat(1, num_time_patches, 1)
-        embeddings += torch.repeat_interleave(self.pos_embed_a[:, :num_time_patches], self.num_freq_patches, dim=1)
+        embeddings += torch.repeat_interleave(
+            self.pos_embed_a[:, :num_time_patches], self.num_freq_patches, dim=1
+        )
         embeddings += self.type_embed_a
 
         return embeddings, attention_masks
@@ -267,16 +285,28 @@ class TvltPixelPatchEmbeddings(nn.Module):
         image_size, patch_size = config.image_size, config.image_patch_size
         num_channels, hidden_size = config.num_image_channels, config.hidden_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches_per_image = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        num_patches_per_image = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches_per_image = num_patches_per_image
         self.hidden_size = hidden_size
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
@@ -289,9 +319,13 @@ class TvltPixelPatchEmbeddings(nn.Module):
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
 
-        pixel_values = pixel_values.reshape(batch_size * num_frames, num_channels, height, width)
+        pixel_values = pixel_values.reshape(
+            batch_size * num_frames, num_channels, height, width
+        )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        embeddings = embeddings.reshape(batch_size, num_frames * self.num_patches_per_image, self.hidden_size)
+        embeddings = embeddings.reshape(
+            batch_size, num_frames * self.num_patches_per_image, self.hidden_size
+        )
 
         return embeddings
 
@@ -313,16 +347,27 @@ class TvltAudioPatchEmbeddings(nn.Module):
         num_channels, hidden_size = config.num_audio_channels, config.hidden_size
 
         spectrogram_size = (spectrogram_length, frequency_length)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (spectrogram_size[1] // patch_size[1]) * (spectrogram_size[0] // patch_size[0])
-        patch_shape = (spectrogram_size[0] // patch_size[0], spectrogram_size[1] // patch_size[1])
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        num_patches = (spectrogram_size[1] // patch_size[1]) * (
+            spectrogram_size[0] // patch_size[0]
+        )
+        patch_shape = (
+            spectrogram_size[0] // patch_size[0],
+            spectrogram_size[1] // patch_size[1],
+        )
         self.spectrogram_size = spectrogram_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
         self.patch_shape = patch_shape
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size
+        )
 
     def forward(self, audio_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = audio_values.shape
@@ -343,7 +388,9 @@ class TvltAudioPatchEmbeddings(nn.Module):
 class TvltSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
@@ -353,18 +400,33 @@ class TvltSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(
+            config.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
+        self.key = nn.Linear(
+            config.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
+        self.value = nn.Linear(
+            config.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -395,7 +457,9 @@ class TvltSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -411,7 +475,9 @@ class TvltSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -429,7 +495,10 @@ class TvltAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+            heads,
+            self.attention.num_attention_heads,
+            self.attention.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -439,16 +508,30 @@ class TvltAttention(nn.Module):
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(
+            heads
+        )
+        self.attention.all_head_size = (
+            self.attention.attention_head_size * self.attention.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
-        self_outputs = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
+        self_outputs = self.attention(
+            hidden_states, attention_mask, head_mask, output_attentions
+        )
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -474,7 +557,9 @@ class TvltOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -493,18 +578,32 @@ class TvltLayer(nn.Module):
         self.attention = TvltAttention(config)
         self.intermediate = TvltIntermediate(config)
         self.output = TvltOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.layernorm_after = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViLT, layernorm is applied before self-attention
+            self.layernorm_before(
+                hidden_states
+            ),  # in ViLT, layernorm is applied before self-attention
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = attention_output + hidden_states.to(attention_output.device)
@@ -525,7 +624,9 @@ class TvltEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([TvltLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [TvltLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -555,7 +656,9 @@ class TvltEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, layer_head_mask, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -566,7 +669,11 @@ class TvltEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -678,7 +785,10 @@ class TvltModel(TvltPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.pixel_embeddings.patch_embeddings, self.audio_embeddings.patch_embeddings
+        return (
+            self.pixel_embeddings.patch_embeddings,
+            self.audio_embeddings.patch_embeddings,
+        )
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -689,7 +799,9 @@ class TvltModel(TvltPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TvltModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TvltModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -725,35 +837,53 @@ class TvltModel(TvltPreTrainedModel):
         >>> loss = outputs.loss
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        pixel_embedding_output, pixel_mask = self.pixel_embeddings(pixel_values, pixel_mask)
+        pixel_embedding_output, pixel_mask = self.pixel_embeddings(
+            pixel_values, pixel_mask
+        )
 
-        audio_embedding_output, audio_mask = self.audio_embeddings(audio_values, audio_mask)
+        audio_embedding_output, audio_mask = self.audio_embeddings(
+            audio_values, audio_mask
+        )
 
         # Mask pixel if mask_pixel is True
         pixel_label_masks = None
         pixel_ids_restore = None
         if mask_pixel:
             pixel_mask_noise, pixel_len_keep = generate_pixel_mask_noise(
-                pixel_embedding_output, pixel_mask=pixel_mask, mask_ratio=self.config.pixel_mask_ratio
-            )
-            pixel_embedding_output, pixel_mask, pixel_label_masks, pixel_ids_restore = random_masking(
                 pixel_embedding_output,
-                pixel_mask_noise,
-                pixel_len_keep,
-                attention_masks=pixel_mask,
+                pixel_mask=pixel_mask,
+                mask_ratio=self.config.pixel_mask_ratio,
+            )
+            pixel_embedding_output, pixel_mask, pixel_label_masks, pixel_ids_restore = (
+                random_masking(
+                    pixel_embedding_output,
+                    pixel_mask_noise,
+                    pixel_len_keep,
+                    attention_masks=pixel_mask,
+                )
             )
 
         # Mask audio if mask_audio is True
         audio_label_masks = None
         audio_ids_restore = None
         if mask_audio:
-            num_freq_patches = self.config.frequency_length // self.config.audio_patch_size[1]
+            num_freq_patches = (
+                self.config.frequency_length // self.config.audio_patch_size[1]
+            )
             audio_mask_noise, audio_len_keep = generate_audio_mask_noise(
                 audio_embedding_output,
                 audio_mask=audio_mask,
@@ -761,17 +891,24 @@ class TvltModel(TvltPreTrainedModel):
                 mask_type=self.config.audio_mask_type,
                 freq_len=num_freq_patches,
             )
-            audio_embedding_output, audio_mask, audio_label_masks, audio_ids_restore = random_masking(
-                audio_embedding_output,
-                audio_mask_noise,
-                audio_len_keep,
-                attention_masks=audio_mask,
+            audio_embedding_output, audio_mask, audio_label_masks, audio_ids_restore = (
+                random_masking(
+                    audio_embedding_output,
+                    audio_mask_noise,
+                    audio_len_keep,
+                    attention_masks=audio_mask,
+                )
             )
 
         # Prepare for encoder inputs and attention masks
         batch_size = pixel_values.size(0)
         embedding_output = torch.cat(
-            [self.cls_embedding.repeat(batch_size, 1, 1), pixel_embedding_output, audio_embedding_output], 1
+            [
+                self.cls_embedding.repeat(batch_size, 1, 1),
+                pixel_embedding_output,
+                audio_embedding_output,
+            ],
+            1,
         )
         masked_pixel_len = pixel_embedding_output.size(1)
 
@@ -782,7 +919,9 @@ class TvltModel(TvltPreTrainedModel):
         input_shape = embedding_output.size()
         extended_attention_mask = None
         if attention_mask is not None:
-            extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+            extended_attention_mask = self.get_extended_attention_mask(
+                attention_mask, input_shape
+            )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -834,7 +973,9 @@ class TvltDecoder(nn.Module):
             [TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
         )
 
-        self.layernorm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(
+            config.decoder_hidden_size, eps=config.layer_norm_eps
+        )
 
         self.gradient_checkpointing = False
         self.config = config
@@ -861,7 +1002,9 @@ class TvltDecoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, output_attentions=output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -875,8 +1018,16 @@ class TvltDecoder(nn.Module):
         logits = self.layernorm(hidden_states)
 
         if not return_dict:
-            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return TvltDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
+            return tuple(
+                v
+                for v in [logits, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
+        return TvltDecoderOutput(
+            logits=logits,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 @add_start_docstrings(
@@ -891,7 +1042,9 @@ class TvltForPreTraining(TvltPreTrainedModel):
         self.task_matching = config.task_matching
         self.task_mae = config.task_mae
         if not (self.task_matching or self.task_mae):
-            raise ValueError("Must set at least one of matching task and MAE task to true")
+            raise ValueError(
+                "Must set at least one of matching task and MAE task to true"
+            )
 
         self.tvlt = TvltModel(config)
 
@@ -899,10 +1052,16 @@ class TvltForPreTraining(TvltPreTrainedModel):
             self.matching_head = TvltMatchingHead(config)
 
         if self.task_mae:
-            self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
+            self.encoder_to_decoder = nn.Linear(
+                config.hidden_size, config.decoder_hidden_size, bias=True
+            )
 
-            self.pixel_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
-            self.audio_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
+            self.pixel_mask_token = nn.Parameter(
+                torch.zeros(1, 1, config.decoder_hidden_size)
+            )
+            self.audio_mask_token = nn.Parameter(
+                torch.zeros(1, 1, config.decoder_hidden_size)
+            )
 
             self.decoder = TvltDecoder(config)
 
@@ -910,22 +1069,38 @@ class TvltForPreTraining(TvltPreTrainedModel):
 
             num_frames = config.num_frames
             num_patches_per_image = self.tvlt.pixel_embeddings.num_patches_per_image
-            self.decoder_pixel_pos_embed = nn.Parameter(torch.zeros(1, num_patches_per_image, decoder_hidden_size))
-            self.decoder_temporal_embed = nn.Parameter(torch.zeros(1, config.num_frames, decoder_hidden_size))
-            self.decoder_pixel_type_embed = nn.Parameter(torch.zeros(1, 1, decoder_hidden_size))
+            self.decoder_pixel_pos_embed = nn.Parameter(
+                torch.zeros(1, num_patches_per_image, decoder_hidden_size)
+            )
+            self.decoder_temporal_embed = nn.Parameter(
+                torch.zeros(1, config.num_frames, decoder_hidden_size)
+            )
+            self.decoder_pixel_type_embed = nn.Parameter(
+                torch.zeros(1, 1, decoder_hidden_size)
+            )
 
             num_audio_patches = self.tvlt.audio_embeddings.num_patches
             num_freq_patches = config.frequency_length // config.audio_patch_size[1]
             self.decoder_audio_pos_embed = nn.Parameter(
-                torch.zeros(1, num_audio_patches // num_freq_patches, decoder_hidden_size)
+                torch.zeros(
+                    1, num_audio_patches // num_freq_patches, decoder_hidden_size
+                )
             )
-            self.decoder_freq_embed = nn.Parameter(torch.zeros(1, num_freq_patches, decoder_hidden_size))
-            self.decoder_audio_type_embed = nn.Parameter(torch.zeros(1, 1, decoder_hidden_size))
+            self.decoder_freq_embed = nn.Parameter(
+                torch.zeros(1, num_freq_patches, decoder_hidden_size)
+            )
+            self.decoder_audio_type_embed = nn.Parameter(
+                torch.zeros(1, 1, decoder_hidden_size)
+            )
 
-            pixel_mae_output_dim = self.config.image_patch_size[0] ** 2 * self.config.num_image_channels
+            pixel_mae_output_dim = (
+                self.config.image_patch_size[0] ** 2 * self.config.num_image_channels
+            )
             self.pixel_mae_head = TvltMAEHead(config, pixel_mae_output_dim)
             audio_mae_output_dim = (
-                self.config.audio_patch_size[0] * self.config.audio_patch_size[1] * self.config.num_audio_channels
+                self.config.audio_patch_size[0]
+                * self.config.audio_patch_size[1]
+                * self.config.num_audio_channels
             )
             self.audio_mae_head = TvltMAEHead(config, audio_mae_output_dim)
 
@@ -956,7 +1131,9 @@ class TvltForPreTraining(TvltPreTrainedModel):
                 self.image_patch_size[1],
             )
         )
-        patchified_pixel_values = torch.einsum("ntchpwq->nthwpqc", patchified_pixel_values)
+        patchified_pixel_values = torch.einsum(
+            "ntchpwq->nthwpqc", patchified_pixel_values
+        )
         patchified_pixel_values = patchified_pixel_values.reshape(
             shape=(
                 batch_size,
@@ -983,7 +1160,9 @@ class TvltForPreTraining(TvltPreTrainedModel):
                 self.audio_patch_size[1],
             )
         )
-        patchified_audio_values = torch.einsum("nchpwq->nhwpqc", patchified_audio_values)
+        patchified_audio_values = torch.einsum(
+            "nchpwq->nhwpqc", patchified_audio_values
+        )
         patchified_audio_values = patchified_audio_values.reshape(
             shape=(
                 batch_size,
@@ -996,20 +1175,26 @@ class TvltForPreTraining(TvltPreTrainedModel):
     def pixel_mae_loss(self, pixel_values, pixel_predictions, mask):
         patchified_pixel_values = self.patchify_pixel(pixel_values)
         loss = (pixel_predictions - patchified_pixel_values) ** 2
-        loss = loss.mean(dim=-1)  # [batch_size, pixel_pixel_length], mean loss per patch
+        loss = loss.mean(
+            dim=-1
+        )  # [batch_size, pixel_pixel_length], mean loss per patch
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
     def audio_mae_loss(self, audio_values, audio_predictions, mask):
         patchified_audio_values = self.patchify_audio(audio_values)
         loss = (audio_predictions - patchified_audio_values) ** 2
-        loss = loss.mean(dim=-1)  # [batch_size, audio_pixel_length], mean loss per patch
+        loss = loss.mean(
+            dim=-1
+        )  # [batch_size, audio_pixel_length], mean loss per patch
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
     def concatenate_mask(self, mask_token, sequence, ids_restore):
         batch_size, seq_length, dim = sequence.shape
-        mask_tokens = mask_token.repeat(batch_size, ids_restore.shape[1] - seq_length, 1)
+        mask_tokens = mask_token.repeat(
+            batch_size, ids_restore.shape[1] - seq_length, 1
+        )
         padded_sequence = torch.cat([sequence, mask_tokens], dim=1)
         padded_sequence = torch.gather(
             padded_sequence, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, dim)
@@ -1017,7 +1202,9 @@ class TvltForPreTraining(TvltPreTrainedModel):
         return padded_sequence
 
     @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TvltForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=TvltForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1065,7 +1252,9 @@ class TvltForPreTraining(TvltPreTrainedModel):
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         total_loss = 0.0
 
         if self.task_matching:
@@ -1105,8 +1294,12 @@ class TvltForPreTraining(TvltPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            pixel_sequence_output = outputs.last_pixel_hidden_state if return_dict else outputs[1]
-            audio_sequence_output = outputs.last_audio_hidden_state if return_dict else outputs[2]
+            pixel_sequence_output = (
+                outputs.last_pixel_hidden_state if return_dict else outputs[1]
+            )
+            audio_sequence_output = (
+                outputs.last_audio_hidden_state if return_dict else outputs[2]
+            )
             pixel_label_masks = outputs.pixel_label_masks if return_dict else outputs[3]
             audio_label_masks = outputs.audio_label_masks if return_dict else outputs[4]
             pixel_ids_restore = outputs.pixel_ids_restore if return_dict else outputs[5]
@@ -1119,28 +1312,41 @@ class TvltForPreTraining(TvltPreTrainedModel):
                 audio_sequence_output
             )  # [batch_size, num_masked_audio_patches, decoder_hidden_size]
             num_frames = pixel_values.size(1)
-            pixel_decoder_input = self.concatenate_mask(self.pixel_mask_token, pixel_decoder_input, pixel_ids_restore)
-            pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_pos_embed.repeat(1, num_frames, 1)
+            pixel_decoder_input = self.concatenate_mask(
+                self.pixel_mask_token, pixel_decoder_input, pixel_ids_restore
+            )
+            pixel_decoder_input = (
+                pixel_decoder_input
+                + self.decoder_pixel_pos_embed.repeat(1, num_frames, 1)
+            )
             pixel_decoder_input = pixel_decoder_input + torch.repeat_interleave(
-                self.decoder_temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1
+                self.decoder_temporal_embed[:, :num_frames],
+                self.num_patches_per_image,
+                dim=1,
             )
             pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_type_embed
             pixel_decoder_outputs = self.decoder(pixel_decoder_input)
             pixel_logits = self.pixel_mae_head(pixel_decoder_outputs.logits)
 
-            audio_decoder_input = self.concatenate_mask(self.audio_mask_token, audio_decoder_input, audio_ids_restore)
+            audio_decoder_input = self.concatenate_mask(
+                self.audio_mask_token, audio_decoder_input, audio_ids_restore
+            )
             num_time_patches = audio_decoder_input.size(1) // self.num_freq_patches
-            audio_decoder_input = audio_decoder_input + self.decoder_freq_embed.repeat(1, num_time_patches, 1)
+            audio_decoder_input = audio_decoder_input + self.decoder_freq_embed.repeat(
+                1, num_time_patches, 1
+            )
             audio_decoder_input = audio_decoder_input + torch.repeat_interleave(
-                self.decoder_audio_pos_embed[:, :num_time_patches], self.num_freq_patches, dim=1
+                self.decoder_audio_pos_embed[:, :num_time_patches],
+                self.num_freq_patches,
+                dim=1,
             )
             audio_decoder_input = audio_decoder_input + self.decoder_audio_type_embed
             audio_decoder_outputs = self.decoder(audio_decoder_input)
             audio_logits = self.audio_mae_head(audio_decoder_outputs.logits)
 
-            loss = self.pixel_mae_loss(pixel_values, pixel_logits, pixel_label_masks) + self.audio_mae_loss(
-                audio_values, audio_logits, audio_label_masks
-            )
+            loss = self.pixel_mae_loss(
+                pixel_values, pixel_logits, pixel_label_masks
+            ) + self.audio_mae_loss(audio_values, audio_logits, audio_label_masks)
             total_loss += loss
 
         if not return_dict:
@@ -1218,7 +1424,9 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1253,7 +1461,9 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         >>> outputs = model(**input_dict)
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.tvlt(
             pixel_values,

@@ -209,7 +209,11 @@ class AriaTextConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.head_dim = (
+            head_dim
+            if head_dim is not None
+            else self.hidden_size // self.num_attention_heads
+        )
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
@@ -279,8 +283,12 @@ class AriaConfig(PretrainedConfig):
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
-        self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
+        self.projector_patch_to_query_dict = {
+            int(k): int(v) for k, v in projector_patch_to_query_dict.items()
+        }
+        self.max_value_projector_patch_to_query_dict = max(
+            self.projector_patch_to_query_dict.values()
+        )
         self.vision_feature_layer = vision_feature_layer
         if isinstance(vision_config, dict):
             vision_config["model_type"] = "idefics3_vision"

@@ -25,13 +25,16 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
-from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput
+from ...modeling_flax_outputs import (FlaxBaseModelOutput,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSeq2SeqLMOutput)
 from ...modeling_flax_utils import FlaxPreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FlaxAutoModel, FlaxAutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -175,10 +178,13 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
         decoder_config = self.config.decoder
 
         # Copied from `modeling_hybrid_clip.py` with modifications.
-        from ...models.auto.modeling_flax_auto import FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, FLAX_MODEL_MAPPING
+        from ...models.auto.modeling_flax_auto import (
+            FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, FLAX_MODEL_MAPPING)
 
         encoder_module = FLAX_MODEL_MAPPING[encoder_config.__class__].module_class
-        decoder_module = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING[decoder_config.__class__].module_class
+        decoder_module = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING[
+            decoder_config.__class__
+        ].module_class
 
         self.encoder = encoder_module(encoder_config, dtype=self.dtype)
         self.decoder = decoder_module(decoder_config, dtype=self.dtype)
@@ -190,7 +196,9 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
         ):
             self.enc_to_dec_proj = nn.Dense(
                 self.decoder.config.hidden_size,
-                kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range),
+                kernel_init=jax.nn.initializers.normal(
+                    self.decoder.config.initializer_range
+                ),
                 dtype=self.dtype,
             )
         else:
@@ -308,9 +316,18 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 )
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input tensors
@@ -326,7 +343,8 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 f"and {decoder_batch_size} for decoder."
             )
         decoder_position_ids = jnp.broadcast_to(
-            jnp.arange(decoder_sequence_length)[None, :], (decoder_batch_size, decoder_sequence_length)
+            jnp.arange(decoder_sequence_length)[None, :],
+            (decoder_batch_size, decoder_sequence_length),
         )
 
         params_rng, dropout_rng = jax.random.split(rng)
@@ -368,10 +386,17 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         decoder_attention_mask = jnp.ones_like(decoder_input_ids)
         decoder_position_ids = jnp.broadcast_to(
-            jnp.arange(jnp.atleast_2d(decoder_input_ids).shape[-1]), decoder_input_ids.shape
+            jnp.arange(jnp.atleast_2d(decoder_input_ids).shape[-1]),
+            decoder_input_ids.shape,
         )
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
+        def _decoder_forward(
+            module,
+            decoder_input_ids,
+            decoder_attention_mask,
+            decoder_position_ids,
+            **kwargs,
+        ):
             decoder_module = module._get_decoder_module()
             return decoder_module(
                 input_ids=decoder_input_ids,
@@ -392,7 +417,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(VISION_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def encode(
         self,
         pixel_values: jnp.ndarray,
@@ -426,11 +453,19 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> pixel_values = image_processor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         # `FlaxViTModel` expects channel first format, but `FlaxViTModule` expects channel last format.
         # Currently, we assume this holds for all Flax vision models, and perform a transpose here.
@@ -466,7 +501,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         return outputs
 
     @add_start_docstrings(VISION_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -511,11 +548,19 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         encoder_hidden_states = encoder_outputs[0]
 
@@ -528,7 +573,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
         if decoder_position_ids is None:
             if past_key_values is not None:
-                raise ValueError("Make sure to provide `decoder_position_ids` when passing `past_key_values`.")
+                raise ValueError(
+                    "Make sure to provide `decoder_position_ids` when passing `past_key_values`."
+                )
 
             decoder_position_ids = jnp.broadcast_to(
                 jnp.arange(sequence_length)[None, :], (batch_size, sequence_length)
@@ -551,7 +598,12 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
             mutable = False
 
         def _decoder_forward(
-            module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs
+            module,
+            decoder_input_ids,
+            decoder_attention_mask,
+            decoder_position_ids,
+            encoder_hidden_states,
+            **kwargs,
         ):
             projection_module = module._get_projection_module()
             decoder_module = module._get_decoder_module()
@@ -596,7 +648,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         return outputs
 
     @add_start_docstrings_to_model_forward(VISION_ENCODER_DECODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+    )
     def __call__(
         self,
         pixel_values: jnp.ndarray,
@@ -645,11 +699,19 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> captions = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         # prepare encoder inputs
 
@@ -702,7 +764,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if decoder_attention_mask is not None:
             decoder_position_ids = decoder_attention_mask.cumsum(axis=-1) - 1
-            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, decoder_attention_mask, (0, 0))
+            extended_attention_mask = lax.dynamic_update_slice(
+                extended_attention_mask, decoder_attention_mask, (0, 0)
+            )
         else:
             decoder_position_ids = jnp.broadcast_to(
                 jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)
@@ -717,7 +781,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
     def update_inputs_for_generation(self, model_outputs, model_kwargs):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
-        model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
+        model_kwargs["decoder_position_ids"] = (
+            model_kwargs["decoder_position_ids"][:, -1:] + 1
+        )
         return model_kwargs
 
     @classmethod
@@ -777,11 +843,15 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         ```"""
 
         kwargs_encoder = {
-            argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+            argument[len("encoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("encoder_")
         }
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+            argument[len("decoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("decoder_")
         }
 
         # remove encoder, decoder kwargs from kwargs
@@ -802,8 +872,13 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 )
 
             if "config" not in kwargs_encoder:
-                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                encoder_config = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path
+                )
+                if (
+                    encoder_config.is_decoder is True
+                    or encoder_config.add_cross_attention is True
+                ):
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and casual mask are disabled."
@@ -826,8 +901,13 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 )
 
             if "config" not in kwargs_decoder:
-                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
-                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                decoder_config = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path
+                )
+                if (
+                    decoder_config.is_decoder is False
+                    or decoder_config.add_cross_attention is False
+                ):
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
                         f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
@@ -838,7 +918,10 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
 
                 kwargs_decoder["config"] = decoder_config
 
-            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
+            if (
+                kwargs_decoder["config"].is_decoder is False
+                or kwargs_decoder["config"].add_cross_attention is False
+            ):
                 logger.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
@@ -847,11 +930,15 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = FlaxAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = FlaxAutoModelForCausalLM.from_pretrained(
+                decoder_pretrained_model_name_or_path, **kwargs_decoder
+            )
 
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
-        config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder.config, decoder.config, **kwargs
+        )
 
         # init model
         model = cls(config, dtype=dtype)

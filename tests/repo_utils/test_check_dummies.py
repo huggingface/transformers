@@ -16,13 +16,14 @@ import os
 import sys
 import unittest
 
-
-git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+git_repo_path = os.path.abspath(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+)
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
 import check_dummies  # noqa: E402
-from check_dummies import create_dummy_files, create_dummy_object, find_backend, read_init  # noqa: E402
-
+from check_dummies import create_dummy_files  # noqa: E402
+from check_dummies import create_dummy_object, find_backend, read_init
 
 # Align TRANSFORMERS_PATH in check_dummies with the current path
 check_dummies.PATH_TO_TRANSFORMERS = os.path.join(git_repo_path, "src", "transformers")
@@ -48,22 +49,30 @@ def {0}(*args, **kwargs):
 
 class CheckDummiesTester(unittest.TestCase):
     def test_find_backend(self):
-        no_backend = find_backend('    _import_structure["models.albert"].append("AlbertTokenizerFast")')
+        no_backend = find_backend(
+            '    _import_structure["models.albert"].append("AlbertTokenizerFast")'
+        )
         self.assertIsNone(no_backend)
 
         simple_backend = find_backend("    if not is_tokenizers_available():")
         self.assertEqual(simple_backend, "tokenizers")
 
-        backend_with_underscore = find_backend("    if not is_tensorflow_text_available():")
+        backend_with_underscore = find_backend(
+            "    if not is_tensorflow_text_available():"
+        )
         self.assertEqual(backend_with_underscore, "tensorflow_text")
 
-        double_backend = find_backend("    if not (is_sentencepiece_available() and is_tokenizers_available()):")
+        double_backend = find_backend(
+            "    if not (is_sentencepiece_available() and is_tokenizers_available()):"
+        )
         self.assertEqual(double_backend, "sentencepiece_and_tokenizers")
 
         double_backend_with_underscore = find_backend(
             "    if not (is_sentencepiece_available() and is_tensorflow_text_available()):"
         )
-        self.assertEqual(double_backend_with_underscore, "sentencepiece_and_tensorflow_text")
+        self.assertEqual(
+            double_backend_with_underscore, "sentencepiece_and_tensorflow_text"
+        )
 
         triple_backend = find_backend(
             "    if not (is_sentencepiece_available() and is_tokenizers_available() and is_vision_available()):"
@@ -91,7 +100,8 @@ class CheckDummiesTester(unittest.TestCase):
 
         dummy_function = create_dummy_object("function", "'torch'")
         self.assertEqual(
-            dummy_function, "\ndef function(*args, **kwargs):\n    requires_backends(function, 'torch')\n"
+            dummy_function,
+            "\ndef function(*args, **kwargs):\n    requires_backends(function, 'torch')\n",
         )
 
         expected_dummy_class = """
@@ -122,5 +132,7 @@ class FakeClass(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 """
-        dummy_files = create_dummy_files({"torch": ["CONSTANT", "function", "FakeClass"]})
+        dummy_files = create_dummy_files(
+            {"torch": ["CONSTANT", "function", "FakeClass"]}
+        )
         self.assertEqual(dummy_files["torch"], expected_dummy_pytorch_file)

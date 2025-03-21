@@ -16,9 +16,9 @@ from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
 from packaging import version
 
-from transformers import CONFIG_MAPPING, logging
+from transformers import CONFIG_MAPPING
 from transformers import __version__ as current_version
-
+from transformers import logging
 
 REPO_PATH = Path(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 repo = Repo(REPO_PATH)
@@ -35,7 +35,9 @@ def get_last_stable_minor_release():
     major_version, minor_version, patch_version, _ = current_version.split(".")
     last_major_minor = f"{major_version}.{int(minor_version) - 1}"
     last_stable_minor_releases = [
-        release for release in release_data["releases"] if release.startswith(last_major_minor)
+        release
+        for release in release_data["releases"]
+        if release.startswith(last_major_minor)
     ]
     last_stable_release = sorted(last_stable_minor_releases, key=version.parse)[-1]
 
@@ -81,7 +83,10 @@ def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
     # Possible variants of the model name in the model doc path
     model_names = [model, model.replace("_", "-"), model.replace("_", "")]
 
-    model_doc_paths = [REPO_PATH / f"docs/source/en/model_doc/{model_name}.md" for model_name in model_names]
+    model_doc_paths = [
+        REPO_PATH / f"docs/source/en/model_doc/{model_name}.md"
+        for model_name in model_names
+    ]
 
     for model_doc_path, model_name in zip(model_doc_paths, model_names):
         if os.path.exists(model_doc_path):
@@ -184,7 +189,9 @@ def update_main_init_file(models):
     # 1. For each model, find all the instances of model.model_name and replace with model.deprecated.model_name
     for model in models:
         init_file = init_file.replace(f'models.{model}"', f'models.deprecated.{model}"')
-        init_file = init_file.replace(f"models.{model} import", f"models.deprecated.{model} import")
+        init_file = init_file.replace(
+            f"models.{model} import", f"models.deprecated.{model} import"
+        )
 
     with open(filename, "w") as f:
         f.write(init_file)
@@ -234,7 +241,9 @@ def remove_model_config_classes_from_config_check(model_config_classes):
 
     for line in check_config_attributes.split("\n"):
         indent = get_line_indent(line)
-        if (line.strip() == "SPECIAL_CASES_TO_ALLOW = {") or (line.strip() == "SPECIAL_CASES_TO_ALLOW.update("):
+        if (line.strip() == "SPECIAL_CASES_TO_ALLOW = {") or (
+            line.strip() == "SPECIAL_CASES_TO_ALLOW.update("
+        ):
             in_special_cases_to_allow = True
 
         elif in_special_cases_to_allow and indent == 0 and line.strip() in ("}", ")"):
@@ -257,7 +266,9 @@ def remove_model_config_classes_from_config_check(model_config_classes):
 
             continue
 
-        elif any(model_config_class in line for model_config_class in model_config_classes):
+        elif any(
+            model_config_class in line for model_config_class in model_config_classes
+        ):
             continue
 
         new_file_lines.append(line)
@@ -316,7 +327,9 @@ def deprecate_models(models):
         if model in CONFIG_MAPPING:
             model_config_classes.append(CONFIG_MAPPING[model].__name__)
         elif model_info["model_doc_name"] in CONFIG_MAPPING:
-            model_config_classes.append(CONFIG_MAPPING[model_info["model_doc_name"]].__name__)
+            model_config_classes.append(
+                CONFIG_MAPPING[model_info["model_doc_name"]].__name__
+            )
         else:
             skipped_models.append(model)
             print(f"Model config class not found for model: {model}")
@@ -325,7 +338,9 @@ def deprecate_models(models):
     models = [model for model in models if model not in skipped_models]
 
     if skipped_models:
-        print(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
+        print(
+            f"Skipped models: {skipped_models} as the model doc or model path could not be found."
+        )
     print(f"Models to deprecate: {models}")
 
     # Remove model config classes from config check
@@ -359,12 +374,18 @@ def deprecate_models(models):
     # Remove model references from other files
     print("Removing model references from other files")
     remove_model_references_from_file(
-        "src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(",")
+        "src/transformers/models/__init__.py",
+        models,
+        lambda line, model: model == line.strip().strip(","),
     )
     remove_model_references_from_file(
-        "utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line
+        "utils/slow_documentation_tests.txt",
+        models,
+        lambda line, model: "/" + model + "/" in line,
     )
-    remove_model_references_from_file("utils/not_doctested.txt", models, lambda line, model: "/" + model + "/" in line)
+    remove_model_references_from_file(
+        "utils/not_doctested.txt", models, lambda line, model: "/" + model + "/" in line
+    )
 
     # Add models to DEPRECATED_MODELS in the configuration_auto.py
     print("Adding models to DEPRECATED_MODELS in configuration_auto.py")

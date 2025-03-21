@@ -25,14 +25,10 @@ import yaml
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import (
-    MobileViTImageProcessor,
-    MobileViTV2Config,
-    MobileViTV2ForImageClassification,
-    MobileViTV2ForSemanticSegmentation,
-)
+from transformers import (MobileViTImageProcessor, MobileViTV2Config,
+                          MobileViTV2ForImageClassification,
+                          MobileViTV2ForSemanticSegmentation)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -60,7 +56,11 @@ def load_orig_config_file(orig_cfg_file):
             for k, v in flat_cfg.items():
                 setattr(config, k, v)
         except yaml.YAMLError as exc:
-            logger.error("Error while loading config file: {}. Error message: {}".format(orig_cfg_file, str(exc)))
+            logger.error(
+                "Error while loading config file: {}. Error message: {}".format(
+                    orig_cfg_file, str(exc)
+                )
+            )
     return config
 
 
@@ -97,24 +97,41 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
 
     # orig_config
     orig_config = load_orig_config_file(orig_cfg_file)
-    assert getattr(orig_config, "model.classification.name", -1) == "mobilevit_v2", "Invalid model"
-    config.width_multiplier = getattr(orig_config, "model.classification.mitv2.width_multiplier", 1.0)
     assert (
-        getattr(orig_config, "model.classification.mitv2.attn_norm_layer", -1) == "layer_norm_2d"
+        getattr(orig_config, "model.classification.name", -1) == "mobilevit_v2"
+    ), "Invalid model"
+    config.width_multiplier = getattr(
+        orig_config, "model.classification.mitv2.width_multiplier", 1.0
+    )
+    assert (
+        getattr(orig_config, "model.classification.mitv2.attn_norm_layer", -1)
+        == "layer_norm_2d"
     ), "Norm layers other than layer_norm_2d is not supported"
-    config.hidden_act = getattr(orig_config, "model.classification.activation.name", "swish")
+    config.hidden_act = getattr(
+        orig_config, "model.classification.activation.name", "swish"
+    )
     # config.image_size == getattr(orig_config,  'sampler.bs.crop_size_width', 256)
 
     if is_segmentation_model:
-        config.output_stride = getattr(orig_config, "model.segmentation.output_stride", 16)
+        config.output_stride = getattr(
+            orig_config, "model.segmentation.output_stride", 16
+        )
         if "_deeplabv3" in task_name:
-            config.atrous_rates = getattr(orig_config, "model.segmentation.deeplabv3.aspp_rates", [12, 24, 36])
-            config.aspp_out_channels = getattr(orig_config, "model.segmentation.deeplabv3.aspp_out_channels", 512)
-            config.aspp_dropout_prob = getattr(orig_config, "model.segmentation.deeplabv3.aspp_dropout", 0.1)
+            config.atrous_rates = getattr(
+                orig_config, "model.segmentation.deeplabv3.aspp_rates", [12, 24, 36]
+            )
+            config.aspp_out_channels = getattr(
+                orig_config, "model.segmentation.deeplabv3.aspp_out_channels", 512
+            )
+            config.aspp_dropout_prob = getattr(
+                orig_config, "model.segmentation.deeplabv3.aspp_dropout", 0.1
+            )
 
     # id2label
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -151,7 +168,9 @@ def create_rename_keys(state_dict, base_model=False):
             k_new = k_new.replace("conv_1.", f"{model_prefix}conv_stem.")
         for i in [1, 2]:
             if f"layer_{i}." in k:
-                k_new = k_new.replace(f"layer_{i}.", f"{model_prefix}encoder.layer.{i-1}.layer.")
+                k_new = k_new.replace(
+                    f"layer_{i}.", f"{model_prefix}encoder.layer.{i-1}.layer."
+                )
         if ".exp_1x1." in k:
             k_new = k_new.replace(".exp_1x1.", ".expand_1x1.")
         if ".red_1x1." in k:
@@ -159,11 +178,20 @@ def create_rename_keys(state_dict, base_model=False):
 
         for i in [3, 4, 5]:
             if f"layer_{i}.0." in k:
-                k_new = k_new.replace(f"layer_{i}.0.", f"{model_prefix}encoder.layer.{i-1}.downsampling_layer.")
+                k_new = k_new.replace(
+                    f"layer_{i}.0.",
+                    f"{model_prefix}encoder.layer.{i-1}.downsampling_layer.",
+                )
             if f"layer_{i}.1.local_rep.0." in k:
-                k_new = k_new.replace(f"layer_{i}.1.local_rep.0.", f"{model_prefix}encoder.layer.{i-1}.conv_kxk.")
+                k_new = k_new.replace(
+                    f"layer_{i}.1.local_rep.0.",
+                    f"{model_prefix}encoder.layer.{i-1}.conv_kxk.",
+                )
             if f"layer_{i}.1.local_rep.1." in k:
-                k_new = k_new.replace(f"layer_{i}.1.local_rep.1.", f"{model_prefix}encoder.layer.{i-1}.conv_1x1.")
+                k_new = k_new.replace(
+                    f"layer_{i}.1.local_rep.1.",
+                    f"{model_prefix}encoder.layer.{i-1}.conv_1x1.",
+                )
 
         for i in [3, 4, 5]:
             if i == 3:
@@ -176,15 +204,20 @@ def create_rename_keys(state_dict, base_model=False):
             for j in j_in:
                 if f"layer_{i}.1.global_rep.{j}." in k:
                     k_new = k_new.replace(
-                        f"layer_{i}.1.global_rep.{j}.", f"{model_prefix}encoder.layer.{i-1}.transformer.layer.{j}."
+                        f"layer_{i}.1.global_rep.{j}.",
+                        f"{model_prefix}encoder.layer.{i-1}.transformer.layer.{j}.",
                     )
             if f"layer_{i}.1.global_rep.{j+1}." in k:
                 k_new = k_new.replace(
-                    f"layer_{i}.1.global_rep.{j+1}.", f"{model_prefix}encoder.layer.{i-1}.layernorm."
+                    f"layer_{i}.1.global_rep.{j+1}.",
+                    f"{model_prefix}encoder.layer.{i-1}.layernorm.",
                 )
 
             if f"layer_{i}.1.conv_proj." in k:
-                k_new = k_new.replace(f"layer_{i}.1.conv_proj.", f"{model_prefix}encoder.layer.{i-1}.conv_projection.")
+                k_new = k_new.replace(
+                    f"layer_{i}.1.conv_proj.",
+                    f"{model_prefix}encoder.layer.{i-1}.conv_projection.",
+                )
 
         if "pre_norm_attn.0." in k:
             k_new = k_new.replace("pre_norm_attn.0.", "layernorm_before.")
@@ -230,7 +263,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path, pytorch_dump_folder_path):
+def convert_mobilevitv2_checkpoint(
+    task_name, checkpoint_path, orig_config_path, pytorch_dump_folder_path
+):
     """
     Copy/paste/tweak model's weights to our MobileViTV2 structure.
     """
@@ -258,7 +293,9 @@ def convert_mobilevitv2_checkpoint(task_name, checkpoint_path, orig_config_path,
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by MobileViTImageProcessor
-    image_processor = MobileViTImageProcessor(crop_size=config.image_size, size=config.image_size + 32)
+    image_processor = MobileViTImageProcessor(
+        crop_size=config.image_size, size=config.image_size + 32
+    )
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
 
@@ -312,7 +349,10 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--orig_checkpoint_path", required=True, type=str, help="Path to the original state dict (.pt file)."
+        "--orig_checkpoint_path",
+        required=True,
+        type=str,
+        help="Path to the original state dict (.pt file).",
     )
     parser.add_argument(
         "--orig_config_path",
@@ -321,10 +361,16 @@ if __name__ == "__main__":
         help="Path to the original config file. yaml.load will be used to load the file, please be wary of which file you're loading.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        required=True,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()
     convert_mobilevitv2_checkpoint(
-        args.task, args.orig_checkpoint_path, args.orig_config_path, args.pytorch_dump_folder_path
+        args.task,
+        args.orig_checkpoint_path,
+        args.orig_config_path,
+        args.pytorch_dump_folder_path,
     )

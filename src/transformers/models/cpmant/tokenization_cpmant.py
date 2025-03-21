@@ -20,13 +20,11 @@ from typing import List, Optional, Tuple
 
 from transformers.utils import is_jieba_available, requires_backends
 
-
 if is_jieba_available():
     import jieba
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -129,10 +127,14 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         del self.encoder[space_token]
         del self.encoder[line_token]
 
-        self.encoder = collections.OrderedDict(sorted(self.encoder.items(), key=lambda x: x[1]))
+        self.encoder = collections.OrderedDict(
+            sorted(self.encoder.items(), key=lambda x: x[1])
+        )
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=unk_token)
+        self.wordpiece_tokenizer = WordpieceTokenizer(
+            vocab=self.encoder, unk_token=unk_token
+        )
 
         super().__init__(
             bod_token=bod_token,
@@ -177,7 +179,11 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         """Decode ids into a string."""
         token_ids = [i for i in token_ids if i >= 0]
         token_ids = [
-            x for x in token_ids if x != self.pad_token_id and x != self.eos_token_id and x != self.bos_token_id
+            x
+            for x in token_ids
+            if x != self.pad_token_id
+            and x != self.eos_token_id
+            and x != self.bos_token_id
         ]
         return super()._decode(token_ids, **kwargs)
 
@@ -195,13 +201,19 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["vocab_file"],
             )
         else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+            vocab_file = (
+                filename_prefix + "-" if filename_prefix else ""
+            ) + save_directory
         index = 0
         if " " in self.encoder:
             self.encoder["</_>"] = self.encoder[" "]
@@ -209,7 +221,9 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         if "\n" in self.encoder:
             self.encoder["</n>"] = self.encoder["\n"]
             del self.encoder["\n"]
-        self.encoder = collections.OrderedDict(sorted(self.encoder.items(), key=lambda x: x[1]))
+        self.encoder = collections.OrderedDict(
+            sorted(self.encoder.items(), key=lambda x: x[1])
+        )
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in self.encoder.items():
                 if index != token_index:
@@ -222,7 +236,9 @@ class CpmAntTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None) -> List[int]:
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: List[int] = None
+    ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CPMAnt sequence has the following format:
@@ -241,7 +257,10 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -259,7 +278,9 @@ class CpmAntTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is not None:

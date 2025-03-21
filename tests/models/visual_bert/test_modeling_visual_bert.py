@@ -24,18 +24,14 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        VisualBertForMultipleChoice,
-        VisualBertForPreTraining,
-        VisualBertForQuestionAnswering,
-        VisualBertForRegionToPhraseAlignment,
-        VisualBertForVisualReasoning,
-        VisualBertModel,
-    )
+    from transformers import (VisualBertForMultipleChoice,
+                              VisualBertForPreTraining,
+                              VisualBertForQuestionAnswering,
+                              VisualBertForRegionToPhraseAlignment,
+                              VisualBertForVisualReasoning, VisualBertModel)
 
 
 class VisualBertModelTester:
@@ -115,25 +111,37 @@ class VisualBertModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        visual_embeds = floats_tensor([self.batch_size, self.visual_seq_length, self.visual_embedding_dim])
+        visual_embeds = floats_tensor(
+            [self.batch_size, self.visual_seq_length, self.visual_embedding_dim]
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = torch.ones((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
+            attention_mask = torch.ones(
+                (self.batch_size, self.seq_length),
+                dtype=torch.long,
+                device=torch_device,
+            )
 
         visual_attention_mask = None
         if self.use_visual_attention_mask:
             visual_attention_mask = torch.ones(
-                (self.batch_size, self.visual_seq_length), dtype=torch.long, device=torch_device
+                (self.batch_size, self.visual_seq_length),
+                dtype=torch.long,
+                device=torch_device,
             )
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         visual_token_type_ids = None
         if self.use_visual_token_type_ids:
-            visual_token_type_ids = ids_tensor([self.batch_size, self.visual_seq_length], self.type_vocab_size)
+            visual_token_type_ids = ids_tensor(
+                [self.batch_size, self.visual_seq_length], self.type_vocab_size
+            )
 
         config = self.get_config()
         return config, {
@@ -150,7 +158,10 @@ class VisualBertModelTester:
         sentence_image_labels = None
 
         if self.use_labels:
-            masked_lm_labels = ids_tensor([self.batch_size, self.seq_length + self.visual_seq_length], self.vocab_size)
+            masked_lm_labels = ids_tensor(
+                [self.batch_size, self.seq_length + self.visual_seq_length],
+                self.vocab_size,
+            )
             sentence_image_labels = ids_tensor(
                 [self.batch_size],
                 self.type_sequence_label_size,
@@ -158,36 +169,53 @@ class VisualBertModelTester:
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
 
-        input_dict.update({"labels": masked_lm_labels, "sentence_image_labels": sentence_image_labels})
+        input_dict.update(
+            {"labels": masked_lm_labels, "sentence_image_labels": sentence_image_labels}
+        )
 
         return config, input_dict
 
     def prepare_config_and_inputs_for_multiple_choice(self):
-        input_ids = ids_tensor([self.batch_size, self.num_choices, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.num_choices, self.seq_length], self.vocab_size
+        )
         visual_embeds = floats_tensor(
-            [self.batch_size, self.num_choices, self.visual_seq_length, self.visual_embedding_dim]
+            [
+                self.batch_size,
+                self.num_choices,
+                self.visual_seq_length,
+                self.visual_embedding_dim,
+            ]
         )
 
         attention_mask = None
         if self.use_attention_mask:
             attention_mask = torch.ones(
-                (self.batch_size, self.num_choices, self.seq_length), dtype=torch.long, device=torch_device
+                (self.batch_size, self.num_choices, self.seq_length),
+                dtype=torch.long,
+                device=torch_device,
             )
 
         visual_attention_mask = None
         if self.use_visual_attention_mask:
             visual_attention_mask = torch.ones(
-                (self.batch_size, self.num_choices, self.visual_seq_length), dtype=torch.long, device=torch_device
+                (self.batch_size, self.num_choices, self.visual_seq_length),
+                dtype=torch.long,
+                device=torch_device,
             )
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.num_choices, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.num_choices, self.seq_length],
+                self.type_vocab_size,
+            )
 
         visual_token_type_ids = None
         if self.use_visual_token_type_ids:
             visual_token_type_ids = ids_tensor(
-                [self.batch_size, self.num_choices, self.visual_seq_length], self.type_vocab_size
+                [self.batch_size, self.num_choices, self.visual_seq_length],
+                self.type_vocab_size,
             )
 
         labels = None
@@ -232,19 +260,34 @@ class VisualBertModelTester:
         region_to_phrase_position = torch.cat(
             (
                 ids_tensor([self.batch_size, self.seq_length], self.visual_seq_length),
-                torch.ones(self.batch_size, self.visual_seq_length, dtype=torch.long, device=torch_device) * -1,
+                torch.ones(
+                    self.batch_size,
+                    self.visual_seq_length,
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                * -1,
             ),
             dim=-1,
         )
         flickr_labels = None
         if self.use_labels:
             flickr_labels = floats_tensor(
-                [self.batch_size, self.seq_length + self.visual_seq_length, self.visual_seq_length]
+                [
+                    self.batch_size,
+                    self.seq_length + self.visual_seq_length,
+                    self.visual_seq_length,
+                ]
             )
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
 
-        input_dict.update({"region_to_phrase_position": region_to_phrase_position, "labels": flickr_labels})
+        input_dict.update(
+            {
+                "region_to_phrase_position": region_to_phrase_position,
+                "labels": flickr_labels,
+            }
+        )
         return config, input_dict
 
     def create_and_check_model(self, config, input_dict):
@@ -254,7 +297,11 @@ class VisualBertModelTester:
         result = model(**input_dict)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.seq_length + self.visual_seq_length, self.hidden_size),
+            (
+                self.batch_size,
+                self.seq_length + self.visual_seq_length,
+                self.hidden_size,
+            ),
         )
 
     def create_and_check_for_pretraining(self, config, input_dict):
@@ -264,7 +311,11 @@ class VisualBertModelTester:
         result = model(**input_dict)
         self.parent.assertEqual(
             result.prediction_logits.shape,
-            (self.batch_size, self.seq_length + self.visual_seq_length, self.vocab_size),
+            (
+                self.batch_size,
+                self.seq_length + self.visual_seq_length,
+                self.vocab_size,
+            ),
         )
 
     def create_and_check_for_vqa(self, config, input_dict):
@@ -279,7 +330,9 @@ class VisualBertModelTester:
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def create_and_check_for_nlvr(self, config, input_dict):
         model = VisualBertForVisualReasoning(config=config)
@@ -294,7 +347,12 @@ class VisualBertModelTester:
         model.eval()
         result = model(**input_dict)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.seq_length + self.visual_seq_length, self.visual_seq_length)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.seq_length + self.visual_seq_length,
+                self.visual_seq_length,
+            ),
         )
 
 
@@ -312,7 +370,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"feature-extraction": VisualBertModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": VisualBertModel} if is_torch_available() else {}
+    )
     test_torchscript = False
     test_pruning = False
 
@@ -324,18 +384,28 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 if isinstance(value, torch.Tensor) and value.ndim > 1:
                     if key != "visual_embeds":
                         inputs_dict[key] = (
-                            inputs_dict[key].unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                            inputs_dict[key]
+                            .unsqueeze(1)
+                            .expand(-1, self.model_tester.num_choices, -1)
+                            .contiguous()
                         )
                     else:
                         inputs_dict[key] = (
                             inputs_dict[key]
                             .unsqueeze(1)
-                            .expand(-1, self.model_tester.num_choices, -1, self.model_tester.visual_embedding_dim)
+                            .expand(
+                                -1,
+                                self.model_tester.num_choices,
+                                -1,
+                                self.model_tester.visual_embedding_dim,
+                            )
                             .contiguous()
                         )
 
         elif model_class == VisualBertForRegionToPhraseAlignment:
-            total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+            total_length = (
+                self.model_tester.seq_length + self.model_tester.visual_seq_length
+            )
             batch_size = self.model_tester.batch_size
             inputs_dict["region_to_phrase_position"] = torch.zeros(
                 (batch_size, total_length),
@@ -349,7 +419,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
             elif model_class == VisualBertForPreTraining:
-                total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+                total_length = (
+                    self.model_tester.seq_length + self.model_tester.visual_seq_length
+                )
                 batch_size = self.model_tester.batch_size
                 inputs_dict["labels"] = torch.zeros(
                     (batch_size, total_length),
@@ -363,7 +435,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             # Flickr expects float labels
             elif model_class == VisualBertForRegionToPhraseAlignment:
                 batch_size = self.model_tester.batch_size
-                total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+                total_length = (
+                    self.model_tester.seq_length + self.model_tester.visual_seq_length
+                )
 
                 inputs_dict["labels"] = torch.ones(
                     (
@@ -385,14 +459,18 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             elif model_class == VisualBertForVisualReasoning:
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
 
         return inputs_dict
 
     def setUp(self):
         self.model_tester = VisualBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VisualBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=VisualBertConfig, hidden_size=37
+        )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -404,7 +482,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         encoder_seq_length = (seq_len if seq_len is not None else 0) + (
             visual_seq_len if visual_seq_len is not None else 0
         )
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
@@ -418,7 +498,11 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -429,18 +513,31 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        chunk_length,
+                        encoder_key_length,
+                    ],
                 )
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
             out_len = len(outputs)
 
@@ -461,18 +558,31 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        chunk_length,
+                        encoder_key_length,
+                    ],
                 )
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
 
     def test_hidden_states_output(self):
@@ -484,19 +594,30 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                if (
+                    hasattr(self.model_tester, "chunk_length")
+                    and self.model_tester.chunk_length > 1
+                ):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
-                seq_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
+                seq_length = (
+                    self.model_tester.seq_length + self.model_tester.visual_seq_length
+                )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -529,7 +650,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_for_pretraining(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pretraining()
+        config_and_inputs = (
+            self.model_tester.prepare_config_and_inputs_for_pretraining()
+        )
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_model_for_vqa(self):
@@ -541,7 +664,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester.create_and_check_for_nlvr(*config_and_inputs)
 
     def test_model_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_multiple_choice()
+        config_and_inputs = (
+            self.model_tester.prepare_config_and_inputs_for_multiple_choice()
+        )
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
     def test_model_for_flickr(self):
@@ -577,10 +702,14 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 class VisualBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_vqa_coco_pre(self):
-        model = VisualBertForPreTraining.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
+        model = VisualBertForPreTraining.from_pretrained(
+            "uclanlp/visualbert-vqa-coco-pre"
+        )
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
+        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(
+            1, -1
+        )
         visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
         visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
@@ -602,24 +731,36 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.prediction_logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-5.1858, -5.1903, -4.9142], [-6.2214, -5.9238, -5.8381], [-6.3027, -5.9939, -5.9297]]]
+            [
+                [
+                    [-5.1858, -5.1903, -4.9142],
+                    [-6.2214, -5.9238, -5.8381],
+                    [-6.3027, -5.9939, -5.9297],
+                ]
+            ]
         )
 
-        torch.testing.assert_close(output.prediction_logits[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output.prediction_logits[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
 
         expected_slice_2 = torch.tensor([[0.7393, 0.1754]])
 
-        torch.testing.assert_close(output.seq_relationship_logits, expected_slice_2, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output.seq_relationship_logits, expected_slice_2, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_vqa(self):
         model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
+        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(
+            1, -1
+        )
         visual_embeds = torch.ones(size=(1, 10, 2048), dtype=torch.float32) * 0.5
         visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
@@ -641,17 +782,34 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-8.9898, 3.0803, -1.8016, 2.4542, -8.3420, -2.0224, -3.3124, -4.4139, -3.1491, -3.8997]]
+            [
+                [
+                    -8.9898,
+                    3.0803,
+                    -1.8016,
+                    2.4542,
+                    -8.3420,
+                    -2.0224,
+                    -3.3124,
+                    -4.4139,
+                    -3.1491,
+                    -3.8997,
+                ]
+            ]
         )
 
-        torch.testing.assert_close(output.logits[:, :10], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output.logits[:, :10], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_nlvr(self):
         model = VisualBertForVisualReasoning.from_pretrained("uclanlp/visualbert-nlvr2")
 
         input_ids = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.long).reshape(1, -1)
-        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(1, -1)
+        token_type_ids = torch.tensor([0, 0, 0, 1, 1, 1], dtype=torch.long).reshape(
+            1, -1
+        )
         visual_embeds = torch.ones(size=(1, 10, 1024), dtype=torch.float32) * 0.5
         visual_token_type_ids = torch.ones(size=(1, 10), dtype=torch.long)
         attention_mask = torch.tensor([1] * 6).reshape(1, -1)
@@ -680,7 +838,9 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
     def test_inference_vcr(self):
         model = VisualBertForMultipleChoice.from_pretrained("uclanlp/visualbert-vcr")
 
-        input_ids = torch.tensor([[[1, 2, 3, 4, 5, 6] for i in range(4)]], dtype=torch.long)
+        input_ids = torch.tensor(
+            [[[1, 2, 3, 4, 5, 6] for i in range(4)]], dtype=torch.long
+        )
         attention_mask = torch.ones_like(input_ids)
         token_type_ids = torch.ones_like(input_ids)
 

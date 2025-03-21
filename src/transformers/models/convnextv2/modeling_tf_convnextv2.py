@@ -22,30 +22,18 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import (
-    TFBaseModelOutputWithNoAttention,
-    TFBaseModelOutputWithPooling,
-    TFBaseModelOutputWithPoolingAndNoAttention,
-    TFImageClassifierOutputWithNoAttention,
-)
-from ...modeling_tf_utils import (
-    TFModelInputType,
-    TFPreTrainedModel,
-    TFSequenceClassificationLoss,
-    get_initializer,
-    keras,
-    keras_serializable,
-    unpack_inputs,
-)
+from ...modeling_tf_outputs import (TFBaseModelOutputWithNoAttention,
+                                    TFBaseModelOutputWithPooling,
+                                    TFBaseModelOutputWithPoolingAndNoAttention,
+                                    TFImageClassifierOutputWithNoAttention)
+from ...modeling_tf_utils import (TFModelInputType, TFPreTrainedModel,
+                                  TFSequenceClassificationLoss,
+                                  get_initializer, keras, keras_serializable,
+                                  unpack_inputs)
 from ...tf_utils import shape_list
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_convnextv2 import ConvNextV2Config
-
 
 logger = logging.get_logger(__name__)
 
@@ -104,9 +92,15 @@ class TFConvNextV2GRN(keras.layers.Layer):
         return super().build(input_shape)
 
     def call(self, hidden_states: tf.Tensor):
-        global_features = tf.norm(hidden_states, ord="euclidean", axis=(1, 2), keepdims=True)
-        norm_features = global_features / (tf.reduce_mean(global_features, axis=-1, keepdims=True) + 1e-6)
-        hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
+        global_features = tf.norm(
+            hidden_states, ord="euclidean", axis=(1, 2), keepdims=True
+        )
+        norm_features = global_features / (
+            tf.reduce_mean(global_features, axis=-1, keepdims=True) + 1e-6
+        )
+        hidden_states = (
+            self.weight * (hidden_states * norm_features) + self.bias + hidden_states
+        )
         return hidden_states
 
 
@@ -155,7 +149,9 @@ class TFConvNextV2Embeddings(keras.layers.Layer):
         self.built = True
         if getattr(self, "patch_embeddings", None) is not None:
             with tf.name_scope(self.patch_embeddings.name):
-                self.patch_embeddings.build([None, None, None, self.config.num_channels])
+                self.patch_embeddings.build(
+                    [None, None, None, self.config.num_channels]
+                )
         if getattr(self, "layernorm", None) is not None:
             with tf.name_scope(self.layernorm.name):
                 self.layernorm.build([None, None, None, self.config.hidden_sizes[0]])
@@ -179,7 +175,9 @@ class TFConvNextV2Layer(keras.layers.Layer):
             Stochastic depth rate.
     """
 
-    def __init__(self, config: ConvNextV2Config, dim: int, drop_path: float = 0.0, **kwargs):
+    def __init__(
+        self, config: ConvNextV2Config, dim: int, drop_path: float = 0.0, **kwargs
+    ):
         super().__init__(**kwargs)
         self.dim = dim
         self.config = config
@@ -384,7 +382,9 @@ class TFConvNextV2Encoder(keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return TFBaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states
+        )
 
     def build(self, input_shape=None):
         for stage in self.stages:
@@ -402,7 +402,9 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
         self.config = config
         self.embeddings = TFConvNextV2Embeddings(config, name="embeddings")
         self.encoder = TFConvNextV2Encoder(config, name="encoder")
-        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm"
+        )
         # We are setting the `data_format` like so because from here on we will revert to the
         # NCHW output format
         self.pooler = keras.layers.GlobalAvgPool2D(data_format="channels_last")
@@ -416,9 +418,13 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -441,7 +447,9 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
+            hidden_states = tuple(
+                [tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]]
+            )
 
         if not return_dict:
             hidden_states = hidden_states if output_hidden_states else ()
@@ -450,7 +458,9 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
         return TFBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
+            hidden_states=(
+                hidden_states if output_hidden_states else encoder_outputs.hidden_states
+            ),
         )
 
     def build(self, input_shape=None):
@@ -562,9 +572,13 @@ class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, Tuple[tf.Tensor]]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -601,7 +615,9 @@ class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
     """,
     CONVNEXTV2_START_DOCSTRING,
 )
-class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequenceClassificationLoss):
+class TFConvNextV2ForImageClassification(
+    TFConvNextV2PreTrainedModel, TFSequenceClassificationLoss
+):
     def __init__(self, config: ConvNextV2Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -639,9 +655,13 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -656,7 +676,11 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.classifier(pooled_output)
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=logits)
+        )
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -680,4 +704,8 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
                 self.classifier.build([None, None, self.config.hidden_sizes[-1]])
 
 
-__all__ = ["TFConvNextV2ForImageClassification", "TFConvNextV2Model", "TFConvNextV2PreTrainedModel"]
+__all__ = [
+    "TFConvNextV2ForImageClassification",
+    "TFConvNextV2Model",
+    "TFConvNextV2PreTrainedModel",
+]

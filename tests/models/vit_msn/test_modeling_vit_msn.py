@@ -17,13 +17,14 @@
 import unittest
 
 from transformers import ViTMSNConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -87,7 +88,9 @@ class ViTMSNModelTester:
         self.mask_length = self.seq_length - 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -118,7 +121,10 @@ class ViTMSNModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -128,7 +134,9 @@ class ViTMSNModelTester:
         result = model(pixel_values, labels=labels)
         print("Pixel and labels shape: {pixel_values.shape}, {labels.shape}")
         print("Labels: {labels}")
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
@@ -136,9 +144,13 @@ class ViTMSNModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -154,9 +166,14 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification}
+        {
+            "image-feature-extraction": ViTMSNModel,
+            "image-classification": ViTMSNForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -169,7 +186,9 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViTMSNModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -213,12 +232,18 @@ def prepare_img():
 class ViTMSNModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
+        return (
+            ViTImageProcessor.from_pretrained("facebook/vit-msn-small")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
         torch.manual_seed(2)
-        model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small").to(torch_device)
+        model = ViTMSNForImageClassification.from_pretrained(
+            "facebook/vit-msn-small"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -234,4 +259,6 @@ class ViTMSNModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.5588, 0.6853, -0.5929]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

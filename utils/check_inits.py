@@ -41,7 +41,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 # Path is set with the intent you should run this script from the root of the repo.
 PATH_TO_TRANSFORMERS = "src/transformers"
 
@@ -55,9 +54,13 @@ _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')
 # Catches a line if not is_foo_available
 _re_test_backend = re.compile(r"^\s*if\s+not\s+is\_[a-z_]*\_available\(\)")
 # Catches a line _import_struct["bla"].append("foo")
-_re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\("(\S*)"\)')
+_re_import_struct_add_one = re.compile(
+    r'^\s*_import_structure\["\S*"\]\.append\("(\S*)"\)'
+)
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
-_re_import_struct_add_many = re.compile(r"^\s*_import_structure\[\S*\](?:\.extend\(|\s*=\s+)\[([^\]]*)\]")
+_re_import_struct_add_many = re.compile(
+    r"^\s*_import_structure\[\S*\](?:\.extend\(|\s*=\s+)\[([^\]]*)\]"
+)
 # Catches a line with an object between quotes and a comma:     "MyModel",
 _re_quote_object = re.compile(r'^\s+"([^"]+)",')
 # Catches a line with objects between brackets only:    ["foo", "bar"],
@@ -89,7 +92,9 @@ def find_backend(line: str) -> Optional[str]:
     return "_and_".join(backends)
 
 
-def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]:
+def parse_init(
+    init_file,
+) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]:
     """
     Read an init_file and parse (per backend) the `_import_structure` objects defined and the `TYPE_CHECKING` objects
     defined.
@@ -107,7 +112,9 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
 
     # Get the to `_import_structure` definition.
     line_index = 0
-    while line_index < len(lines) and not lines[line_index].startswith("_import_structure = {"):
+    while line_index < len(lines) and not lines[line_index].startswith(
+        "_import_structure = {"
+    ):
         line_index += 1
 
     # If this is a traditional init, just return.
@@ -116,7 +123,10 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
 
     # First grab the objects without a specific backend in _import_structure
     objects = []
-    while not lines[line_index].startswith("if TYPE_CHECKING") and find_backend(lines[line_index]) is None:
+    while (
+        not lines[line_index].startswith("if TYPE_CHECKING")
+        and find_backend(lines[line_index]) is None
+    ):
         line = lines[line_index]
         # If we have everything on a single line, let's deal with it.
         if _re_one_line_import_struct.search(line):
@@ -128,7 +138,11 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
             continue
         single_line_import_search = _re_import_struct_key_value.search(line)
         if single_line_import_search is not None:
-            imports = [obj[1:-1] for obj in single_line_import_search.groups()[0].split(", ") if len(obj) > 0]
+            imports = [
+                obj[1:-1]
+                for obj in single_line_import_search.groups()[0].split(", ")
+                if len(obj) > 0
+            ]
             objects.extend(imports)
         elif line.startswith(" " * 8 + '"'):
             objects.append(line[9:-3])
@@ -161,7 +175,9 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
                 if _re_import_struct_add_one.search(line) is not None:
                     objects.append(_re_import_struct_add_one.search(line).groups()[0])
                 elif _re_import_struct_add_many.search(line) is not None:
-                    imports = _re_import_struct_add_many.search(line).groups()[0].split(", ")
+                    imports = (
+                        _re_import_struct_add_many.search(line).groups()[0].split(", ")
+                    )
                     imports = [obj[1:-1] for obj in imports if len(obj) > 0]
                     objects.extend(imports)
                 elif _re_between_brackets.search(line) is not None:
@@ -232,7 +248,9 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
     return import_dict_objects, type_hint_objects
 
 
-def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects: Dict[str, List[str]]) -> List[str]:
+def analyze_results(
+    import_dict_objects: Dict[str, List[str]], type_hint_objects: Dict[str, List[str]]
+) -> List[str]:
     """
     Analyze the differences between _import_structure objects and TYPE_CHECKING objects found in an init.
 
@@ -261,10 +279,14 @@ def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects
         # Duplicate imports in any half.
         duplicate_imports = find_duplicates(import_dict_objects[key])
         if duplicate_imports:
-            errors.append(f"Duplicate _import_structure definitions for: {duplicate_imports}")
+            errors.append(
+                f"Duplicate _import_structure definitions for: {duplicate_imports}"
+            )
         duplicate_type_hints = find_duplicates(type_hint_objects[key])
         if duplicate_type_hints:
-            errors.append(f"Duplicate TYPE_CHECKING objects for: {duplicate_type_hints}")
+            errors.append(
+                f"Duplicate TYPE_CHECKING objects for: {duplicate_type_hints}"
+            )
 
         # Missing imports in either part of the init.
         if sorted(set(import_dict_objects[key])) != sorted(set(type_hint_objects[key])):
@@ -292,7 +314,9 @@ def check_all_inits():
             if objects is not None:
                 errors = analyze_results(*objects)
                 if len(errors) > 0:
-                    errors[0] = f"Problem in {fname}, both halves do not define the same objects.\n{errors[0]}"
+                    errors[0] = (
+                        f"Problem in {fname}, both halves do not define the same objects.\n{errors[0]}"
+                    )
                     failures.append("\n".join(errors))
     if len(failures) > 0:
         raise ValueError("\n\n".join(failures))
@@ -352,7 +376,9 @@ def check_submodules():
     # (potentiall re-) add them.
     with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r") as f:
         init_content = f.read()
-    import_structure_keys.update(set(re.findall(r"import_structure\[\"([^\"]*)\"\]", init_content)))
+    import_structure_keys.update(
+        set(re.findall(r"import_structure\[\"([^\"]*)\"\]", init_content))
+    )
 
     module_not_registered = [
         module

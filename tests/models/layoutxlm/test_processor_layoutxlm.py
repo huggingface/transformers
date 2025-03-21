@@ -19,19 +19,19 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
-from transformers.testing_utils import (
-    require_pytesseract,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    slow,
-)
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers import (PreTrainedTokenizer, PreTrainedTokenizerBase,
+                          PreTrainedTokenizerFast)
+from transformers.models.layoutxlm import (LayoutXLMProcessor,
+                                           LayoutXLMTokenizer,
+                                           LayoutXLMTokenizerFast)
+from transformers.testing_utils import (require_pytesseract,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        slow)
+from transformers.utils import (FEATURE_EXTRACTOR_NAME, cached_property,
+                                is_pytesseract_available)
 
 from ...test_processing_common import ProcessorTesterMixin
-
 
 if is_pytesseract_available():
     from PIL import Image
@@ -55,7 +55,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
         self.tmpdirname = tempfile.mkdtemp()
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        self.feature_extraction_file = os.path.join(
+            self.tmpdirname, FEATURE_EXTRACTOR_NAME
+        )
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
@@ -64,14 +66,20 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
-        processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = LayoutXLMProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+        return self.tokenizer_class.from_pretrained(
+            self.tokenizer_pretrained_name, **kwargs
+        )
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(
+            self.tokenizer_pretrained_name, **kwargs
+        )
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
@@ -86,19 +94,28 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             processor.save_pretrained(self.tmpdirname)
             processor = LayoutXLMProcessor.from_pretrained(self.tmpdirname)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
+            self.assertIsInstance(
+                processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast)
+            )
 
-            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
+            self.assertEqual(
+                processor.image_processor.to_json_string(),
+                image_processor.to_json_string(),
+            )
             self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutXLMProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+        processor = LayoutXLMProcessor(
+            image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
@@ -114,37 +131,61 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             size=30,
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
         # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+        tokenizer_add_kwargs = self.get_rust_tokenizer(
+            bos_token="(BOS)", eos_token="(EOS)"
+        )
         image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
         processor = LayoutXLMProcessor.from_pretrained(
-            self.tmpdirname, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
+            self.tmpdirname,
+            use_xlm=True,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = LayoutXLMProcessor(
+            tokenizer=tokenizer, image_processor=image_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
         # add extra args
-        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_codebook_pixels=False,
+            return_image_mask=False,
+        )
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
@@ -156,10 +197,14 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # set up
         datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
-        processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
+        processor = LayoutXLMProcessor.from_pretrained(
+            "microsoft/layoutxlm-base", apply_ocr=False
+        )
 
         def preprocess_data(examples):
-            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            images = [
+                Image.open(path).convert("RGB") for path in examples["image_path"]
+            ]
             words = examples["words"]
             boxes = examples["bboxes"]
             word_labels = examples["ner_tags"]
@@ -193,7 +238,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True
+        )
 
         image_1 = Image.open(ds[0]["file"]).convert("RGB")
         image_2 = Image.open(ds[1]["file"]).convert("RGB")
@@ -203,7 +250,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
     @cached_property
     def get_tokenizers(self):
         slow_tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
-        fast_tokenizer = LayoutXLMTokenizerFast.from_pretrained("microsoft/layoutxlm-base")
+        fast_tokenizer = LayoutXLMTokenizerFast.from_pretrained(
+            "microsoft/layoutxlm-base"
+        )
         return [slow_tokenizer, fast_tokenizer]
 
     @slow
@@ -215,7 +264,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             input_feat_extract = image_processor(images[0], return_tensors="pt")
@@ -228,7 +279,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify image
             self.assertAlmostEqual(
-                input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2
+                input_feat_extract["pixel_values"].sum(),
+                input_processor["image"].sum(),
+                delta=1e-2,
             )
 
             # verify input_ids
@@ -248,7 +301,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify images
             self.assertAlmostEqual(
-                input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2
+                input_feat_extract["pixel_values"].sum(),
+                input_processor["image"].sum(),
+                delta=1e-2,
             )
 
             # verify input_ids
@@ -266,12 +321,16 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], words, boxes=boxes, return_tensors="pt")
+            input_processor = processor(
+                images[0], words, boxes=boxes, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["input_ids", "bbox", "attention_mask", "image"]
@@ -286,8 +345,13 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # batched
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            input_processor = processor(images, words, boxes=boxes, padding=True, return_tensors="pt")
+            boxes = [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]],
+            ]
+            input_processor = processor(
+                images, words, boxes=boxes, padding=True, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
@@ -320,13 +384,21 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             words = ["weirdly", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
             word_labels = [1, 2]
-            input_processor = processor(images[0], words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+            input_processor = processor(
+                images[0],
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                return_tensors="pt",
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels"]
@@ -340,14 +412,24 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify labels
             expected_labels = [-100, 1, -100, 2, -100]
-            self.assertListEqual(input_processor.labels.squeeze().tolist(), expected_labels)
+            self.assertListEqual(
+                input_processor.labels.squeeze().tolist(), expected_labels
+            )
 
             # batched
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
+            boxes = [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]],
+            ]
             word_labels = [[1, 2], [6, 3, 10, 2]]
             input_processor = processor(
-                images, words, boxes=boxes, word_labels=word_labels, padding=True, return_tensors="pt"
+                images,
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                padding=True,
+                return_tensors="pt",
             )
 
             # verify keys
@@ -385,7 +467,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             question = "What's his name?"
@@ -405,7 +489,12 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             # batched
             questions = ["How old is he?", "what's the time"]
             input_processor = processor(
-                images, questions, padding="max_length", max_length=20, truncation=True, return_tensors="pt"
+                images,
+                questions,
+                padding="max_length",
+                max_length=20,
+                truncation=True,
+                return_tensors="pt",
             )
 
             # verify keys
@@ -415,7 +504,9 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            expected_decoding = "<s> what's the time</s></s> 7 ITC Limited REPORT AND ACCOUNTS 2013</s>"
+            expected_decoding = (
+                "<s> what's the time</s></s> 7 ITC Limited REPORT AND ACCOUNTS 2013</s>"
+            )
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -432,13 +523,17 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            processor = LayoutXLMProcessor(
+                image_processor=image_processor, tokenizer=tokenizer
+            )
 
             # not batched
             question = "What's his name?"
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], question, words, boxes, return_tensors="pt")
+            input_processor = processor(
+                images[0], question, words, boxes, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
@@ -453,8 +548,13 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             # batched
             questions = ["How old is he?", "what's the time"]
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            input_processor = processor(images, questions, words, boxes, padding=True, return_tensors="pt")
+            boxes = [
+                [[1, 2, 3, 4], [5, 6, 7, 8]],
+                [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]],
+            ]
+            input_processor = processor(
+                images, questions, words, boxes, padding=True, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids"]
@@ -471,5 +571,11 @@ class LayoutXLMProcessorIntegrationTests(unittest.TestCase):
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
-            expected_bbox = [[6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3], [1, 1, 2, 3], [1000, 1000, 1000, 1000]]
+            expected_bbox = [
+                [6, 7, 4, 2],
+                [3, 9, 2, 4],
+                [1, 1, 2, 3],
+                [1, 1, 2, 3],
+                [1000, 1000, 1000, 1000],
+            ]
             self.assertListEqual(input_processor.bbox[1].tolist()[-5:], expected_bbox)

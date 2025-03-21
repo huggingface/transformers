@@ -21,7 +21,6 @@ import warnings
 from ...utils import logging
 from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessor
 
-
 logger = logging.get_logger(__name__)
 
 

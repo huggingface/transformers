@@ -36,7 +36,6 @@ from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from transformers.utils import WEIGHTS_NAME, logging
 
-
 logging.set_verbosity_warning()
 
 json_indent = 2
@@ -78,7 +77,10 @@ for m in [
 def rewrite_dict_keys(d):
     # (1) remove word breaking symbol, (2) add word ending symbol where the word is not broken up,
     # e.g.: d = {'le@@': 5, 'tt@@': 6, 'er': 7} => {'le': 5, 'tt': 6, 'er</w>': 7}
-    d2 = dict((re.sub(r"@@$", "", k), v) if k.endswith("@@") else (re.sub(r"$", "</w>", k), v) for k, v in d.items())
+    d2 = dict(
+        (re.sub(r"@@$", "", k), v) if k.endswith("@@") else (re.sub(r"$", "</w>", k), v)
+        for k, v in d.items()
+    )
     keep_keys = "<s> <pad> </s> <unk>".split()
     # restore the special tokens
     for k in keep_keys:
@@ -108,7 +110,11 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     # see: upgrade_state_dict(state_dict) in fairseq_model.py
     print(f"using checkpoint {checkpoint_file}")
     chkpt = hub_utils.from_pretrained(
-        fsmt_folder_path, checkpoint_file, data_name_or_path, archive_map=models, **kwargs
+        fsmt_folder_path,
+        checkpoint_file,
+        data_name_or_path,
+        archive_map=models,
+        **kwargs,
     )
 
     args = vars(chkpt["args"]["model"])
@@ -148,7 +154,9 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         f.write(json.dumps(tgt_vocab, ensure_ascii=False, indent=json_indent))
 
     # merges_file (bpecodes)
-    merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
+    merges_file = os.path.join(
+        pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"]
+    )
     for fn in ["bpecodes", "code"]:  # older fairseq called the merges file "code"
         fsmt_merges_file = os.path.join(fsmt_folder_path, fn)
         if os.path.exists(fsmt_merges_file):
@@ -165,8 +173,12 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
 
     # validate bpe/tokenizer config, as currently it's hardcoded to moses+fastbpe -
     # may have to modify the tokenizer if a different type is used by a future model
-    assert args["bpe"] == "fastbpe", f"need to extend tokenizer to support bpe={args['bpe']}"
-    assert args["tokenizer"] == "moses", f"need to extend tokenizer to support bpe={args['tokenizer']}"
+    assert (
+        args["bpe"] == "fastbpe"
+    ), f"need to extend tokenizer to support bpe={args['bpe']}"
+    assert (
+        args["tokenizer"] == "moses"
+    ), f"need to extend tokenizer to support bpe={args['tokenizer']}"
 
     model_conf = {
         "architectures": ["FSMTForConditionalGeneration"],
@@ -201,7 +213,10 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     # good hparam defaults to start with
     model_conf["num_beams"] = 5
     model_conf["early_stopping"] = False
-    if model_dir in best_score_hparams and "length_penalty" in best_score_hparams[model_dir]:
+    if (
+        model_dir in best_score_hparams
+        and "length_penalty" in best_score_hparams[model_dir]
+    ):
         model_conf["length_penalty"] = best_score_hparams[model_dir]["length_penalty"]
     else:
         model_conf["length_penalty"] = 1.0
@@ -211,7 +226,9 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
         f.write(json.dumps(model_conf, ensure_ascii=False, indent=json_indent))
 
     # tokenizer config
-    fsmt_tokenizer_config_file = os.path.join(pytorch_dump_folder_path, TOKENIZER_CONFIG_FILE)
+    fsmt_tokenizer_config_file = os.path.join(
+        pytorch_dump_folder_path, TOKENIZER_CONFIG_FILE
+    )
 
     tokenizer_conf = {
         "langs": [src_lang, tgt_lang],
@@ -228,7 +245,9 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     model_state_dict = model.state_dict()
 
     # rename keys to start with 'model.'
-    model_state_dict = OrderedDict(("model." + k, v) for k, v in model_state_dict.items())
+    model_state_dict = OrderedDict(
+        ("model." + k, v) for k, v in model_state_dict.items()
+    )
 
     # remove unneeded keys
     ignore_keys = [
@@ -274,7 +293,13 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_fsmt_checkpoint_to_pytorch(args.fsmt_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_fsmt_checkpoint_to_pytorch(
+        args.fsmt_checkpoint_path, args.pytorch_dump_folder_path
+    )

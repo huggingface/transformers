@@ -24,7 +24,8 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import AutoImageProcessor, Swinv2Config, Swinv2ForImageClassification
+from transformers import (AutoImageProcessor, Swinv2Config,
+                          Swinv2ForImageClassification)
 
 
 def get_swinv2_config(swinv2_name):
@@ -65,7 +66,9 @@ def get_swinv2_config(swinv2_name):
         num_classes = 21841
         repo_id = "huggingface/label-files"
         filename = "imagenet-22k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -74,7 +77,9 @@ def get_swinv2_config(swinv2_name):
         num_classes = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -91,7 +96,9 @@ def get_swinv2_config(swinv2_name):
 
 def rename_key(name):
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if "layers" in name:
@@ -139,28 +146,32 @@ def convert_state_dict(orig_state_dict, model):
             key_split = key.split(".")
             layer_num = int(key_split[1])
             block_num = int(key_split[3])
-            dim = model.swinv2.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+            dim = (
+                model.swinv2.encoder.layers[layer_num]
+                .blocks[block_num]
+                .attention.self.all_head_size
+            )
 
             if "weight" in key:
                 orig_state_dict[
                     f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = (
-                    val[dim : dim * 2, :]
-                )
+                orig_state_dict[
+                    f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
                 orig_state_dict[
                     f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = (
-                    val[:dim]
-                )
-                orig_state_dict[f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
-                    dim : dim * 2
-                ]
-                orig_state_dict[f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = (
-                    val[-dim:]
-                )
+                orig_state_dict[
+                    f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"swinv2.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -180,7 +191,9 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swinv2_name.replace("_", "-")))
+    image_processor = AutoImageProcessor.from_pretrained(
+        "microsoft/{}".format(swinv2_name.replace("_", "-"))
+    )
     image = Image.open(requests.get(url, stream=True).raw)
     inputs = image_processor(images=image, return_tensors="pt")
 
@@ -212,7 +225,10 @@ if __name__ == "__main__":
         help="Name of the Swinv2 timm model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()

@@ -36,16 +36,9 @@ from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
 
-from transformers import (
-    AddedToken,
-    AutoConfig,
-    AutoTokenizer,
-    LlavaNextConfig,
-    LlavaNextForConditionalGeneration,
-    LlavaNextImageProcessor,
-    LlavaNextProcessor,
-)
-
+from transformers import (AddedToken, AutoConfig, AutoTokenizer,
+                          LlavaNextConfig, LlavaNextForConditionalGeneration,
+                          LlavaNextImageProcessor, LlavaNextProcessor)
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.": "",
@@ -61,7 +54,9 @@ KEYS_TO_MODIFY_MAPPING = {
 
 
 def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+    directory_path = snapshot_download(
+        repo_id=model_id, allow_patterns=["*.safetensors"]
+    )
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -94,7 +89,9 @@ def load_image():
 
 def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # load original config
-    filepath = hf_hub_download(repo_id=model_id, filename="config.json", repo_type="model")
+    filepath = hf_hub_download(
+        repo_id=model_id, filename="config.json", repo_type="model"
+    )
     # read json
     with open(filepath) as f:
         data = json.load(f)
@@ -129,9 +126,14 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     use_fast = False if model_id == "liuhaotian/llava-v1.6-34b" else True
     tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=use_fast)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_tokens(
+        AddedToken("<image>", special=True, normalized=False), special_tokens=True
+    )
 
-    if model_id in ("liuhaotian/llava-v1.6-mistral-7b", "lmms-lab/llama3-llava-next-8b"):
+    if model_id in (
+        "liuhaotian/llava-v1.6-mistral-7b",
+        "lmms-lab/llama3-llava-next-8b",
+    ):
         # Mistral-7B doesn't have a padding token set yet
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
@@ -158,7 +160,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mu, covariance_matrix=1e-5 * sigma
+    )
 
     # We add an image token so we resize the model
     # Pad to 64 for performance reasons
@@ -177,13 +181,24 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
             tuple(
                 (
                     dist.sample()
-                    for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
+                    for _ in range(
+                        model.language_model.model.embed_tokens.weight.data[
+                            vocab_size:
+                        ].shape[0]
+                    )
                 )
             ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+            tuple(
+                (
+                    dist.sample()
+                    for _ in range(
+                        model.language_model.lm_head.weight.data[vocab_size:].shape[0]
+                    )
+                )
+            ),
             dim=0,
         )
 
@@ -198,7 +213,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # Load everything back for inference tests in float32 because prev script was written as that
     # Though it's mostly loaded in fp16 as original weights are in fp16
-    model = LlavaNextForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, device_map="auto")
+    model = LlavaNextForConditionalGeneration.from_pretrained(
+        pytorch_dump_folder_path, device_map="auto"
+    )
     processor = LlavaNextProcessor.from_pretrained(pytorch_dump_folder_path)
     device = model.device
 
@@ -206,7 +223,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     image = load_image()
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
-    elif model_id in ["liuhaotian/llava-v1.6-vicuna-7b", "liuhaotian/llava-v1.6-vicuna-13b"]:
+    elif model_id in [
+        "liuhaotian/llava-v1.6-vicuna-7b",
+        "liuhaotian/llava-v1.6-vicuna-13b",
+    ]:
         prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT:"
     elif model_id == "liuhaotian/llava-v1.6-34b":
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
@@ -218,12 +238,20 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     inputs = processor(images=image, text=prompt, return_tensors="pt")
 
     # verify inputs
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
+    filepath = hf_hub_download(
+        repo_id="nielsr/test-image",
+        filename="llava_1_6_pixel_values.pt",
+        repo_type="dataset",
+    )
     original_pixel_values = torch.load(filepath, map_location="cpu")
     assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
-        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-image",
+            filename="llava_1_6_input_ids.pt",
+            repo_type="dataset",
+        )
         original_input_ids = torch.load(filepath, map_location="cpu")
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         original_input_ids[original_input_ids == -200] = image_token_index
@@ -231,7 +259,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     elif model_id == "liuhaotian/llava-v1.6-34b":
         filepath = hf_hub_download(
-            repo_id="nielsr/test-image", filename="llava_1_6_34b_input_ids.pt", repo_type="dataset"
+            repo_id="nielsr/test-image",
+            filename="llava_1_6_34b_input_ids.pt",
+            repo_type="dataset",
         )
         original_input_ids = torch.load(filepath, map_location="cpu")
         # replace -200 by image_token_index
@@ -252,45 +282,73 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
         if model_id == "liuhaotian/llava-v1.6-mistral-7b":
             expected_slice = torch.tensor(
-                [[-4.8555, -4.6992, -0.1996], [-10.5703, -10.7344, -2.7246], [-7.0391, -7.3672, -0.2634]],
+                [
+                    [-4.8555, -4.6992, -0.1996],
+                    [-10.5703, -10.7344, -2.7246],
+                    [-7.0391, -7.3672, -0.2634],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
             expected_slice = torch.tensor(
-                [[1.4883, 0.9976, -0.6992], [-9.7031, -5.7031, -1.5557], [-5.1328, -5.5586, 8.8281]],
+                [
+                    [1.4883, 0.9976, -0.6992],
+                    [-9.7031, -5.7031, -1.5557],
+                    [-5.1328, -5.5586, 8.8281],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "liuhaotian/llava-v1.6-vicuna-13b":
             expected_slice = torch.tensor(
-                [[-0.9614, 7.3125, 0.2106], [-7.2695, -8.5469, 3.6211], [-6.3750, -8.1875, 5.4688]],
+                [
+                    [-0.9614, 7.3125, 0.2106],
+                    [-7.2695, -8.5469, 3.6211],
+                    [-6.3750, -8.1875, 5.4688],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "liuhaotian/llava-v1.6-34b":
             expected_slice = torch.tensor(
-                [[-9.0859, -9.1406, 5.9453], [-5.9570, -5.9766, 2.2754], [-5.7305, -5.7539, 4.0000]],
+                [
+                    [-9.0859, -9.1406, 5.9453],
+                    [-5.9570, -5.9766, 2.2754],
+                    [-5.7305, -5.7539, 4.0000],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llama3-llava-next-8b":
             expected_slice = torch.tensor(
-                [[-3.9648, 1.1396, 3.3145], [-5.3594, -1.5654, -1.9619], [-12.3750, -10.6797, -9.3125]],
+                [
+                    [-3.9648, 1.1396, 3.3145],
+                    [-5.3594, -1.5654, -1.9619],
+                    [-12.3750, -10.6797, -9.3125],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-next-72b":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[3.7148, 3.9277, 3.4395], [-0.4341, 1.1387, 6.5117], [3.2324, 3.4688, 4.1133]],
+                [
+                    [3.7148, 3.9277, 3.4395],
+                    [-0.4341, 1.1387, 6.5117],
+                    [3.2324, 3.4688, 4.1133],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-next-110b":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[-2.5449, -1.6738, -2.0371], [1.0811, 3.4961, 5.0312], [1.7803, 2.5137, 2.4277]],
+                [
+                    [-2.5449, -1.6738, -2.0371],
+                    [1.0811, 3.4961, 5.0312],
+                    [1.7803, 2.5137, 2.4277],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
@@ -307,7 +365,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         use_cache=True,
     )
 
-    generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+    generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[
+        0
+    ].strip()
 
     print("Generated text:", repr(generated_text))
 
@@ -387,10 +447,15 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     args = parser.parse_args()
 

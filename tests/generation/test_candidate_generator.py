@@ -5,12 +5,11 @@ from unittest.mock import MagicMock
 
 import torch
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
+from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
+                          GenerationConfig, pipeline)
 from transformers.generation.candidate_generator import (
-    AssistantToTargetTranslator,
-    AssistantVocabTranslatorCache,
-    UniversalSpeculativeDecodingGenerator,
-)
+    AssistantToTargetTranslator, AssistantVocabTranslatorCache,
+    UniversalSpeculativeDecodingGenerator)
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -40,7 +39,13 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
 
     def test_get_assistant_to_target_input_ids(self):
         """Test the mapping from assistant tokens to target tokens."""
-        expected_mapping = [0, 1, 2, self.translator.SUPPRESS_TOKEN_ID, self.translator.SUPPRESS_TOKEN_ID]
+        expected_mapping = [
+            0,
+            1,
+            2,
+            self.translator.SUPPRESS_TOKEN_ID,
+            self.translator.SUPPRESS_TOKEN_ID,
+        ]
         actual_mapping = self.translator._assistant_to_target_input_ids.tolist()
         self.assertEqual(actual_mapping, expected_mapping)
 
@@ -76,14 +81,16 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
     def test_get_target_logits(self):
         """Test the conversion of assistant logits to target logits."""
         # Assistant logits for IDs 0, 1, 2
-        assistant_logits = torch.FloatTensor([[[0.1, 0.2, 0.3, 0.4, self.translator.FILTER_VALUE]]]).to(
+        assistant_logits = torch.FloatTensor(
+            [[[0.1, 0.2, 0.3, 0.4, self.translator.FILTER_VALUE]]]
+        ).to(
             self.assistant_model_device
         )  # Shape (1, 1, 5)
 
         # Expected target logits (target_vocab_size = 4)
-        expected_target_logits = torch.full((1, 1, self.target_vocab_size), self.translator.FILTER_VALUE).to(
-            self.assistant_model_device
-        )
+        expected_target_logits = torch.full(
+            (1, 1, self.target_vocab_size), self.translator.FILTER_VALUE
+        ).to(self.assistant_model_device)
         expected_target_logits[0, 0, 0] = 0.1  # 'hello'
         expected_target_logits[0, 0, 1] = 0.2  # 'world'
         expected_target_logits[0, 0, 2] = 0.3  # 'foo'
@@ -136,7 +143,9 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             assistant_model_device=self.assistant_model_device,
             target_vocab_size=self.target_vocab_size,
         )
-        self.assertIs(translator1, translator2, "Translators should be cached and identical")
+        self.assertIs(
+            translator1, translator2, "Translators should be cached and identical"
+        )
 
     def test_different_instances_for_different_tokenizers(self):
         """Test that different tokenizers produce different translators."""
@@ -152,7 +161,11 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             assistant_model_device=self.assistant_model_device,
             target_vocab_size=self.target_vocab_size,
         )
-        self.assertIsNot(translator1, translator2, "Translators should differ for different tokenizers")
+        self.assertIsNot(
+            translator1,
+            translator2,
+            "Translators should differ for different tokenizers",
+        )
 
     def test_cache_with_weakref_key(self):
         """Ensure that the cache uses weak references as keys."""
@@ -167,7 +180,9 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
             assistant_model_device=self.assistant_model_device,
             target_vocab_size=self.target_vocab_size,
         )
-        self.assertEqual(len(AssistantVocabTranslatorCache._cache), initial_cache_size + 1)
+        self.assertEqual(
+            len(AssistantVocabTranslatorCache._cache), initial_cache_size + 1
+        )
 
         # Delete all strong references
         del target_tokenizer
@@ -181,7 +196,9 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
         AssistantVocabTranslatorCache.cleanup()
 
         # The cache size remains increased due to strong references
-        self.assertEqual(len(AssistantVocabTranslatorCache._cache), initial_cache_size + 1)
+        self.assertEqual(
+            len(AssistantVocabTranslatorCache._cache), initial_cache_size + 1
+        )
 
     def test_weakref_cache_cleanup(self):
         """Test that the cache cleans up translators when tokenizers are garbage collected."""
@@ -196,7 +213,11 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
                 target_vocab_size=self.target_vocab_size,
             )
             # Create weak references before returning
-            refs = (weakref.ref(translator), weakref.ref(target_tokenizer), weakref.ref(assistant_tokenizer))
+            refs = (
+                weakref.ref(translator),
+                weakref.ref(target_tokenizer),
+                weakref.ref(assistant_tokenizer),
+            )
             # Remove strong references inside the function
             del target_tokenizer
             del assistant_tokenizer
@@ -212,9 +233,18 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
         AssistantVocabTranslatorCache.cleanup()
 
         # The tokenizers and translator are not garbage collected due to strong references
-        self.assertIsNotNone(target_ref(), "Target tokenizer should still be alive due to strong references")
-        self.assertIsNotNone(assistant_ref(), "Assistant tokenizer should still be alive due to strong references")
-        self.assertIsNotNone(translator_ref(), "Translator should still be alive due to strong references")
+        self.assertIsNotNone(
+            target_ref(),
+            "Target tokenizer should still be alive due to strong references",
+        )
+        self.assertIsNotNone(
+            assistant_ref(),
+            "Assistant tokenizer should still be alive due to strong references",
+        )
+        self.assertIsNotNone(
+            translator_ref(),
+            "Translator should still be alive due to strong references",
+        )
 
 
 @require_torch
@@ -227,7 +257,9 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
     def setUp(self):
         self.target_tokenizer = AutoTokenizer.from_pretrained(self.target_name)
         self.target_config = AutoConfig.from_pretrained(self.target_name)
-        self.assistant_model = AutoModelForCausalLM.from_pretrained(self.assistant_name).to(torch_device)
+        self.assistant_model = AutoModelForCausalLM.from_pretrained(
+            self.assistant_name
+        ).to(torch_device)
         self.assistant_tokenizer = AutoTokenizer.from_pretrained(self.assistant_name)
 
         self.generation_config = GenerationConfig()
@@ -238,9 +270,13 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         if self.target_tokenizer.bos_token_id is None:
             self.target_tokenizer.bos_token_id = self.target_tokenizer.eos_token_id
         if self.assistant_tokenizer.pad_token_id is None:
-            self.assistant_tokenizer.pad_token_id = self.assistant_tokenizer.eos_token_id
+            self.assistant_tokenizer.pad_token_id = (
+                self.assistant_tokenizer.eos_token_id
+            )
         if self.target_tokenizer.bos_token_id is None:
-            self.assistant_tokenizer.bos_token_id = self.assistant_tokenizer.eos_token_id
+            self.assistant_tokenizer.bos_token_id = (
+                self.assistant_tokenizer.eos_token_id
+            )
 
         self.input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
         self.model_kwargs = {
@@ -248,7 +284,10 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         }
 
         atm_translator = AssistantVocabTranslatorCache.get_translator(
-            self.target_tokenizer, self.assistant_tokenizer, self.target_config.vocab_size, torch_device
+            self.target_tokenizer,
+            self.assistant_tokenizer,
+            self.target_config.vocab_size,
+            torch_device,
         )
         self.generator = UniversalSpeculativeDecodingGenerator(
             input_ids=self.input_ids,
@@ -284,7 +323,9 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
             and token not in self.target_tokenizer.all_special_tokens
             and "reserved_" not in token
         )
-        input_ids = torch.tensor([[self.target_tokenizer.convert_tokens_to_ids(missing_token)]])
+        input_ids = torch.tensor(
+            [[self.target_tokenizer.convert_tokens_to_ids(missing_token)]]
+        )
         self.generator.input_ids = input_ids
         candidates, scores = self.generator.get_candidates(input_ids)
         self.assertIsNotNone(candidates)
@@ -310,8 +351,12 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         """Test that USD matches vanilla sampling with temperature set to nearly 0"""
         prompt = "Test text"
 
-        pipe_usd = pipeline("text-generation", model=cls.target_name, assistant_model=cls.assistant_name)
-        pipe_usd_output = pipe_usd(prompt, max_new_tokens=5, do_sample=True, temperature=1e-9)  # Nearly 0 temperature
+        pipe_usd = pipeline(
+            "text-generation", model=cls.target_name, assistant_model=cls.assistant_name
+        )
+        pipe_usd_output = pipe_usd(
+            prompt, max_new_tokens=5, do_sample=True, temperature=1e-9
+        )  # Nearly 0 temperature
         usd_text = pipe_usd_output[0]["generated_text"]
 
         pipe_vanilla = pipeline(

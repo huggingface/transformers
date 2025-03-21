@@ -19,7 +19,6 @@ from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
 
-
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
@@ -1426,7 +1425,9 @@ _TRAINERSPEC.fields_by_name["model_type"].enum_type = _TRAINERSPEC_MODELTYPE
 _TRAINERSPEC_MODELTYPE.containing_type = _TRAINERSPEC
 _SELFTESTDATA_SAMPLE.containing_type = _SELFTESTDATA
 _SELFTESTDATA.fields_by_name["samples"].message_type = _SELFTESTDATA_SAMPLE
-_MODELPROTO_SENTENCEPIECE.fields_by_name["type"].enum_type = _MODELPROTO_SENTENCEPIECE_TYPE
+_MODELPROTO_SENTENCEPIECE.fields_by_name["type"].enum_type = (
+    _MODELPROTO_SENTENCEPIECE_TYPE
+)
 _MODELPROTO_SENTENCEPIECE.containing_type = _MODELPROTO
 _MODELPROTO_SENTENCEPIECE_TYPE.containing_type = _MODELPROTO_SENTENCEPIECE
 _MODELPROTO.fields_by_name["pieces"].message_type = _MODELPROTO_SENTENCEPIECE

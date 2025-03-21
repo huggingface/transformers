@@ -17,13 +17,15 @@ from typing import List
 
 from datasets import load_dataset
 
-from transformers.models.superglue.configuration_superglue import SuperGlueConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.models.superglue.configuration_superglue import \
+    SuperGlueConfig
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
-
 
 if is_torch_available():
     import torch
@@ -75,7 +77,9 @@ class SuperGlueModelTester:
 
     def prepare_config_and_inputs(self):
         # SuperGlue expects a grayscale image as input
-        pixel_values = floats_tensor([self.batch_size, 2, 3, self.image_height, self.image_width])
+        pixel_values = floats_tensor(
+            [self.batch_size, 2, 3, self.image_height, self.image_width]
+        )
         config = self.get_config()
         return config, pixel_values
 
@@ -128,7 +132,9 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SuperGlueModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=64)
+        self.config_tester = ConfigTester(
+            self, config_class=SuperGlueConfig, has_text_modality=False, hidden_size=64
+        )
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -142,11 +148,15 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching does not support input and output embeddings")
+    @unittest.skip(
+        reason="SuperGlueForKeypointMatching does not support input and output embeddings"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching does not use feedforward chunking")
+    @unittest.skip(
+        reason="SuperGlueForKeypointMatching does not use feedforward chunking"
+    )
     def test_feed_forward_chunking(self):
         pass
 
@@ -262,7 +272,10 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        from_pretrained_ids = ["magic-leap-community/superglue_indoor", "magic-leap-community/superglue_outdoor"]
+        from_pretrained_ids = [
+            "magic-leap-community/superglue_indoor",
+            "magic-leap-community/superglue_outdoor",
+        ]
         for model_name in from_pretrained_ids:
             model = SuperGlueForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
@@ -292,13 +305,19 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (list, tuple)):
-                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                for batched_object_value, single_row_object_value in zip(
+                    batched_object, single_row_object
+                ):
+                    recursive_check(
+                        batched_object_value, single_row_object_value, model_name, key
+                    )
             elif isinstance(batched_object, dict):
                 for batched_object_value, single_row_object_value in zip(
                     batched_object.values(), single_row_object.values()
                 ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                    recursive_check(
+                        batched_object_value, single_row_object_value, model_name, key
+                    )
             # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
@@ -310,16 +329,20 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
                 slice_ids = [slice(0, index) for index in single_row_object.shape]
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                    torch.isnan(batched_row).any(),
+                    f"Batched output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                    torch.isinf(batched_row).any(),
+                    f"Batched output has `inf` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                    torch.isnan(single_row_object).any(),
+                    f"Single row output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                    torch.isinf(single_row_object).any(),
+                    f"Single row output has `inf` in {model_name} for key={key}",
                 )
                 self.assertTrue(
                     (equivalence(batched_row, single_row_object)) <= 1e-03,
@@ -360,11 +383,15 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
                 model_row_output = {"model_output": model_row_output}
 
             for key in model_batched_output:
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+                recursive_check(
+                    model_batched_output[key], model_row_output[key], model_name, key
+                )
 
 
 def prepare_imgs():
-    dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
+    dataset = load_dataset(
+        "hf-internal-testing/image-matching-test-dataset", split="train"
+    )
     image1 = dataset[0]["image"]
     image2 = dataset[1]["image"]
     image3 = dataset[2]["image"]
@@ -384,7 +411,9 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference(self):
-        model = SuperGlueForKeypointMatching.from_pretrained("magic-leap-community/superglue_outdoor").to(torch_device)
+        model = SuperGlueForKeypointMatching.from_pretrained(
+            "magic-leap-community/superglue_outdoor"
+        ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
@@ -419,8 +448,19 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
         """
 
-        self.assertTrue(abs(predicted_number_of_matches - expected_number_of_matches) < 4)
         self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)) < 4
+            abs(predicted_number_of_matches - expected_number_of_matches) < 4
         )
-        self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 4)
+        self.assertTrue(
+            torch.sum(
+                ~torch.isclose(
+                    predicted_matching_scores_values,
+                    expected_matching_scores_values,
+                    atol=1e-2,
+                )
+            )
+            < 4
+        )
+        self.assertTrue(
+            torch.sum(predicted_matches_values != expected_matches_values) < 4
+        )

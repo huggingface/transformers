@@ -8,16 +8,9 @@ from transformers.models.ijepa.configuration_ijepa import IJepaConfig
 
 from ...modeling_outputs import ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    torch_int,
-)
-from ..vit.modeling_vit import (
-    ViTEmbeddings,
-    ViTForImageClassification,
-    ViTModel,
-)
-
+from ...utils import add_start_docstrings, torch_int
+from ..vit.modeling_vit import (ViTEmbeddings, ViTForImageClassification,
+                                ViTModel)
 
 _CHECKPOINT_FOR_DOC = "facebook/ijepa_vith14_1k"
 
@@ -28,9 +21,13 @@ class IJepaEmbeddings(ViTEmbeddings):
         # Remove cls_token from IJepaEmbeddings, as it is not used in the model
         del self.cls_token
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, num_patches, config.hidden_size)
+        )
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
         images. This method is also adapted to support torch.jit tracing.
@@ -44,7 +41,11 @@ class IJepaEmbeddings(ViTEmbeddings):
         num_positions = self.position_embeddings.shape[1]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        if (
+            not torch.jit.is_tracing()
+            and num_patches == num_positions
+            and height == width
+        ):
             return self.position_embeddings
 
         patch_pos_embed = self.position_embeddings
@@ -55,7 +56,9 @@ class IJepaEmbeddings(ViTEmbeddings):
         new_width = width // self.patch_size
 
         sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.reshape(
+            1, sqrt_num_positions, sqrt_num_positions, dim
+        )
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
@@ -76,7 +79,9 @@ class IJepaEmbeddings(ViTEmbeddings):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+        )
 
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
@@ -87,7 +92,9 @@ class IJepaEmbeddings(ViTEmbeddings):
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(
+                embeddings, height, width
+            )
         else:
             embeddings = embeddings + self.position_embeddings
 
@@ -116,7 +123,9 @@ class IJepaPreTrainedModel(PreTrainedModel):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
+                module.weight.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -150,7 +159,12 @@ IJEPA_START_DOCSTRING = r"""
     IJEPA_START_DOCSTRING,
 )
 class IJepaModel(IJepaPreTrainedModel, ViTModel):
-    def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
+    def __init__(
+        self,
+        config: IJepaConfig,
+        add_pooling_layer: bool = False,
+        use_mask_token: bool = False,
+    ):
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
@@ -197,7 +211,9 @@ class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassificatio
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.ijepa(
             pixel_values,
@@ -219,7 +235,9 @@ class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassificatio
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"

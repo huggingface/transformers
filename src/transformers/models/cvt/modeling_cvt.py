@@ -23,12 +23,15 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import ImageClassifierOutputWithNoAttention, ModelOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...file_utils import (add_code_sample_docstrings, add_start_docstrings,
+                           add_start_docstrings_to_model_forward)
+from ...modeling_outputs import (ImageClassifierOutputWithNoAttention,
+                                 ModelOutput)
+from ...modeling_utils import (PreTrainedModel,
+                               find_pruneable_heads_and_indices,
+                               prune_linear_layer)
 from ...utils import logging
 from .configuration_cvt import CvtConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -66,7 +69,9 @@ class BaseModelOutputWithCLSToken(ModelOutput):
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -79,8 +84,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -106,10 +115,16 @@ class CvtEmbeddings(nn.Module):
     Construct the CvT embeddings.
     """
 
-    def __init__(self, patch_size, num_channels, embed_dim, stride, padding, dropout_rate):
+    def __init__(
+        self, patch_size, num_channels, embed_dim, stride, padding, dropout_rate
+    ):
         super().__init__()
         self.convolution_embeddings = CvtConvEmbeddings(
-            patch_size=patch_size, num_channels=num_channels, embed_dim=embed_dim, stride=stride, padding=padding
+            patch_size=patch_size,
+            num_channels=num_channels,
+            embed_dim=embed_dim,
+            stride=stride,
+            padding=padding,
         )
         self.dropout = nn.Dropout(dropout_rate)
 
@@ -126,9 +141,19 @@ class CvtConvEmbeddings(nn.Module):
 
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding):
         super().__init__()
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
         self.patch_size = patch_size
-        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
+        self.projection = nn.Conv2d(
+            num_channels,
+            embed_dim,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=padding,
+        )
         self.normalization = nn.LayerNorm(embed_dim)
 
     def forward(self, pixel_values):
@@ -136,11 +161,15 @@ class CvtConvEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         hidden_size = height * width
         # rearrange "b c h w -> b (h w) c"
-        pixel_values = pixel_values.view(batch_size, num_channels, hidden_size).permute(0, 2, 1)
+        pixel_values = pixel_values.view(batch_size, num_channels, hidden_size).permute(
+            0, 2, 1
+        )
         if self.normalization:
             pixel_values = self.normalization(pixel_values)
         # rearrange "b (h w) c" -> b c h w"
-        pixel_values = pixel_values.permute(0, 2, 1).view(batch_size, num_channels, height, width)
+        pixel_values = pixel_values.permute(0, 2, 1).view(
+            batch_size, num_channels, height, width
+        )
         return pixel_values
 
 
@@ -169,15 +198,21 @@ class CvtSelfAttentionLinearProjection(nn.Module):
         batch_size, num_channels, height, width = hidden_state.shape
         hidden_size = height * width
         # rearrange " b c h w -> b (h w) c"
-        hidden_state = hidden_state.view(batch_size, num_channels, hidden_size).permute(0, 2, 1)
+        hidden_state = hidden_state.view(batch_size, num_channels, hidden_size).permute(
+            0, 2, 1
+        )
         return hidden_state
 
 
 class CvtSelfAttentionProjection(nn.Module):
-    def __init__(self, embed_dim, kernel_size, padding, stride, projection_method="dw_bn"):
+    def __init__(
+        self, embed_dim, kernel_size, padding, stride, projection_method="dw_bn"
+    ):
         super().__init__()
         if projection_method == "dw_bn":
-            self.convolution_projection = CvtSelfAttentionConvProjection(embed_dim, kernel_size, padding, stride)
+            self.convolution_projection = CvtSelfAttentionConvProjection(
+                embed_dim, kernel_size, padding, stride
+            )
         self.linear_projection = CvtSelfAttentionLinearProjection()
 
     def forward(self, hidden_state):
@@ -213,13 +248,23 @@ class CvtSelfAttention(nn.Module):
             kernel_size,
             padding_q,
             stride_q,
-            projection_method="linear" if qkv_projection_method == "avg" else qkv_projection_method,
+            projection_method=(
+                "linear" if qkv_projection_method == "avg" else qkv_projection_method
+            ),
         )
         self.convolution_projection_key = CvtSelfAttentionProjection(
-            embed_dim, kernel_size, padding_kv, stride_kv, projection_method=qkv_projection_method
+            embed_dim,
+            kernel_size,
+            padding_kv,
+            stride_kv,
+            projection_method=qkv_projection_method,
         )
         self.convolution_projection_value = CvtSelfAttentionProjection(
-            embed_dim, kernel_size, padding_kv, stride_kv, projection_method=qkv_projection_method
+            embed_dim,
+            kernel_size,
+            padding_kv,
+            stride_kv,
+            projection_method=qkv_projection_method,
         )
 
         self.projection_query = nn.Linear(embed_dim, embed_dim, bias=qkv_bias)
@@ -232,14 +277,18 @@ class CvtSelfAttention(nn.Module):
         batch_size, hidden_size, _ = hidden_state.shape
         head_dim = self.embed_dim // self.num_heads
         # rearrange 'b t (h d) -> b h t d'
-        return hidden_state.view(batch_size, hidden_size, self.num_heads, head_dim).permute(0, 2, 1, 3)
+        return hidden_state.view(
+            batch_size, hidden_size, self.num_heads, head_dim
+        ).permute(0, 2, 1, 3)
 
     def forward(self, hidden_state, height, width):
         if self.with_cls_token:
             cls_token, hidden_state = torch.split(hidden_state, [1, height * width], 1)
         batch_size, hidden_size, num_channels = hidden_state.shape
         # rearrange "b (h w) c -> b c h w"
-        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, num_channels, height, width)
+        hidden_state = hidden_state.permute(0, 2, 1).view(
+            batch_size, num_channels, height, width
+        )
 
         key = self.convolution_projection_key(hidden_state)
         query = self.convolution_projection_query(hidden_state)
@@ -263,7 +312,11 @@ class CvtSelfAttention(nn.Module):
         context = torch.einsum("bhlt,bhtv->bhlv", [attention_probs, value])
         # rearrange"b h t d -> b t (h d)"
         _, _, hidden_size, _ = context.shape
-        context = context.permute(0, 2, 1, 3).contiguous().view(batch_size, hidden_size, self.num_heads * head_dim)
+        context = (
+            context.permute(0, 2, 1, 3)
+            .contiguous()
+            .view(batch_size, hidden_size, self.num_heads * head_dim)
+        )
         return context
 
 
@@ -321,7 +374,10 @@ class CvtAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+            heads,
+            self.attention.num_attention_heads,
+            self.attention.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -331,8 +387,12 @@ class CvtAttention(nn.Module):
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(
+            heads
+        )
+        self.attention.all_head_size = (
+            self.attention.attention_head_size * self.attention.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_state, height, width):
@@ -406,13 +466,19 @@ class CvtLayer(nn.Module):
 
         self.intermediate = CvtIntermediate(embed_dim, mlp_ratio)
         self.output = CvtOutput(embed_dim, mlp_ratio, drop_rate)
-        self.drop_path = CvtDropPath(drop_prob=drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = (
+            CvtDropPath(drop_prob=drop_path_rate)
+            if drop_path_rate > 0.0
+            else nn.Identity()
+        )
         self.layernorm_before = nn.LayerNorm(embed_dim)
         self.layernorm_after = nn.LayerNorm(embed_dim)
 
     def forward(self, hidden_state, height, width):
         self_attention_output = self.attention(
-            self.layernorm_before(hidden_state),  # in Cvt, layernorm is applied before self-attention
+            self.layernorm_before(
+                hidden_state
+            ),  # in Cvt, layernorm is applied before self-attention
             height,
             width,
         )
@@ -443,13 +509,22 @@ class CvtStage(nn.Module):
         self.embedding = CvtEmbeddings(
             patch_size=config.patch_sizes[self.stage],
             stride=config.patch_stride[self.stage],
-            num_channels=config.num_channels if self.stage == 0 else config.embed_dim[self.stage - 1],
+            num_channels=(
+                config.num_channels
+                if self.stage == 0
+                else config.embed_dim[self.stage - 1]
+            ),
             embed_dim=config.embed_dim[self.stage],
             padding=config.patch_padding[self.stage],
             dropout_rate=config.drop_rate[self.stage],
         )
 
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
+        drop_path_rates = [
+            x.item()
+            for x in torch.linspace(
+                0, config.drop_path_rate[self.stage], config.depth[stage]
+            )
+        ]
 
         self.layers = nn.Sequential(
             *[
@@ -478,7 +553,9 @@ class CvtStage(nn.Module):
         hidden_state = self.embedding(hidden_state)
         batch_size, num_channels, height, width = hidden_state.shape
         # rearrange b c h w -> b (h w) c"
-        hidden_state = hidden_state.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        hidden_state = hidden_state.view(
+            batch_size, num_channels, height * width
+        ).permute(0, 2, 1)
         if self.config.cls_token[self.stage]:
             cls_token = self.cls_token.expand(batch_size, -1, -1)
             hidden_state = torch.cat((cls_token, hidden_state), dim=1)
@@ -489,7 +566,9 @@ class CvtStage(nn.Module):
 
         if self.config.cls_token[self.stage]:
             cls_token, hidden_state = torch.split(hidden_state, [1, height * width], 1)
-        hidden_state = hidden_state.permute(0, 2, 1).view(batch_size, num_channels, height, width)
+        hidden_state = hidden_state.permute(0, 2, 1).view(
+            batch_size, num_channels, height, width
+        )
         return hidden_state, cls_token
 
 
@@ -512,7 +591,9 @@ class CvtEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_state, cls_token, all_hidden_states] if v is not None)
+            return tuple(
+                v for v in [hidden_state, cls_token, all_hidden_states] if v is not None
+            )
 
         return BaseModelOutputWithCLSToken(
             last_hidden_state=hidden_state,
@@ -535,7 +616,9 @@ class CvtPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data, mean=0.0, std=self.config.initializer_range
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -606,9 +689,13 @@ class CvtModel(CvtPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCLSToken]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -646,7 +733,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.embed_dim[-1])
         # Classifier head
         self.classifier = (
-            nn.Linear(config.embed_dim[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.embed_dim[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -672,7 +761,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         outputs = self.cvt(
             pixel_values,
             output_hidden_states=output_hidden_states,
@@ -686,7 +777,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
         else:
             batch_size, num_channels, height, width = sequence_output.shape
             # rearrange "b c h w -> b (h w) c"
-            sequence_output = sequence_output.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+            sequence_output = sequence_output.view(
+                batch_size, num_channels, height * width
+            ).permute(0, 2, 1)
             sequence_output = self.layernorm(sequence_output)
 
         sequence_output_mean = sequence_output.mean(dim=1)
@@ -697,7 +790,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
             if self.config.problem_type is None:
                 if self.config.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.config.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -710,7 +805,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    logits.view(-1, self.config.num_labels), labels.view(-1)
+                )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
@@ -719,7 +816,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
 
 __all__ = ["CvtForImageClassification", "CvtModel", "CvtPreTrainedModel"]

@@ -5,7 +5,6 @@ import torch
 from ..modeling_flash_attention_utils import _flash_attention_forward
 from ..utils import is_flash_attn_greater_or_equal_2_10
 
-
 _use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
 
@@ -42,7 +41,11 @@ def flash_attention_forward(
         elif hasattr(module.config, "_pre_quantization_dtype"):
             target_dtype = module.config._pre_quantization_dtype
         else:
-            target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+            target_dtype = next(
+                layer
+                for layer in module.modules()
+                if isinstance(layer, torch.nn.Linear)
+            ).weight.dtype
 
     # FA2 always relies on the value set in the module, so remove it if present in kwargs to avoid passing it twice
     kwargs.pop("is_causal", None)

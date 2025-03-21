@@ -26,29 +26,20 @@ from .. import is_torch_available
 from ..utils import logging as transformers_logging
 from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage
-from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
+from .default_tools import (BASE_PYTHON_TOOLS, FinalAnswerTool,
+                            setup_default_tools)
 from .llm_engine import HfApiEngine, MessageRole
 from .monitoring import Monitor
-from .prompts import (
-    DEFAULT_CODE_SYSTEM_PROMPT,
-    DEFAULT_REACT_CODE_SYSTEM_PROMPT,
-    DEFAULT_REACT_JSON_SYSTEM_PROMPT,
-    PLAN_UPDATE_FINAL_PLAN_REDACTION,
-    PROMPTS_FOR_INITIAL_PLAN,
-    PROMPTS_FOR_PLAN_UPDATE,
-    SUPPORTED_PLAN_TYPES,
-    SYSTEM_PROMPT_FACTS,
-    SYSTEM_PROMPT_FACTS_UPDATE,
-    USER_PROMPT_FACTS_UPDATE,
-)
+from .prompts import (DEFAULT_CODE_SYSTEM_PROMPT,
+                      DEFAULT_REACT_CODE_SYSTEM_PROMPT,
+                      DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+                      PLAN_UPDATE_FINAL_PLAN_REDACTION,
+                      PROMPTS_FOR_INITIAL_PLAN, PROMPTS_FOR_PLAN_UPDATE,
+                      SUPPORTED_PLAN_TYPES, SYSTEM_PROMPT_FACTS,
+                      SYSTEM_PROMPT_FACTS_UPDATE, USER_PROMPT_FACTS_UPDATE)
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
-from .tools import (
-    DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-    Tool,
-    get_tool_description_with_args,
-    load_tool,
-)
-
+from .tools import (DEFAULT_TOOL_DESCRIPTION_TEMPLATE, Tool,
+                    get_tool_description_with_args, load_tool)
 
 if is_pygments_available():
     from pygments import highlight
@@ -100,7 +91,9 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
     try:
         first_accolade_index = json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer("}", json_blob))][-1]
-        json_blob = json_blob[first_accolade_index : last_accolade_index + 1].replace('\\"', "'")
+        json_blob = json_blob[first_accolade_index : last_accolade_index + 1].replace(
+            '\\"', "'"
+        )
         json_data = json.loads(json_blob, strict=False)
         return json_data
     except json.JSONDecodeError as e:
@@ -226,7 +219,10 @@ class Toolbox:
                 The template to use to describe the tools. If not provided, the default template will be used.
         """
         return "\n".join(
-            [get_tool_description_with_args(tool, tool_description_template) for tool in self._tools.values()]
+            [
+                get_tool_description_with_args(tool, tool_description_template)
+                for tool in self._tools.values()
+            ]
         )
 
     def add_tool(self, tool: Tool):
@@ -318,7 +314,9 @@ class AgentGenerationError(AgentError):
     pass
 
 
-def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
+def format_prompt_with_tools(
+    toolbox: Toolbox, prompt_template: str, tool_description_template: str
+) -> str:
     tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
 
@@ -340,16 +338,24 @@ Here is a list of the team members that you can call:"""
     return managed_agents_descriptions
 
 
-def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents=None) -> str:
+def format_prompt_with_managed_agents_descriptions(
+    prompt_template, managed_agents=None
+) -> str:
     if managed_agents is not None:
-        return prompt_template.replace("<<managed_agents_descriptions>>", show_agents_descriptions(managed_agents))
+        return prompt_template.replace(
+            "<<managed_agents_descriptions>>", show_agents_descriptions(managed_agents)
+        )
     else:
         return prompt_template.replace("<<managed_agents_descriptions>>", "")
 
 
-def format_prompt_with_imports(prompt_template: str, authorized_imports: List[str]) -> str:
+def format_prompt_with_imports(
+    prompt_template: str, authorized_imports: List[str]
+) -> str:
     if "<<authorized_imports>>" not in prompt_template:
-        raise AgentError("Tag '<<authorized_imports>>' should be provided in the prompt.")
+        raise AgentError(
+            "Tag '<<authorized_imports>>' should be provided in the prompt."
+        )
     return prompt_template.replace("<<authorized_imports>>", str(authorized_imports))
 
 
@@ -378,7 +384,9 @@ class Agent:
         self.llm_engine = llm_engine
         self.system_prompt_template = system_prompt
         self.tool_description_template = (
-            tool_description_template if tool_description_template else DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+            tool_description_template
+            if tool_description_template
+            else DEFAULT_TOOL_DESCRIPTION_TEMPLATE
         )
         self.additional_args = additional_args
         self.max_iterations = max_iterations
@@ -394,9 +402,13 @@ class Agent:
             self._toolbox = tools
             if add_base_tools:
                 if not is_torch_available():
-                    raise ImportError("Using the base tools requires torch to be installed.")
+                    raise ImportError(
+                        "Using the base tools requires torch to be installed."
+                    )
 
-                self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
+                self._toolbox.add_base_tools(
+                    add_python_interpreter=(self.__class__ == ReactJsonAgent)
+                )
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
         self._toolbox.add_tool(FinalAnswerTool())
@@ -404,7 +416,9 @@ class Agent:
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
-        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(
+            self.system_prompt, self.managed_agents
+        )
         self.prompt = None
         self.logs = []
         self.task = None
@@ -437,10 +451,13 @@ class Agent:
             self.system_prompt_template,
             self.tool_description_template,
         )
-        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(
+            self.system_prompt, self.managed_agents
+        )
         if hasattr(self, "authorized_imports"):
             self.system_prompt = format_prompt_with_imports(
-                self.system_prompt, list(set(LIST_SAFE_MODULES) | set(self.authorized_imports))
+                self.system_prompt,
+                list(set(LIST_SAFE_MODULES) | set(self.authorized_imports)),
             )
         self.logs = [{"system_prompt": self.system_prompt, "task": self.task}]
         self.logger.log(33, "======== New task ========")
@@ -448,12 +465,17 @@ class Agent:
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
 
-    def write_inner_memory_from_logs(self, summary_mode: Optional[bool] = False) -> List[Dict[str, str]]:
+    def write_inner_memory_from_logs(
+        self, summary_mode: Optional[bool] = False
+    ) -> List[Dict[str, str]]:
         """
         Reads past llm_outputs, actions, and observations or errors from the logs into a series of messages
         that can be used as input to the LLM.
         """
-        prompt_message = {"role": MessageRole.SYSTEM, "content": self.logs[0]["system_prompt"]}
+        prompt_message = {
+            "role": MessageRole.SYSTEM,
+            "content": self.logs[0]["system_prompt"],
+        }
         task_message = {
             "role": MessageRole.USER,
             "content": "Task: " + self.logs[0]["task"],
@@ -464,7 +486,10 @@ class Agent:
             memory = [prompt_message, task_message]
         for i, step_log in enumerate(self.logs[1:]):
             if "llm_output" in step_log and not summary_mode:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"].strip()}
+                thought_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": step_log["llm_output"].strip(),
+                }
                 memory.append(thought_message)
             if "facts" in step_log:
                 thought_message = {
@@ -474,13 +499,17 @@ class Agent:
                 memory.append(thought_message)
 
             if "plan" in step_log and not summary_mode:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": "[PLAN]:\n" + step_log["plan"].strip()}
+                thought_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": "[PLAN]:\n" + step_log["plan"].strip(),
+                }
                 memory.append(thought_message)
 
             if "tool_call" in step_log and summary_mode:
                 tool_call_message = {
                     "role": MessageRole.ASSISTANT,
-                    "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip(),
+                    "content": f"[STEP {i} TOOL CALL]: "
+                    + str(step_log["tool_call"]).strip(),
                 }
                 memory.append(tool_call_message)
 
@@ -500,13 +529,19 @@ class Agent:
                     )
                 elif "observation" in step_log:
                     message_content = f"[OUTPUT OF STEP {i}] -> Observation:\n{step_log['observation']}"
-                tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
+                tool_response_message = {
+                    "role": MessageRole.TOOL_RESPONSE,
+                    "content": message_content,
+                }
                 memory.append(tool_response_message)
 
         return memory
 
     def get_succinct_logs(self):
-        return [{key: value for key, value in log.items() if key != "agent_memory"} for log in self.logs]
+        return [
+            {key: value for key, value in log.items() if key != "agent_memory"}
+            for log in self.logs
+        ]
 
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -578,7 +613,12 @@ class Agent:
         self.logger.warning(">>> Agent is executing the code below:")
         if is_pygments_available():
             self.logger.log(
-                31, highlight(code_action, PythonLexer(ensurenl=False), Terminal256Formatter(style="nord"))
+                31,
+                highlight(
+                    code_action,
+                    PythonLexer(ensurenl=False),
+                    Terminal256Formatter(style="nord"),
+                ),
             )
         else:
             self.logger.log(31, code_action)
@@ -627,9 +667,15 @@ class CodeAgent(Agent):
             )
 
         self.python_evaluator = evaluate_python_code
-        self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
-        self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
-        self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
+        self.additional_authorized_imports = (
+            additional_authorized_imports if additional_authorized_imports else []
+        )
+        self.authorized_imports = list(
+            set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports)
+        )
+        self.system_prompt = self.system_prompt.replace(
+            "<<authorized_imports>>", str(self.authorized_imports)
+        )
 
     def parse_code_blob(self, result: str) -> str:
         """
@@ -659,7 +705,9 @@ class CodeAgent(Agent):
         """
         self.task = task
         if len(kwargs) > 0:
-            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+            self.task += (
+                f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+            )
         self.state = kwargs.copy()
         self.initialize_for_run()
 
@@ -675,14 +723,18 @@ class CodeAgent(Agent):
         self.logger.info(self.prompt)
 
         additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
-        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"], **additional_args)
+        llm_output = self.llm_engine(
+            self.prompt, stop_sequences=["<end_action>"], **additional_args
+        )
 
         if return_generated_code:
             return llm_output
 
         # Parse
         try:
-            rationale, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+            rationale, code_action = self.extract_action(
+                llm_output=llm_output, split_token="Code:"
+            )
         except Exception as e:
             self.logger.debug(
                 f"Error in extracting action, trying to parse the whole output as code. Error trace: {e}"
@@ -746,7 +798,9 @@ class ReactAgent(Agent):
         if plan_type is None:
             plan_type = SUPPORTED_PLAN_TYPES[0]
         else:
-            assert plan_type in SUPPORTED_PLAN_TYPES, f"plan type {plan_type} is not supported"
+            assert (
+                plan_type in SUPPORTED_PLAN_TYPES
+            ), f"plan type {plan_type} is not supported"
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
@@ -800,7 +854,9 @@ class ReactAgent(Agent):
         """
         self.task = task
         if len(kwargs) > 0:
-            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+            self.task += (
+                f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+            )
         self.state = kwargs.copy()
         if reset:
             self.initialize_for_run()
@@ -861,8 +917,13 @@ class ReactAgent(Agent):
             step_start_time = time.time()
             step_log_entry = {"iteration": iteration, "start_time": step_start_time}
             try:
-                if self.planning_interval is not None and iteration % self.planning_interval == 0:
-                    self.planning_step(task, is_first_step=(iteration == 0), iteration=iteration)
+                if (
+                    self.planning_interval is not None
+                    and iteration % self.planning_interval == 0
+                ):
+                    self.planning_step(
+                        task, is_first_step=(iteration == 0), iteration=iteration
+                    )
                 self.step(step_log_entry)
                 if "final_answer" in step_log_entry:
                     final_answer = step_log_entry["final_answer"]
@@ -901,7 +962,10 @@ class ReactAgent(Agent):
             iteration (`int`): The number of the current step, used as an indication for the LLM.
         """
         if is_first_step:
-            message_prompt_facts = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_FACTS}
+            message_prompt_facts = {
+                "role": MessageRole.SYSTEM,
+                "content": SYSTEM_PROMPT_FACTS,
+            }
             message_prompt_task = {
                 "role": MessageRole.USER,
                 "content": f"""Here is the task:
@@ -921,15 +985,20 @@ Now begin!""",
                 "role": MessageRole.USER,
                 "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["user"].format(
                     task=task,
-                    tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                    tool_descriptions=self._toolbox.show_tool_descriptions(
+                        self.tool_description_template
+                    ),
                     managed_agents_descriptions=(
-                        show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""
+                        show_agents_descriptions(self.managed_agents)
+                        if self.managed_agents is not None
+                        else ""
                     ),
                     answer_facts=answer_facts,
                 ),
             }
             answer_plan = self.llm_engine(
-                [message_system_prompt_plan, message_user_prompt_plan], stop_sequences=["<end_plan>"]
+                [message_system_prompt_plan, message_user_prompt_plan],
+                stop_sequences=["<end_plan>"],
             )
 
             final_plan_redaction = f"""Here is the plan of action that I will follow to solve the task:
@@ -940,7 +1009,9 @@ Now begin!""",
 ```
 {answer_facts}
 ```""".strip()
-            self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
+            self.logs.append(
+                {"plan": final_plan_redaction, "facts": final_facts_redaction}
+            )
             self.logger.log(36, "===== Initial plan =====")
             self.logger.log(35, final_plan_redaction)
         else:  # update plan
@@ -957,36 +1028,49 @@ Now begin!""",
                 "role": MessageRole.USER,
                 "content": USER_PROMPT_FACTS_UPDATE,
             }
-            facts_update = self.llm_engine([facts_update_system_prompt] + agent_memory + [facts_update_message])
+            facts_update = self.llm_engine(
+                [facts_update_system_prompt] + agent_memory + [facts_update_message]
+            )
 
             # Redact updated plan
             plan_update_message = {
                 "role": MessageRole.SYSTEM,
-                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["system"].format(task=task),
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["system"].format(
+                    task=task
+                ),
             }
             plan_update_message_user = {
                 "role": MessageRole.USER,
                 "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["user"].format(
                     task=task,
-                    tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                    tool_descriptions=self._toolbox.show_tool_descriptions(
+                        self.tool_description_template
+                    ),
                     managed_agents_descriptions=(
-                        show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""
+                        show_agents_descriptions(self.managed_agents)
+                        if self.managed_agents is not None
+                        else ""
                     ),
                     facts_update=facts_update,
                     remaining_steps=(self.max_iterations - iteration),
                 ),
             }
             plan_update = self.llm_engine(
-                [plan_update_message] + agent_memory + [plan_update_message_user], stop_sequences=["<end_plan>"]
+                [plan_update_message] + agent_memory + [plan_update_message_user],
+                stop_sequences=["<end_plan>"],
             )
 
             # Log final facts and plan
-            final_plan_redaction = PLAN_UPDATE_FINAL_PLAN_REDACTION.format(task=task, plan_update=plan_update)
+            final_plan_redaction = PLAN_UPDATE_FINAL_PLAN_REDACTION.format(
+                task=task, plan_update=plan_update
+            )
             final_facts_redaction = f"""Here is the updated list of the facts that I know:
 ```
 {facts_update}
 ```"""
-            self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
+            self.logs.append(
+                {"plan": final_plan_redaction, "facts": final_facts_redaction}
+            )
             self.logger.log(36, "===== Updated plan =====")
             self.logger.log(35, final_plan_redaction)
 
@@ -1041,9 +1125,13 @@ class ReactJsonAgent(ReactAgent):
         self.logger.info(self.prompt[-1])
 
         try:
-            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+            additional_args = (
+                {"grammar": self.grammar} if self.grammar is not None else {}
+            )
             llm_output = self.llm_engine(
-                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+                self.prompt,
+                stop_sequences=["<end_action>", "Observation:"],
+                **additional_args,
             )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
@@ -1053,7 +1141,9 @@ class ReactJsonAgent(ReactAgent):
 
         # Parse
         self.logger.debug("===== Extracting action =====")
-        rationale, action = self.extract_action(llm_output=llm_output, split_token="Action:")
+        rationale, action = self.extract_action(
+            llm_output=llm_output, split_token="Action:"
+        )
 
         try:
             tool_name, arguments = self.tool_parser(action)
@@ -1066,7 +1156,9 @@ class ReactJsonAgent(ReactAgent):
         # Execute
         self.logger.warning("=== Agent thoughts:")
         self.logger.log(31, rationale)
-        self.logger.warning(f">>> Calling tool: '{tool_name}' with arguments: {arguments}")
+        self.logger.warning(
+            f">>> Calling tool: '{tool_name}' with arguments: {arguments}"
+        )
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
                 if "answer" in arguments:
@@ -1144,9 +1236,15 @@ class ReactCodeAgent(ReactAgent):
             )
 
         self.python_evaluator = evaluate_python_code
-        self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
-        self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
-        self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
+        self.additional_authorized_imports = (
+            additional_authorized_imports if additional_authorized_imports else []
+        )
+        self.authorized_imports = list(
+            set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports)
+        )
+        self.system_prompt = self.system_prompt.replace(
+            "<<authorized_imports>>", str(self.authorized_imports)
+        )
         self.custom_tools = {}
 
     def step(self, log_entry: Dict[str, Any]):
@@ -1166,9 +1264,13 @@ class ReactCodeAgent(ReactAgent):
         self.logger.info(self.prompt[-2:])
 
         try:
-            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+            additional_args = (
+                {"grammar": self.grammar} if self.grammar is not None else {}
+            )
             llm_output = self.llm_engine(
-                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+                self.prompt,
+                stop_sequences=["<end_action>", "Observation:"],
+                **additional_args,
             )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
@@ -1180,9 +1282,13 @@ class ReactCodeAgent(ReactAgent):
         # Parse
         self.logger.debug("=== Extracting action ===")
         try:
-            rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+            rationale, raw_code_action = self.extract_action(
+                llm_output=llm_output, split_token="Code:"
+            )
         except Exception as e:
-            self.logger.debug(f"Error in extracting action, trying to parse the whole output. Error trace: {e}")
+            self.logger.debug(
+                f"Error in extracting action, trying to parse the whole output. Error trace: {e}"
+            )
             rationale, raw_code_action = llm_output, llm_output
 
         try:
@@ -1192,7 +1298,10 @@ class ReactCodeAgent(ReactAgent):
             raise AgentParsingError(error_msg)
 
         log_entry["rationale"] = rationale
-        log_entry["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
+        log_entry["tool_call"] = {
+            "tool_name": "code interpreter",
+            "tool_arguments": code_action,
+        }
 
         # Execute
         self.log_rationale_code_action(rationale, code_action)
@@ -1239,7 +1348,14 @@ class ManagedAgent:
         version="4.51.0",
         message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
     )
-    def __init__(self, agent, name, description, additional_prompting=None, provide_run_summary=False):
+    def __init__(
+        self,
+        agent,
+        name,
+        description,
+        additional_prompting=None,
+        provide_run_summary=False,
+    ):
         self.agent = agent
         self.name = name
         self.description = description
@@ -1264,7 +1380,9 @@ Put all these in your final_answer tool, everything that you do not pass as an a
 And even if your task resolution is not successful, please return as much context as possible, so that your manager can act upon this feedback.
 <<additional_prompting>>"""
         if self.additional_prompting:
-            full_task = full_task.replace("\n<<additional_prompting>>", self.additional_prompting).strip()
+            full_task = full_task.replace(
+                "\n<<additional_prompting>>", self.additional_prompting
+            ).strip()
         else:
             full_task = full_task.replace("\n<<additional_prompting>>", "").strip()
         return full_task
@@ -1273,12 +1391,16 @@ And even if your task resolution is not successful, please return as much contex
         full_task = self.write_full_task(request)
         output = self.agent.run(full_task, **kwargs)
         if self.provide_run_summary:
-            answer = f"Here is the final answer from your managed agent '{self.name}':\n"
+            answer = (
+                f"Here is the final answer from your managed agent '{self.name}':\n"
+            )
             answer += str(output)
             answer += f"\n\nFor more detail, find below a summary of this agent's work:\nSUMMARY OF WORK FROM AGENT '{self.name}':\n"
             for message in self.agent.write_inner_memory_from_logs(summary_mode=True):
                 content = message["content"]
-                if len(str(content)) < LENGTH_TRUNCATE_REPORTS or "[FACTS LIST]" in str(content):
+                if len(str(content)) < LENGTH_TRUNCATE_REPORTS or "[FACTS LIST]" in str(
+                    content
+                ):
                     answer += "\n" + str(content) + "\n---"
                 else:
                     answer += (

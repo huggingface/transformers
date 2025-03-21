@@ -28,22 +28,12 @@ from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
 
-from .utils import (
-    ExplicitEnum,
-    is_psutil_available,
-    is_tf_available,
-    is_torch_available,
-    is_torch_cuda_available,
-    is_torch_hpu_available,
-    is_torch_mlu_available,
-    is_torch_mps_available,
-    is_torch_musa_available,
-    is_torch_npu_available,
-    is_torch_xla_available,
-    is_torch_xpu_available,
-    requires_backends,
-)
-
+from .utils import (ExplicitEnum, is_psutil_available, is_tf_available,
+                    is_torch_available, is_torch_cuda_available,
+                    is_torch_hpu_available, is_torch_mlu_available,
+                    is_torch_mps_available, is_torch_musa_available,
+                    is_torch_npu_available, is_torch_xla_available,
+                    is_torch_xpu_available, requires_backends)
 
 if is_torch_available():
     import torch
@@ -216,11 +206,15 @@ def get_last_checkpoint(folder):
     checkpoints = [
         path
         for path in content
-        if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
+        if _re_checkpoint.search(path) is not None
+        and os.path.isdir(os.path.join(folder, path))
     ]
     if len(checkpoints) == 0:
         return
-    return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+    return os.path.join(
+        folder,
+        max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])),
+    )
 
 
 class IntervalStrategy(ExplicitEnum):
@@ -289,7 +283,9 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     speed_metrics = [
         m
         for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+        if m.endswith("_runtime")
+        or m.endswith("_per_second")
+        or m.endswith("_compilation_time")
     ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
@@ -299,19 +295,25 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
 def default_hp_space_optuna(trial) -> dict[str, float]:
     from .integrations import is_optuna_available
 
-    assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
+    assert (
+        is_optuna_available()
+    ), "This function needs Optuna installed: `pip install optuna`"
     return {
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
         "seed": trial.suggest_int("seed", 1, 40),
-        "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [4, 8, 16, 32, 64]),
+        "per_device_train_batch_size": trial.suggest_categorical(
+            "per_device_train_batch_size", [4, 8, 16, 32, 64]
+        ),
     }
 
 
 def default_hp_space_ray(trial) -> dict[str, float]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
+    assert (
+        is_ray_tune_available()
+    ), "This function needs ray installed: `pip install ray[tune]`"
     from ray import tune
 
     return {
@@ -324,7 +326,12 @@ def default_hp_space_ray(trial) -> dict[str, float]:
 
 def default_hp_space_sigopt(trial):
     return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
+        {
+            "bounds": {"min": 1e-6, "max": 1e-4},
+            "name": "learning_rate",
+            "type": "double",
+            "transformation": "log",
+        },
         {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
         {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
         {
@@ -490,7 +497,11 @@ class TrainerMemoryTracker:
 
         import psutil  # noqa
 
-        if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
+        if (
+            is_torch_cuda_available()
+            or is_torch_mlu_available()
+            or is_torch_musa_available()
+        ):
             import torch
 
             self.torch = torch
@@ -682,7 +693,9 @@ class TrainerMemoryTracker:
                 "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
             }
             if self.gpu_mem_used_peak is not None:
-                self.gpu[self.cur_stage]["peaked"] = max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now)
+                self.gpu[self.cur_stage]["peaked"] = max(
+                    0, self.gpu_mem_used_peak - self.gpu_mem_used_now
+                )
             else:
                 self.gpu[self.cur_stage]["peaked"] = "Not available"
 
@@ -717,7 +730,11 @@ class TrainerMemoryTracker:
             for t in ["alloc", "peaked"]:
                 if stage in self.cpu and t in self.cpu[stage]:
                     metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
-                if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
+                if (
+                    self.torch is not None
+                    and stage in self.gpu
+                    and t in self.gpu[stage]
+                ):
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
             # if we need additional debug info, enable the following
             # for t in ["begin", "end"]:
@@ -776,7 +793,11 @@ def denumpify_detensorize(metrics):
         return type(metrics)({k: denumpify_detensorize(v) for k, v in metrics.items()})
     elif isinstance(metrics, np.generic):
         return metrics.item()
-    elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
+    elif (
+        is_torch_available()
+        and isinstance(metrics, torch.Tensor)
+        and metrics.numel() == 1
+    ):
         return metrics.item()
     return metrics
 
@@ -792,7 +813,9 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: callable = None,
+    starting_batch_size: int = 128,
+    auto_find_batch_size: bool = False,
 ):
     """
     Args:
@@ -815,9 +838,12 @@ def find_executable_batch_size(
 
     if auto_find_batch_size:
         requires_backends(find_executable_batch_size, "accelerate")
-        from accelerate.utils import find_executable_batch_size as accelerate_find_executable_batch_size
+        from accelerate.utils import \
+            find_executable_batch_size as accelerate_find_executable_batch_size
 
-        return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+        return accelerate_find_executable_batch_size(
+            function=function, starting_batch_size=starting_batch_size
+        )
 
     return functools.partial(function, batch_size=starting_batch_size)
 
@@ -856,7 +882,9 @@ class RemoveColumnsCollator:
         if not self.message_logged and self.logger and self.model_name:
             ignored_columns = list(set(feature.keys()) - set(self.signature_columns))
             if len(ignored_columns) > 0:
-                dset_description = "" if self.description is None else f"in the {self.description} set"
+                dset_description = (
+                    "" if self.description is None else f"in the {self.description} set"
+                )
                 self.logger.info(
                     f"The following columns {dset_description} don't have a corresponding argument in "
                     f"`{self.model_name}.forward` and have been ignored: {', '.join(ignored_columns)}."
@@ -871,7 +899,9 @@ class RemoveColumnsCollator:
         return self.data_collator(features)
 
 
-def check_target_module_exists(optim_target_modules, key: str, return_is_regex: bool = False):
+def check_target_module_exists(
+    optim_target_modules, key: str, return_is_regex: bool = False
+):
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
@@ -895,12 +925,17 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
         is_regex = True if not optim_target_modules == key else False
-    elif key in optim_target_modules:  # from here, target_module_found must be a list of str
+    elif (
+        key in optim_target_modules
+    ):  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True
     elif any(target_key in key for target_key in optim_target_modules):
         target_module_found = True
-    elif any(bool(re.fullmatch(optim_target_module, key)) for optim_target_module in optim_target_modules):
+    elif any(
+        bool(re.fullmatch(optim_target_module, key))
+        for optim_target_module in optim_target_modules
+    ):
         target_module_found = True
         is_regex = True
 

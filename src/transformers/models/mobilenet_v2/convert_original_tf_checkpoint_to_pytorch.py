@@ -24,15 +24,11 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import (
-    MobileNetV2Config,
-    MobileNetV2ForImageClassification,
-    MobileNetV2ForSemanticSegmentation,
-    MobileNetV2ImageProcessor,
-    load_tf_weights_in_mobilenet_v2,
-)
+from transformers import (MobileNetV2Config, MobileNetV2ForImageClassification,
+                          MobileNetV2ForSemanticSegmentation,
+                          MobileNetV2ImageProcessor,
+                          load_tf_weights_in_mobilenet_v2)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -60,7 +56,9 @@ def get_mobilenet_v2_config(model_name):
         filename = "imagenet-1k-id2label.json"
 
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
 
     if config.num_labels == 1001:
         id2label = {int(k) + 1: v for k, v in id2label.items()}
@@ -82,7 +80,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_movilevit_checkpoint(
+    model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our MobileNetV2 structure.
     """
@@ -112,9 +112,21 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         if model_name == "deeplabv3_mobilenet_v2_1.0_513":
             expected_logits = torch.tensor(
                 [
-                    [[17.5790, 17.7581, 18.3355], [18.3257, 18.4230, 18.8973], [18.6169, 18.8650, 19.2187]],
-                    [[-2.1595, -2.0977, -2.3741], [-2.4226, -2.3028, -2.6835], [-2.7819, -2.5991, -2.7706]],
-                    [[4.2058, 4.8317, 4.7638], [4.4136, 5.0361, 4.9383], [4.5028, 4.9644, 4.8734]],
+                    [
+                        [17.5790, 17.7581, 18.3355],
+                        [18.3257, 18.4230, 18.8973],
+                        [18.6169, 18.8650, 19.2187],
+                    ],
+                    [
+                        [-2.1595, -2.0977, -2.3741],
+                        [-2.4226, -2.3028, -2.6835],
+                        [-2.7819, -2.5991, -2.7706],
+                    ],
+                    [
+                        [4.2058, 4.8317, 4.7638],
+                        [4.4136, 5.0361, 4.9383],
+                        [4.5028, 4.9644, 4.8734],
+                    ],
                 ]
             )
 
@@ -162,16 +174,27 @@ if __name__ == "__main__":
         help="Name of the MobileNetV2 model you'd like to convert. Should in the form 'mobilenet_v2_<depth>_<size>'.",
     )
     parser.add_argument(
-        "--checkpoint_path", required=True, type=str, help="Path to the original TensorFlow checkpoint (.ckpt file)."
+        "--checkpoint_path",
+        required=True,
+        type=str,
+        help="Path to the original TensorFlow checkpoint (.ckpt file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        required=True,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
     convert_movilevit_checkpoint(
-        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )

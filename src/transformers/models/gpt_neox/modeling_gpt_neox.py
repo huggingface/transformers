@@ -14,27 +14,20 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import (BaseModelOutputWithPast,
+                                 CausalLMOutputWithPast,
+                                 QuestionAnsweringModelOutput,
+                                 SequenceClassifierOutputWithPast,
+                                 TokenClassifierOutput)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (LossKwargs, add_code_sample_docstrings,
+                      add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_torch_flex_attn_available, logging,
+                      replace_return_docstrings)
 from .configuration_gpt_neox import GPTNeoXConfig
-
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
@@ -125,13 +118,17 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
 
     # Mask heads if we want to
     if head_mask is not None:
         attn_weights = attn_weights * head_mask
 
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
     attn_output = torch.matmul(attn_weights, value)
 
     # Reshape outputs
@@ -151,8 +148,12 @@ class GPTNeoXAttention(nn.Module):
         self.is_causal = True
         self.layer_idx = layer_idx
 
-        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.query_key_value = nn.Linear(
+            config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias
+        )
+        self.dense = nn.Linear(
+            config.hidden_size, config.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
@@ -162,7 +163,9 @@ class GPTNeoXAttention(nn.Module):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -172,7 +175,9 @@ class GPTNeoXAttention(nn.Module):
         query_states, key_states, value_states = qkv.chunk(3, dim=-1)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         # Cache QKV values
         if layer_past is not None:
@@ -182,11 +187,15 @@ class GPTNeoXAttention(nn.Module):
                 "partial_rotation_size": self.rotary_ndims,
                 "cache_position": cache_position,
             }
-            key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = layer_past.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         # Checking for fallbacks in case an unsupported feature is requested
         attention_type = self.config._attn_implementation
-        if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
+        if (
+            output_attentions or head_mask is not None
+        ) and self.config._attn_implementation in [
             "sdpa",
             "flash_attention_2",
         ]:
@@ -196,7 +205,11 @@ class GPTNeoXAttention(nn.Module):
             )
             attention_type = "eager"
 
-        elif self.training and self.attention_dropout > 0 and self.config._attn_implementation == "flex_attention":
+        elif (
+            self.training
+            and self.attention_dropout > 0
+            and self.config._attn_implementation == "flex_attention"
+        ):
             logger.warning_once(
                 f"Setting `attention_type` to `eager` because `dropout` is not supported in `{attention_type}`."
             )
@@ -204,7 +217,9 @@ class GPTNeoXAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         attention_interface = (
-            ALL_ATTENTION_FUNCTIONS[attention_type] if attention_type != "eager" else attention_interface
+            ALL_ATTENTION_FUNCTIONS[attention_type]
+            if attention_type != "eager"
+            else attention_interface
         )
 
         # Compute attention
@@ -231,8 +246,12 @@ class GPTNeoXLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.use_parallel_residual = config.use_parallel_residual
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout)
         self.attention = GPTNeoXAttention(config, layer_idx)
@@ -248,7 +267,9 @@ class GPTNeoXLayer(nn.Module):
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         attn_output, attn_weights = self.attention(
@@ -292,7 +313,9 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -313,11 +336,18 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -330,13 +360,21 @@ class GPTNeoXRotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -495,8 +533,12 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layers = nn.ModuleList(
+            [GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)]
+        )
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
@@ -509,7 +551,9 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
@@ -531,15 +575,25 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -555,16 +609,24 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # Prepare head mask if needed
@@ -572,11 +634,17 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        converted_head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        converted_head_mask = self.get_head_mask(
+            head_mask, self.config.num_hidden_layers
+        )
         # Flex Attention converts it to a separate mask
         if head_mask is not None:
-            converted_head_mask = ~converted_head_mask.bool() * torch.finfo(inputs_embeds.dtype).min
-            converted_head_mask = converted_head_mask.to(dtype=self.dtype, device=self.device)
+            converted_head_mask = (
+                ~converted_head_mask.bool() * torch.finfo(inputs_embeds.dtype).min
+            )
+            converted_head_mask = converted_head_mask.to(
+                dtype=self.dtype, device=self.device
+            )
         head_mask = converted_head_mask
 
         hidden_states = self.emb_dropout(inputs_embeds)
@@ -655,11 +723,17 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -700,7 +774,9 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -743,22 +819,29 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -767,7 +850,8 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
-    """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
+    """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""",
+    GPT_NEOX_START_DOCSTRING,
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
@@ -789,8 +873,12 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -835,7 +923,9 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.gpt_neox(
             input_ids,
@@ -854,12 +944,21 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.embed_out(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -925,7 +1024,9 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.gpt_neox(
             input_ids,
@@ -944,13 +1045,19 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
 
         batch_size = logits.shape[0]
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
         if self.config.pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(
+                logits.device, torch.int32
+            )
+            token_indices = torch.arange(
+                input_ids.shape[-1], device=logits.device, dtype=torch.int32
+            )
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
@@ -959,11 +1066,18 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
                 "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
             )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+        pooled_logits = logits[
+            torch.arange(batch_size, device=logits.device), last_non_pad_token
+        ]
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                pooled_logits=pooled_logits,
+                config=self.config,
+            )
 
         if not return_dict:
             output = (pooled_logits,) + outputs[1:]
@@ -1018,7 +1132,9 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.gpt_neox(
             input_ids,
@@ -1070,7 +1186,9 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
@@ -1101,7 +1219,9 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.gpt_neox(
             input_ids,
@@ -1123,7 +1243,9 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
 
         loss = None
         if start_positions is not None and end_positions is not None:
-            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions)
+            loss = self.loss_function(
+                start_logits, end_logits, start_positions, end_positions
+            )
 
         if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]

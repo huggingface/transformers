@@ -24,14 +24,10 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_timm_available,
-    replace_return_docstrings,
-    requires_backends,
-)
+from ...file_utils import (ModelOutput, add_start_docstrings,
+                           add_start_docstrings_to_model_forward,
+                           is_timm_available, replace_return_docstrings,
+                           requires_backends)
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -39,7 +35,6 @@ from ...utils import logging
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
-
 
 if is_timm_available():
     from timm import create_model
@@ -66,7 +61,9 @@ class MultiScaleDeformableAttention(nn.Module):
     ):
         batch_size, _, num_heads, hidden_dim = value.shape
         _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-        value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+        value_list = value.split(
+            [height * width for height, width in value_spatial_shapes], dim=1
+        )
         sampling_grids = 2 * sampling_locations - 1
         sampling_value_list = []
         for level_id, (height, width) in enumerate(value_spatial_shapes):
@@ -83,7 +80,9 @@ class MultiScaleDeformableAttention(nn.Module):
             # batch_size, num_queries, num_heads, num_points, 2
             # -> batch_size, num_heads, num_queries, num_points, 2
             # -> batch_size*num_heads, num_queries, num_points, 2
-            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            sampling_grid_l_ = (
+                sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            )
             # batch_size*num_heads, hidden_dim, num_queries, num_points
             sampling_value_l_ = nn.functional.grid_sample(
                 value_l_,
@@ -352,14 +351,27 @@ class GroundingDinoFrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(n))
 
     def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
     ):
         num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
         )
 
     def forward(self, x):
@@ -429,7 +441,9 @@ class GroundingDinoConvEncoder(nn.Module):
             replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+            self.model.feature_info.channels()
+            if config.use_timm_backbone
+            else self.model.channels
         )
 
         backbone_model_type = None
@@ -438,26 +452,42 @@ class GroundingDinoConvEncoder(nn.Module):
         elif config.backbone_config is not None:
             backbone_model_type = config.backbone_config.model_type
         else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
+            raise ValueError(
+                "Either `backbone` or `backbone_config` should be provided in the config"
+            )
 
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
                 if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                    if (
+                        "layer2" not in name
+                        and "layer3" not in name
+                        and "layer4" not in name
+                    ):
                         parameter.requires_grad_(False)
                 else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    if (
+                        "stage.1" not in name
+                        and "stage.2" not in name
+                        and "stage.3" not in name
+                    ):
                         parameter.requires_grad_(False)
 
     # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->GroundingDino
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = (
+            self.model(pixel_values)
+            if self.config.use_timm_backbone
+            else self.model(pixel_values).feature_maps
+        )
 
         out = []
         for feature_map in features:
             # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            mask = nn.functional.interpolate(
+                pixel_mask[None].float(), size=feature_map.shape[-2:]
+            ).to(torch.bool)[0]
             out.append((feature_map, mask))
         return out
 
@@ -503,13 +533,21 @@ class GroundingDinoSinePositionEmbedding(nn.Module):
         y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
         x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+        dim_t = torch.arange(
+            self.embedding_dim, dtype=torch.float32, device=pixel_values.device
+        )
+        dim_t = self.temperature ** (
+            2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim
+        )
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_x = torch.stack(
+            (pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4
+        ).flatten(3)
+        pos_y = torch.stack(
+            (pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4
+        ).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
 
@@ -532,7 +570,13 @@ class GroundingDinoLearnedPositionEmbedding(nn.Module):
         height_values = torch.arange(height, device=pixel_values.device)
         x_emb = self.column_embeddings(width_values)
         y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
+        pos = torch.cat(
+            [
+                x_emb.unsqueeze(0).repeat(height, 1, 1),
+                y_emb.unsqueeze(1).repeat(1, width, 1),
+            ],
+            dim=-1,
+        )
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
@@ -581,14 +625,20 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.sampling_offsets = nn.Linear(
+            config.d_model, num_heads * self.n_levels * n_points * 2
+        )
+        self.attention_weights = nn.Linear(
+            config.d_model, num_heads * self.n_levels * n_points
+        )
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -620,7 +670,9 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
         if attention_mask is not None:
             # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        value = value.view(
+            batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads
+        )
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
         )
@@ -633,7 +685,9 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.stack(
+                [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1
+            )
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
@@ -641,10 +695,15 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
         elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+                + sampling_offsets
+                / self.n_points
+                * reference_points[:, :, None, :, None, 2:]
+                * 0.5
             )
         else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+            raise ValueError(
+                f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+            )
 
         output = self.attn(
             value,
@@ -681,8 +740,14 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
         self.num_heads = config.encoder_attention_heads // 2
         self.dropout = config.text_enhancer_dropout
 
-    def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
-        return hidden_state if position_embeddings is None else hidden_state + position_embeddings
+    def with_pos_embed(
+        self, hidden_state: Tensor, position_embeddings: Optional[Tensor]
+    ):
+        return (
+            hidden_state
+            if position_embeddings is None
+            else hidden_state + position_embeddings
+        )
 
     def forward(
         self,
@@ -711,7 +776,10 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
         """
 
         # repeat attn mask
-        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
+        if (
+            attention_masks.dim() == 3
+            and attention_masks.shape[0] == hidden_states.shape[0]
+        ):
             # batch_size, num_queries, num_keys
             attention_masks = attention_masks[:, None, :, :]
             attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
@@ -728,15 +796,21 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
             attention_mask=attention_masks,
             output_attentions=True,
         )
-        attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
+        attention_output = nn.functional.dropout(
+            attention_output, p=self.dropout, training=self.training
+        )
         hidden_states = hidden_states + attention_output
         hidden_states = self.layer_norm_before(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = hidden_states + residual
         hidden_states = self.layer_norm_after(hidden_states)
 
@@ -774,7 +848,11 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         self.out_text_proj = nn.Linear(self.embed_dim, self.text_dim)
 
     def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(batch_size, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -782,7 +860,10 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         text_features: torch.FloatTensor,
         vision_attention_mask: Optional[torch.BoolTensor] = None,
         text_attention_mask: Optional[torch.BoolTensor] = None,
-    ) -> Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> Tuple[
+        Tuple[torch.FloatTensor, torch.FloatTensor],
+        Tuple[torch.FloatTensor, torch.FloatTensor],
+    ]:
         """Image-to-text and text-to-image cross-attention
 
         Args:
@@ -832,7 +913,9 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         text_value_states = text_value_states.view(*proj_shape)
 
         src_len = text_key_states.size(1)
-        attn_weights = torch.bmm(vision_query_states, text_key_states.transpose(1, 2))  # bs*nhead, nimg, ntxt
+        attn_weights = torch.bmm(
+            vision_query_states, text_key_states.transpose(1, 2)
+        )  # bs*nhead, nimg, ntxt
 
         if attn_weights.size() != (batch_size * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -844,7 +927,10 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         attn_weights = torch.clamp(attn_weights, min=-50000, max=50000)
 
         attn_weights_transposed = attn_weights.transpose(1, 2)
-        text_attn_weights = attn_weights_transposed - torch.max(attn_weights_transposed, dim=-1, keepdim=True)[0]
+        text_attn_weights = (
+            attn_weights_transposed
+            - torch.max(attn_weights_transposed, dim=-1, keepdim=True)[0]
+        )
 
         # Do not increase -50000/50000, data type half has quite limited range
         text_attn_weights = torch.clamp(text_attn_weights, min=-50000, max=50000)
@@ -852,7 +938,9 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         # mask vision for language
         if vision_attention_mask is not None:
             vision_attention_mask = (
-                vision_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
+                vision_attention_mask[:, None, None, :]
+                .repeat(1, self.num_heads, 1, 1)
+                .flatten(0, 1)
             )
             text_attn_weights.masked_fill_(vision_attention_mask, float("-inf"))
 
@@ -860,42 +948,69 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
 
         # mask language for vision
         if text_attention_mask is not None:
-            text_attention_mask = text_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
+            text_attention_mask = (
+                text_attention_mask[:, None, None, :]
+                .repeat(1, self.num_heads, 1, 1)
+                .flatten(0, 1)
+            )
             attn_weights.masked_fill_(text_attention_mask, float("-inf"))
         vision_attn_weights = attn_weights.softmax(dim=-1)
 
-        vision_attn_probs = F.dropout(vision_attn_weights, p=self.dropout, training=self.training)
-        text_attn_probs = F.dropout(text_attn_weights, p=self.dropout, training=self.training)
+        vision_attn_probs = F.dropout(
+            vision_attn_weights, p=self.dropout, training=self.training
+        )
+        text_attn_probs = F.dropout(
+            text_attn_weights, p=self.dropout, training=self.training
+        )
 
         vision_attn_output = torch.bmm(vision_attn_probs, text_value_states)
         text_attn_output = torch.bmm(text_attn_probs, vision_value_states)
 
-        if vision_attn_output.size() != (batch_size * self.num_heads, tgt_len, self.head_dim):
+        if vision_attn_output.size() != (
+            batch_size * self.num_heads,
+            tgt_len,
+            self.head_dim,
+        ):
             raise ValueError(
                 f"`vision_attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is {vision_attn_output.size()}"
             )
 
-        if text_attn_output.size() != (batch_size * self.num_heads, src_len, self.head_dim):
+        if text_attn_output.size() != (
+            batch_size * self.num_heads,
+            src_len,
+            self.head_dim,
+        ):
             raise ValueError(
                 f"`text_attn_output` should be of size {(batch_size, self.num_heads, src_len, self.head_dim)}, but is {text_attn_output.size()}"
             )
 
-        vision_attn_output = vision_attn_output.view(batch_size, self.num_heads, tgt_len, self.head_dim)
+        vision_attn_output = vision_attn_output.view(
+            batch_size, self.num_heads, tgt_len, self.head_dim
+        )
         vision_attn_output = vision_attn_output.transpose(1, 2)
-        vision_attn_output = vision_attn_output.reshape(batch_size, tgt_len, self.embed_dim)
+        vision_attn_output = vision_attn_output.reshape(
+            batch_size, tgt_len, self.embed_dim
+        )
 
-        text_attn_output = text_attn_output.view(batch_size, self.num_heads, src_len, self.head_dim)
+        text_attn_output = text_attn_output.view(
+            batch_size, self.num_heads, src_len, self.head_dim
+        )
         text_attn_output = text_attn_output.transpose(1, 2)
         text_attn_output = text_attn_output.reshape(batch_size, src_len, self.embed_dim)
 
         vision_attn_output = self.out_vision_proj(vision_attn_output)
         text_attn_output = self.out_text_proj(text_attn_output)
 
-        return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
+        return (vision_attn_output, vision_attn_weights), (
+            text_attn_output,
+            text_attn_weights,
+        )
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -908,8 +1023,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -941,10 +1060,16 @@ class GroundingDinoFusionLayer(nn.Module):
         self.attn = GroundingDinoBiMultiHeadAttention(config)
 
         # add layer scale for training stability
-        self.drop_path = GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = (
+            GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        )
         init_values = 1e-4
-        self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
-        self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.vision_param = nn.Parameter(
+            init_values * torch.ones((config.d_model)), requires_grad=True
+        )
+        self.text_param = nn.Parameter(
+            init_values * torch.ones((config.d_model)), requires_grad=True
+        )
 
     def forward(
         self,
@@ -952,7 +1077,10 @@ class GroundingDinoFusionLayer(nn.Module):
         text_features: torch.FloatTensor,
         attention_mask_vision: Optional[torch.BoolTensor] = None,
         attention_mask_text: Optional[torch.BoolTensor] = None,
-    ) -> Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> Tuple[
+        Tuple[torch.FloatTensor, torch.FloatTensor],
+        Tuple[torch.FloatTensor, torch.FloatTensor],
+    ]:
         """Image and text features fusion
 
         Args:
@@ -998,7 +1126,9 @@ class GroundingDinoDeformableLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = GroundingDinoMultiscaleDeformableAttention(
-            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
+            config,
+            num_heads=config.encoder_attention_heads,
+            n_points=config.encoder_n_points,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         self.dropout = config.dropout
@@ -1051,16 +1181,22 @@ class GroundingDinoDeformableLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
@@ -1068,14 +1204,19 @@ class GroundingDinoDeformableLayer(nn.Module):
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+                hidden_states = torch.clamp(
+                    hidden_states, min=-clamp_value, max=clamp_value
+                )
 
         return hidden_states, attn_weights
 
 
 # Based on https://github.com/IDEA-Research/GroundingDINO/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/groundingdino/models/GroundingDINO/utils.py#L24
 def get_sine_pos_embed(
-    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+    exchange_xy: bool = True,
 ) -> Tensor:
     """
     Generate sine position embeddings from a position tensor.
@@ -1095,17 +1236,24 @@ def get_sine_pos_embed(
     """
     scale = 2 * math.pi
     dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+    dim_t = temperature ** (
+        2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats
+    )
 
     def sine_func(x: torch.Tensor):
         sin_x = x * scale / dim_t
-        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
+        sin_x = torch.stack(
+            (sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3
+        ).flatten(2)
         return sin_x
 
     pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
     position_embeddings = [sine_func(x) for x in pos_tensor]
     if exchange_xy:
-        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
+        position_embeddings[0], position_embeddings[1] = (
+            position_embeddings[1],
+            position_embeddings[0],
+        )
     position_embeddings = torch.cat(position_embeddings, dim=-1)
     return position_embeddings
 
@@ -1128,7 +1276,9 @@ class GroundingDinoEncoderLayer(nn.Module):
     ) -> Tensor:
         batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
-            text_position_embedding = torch.arange(seq_length, device=text_features.device)
+            text_position_embedding = torch.arange(
+                seq_length, device=text_features.device
+            )
             text_position_embedding = text_position_embedding.float()
             text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
             text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
@@ -1137,7 +1287,9 @@ class GroundingDinoEncoderLayer(nn.Module):
             )
         if text_position_ids is not None:
             text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
+                text_position_ids[..., None],
+                num_pos_feats=self.d_model,
+                exchange_xy=False,
             )
 
         return text_position_embedding
@@ -1160,17 +1312,21 @@ class GroundingDinoEncoderLayer(nn.Module):
             text_features, text_position_embedding, text_position_ids
         )
 
-        (vision_features, vision_fused_attn), (text_features, text_fused_attn) = self.fusion_layer(
-            vision_features=vision_features,
-            text_features=text_features,
-            attention_mask_vision=key_padding_mask,
-            attention_mask_text=text_attention_mask,
+        (vision_features, vision_fused_attn), (text_features, text_fused_attn) = (
+            self.fusion_layer(
+                vision_features=vision_features,
+                text_features=text_features,
+                attention_mask_vision=key_padding_mask,
+                attention_mask_text=text_attention_mask,
+            )
         )
 
         (text_features, text_enhanced_attn) = self.text_enhancer_layer(
             hidden_states=text_features,
             attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
-            position_embeddings=(text_position_embedding if text_position_embedding is not None else None),
+            position_embeddings=(
+                text_position_embedding if text_position_embedding is not None else None
+            ),
         )
 
         (vision_features, vision_deformable_attn) = self.deformable_layer(
@@ -1184,7 +1340,12 @@ class GroundingDinoEncoderLayer(nn.Module):
 
         return (
             (vision_features, text_features),
-            (vision_fused_attn, text_fused_attn, text_enhanced_attn, vision_deformable_attn),
+            (
+                vision_fused_attn,
+                text_fused_attn,
+                text_enhanced_attn,
+                vision_deformable_attn,
+            ),
         )
 
 
@@ -1193,7 +1354,9 @@ class GroundingDinoMultiheadAttention(nn.Module):
 
     def __init__(self, config, num_attention_heads=None):
         super().__init__()
-        if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({num_attention_heads})"
@@ -1212,7 +1375,10 @@ class GroundingDinoMultiheadAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_dropout)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -1251,7 +1417,9 @@ class GroundingDinoMultiheadAttention(nn.Module):
 
         context_layer = self.out_proj(context_layer)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -1262,7 +1430,9 @@ class GroundingDinoDecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         # self-attention
-        self.self_attn = GroundingDinoMultiheadAttention(config, num_attention_heads=config.decoder_attention_heads)
+        self.self_attn = GroundingDinoMultiheadAttention(
+            config, num_attention_heads=config.decoder_attention_heads
+        )
 
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1273,20 +1443,26 @@ class GroundingDinoDecoderLayer(nn.Module):
         self.encoder_attn_text = GroundingDinoMultiheadAttention(
             config, num_attention_heads=config.decoder_attention_heads
         )
-        self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
+        self.encoder_attn_text_layer_norm = nn.LayerNorm(
+            self.embed_dim, config.layer_norm_eps
+        )
         # cross-attention
         self.encoder_attn = GroundingDinoMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
+        self.encoder_attn_layer_norm = nn.LayerNorm(
+            self.embed_dim, config.layer_norm_eps
+        )
         # feedforward neural networks
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(
+        self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]
+    ):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
@@ -1315,7 +1491,9 @@ class GroundingDinoDecoderLayer(nn.Module):
             output_attentions=True,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -1331,7 +1509,9 @@ class GroundingDinoDecoderLayer(nn.Module):
             output_attentions=True,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = second_residual + hidden_states
         hidden_states = self.encoder_attn_text_layer_norm(hidden_states)
 
@@ -1351,16 +1531,22 @@ class GroundingDinoDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = third_residual + hidden_states
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -1387,7 +1573,9 @@ class GroundingDinoContrastiveEmbedding(nn.Module):
         output = output.masked_fill(~text_token_mask[:, None, :], float("-inf"))
 
         # padding to max_text_len
-        new_output = torch.full((*output.shape[:-1], self.max_text_len), float("-inf"), device=output.device)
+        new_output = torch.full(
+            (*output.shape[:-1], self.max_text_len), float("-inf"), device=output.device
+        )
         new_output[..., : output.shape[-1]] = output
 
         return new_output
@@ -1407,9 +1595,9 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroundingDinoMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
-            )
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(
+                default_dtype
+            ) * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -1552,7 +1740,9 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([GroundingDinoEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [GroundingDinoEncoderLayer(config) for _ in range(config.encoder_layers)]
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1575,8 +1765,12 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(
+                    0.5, height - 0.5, height, dtype=torch.float32, device=device
+                ),
+                torch.linspace(
+                    0.5, width - 0.5, width, dtype=torch.float32, device=device
+                ),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1646,13 +1840,23 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=vision_features.device)
+        reference_points = self.get_reference_points(
+            spatial_shapes, valid_ratios, device=vision_features.device
+        )
 
         encoder_vision_states = () if output_hidden_states else None
         encoder_text_states = () if output_hidden_states else None
@@ -1691,10 +1895,21 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
             encoder_text_states += (text_features,)
 
         if output_attentions:
-            all_attns = (all_attn_fused_vision, all_attn_fused_text, all_attn_enhanced_text, all_attn_deformable)
+            all_attns = (
+                all_attn_fused_vision,
+                all_attn_fused_text,
+                all_attn_enhanced_text,
+                all_attn_deformable,
+            )
 
         if not return_dict:
-            enc_outputs = [vision_features, text_features, encoder_vision_states, encoder_text_states, all_attns]
+            enc_outputs = [
+                vision_features,
+                text_features,
+                encoder_vision_states,
+                encoder_text_states,
+                all_attns,
+            ]
             return tuple(v for v in enc_outputs if v is not None)
         return GroundingDinoEncoderOutput(
             last_hidden_state_vision=vision_features,
@@ -1725,7 +1940,9 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
 
         self.dropout = config.dropout
         self.layer_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
-        self.layers = nn.ModuleList([GroundingDinoDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [GroundingDinoDecoderLayer(config) for _ in range(config.decoder_layers)]
+        )
         self.reference_points_head = GroundingDinoMLPPredictionHead(
             config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
         )
@@ -1792,11 +2009,19 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1805,8 +2030,16 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_attns = () if output_attentions else None
-        all_cross_attns_vision = () if (output_attentions and vision_encoder_hidden_states is not None) else None
-        all_cross_attns_text = () if (output_attentions and text_encoder_hidden_states is not None) else None
+        all_cross_attns_vision = (
+            ()
+            if (output_attentions and vision_encoder_hidden_states is not None)
+            else None
+        )
+        all_cross_attns_text = (
+            ()
+            if (output_attentions and text_encoder_hidden_states is not None)
+            else None
+        )
         intermediate = ()
         intermediate_reference_points = ()
 
@@ -1818,19 +2051,29 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 1, self.config.decoder_attention_heads, self.config.num_queries, 1
             )
             text_encoder_attention_mask = text_encoder_attention_mask.to(dtype=dtype)
-            text_encoder_attention_mask = text_encoder_attention_mask * torch.finfo(dtype).min
+            text_encoder_attention_mask = (
+                text_encoder_attention_mask * torch.finfo(dtype).min
+            )
 
         for idx, decoder_layer in enumerate(self.layers):
             num_coordinates = reference_points.shape[-1]
             if num_coordinates == 4:
                 reference_points_input = (
-                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                    reference_points[:, :, None]
+                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             elif num_coordinates == 2:
-                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+                reference_points_input = (
+                    reference_points[:, :, None] * valid_ratios[:, None]
+                )
             else:
-                raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
+                raise ValueError(
+                    "Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+                )
+            query_pos = get_sine_pos_embed(
+                reference_points_input[:, :, 0, :],
+                num_pos_feats=self.config.d_model // 2,
+            )
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
@@ -1883,11 +2126,15 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 tmp = self.bbox_embed[idx](hidden_states)
                 num_coordinates = reference_points.shape[-1]
                 if num_coordinates == 4:
-                    new_reference_points = tmp + torch.special.logit(reference_points, eps=1e-5)
+                    new_reference_points = tmp + torch.special.logit(
+                        reference_points, eps=1e-5
+                    )
                     new_reference_points = new_reference_points.sigmoid()
                 elif num_coordinates == 2:
                     new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(reference_points, eps=1e-5)
+                    new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(
+                        reference_points, eps=1e-5
+                    )
                     new_reference_points = new_reference_points.sigmoid()
                 else:
                     raise ValueError(
@@ -1909,7 +2156,9 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        intermediate_reference_points = torch.stack(
+            intermediate_reference_points, dim=1
+        )
         hidden_states = self.layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
@@ -1944,7 +2193,9 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
 
-def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> Tuple[Tensor, Tensor]:
+def generate_masks_with_special_tokens_and_transfer_map(
+    input_ids: torch.LongTensor,
+) -> Tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1956,7 +2207,9 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     """
     batch_size, num_token = input_ids.shape
     # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
-    special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
+    special_tokens_mask = torch.zeros(
+        (batch_size, num_token), device=input_ids.device
+    ).bool()
     for special_token in SPECIAL_TOKENS:
         special_tokens_mask |= input_ids == special_token
 
@@ -1964,7 +2217,12 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     idxs = torch.nonzero(special_tokens_mask)
 
     # generate attention mask and positional ids
-    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(batch_size, 1, 1)
+    attention_mask = (
+        torch.eye(num_token, device=input_ids.device)
+        .bool()
+        .unsqueeze(0)
+        .repeat(batch_size, 1, 1)
+    )
     position_ids = torch.zeros((batch_size, num_token), device=input_ids.device)
     previous_col = 0
     for i in range(idxs.shape[0]):
@@ -1973,7 +2231,9 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
             attention_mask[row, col, col] = True
             position_ids[row, col] = 0
         else:
-            attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
+            attention_mask[
+                row, previous_col + 1 : col + 1, previous_col + 1 : col + 1
+            ] = True
             position_ids[row, previous_col + 1 : col + 1] = torch.arange(
                 0, col - previous_col, device=input_ids.device
             )
@@ -2014,7 +2274,13 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             for _ in range(config.num_feature_levels - num_backbone_outs):
                 input_proj_list.append(
                     nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
+                        nn.Conv2d(
+                            in_channels,
+                            config.d_model,
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
+                        ),
                         nn.GroupNorm(32, config.d_model),
                     )
                 )
@@ -2024,23 +2290,33 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             self.input_proj_vision = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.Conv2d(
+                            backbone.intermediate_channel_sizes[-1],
+                            config.d_model,
+                            kernel_size=1,
+                        ),
                         nn.GroupNorm(32, config.d_model),
                     )
                 ]
             )
 
         # Create text backbone
-        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
+        self.text_backbone = AutoModel.from_config(
+            config.text_config, add_pooling_layer=False
+        )
         self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
-            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
+            self.query_position_embeddings = nn.Embedding(
+                config.num_queries, config.d_model
+            )
 
         self.encoder = GroundingDinoEncoder(config)
         self.decoder = GroundingDinoDecoder(config)
 
-        self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+        self.level_embed = nn.Parameter(
+            torch.Tensor(config.num_feature_levels, config.d_model)
+        )
 
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
@@ -2053,7 +2329,10 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 self.encoder_output_bbox_embed = self.decoder.bbox_embed
             else:
                 self.encoder_output_bbox_embed = GroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                    input_dim=config.d_model,
+                    hidden_dim=config.d_model,
+                    output_dim=4,
+                    num_layers=3,
                 )
 
             self.encoder_output_class_embed = GroundingDinoContrastiveEmbedding(config)
@@ -2087,7 +2366,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
 
-    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
+    def generate_encoder_output_proposals(
+        self, enc_output, padding_mask, spatial_shapes
+    ):
         """Generate the encoder output proposals from encoded enc_output.
 
         Args:
@@ -2106,19 +2387,27 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         proposals = []
         current_position = 0
         for level, (height, width) in enumerate(spatial_shapes):
-            mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)]
+            mask_flatten_ = padding_mask[
+                :, current_position : (current_position + height * width)
+            ]
             mask_flatten_ = mask_flatten_.view(batch_size, height, width, 1)
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = meshgrid(
-                torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                torch.linspace(
+                    0, height - 1, height, dtype=torch.float32, device=enc_output.device
+                ),
+                torch.linspace(
+                    0, width - 1, width, dtype=torch.float32, device=enc_output.device
+                ),
                 indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
-            scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
+            scale = torch.cat(
+                [valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1
+            ).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
             width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
             proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
@@ -2126,10 +2415,18 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             current_position += height * width
 
         output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        output_proposals_valid = (
+            (output_proposals > 0.01) & (output_proposals < 0.99)
+        ).all(-1, keepdim=True)
+        output_proposals = torch.log(
+            output_proposals / (1 - output_proposals)
+        )  # inverse sigmoid
+        output_proposals = output_proposals.masked_fill(
+            padding_mask.unsqueeze(-1), float("inf")
+        )
+        output_proposals = output_proposals.masked_fill(
+            ~output_proposals_valid, float("inf")
+        )
 
         # assign each pixel as an object query
         object_query = enc_output
@@ -2139,7 +2436,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         return object_query, output_proposals
 
     @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GroundingDinoModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=GroundingDinoModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Tensor,
@@ -2176,13 +2475,23 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 900, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
+        text_self_attention_masks, position_ids = (
+            generate_masks_with_special_tokens_and_transfer_map(input_ids)
+        )
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -2194,7 +2503,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
 
         max_text_len = self.config.max_text_len
         if text_self_attention_masks.shape[1] > max_text_len:
-            text_self_attention_masks = text_self_attention_masks[:, :max_text_len, :max_text_len]
+            text_self_attention_masks = text_self_attention_masks[
+                :, :max_text_len, :max_text_len
+            ]
             position_ids = position_ids[:, :max_text_len]
             input_ids = input_ids[:, :max_text_len]
             token_type_ids = token_type_ids[:, :max_text_len]
@@ -2202,21 +2513,31 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
 
         # Extract text features from text backbone
         text_outputs = self.text_backbone(
-            input_ids, text_self_attention_masks, token_type_ids, position_ids, return_dict=return_dict
+            input_ids,
+            text_self_attention_masks,
+            token_type_ids,
+            position_ids,
+            return_dict=return_dict,
         )
-        text_features = text_outputs.last_hidden_state if return_dict else text_outputs[0]
+        text_features = (
+            text_outputs.last_hidden_state if return_dict else text_outputs[0]
+        )
         text_features = self.text_projection(text_features)
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
+            pixel_mask = torch.ones(
+                ((batch_size, height, width)), dtype=torch.long, device=device
+            )
 
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
-        vision_features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        vision_features, position_embeddings_list = self.backbone(
+            pixel_values, pixel_mask
+        )
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         feature_maps = []
@@ -2233,7 +2554,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                     source = self.input_proj_vision[level](vision_features[-1][0])
                 else:
                     source = self.input_proj_vision[level](feature_maps[-1])
-                mask = nn.functional.interpolate(pixel_mask[None].float(), size=source.shape[-2:]).to(torch.bool)[0]
+                mask = nn.functional.interpolate(
+                    pixel_mask[None].float(), size=source.shape[-2:]
+                ).to(torch.bool)[0]
                 pos_l = self.backbone.position_embedding(source, mask).to(source.dtype)
                 feature_maps.append(source)
                 masks.append(mask)
@@ -2249,7 +2572,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
-        for level, (source, mask, pos_embed) in enumerate(zip(feature_maps, masks, position_embeddings_list)):
+        for level, (source, mask, pos_embed) in enumerate(
+            zip(feature_maps, masks, position_embeddings_list)
+        ):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
             spatial_shapes.append(spatial_shape)
@@ -2263,8 +2588,12 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        spatial_shapes = torch.as_tensor(
+            spatial_shapes, dtype=torch.long, device=source_flatten.device
+        )
+        level_start_index = torch.cat(
+            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+        )
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
         valid_ratios = valid_ratios.float()
 
@@ -2288,11 +2617,15 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 return_dict=return_dict,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a GroundingDinoEncoderOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, GroundingDinoEncoderOutput):
+        elif return_dict and not isinstance(
+            encoder_outputs, GroundingDinoEncoderOutput
+        ):
             encoder_outputs = GroundingDinoEncoderOutput(
                 last_hidden_state_vision=encoder_outputs[0],
                 last_hidden_state_text=encoder_outputs[1],
-                vision_hidden_states=encoder_outputs[2] if output_hidden_states else None,
+                vision_hidden_states=(
+                    encoder_outputs[2] if output_hidden_states else None
+                ),
                 text_hidden_states=encoder_outputs[3] if output_hidden_states else None,
                 attentions=encoder_outputs[-1] if output_attentions else None,
             )
@@ -2304,8 +2637,10 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         encoder_logits = None
         encoder_pred_boxes = None
         if self.config.two_stage:
-            object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+            object_query_embedding, output_proposals = (
+                self.generate_encoder_output_proposals(
+                    encoder_outputs[0], ~mask_flatten, spatial_shapes
+                )
             )
 
             # hack implementation as in two-stage Deformable DETR
@@ -2323,7 +2658,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             topk_logits = enc_outputs_class.max(-1)[0]
             topk_proposals = torch.topk(topk_logits, topk, dim=1)[1]
             topk_coords_logits = torch.gather(
-                enc_outputs_coord_logits, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
+                enc_outputs_coord_logits,
+                1,
+                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
             )
 
             topk_coords_logits = topk_coords_logits.detach()
@@ -2333,15 +2670,23 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
             else:
                 target = torch.gather(
-                    object_query_embedding, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model)
+                    object_query_embedding,
+                    1,
+                    topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
                 ).detach()
 
             # Set intermediate topk proposals (coords and class) for loss computation
             encoder_pred_boxes = reference_points
-            encoder_logits = self.encoder_output_class_embed(target, text_features, text_token_mask)
+            encoder_logits = self.encoder_output_class_embed(
+                target, text_features, text_token_mask
+            )
         else:
             target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
-            reference_points = self.reference_points.weight.unsqueeze(0).repeat(batch_size, 1, 1).sigmoid()
+            reference_points = (
+                self.reference_points.weight.unsqueeze(0)
+                .repeat(batch_size, 1, 1)
+                .sigmoid()
+            )
             init_reference_points = reference_points
 
         decoder_outputs = self.decoder(
@@ -2372,7 +2717,10 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 if value is not None
             )
             tuple_outputs = (
-                (decoder_outputs[0], init_reference_points) + decoder_outputs[1:] + encoder_outputs + enc_outputs
+                (decoder_outputs[0], init_reference_points)
+                + decoder_outputs[1:]
+                + encoder_outputs
+                + enc_outputs
             )
 
             return tuple_outputs
@@ -2410,7 +2758,9 @@ class GroundingDinoMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
+        )
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -2418,7 +2768,9 @@ class GroundingDinoMLPPredictionHead(nn.Module):
         return x
 
 
-def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> Tuple[torch.FloatTensor]:
+def build_label_maps(
+    logits: torch.FloatTensor, input_ids: torch.LongTensor
+) -> Tuple[torch.FloatTensor]:
     """
     Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
     The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
@@ -2449,7 +2801,9 @@ def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> 
     delimiter_tokens = torch.tensor(SPECIAL_TOKENS + [0], device=input_ids.device)
 
     delimiter_token_masks = torch.isin(input_ids, delimiter_tokens)
-    label_groups = torch.cumsum(delimiter_token_masks, dim=1) * (~delimiter_token_masks).to(torch.int32)
+    label_groups = torch.cumsum(delimiter_token_masks, dim=1) * (
+        ~delimiter_token_masks
+    ).to(torch.int32)
 
     label_maps = ()
 
@@ -2479,7 +2833,9 @@ def build_text_mask(logits, attention_mask):
     Create text_mask based on the matching indices
     """
     seq_len = attention_mask.shape[1]
-    text_mask = torch.zeros_like(logits, device=logits.device, dtype=attention_mask.dtype)
+    text_mask = torch.zeros_like(
+        logits, device=logits.device, dtype=attention_mask.dtype
+    )
     text_mask[:, :, :seq_len] = attention_mask[:, None, :]
 
     return text_mask.bool()
@@ -2495,7 +2851,10 @@ def build_text_mask(logits, attention_mask):
 class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
-    _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"model\.decoder\.bbox_embed\.[0-9]\d*"]
+    _tied_weights_keys = [
+        r"bbox_embed\.[1-9]\d*",
+        r"model\.decoder\.bbox_embed\.[0-9]\d*",
+    ]
 
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
@@ -2505,16 +2864,28 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         if config.decoder_bbox_embed_share:
             _bbox_embed = GroundingDinoMLPPredictionHead(
-                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                input_dim=config.d_model,
+                hidden_dim=config.d_model,
+                output_dim=4,
+                num_layers=3,
             )
-            self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
+            self.bbox_embed = nn.ModuleList(
+                [_bbox_embed for _ in range(config.decoder_layers)]
+            )
         else:
             for _ in range(config.decoder_layers):
                 _bbox_embed = GroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                    input_dim=config.d_model,
+                    hidden_dim=config.d_model,
+                    output_dim=4,
+                    num_layers=3,
                 )
-                self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
-        self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
+                self.bbox_embed = nn.ModuleList(
+                    [_bbox_embed for _ in range(config.decoder_layers)]
+                )
+        self.class_embed = nn.ModuleList(
+            [_class_embed for _ in range(config.decoder_layers)]
+        )
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed
         # hack implementation for two-stage
@@ -2524,7 +2895,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GroundingDinoObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=GroundingDinoObjectDetectionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2586,7 +2959,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
         Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -2605,10 +2980,18 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         )
 
         idx = 5 + (1 if output_attentions else 0) + (1 if output_hidden_states else 0)
-        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
-        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
-        init_reference_points = outputs.init_reference_points if return_dict else outputs[1]
-        inter_references_points = outputs.intermediate_reference_points if return_dict else outputs[3]
+        enc_text_hidden_state = (
+            outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
+        )
+        hidden_states = (
+            outputs.intermediate_hidden_states if return_dict else outputs[2]
+        )
+        init_reference_points = (
+            outputs.init_reference_points if return_dict else outputs[1]
+        )
+        inter_references_points = (
+            outputs.intermediate_reference_points if return_dict else outputs[3]
+        )
 
         # class logits + predicted bounding boxes
         outputs_classes = []
@@ -2637,7 +3020,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 delta_bbox[..., :2] += reference
                 outputs_coord_logits = delta_bbox
             else:
-                raise ValueError(f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}")
+                raise ValueError(
+                    f"reference.shape[-1] should be 4 or 2, but got {reference.shape[-1]}"
+                )
             outputs_coord = outputs_coord_logits.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
@@ -2666,8 +3051,18 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             )
 
         if not return_dict:
-            auxiliary_outputs = auxiliary_outputs if auxiliary_outputs is not None else []
-            output = [loss, loss_dict, logits, pred_boxes, *auxiliary_outputs, *outputs, input_ids]
+            auxiliary_outputs = (
+                auxiliary_outputs if auxiliary_outputs is not None else []
+            )
+            output = [
+                loss,
+                loss_dict,
+                logits,
+                pred_boxes,
+                *auxiliary_outputs,
+                *outputs,
+                input_ids,
+            ]
             output = tuple(out for out in output if out is not None)
             return output
 
@@ -2698,4 +3093,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         return dict_outputs
 
 
-__all__ = ["GroundingDinoForObjectDetection", "GroundingDinoModel", "GroundingDinoPreTrainedModel"]
+__all__ = [
+    "GroundingDinoForObjectDetection",
+    "GroundingDinoModel",
+    "GroundingDinoPreTrainedModel",
+]

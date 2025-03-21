@@ -16,15 +16,21 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
-from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
-from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
+from .loss_deformable_detr import (DeformableDetrForObjectDetectionLoss,
+                                   DeformableDetrForSegmentationLoss)
+from .loss_for_object_detection import (ForObjectDetectionLoss,
+                                        ForSegmentationLoss)
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
-def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
+def fixed_cross_entropy(
+    source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
+):
     reduction = "sum" if num_items_in_batch is not None else "mean"
-    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
+    loss = nn.functional.cross_entropy(
+        source, target, ignore_index=ignore_index, reduction=reduction
+    )
     if reduction == "sum":
         loss = loss / num_items_in_batch
     return loss
@@ -53,12 +59,19 @@ def ForCausalLMLoss(
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
     shift_labels = shift_labels.to(logits.device)
-    loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
+    loss = fixed_cross_entropy(
+        logits, shift_labels, num_items_in_batch, ignore_index, **kwargs
+    )
     return loss
 
 
 def ForMaskedLMLoss(
-    logits, labels, vocab_size: int, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
+    logits,
+    labels,
+    vocab_size: int,
+    num_items_in_batch: int = None,
+    ignore_index: int = -100,
+    **kwargs,
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
@@ -70,7 +83,9 @@ def ForMaskedLMLoss(
     # Enable model parallelism
 
     labels = labels.to(logits.device)
-    loss = fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
+    loss = fixed_cross_entropy(
+        logits, labels, num_items_in_batch, ignore_index, **kwargs
+    )
     return loss
 
 
@@ -79,7 +94,9 @@ def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
     if config.problem_type is None:
         if num_labels == 1:
             config.problem_type = "regression"
-        elif num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+        elif num_labels > 1 and (
+            labels.dtype == torch.long or labels.dtype == torch.int
+        ):
             config.problem_type = "single_label_classification"
         else:
             config.problem_type = "multi_label_classification"
@@ -92,14 +109,18 @@ def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
         else:
             loss = loss_fct(pooled_logits, labels)
     elif config.problem_type == "single_label_classification":
-        loss = fixed_cross_entropy(pooled_logits.view(-1, num_labels), labels.view(-1), **kwargs)
+        loss = fixed_cross_entropy(
+            pooled_logits.view(-1, num_labels), labels.view(-1), **kwargs
+        )
     elif config.problem_type == "multi_label_classification":
         loss_fct = BCEWithLogitsLoss()
         loss = loss_fct(pooled_logits, labels)
     return loss
 
 
-def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_positions, **kwargs):
+def ForQuestionAnsweringLoss(
+    start_logits, end_logits, start_positions, end_positions, **kwargs
+):
     total_loss = None
     if start_positions is not None and end_positions is not None:
         # If we are on multi-GPU, split add a dimension
@@ -112,8 +133,12 @@ def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_posi
         start_positions = start_positions.clamp(0, ignored_index)
         end_positions = end_positions.clamp(0, ignored_index)
 
-        start_loss = fixed_cross_entropy(start_logits, start_positions, ignore_index=ignored_index, **kwargs)
-        end_loss = fixed_cross_entropy(end_logits, end_positions, ignore_index=ignored_index, **kwargs)
+        start_loss = fixed_cross_entropy(
+            start_logits, start_positions, ignore_index=ignored_index, **kwargs
+        )
+        end_loss = fixed_cross_entropy(
+            end_logits, end_positions, ignore_index=ignored_index, **kwargs
+        )
         total_loss = (start_loss + end_loss) / 2
     return total_loss
 

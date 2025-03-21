@@ -21,9 +21,9 @@ from transformers import DecisionTransformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -92,13 +92,16 @@ class DecisionTransformerModelTester:
         model = DecisionTransformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(states, actions, rewards, returns_to_go, timesteps, attention_mask)
+        result = model(
+            states, actions, rewards, returns_to_go, timesteps, attention_mask
+        )
 
         self.parent.assertEqual(result.state_preds.shape, states.shape)
         self.parent.assertEqual(result.action_preds.shape, actions.shape)
         self.parent.assertEqual(result.return_preds.shape, returns_to_go.shape)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length * 3, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length * 3, self.hidden_size),
         )  # seq length *3 as there are 3 modelities: states, returns and actions
 
     def prepare_config_and_inputs_for_common(self):
@@ -124,9 +127,13 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DecisionTransformerModelTest(
+    ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
+    )
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
@@ -143,7 +150,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=DecisionTransformerConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -176,7 +185,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
                 "attention_mask",
             ]
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @unittest.skip(reason="Model does not have input embeddings")
     def test_model_get_set_embeddings(self):
@@ -195,27 +206,45 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
 
         NUM_STEPS = 2  # number of steps of autoregressive prediction we will perform
         TARGET_RETURN = 10  # defined by the RL environment, may be normalized
-        model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-expert")
+        model = DecisionTransformerModel.from_pretrained(
+            "edbeeching/decision-transformer-gym-hopper-expert"
+        )
         model = model.to(torch_device)
         config = model.config
         torch.manual_seed(0)
-        state = torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32)  # env.reset()
+        state = torch.randn(1, 1, config.state_dim).to(
+            device=torch_device, dtype=torch.float32
+        )  # env.reset()
 
         expected_outputs = torch.tensor(
-            [[0.242793, -0.28693074, 0.8742613], [0.67815274, -0.08101085, -0.12952147]], device=torch_device
+            [
+                [0.242793, -0.28693074, 0.8742613],
+                [0.67815274, -0.08101085, -0.12952147],
+            ],
+            device=torch_device,
         )
 
-        returns_to_go = torch.tensor(TARGET_RETURN, device=torch_device, dtype=torch.float32).reshape(1, 1, 1)
+        returns_to_go = torch.tensor(
+            TARGET_RETURN, device=torch_device, dtype=torch.float32
+        ).reshape(1, 1, 1)
         states = state
-        actions = torch.zeros(1, 0, config.act_dim, device=torch_device, dtype=torch.float32)
+        actions = torch.zeros(
+            1, 0, config.act_dim, device=torch_device, dtype=torch.float32
+        )
         rewards = torch.zeros(1, 0, device=torch_device, dtype=torch.float32)
         timesteps = torch.tensor(0, device=torch_device, dtype=torch.long).reshape(1, 1)
 
         for step in range(NUM_STEPS):
-            actions = torch.cat([actions, torch.zeros(1, 1, config.act_dim, device=torch_device)], dim=1)
-            rewards = torch.cat([rewards, torch.zeros(1, 1, device=torch_device)], dim=1)
+            actions = torch.cat(
+                [actions, torch.zeros(1, 1, config.act_dim, device=torch_device)], dim=1
+            )
+            rewards = torch.cat(
+                [rewards, torch.zeros(1, 1, device=torch_device)], dim=1
+            )
 
-            attention_mask = torch.ones(1, states.shape[1]).to(dtype=torch.long, device=states.device)
+            attention_mask = torch.ones(1, states.shape[1]).to(
+                dtype=torch.long, device=states.device
+            )
 
             with torch.no_grad():
                 _, action_pred, _ = model(
@@ -229,9 +258,13 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
                 )
 
             self.assertEqual(action_pred.shape, actions.shape)
-            torch.testing.assert_close(action_pred[0, -1], expected_outputs[step], rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                action_pred[0, -1], expected_outputs[step], rtol=1e-4, atol=1e-4
+            )
             state, reward, _, _ = (  # env.step(action)
-                torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32),
+                torch.randn(1, 1, config.state_dim).to(
+                    device=torch_device, dtype=torch.float32
+                ),
                 1.0,
                 False,
                 {},
@@ -240,7 +273,14 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
             actions[-1] = action_pred[0, -1]
             states = torch.cat([states, state], dim=1)
             pred_return = returns_to_go[0, -1] - reward
-            returns_to_go = torch.cat([returns_to_go, pred_return.reshape(1, 1, 1)], dim=1)
+            returns_to_go = torch.cat(
+                [returns_to_go, pred_return.reshape(1, 1, 1)], dim=1
+            )
             timesteps = torch.cat(
-                [timesteps, torch.ones((1, 1), device=torch_device, dtype=torch.long) * (step + 1)], dim=1
+                [
+                    timesteps,
+                    torch.ones((1, 1), device=torch_device, dtype=torch.long)
+                    * (step + 1),
+                ],
+                dim=1,
             )

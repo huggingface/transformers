@@ -13,8 +13,8 @@
 # limitations under the License.
 "SpQR (Sparse-Quantized Representation) integration file"
 
-from ..utils import is_accelerate_available, is_spqr_available, is_torch_available
-
+from ..utils import (is_accelerate_available, is_spqr_available,
+                     is_torch_available)
 
 if is_torch_available():
     import torch.nn as nn

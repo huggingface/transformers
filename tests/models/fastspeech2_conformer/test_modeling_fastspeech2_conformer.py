@@ -18,23 +18,24 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import (
-    FastSpeech2ConformerConfig,
-    FastSpeech2ConformerHifiGanConfig,
-    FastSpeech2ConformerTokenizer,
-    FastSpeech2ConformerWithHifiGanConfig,
-    is_torch_available,
-)
-from transformers.testing_utils import require_g2p_en, require_torch, require_torch_accelerator, slow, torch_device
+from transformers import (FastSpeech2ConformerConfig,
+                          FastSpeech2ConformerHifiGanConfig,
+                          FastSpeech2ConformerTokenizer,
+                          FastSpeech2ConformerWithHifiGanConfig,
+                          is_torch_available)
+from transformers.testing_utils import (require_g2p_en, require_torch,
+                                        require_torch_accelerator, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
-
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     ids_tensor)
 
 if is_torch_available():
     import torch
 
-    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan, set_seed
+    from transformers import (FastSpeech2ConformerModel,
+                              FastSpeech2ConformerWithHifiGan, set_seed)
 
 
 class FastSpeech2ConformerModelTester:
@@ -106,10 +107,16 @@ class FastSpeech2ConformerModelTester:
             self.parent.assertEqual(value.size(0), self.batch_size)
         # check duration, pitch, and energy have the appropriate shapes
         # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
-        self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
-        self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)
+        self.parent.assertEqual(
+            result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape
+        )
+        self.parent.assertEqual(
+            result["pitch_outputs"].shape, result["energy_outputs"].shape
+        )
         # check predicted mel-spectrogram has correct dimension
-        self.parent.assertEqual(result["spectrogram"].size(2), model.config.num_mel_bins)
+        self.parent.assertEqual(
+            result["spectrogram"].size(2), model.config.num_mel_bins
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids = self.prepare_config_and_inputs()
@@ -152,7 +159,12 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
                         if "weight" in name:
                             self.assertEqual(param.data.mean().item(), 1.0, msg=msg)
                     elif "conv" in name or "embed" in name:
-                        self.assertTrue(-1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0, msg=msg)
+                        self.assertTrue(
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
+                            msg=msg,
+                        )
 
     def test_duration_energy_pitch_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -167,11 +179,20 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             # duration
-            self.assertListEqual(list(outputs.duration_outputs.shape), [self.model_tester.batch_size, seq_len])
+            self.assertListEqual(
+                list(outputs.duration_outputs.shape),
+                [self.model_tester.batch_size, seq_len],
+            )
             # energy
-            self.assertListEqual(list(outputs.energy_outputs.shape), [self.model_tester.batch_size, seq_len, 1])
+            self.assertListEqual(
+                list(outputs.energy_outputs.shape),
+                [self.model_tester.batch_size, seq_len, 1],
+            )
             # pitch
-            self.assertListEqual(list(outputs.pitch_outputs.shape), [self.model_tester.batch_size, seq_len, 1])
+            self.assertListEqual(
+                list(outputs.pitch_outputs.shape),
+                [self.model_tester.batch_size, seq_len, 1],
+            )
 
     def test_hidden_states_output(self):
         def _check_hidden_states_output(inputs_dict, config, model_class):
@@ -182,14 +203,20 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            for idx, hidden_states in enumerate([outputs.encoder_hidden_states, outputs.decoder_hidden_states]):
+            for idx, hidden_states in enumerate(
+                [outputs.encoder_hidden_states, outputs.decoder_hidden_states]
+            ):
                 expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                    self.model_tester,
+                    "expected_num_hidden_layers",
+                    self.model_tester.num_hidden_layers + 1,
                 )
 
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 self.assertIsInstance(hidden_states, (list, tuple))
-                expected_batch_size, expected_seq_length, expected_hidden_size = hidden_states[0].shape
+                expected_batch_size, expected_seq_length, expected_hidden_size = (
+                    hidden_states[0].shape
+                )
                 self.assertEqual(expected_batch_size, self.model_tester.batch_size)
                 # Only test encoder seq_length since decoder seq_length is variable based on inputs
                 if idx == 0:
@@ -213,7 +240,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            _, info = FastSpeech2ConformerModel.from_pretrained(tmpdirname, output_loading_info=True)
+            _, info = FastSpeech2ConformerModel.from_pretrained(
+                tmpdirname, output_loading_info=True
+            )
         self.assertEqual(info["missing_keys"], [])
 
     def test_forward_signature(self):
@@ -293,7 +322,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(len(outputs.encoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(outputs.encoder_attentions), self.model_tester.num_hidden_layers
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -305,7 +336,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             encoder_attentions = outputs.encoder_attentions
-            self.assertEqual(len(encoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(encoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(encoder_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -336,7 +369,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
@@ -360,11 +395,15 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
     def test_inference_integration(self):
-        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         model.to(torch_device)
         model.eval()
 
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
@@ -390,29 +429,43 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-4, atol=1e-4
+        )
         self.assertEqual(spectrogram.shape, (1, 205, model.config.num_mel_bins))
 
     def test_training_integration(self):
-        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         model.to(torch_device)
         # Set self.training manually to keep deterministic but run the training path
         model.training = True
         set_seed(0)
 
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
         # NOTE: Dummy numbers since FastSpeech2Conformer does not have a feature extractor due to the package deps required (librosa, MFA)
         batch_size, max_text_len = input_ids.shape
-        pitch_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
-        energy_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
-        duration_labels = torch.normal(10, 2, size=(batch_size, max_text_len)).clamp(1, 20).int()
+        pitch_labels = torch.rand(
+            (batch_size, max_text_len, 1), dtype=torch.float, device=torch_device
+        )
+        energy_labels = torch.rand(
+            (batch_size, max_text_len, 1), dtype=torch.float, device=torch_device
+        )
+        duration_labels = (
+            torch.normal(10, 2, size=(batch_size, max_text_len)).clamp(1, 20).int()
+        )
         max_target_len, _ = duration_labels.sum(dim=1).max(dim=0)
         max_target_len = max_target_len.item()
         spectrogram_labels = torch.rand(
-            (batch_size, max_target_len, model.num_mel_bins), dtype=torch.float, device=torch_device
+            (batch_size, max_target_len, model.num_mel_bins),
+            dtype=torch.float,
+            device=torch_device,
         )
 
         outputs_dict = model(
@@ -447,7 +500,9 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         expected_loss = torch.tensor(74.4595, device=torch_device)
 
-        torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-3, atol=1e-3
+        )
         torch.testing.assert_close(loss, expected_loss, rtol=1e-4, atol=1e-4)
         self.assertEqual(spectrogram.shape, (1, 224, model.config.num_mel_bins))
 
@@ -510,10 +565,12 @@ class FastSpeech2ConformerWithHifiGanTester:
             duration_predictor_layers=self.duration_predictor_layers,
         )
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(
-            model_in_dim=self.num_mel_bins, upsample_initial_channel=self.upsample_initial_channel
+            model_in_dim=self.num_mel_bins,
+            upsample_initial_channel=self.upsample_initial_channel,
         )
         return FastSpeech2ConformerWithHifiGanConfig(
-            model_config=self.model_config.to_dict(), vocoder_config=self.vocoder_config.to_dict()
+            model_config=self.model_config.to_dict(),
+            vocoder_config=self.vocoder_config.to_dict(),
         )
 
     def create_and_check_model(self, config, input_ids, *args):
@@ -529,10 +586,16 @@ class FastSpeech2ConformerWithHifiGanTester:
             self.parent.assertEqual(value.size(0), self.batch_size)
         # check duration, pitch, and energy have the appropriate shapes
         # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
-        self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
-        self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)
+        self.parent.assertEqual(
+            result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape
+        )
+        self.parent.assertEqual(
+            result["pitch_outputs"].shape, result["energy_outputs"].shape
+        )
         # check predicted mel-spectrogram has correct dimension
-        self.parent.assertEqual(result["spectrogram"].size(2), model.config.model_config.num_mel_bins)
+        self.parent.assertEqual(
+            result["spectrogram"].size(2), model.config.model_config.num_mel_bins
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids = self.prepare_config_and_inputs()
@@ -543,7 +606,9 @@ class FastSpeech2ConformerWithHifiGanTester:
 @require_torch_accelerator
 @require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
+    all_model_classes = (
+        (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -571,7 +636,12 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
                         if "weight" in name:
                             self.assertEqual(param.data.mean().item(), 1.0, msg=msg)
                     elif "conv" in name or "embed" in name:
-                        self.assertTrue(-1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0, msg=msg)
+                        self.assertTrue(
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
+                            msg=msg,
+                        )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         return inputs_dict
@@ -589,11 +659,20 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             # duration
-            self.assertListEqual(list(outputs.duration_outputs.shape), [self.model_tester.batch_size, seq_len])
+            self.assertListEqual(
+                list(outputs.duration_outputs.shape),
+                [self.model_tester.batch_size, seq_len],
+            )
             # energy
-            self.assertListEqual(list(outputs.energy_outputs.shape), [self.model_tester.batch_size, seq_len, 1])
+            self.assertListEqual(
+                list(outputs.energy_outputs.shape),
+                [self.model_tester.batch_size, seq_len, 1],
+            )
             # pitch
-            self.assertListEqual(list(outputs.pitch_outputs.shape), [self.model_tester.batch_size, seq_len, 1])
+            self.assertListEqual(
+                list(outputs.pitch_outputs.shape),
+                [self.model_tester.batch_size, seq_len, 1],
+            )
 
     def test_hidden_states_output(self):
         def _check_hidden_states_output(inputs_dict, config, model_class):
@@ -604,14 +683,20 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            for idx, hidden_states in enumerate([outputs.encoder_hidden_states, outputs.decoder_hidden_states]):
+            for idx, hidden_states in enumerate(
+                [outputs.encoder_hidden_states, outputs.decoder_hidden_states]
+            ):
                 expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                    self.model_tester,
+                    "expected_num_hidden_layers",
+                    self.model_tester.num_hidden_layers + 1,
                 )
 
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 self.assertIsInstance(hidden_states, (list, tuple))
-                expected_batch_size, expected_seq_length, expected_hidden_size = hidden_states[0].shape
+                expected_batch_size, expected_seq_length, expected_hidden_size = (
+                    hidden_states[0].shape
+                )
                 self.assertEqual(expected_batch_size, self.model_tester.batch_size)
                 # Only test encoder seq_length since decoder seq_length is variable based on inputs
                 if idx == 0:
@@ -621,13 +706,17 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         inputs_dict["output_hidden_states"] = True
-        _check_hidden_states_output(inputs_dict, config, FastSpeech2ConformerWithHifiGan)
+        _check_hidden_states_output(
+            inputs_dict, config, FastSpeech2ConformerWithHifiGan
+        )
 
         # check that output_hidden_states also work using config
         del inputs_dict["output_hidden_states"]
         config.model_config.output_hidden_states = True
 
-        _check_hidden_states_output(inputs_dict, config, FastSpeech2ConformerWithHifiGan)
+        _check_hidden_states_output(
+            inputs_dict, config, FastSpeech2ConformerWithHifiGan
+        )
 
     def test_save_load_strict(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
@@ -635,7 +724,9 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            _, info = FastSpeech2ConformerWithHifiGan.from_pretrained(tmpdirname, output_loading_info=True)
+            _, info = FastSpeech2ConformerWithHifiGan.from_pretrained(
+                tmpdirname, output_loading_info=True
+            )
         self.assertEqual(info["missing_keys"], [])
 
     def test_forward_signature(self):
@@ -715,7 +806,9 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(len(outputs.encoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(outputs.encoder_attentions), self.model_tester.num_hidden_layers
+            )
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -727,7 +820,9 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             encoder_attentions = outputs.encoder_attentions
-            self.assertEqual(len(encoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(encoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(encoder_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -758,7 +853,9 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
@@ -782,11 +879,15 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
     def test_inference_integration(self):
-        model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")
+        model = FastSpeech2ConformerWithHifiGan.from_pretrained(
+            "espnet/fastspeech2_conformer_with_hifigan"
+        )
         model.to(torch_device)
         model.eval()
 
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained(
+            "espnet/fastspeech2_conformer"
+        )
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
@@ -803,5 +904,7 @@ class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        torch.testing.assert_close(waveform[0, :100], expected_waveform, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            waveform[0, :100], expected_waveform, rtol=1e-4, atol=1e-4
+        )
         self.assertEqual(waveform.shape, (1, 52480))

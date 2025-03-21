@@ -23,12 +23,13 @@ import numpy as np
 
 from transformers import ResNetConfig
 from transformers.testing_utils import require_tf, require_vision, slow
-from transformers.utils import cached_property, is_tf_available, is_vision_available
+from transformers.utils import (cached_property, is_tf_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
@@ -73,7 +74,9 @@ class TFResNetModelTester:
         self.num_stages = len(hidden_sizes)
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -100,7 +103,12 @@ class TFResNetModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (
+                self.batch_size,
+                self.hidden_sizes[-1],
+                self.image_size // 32,
+                self.image_size // 32,
+            ),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -123,9 +131,14 @@ class TFResNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TFResNetModel, TFResNetForImageClassification) if is_tf_available() else ()
+    all_model_classes = (
+        (TFResNetModel, TFResNetForImageClassification) if is_tf_available() else ()
+    )
     pipeline_model_mapping = (
-        {"feature-extraction": TFResNetModel, "image-classification": TFResNetForImageClassification}
+        {
+            "feature-extraction": TFResNetModel,
+            "image-classification": TFResNetForImageClassification,
+        }
         if is_tf_available()
         else {}
     )
@@ -138,7 +151,9 @@ class TFResNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = TFResNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=ResNetConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -181,7 +196,11 @@ class TFResNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -228,7 +247,11 @@ def prepare_img():
 class TFResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("microsoft/resnet-50") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
@@ -247,4 +270,6 @@ class TFResNetModelIntegrationTest(unittest.TestCase):
 
         expected_slice = tf.constant([-11.1069, -9.7877, -8.3777])
 
-        self.assertTrue(np.allclose(outputs.logits[0, :3].numpy(), expected_slice, atol=1e-4))
+        self.assertTrue(
+            np.allclose(outputs.logits[0, :3].numpy(), expected_slice, atol=1e-4)
+        )

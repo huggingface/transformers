@@ -24,24 +24,22 @@ from typing import Dict, List, Optional, Tuple, Union
 from tokenizers import processors
 
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
-from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
-    AddedToken,
-    BatchEncoding,
-    EncodedInput,
-    PreTokenizedInput,
-    TextInput,
-    TextInputPair,
-    TruncationStrategy,
-)
+from ...tokenization_utils_base import (ENCODE_KWARGS_DOCSTRING, AddedToken,
+                                        BatchEncoding, EncodedInput,
+                                        PreTokenizedInput, TextInput,
+                                        TextInputPair, TruncationStrategy)
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_markuplm import MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, MarkupLMTokenizer
-
+from .tokenization_markuplm import (
+    MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, MarkupLMTokenizer)
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json",
+}
 
 
 @lru_cache()
@@ -54,7 +52,9 @@ def bytes_to_unicode():
     vocab. To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     """
     bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
@@ -164,15 +164,43 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         trim_offsets=False,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        sep_token = (
+            AddedToken(sep_token, lstrip=False, rstrip=False)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
+        cls_token = (
+            AddedToken(cls_token, lstrip=False, rstrip=False)
+            if isinstance(cls_token, str)
+            else cls_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file=vocab_file,
@@ -208,7 +236,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         self.tags_dict = tags_dict
 
         tokenizer_component = "post_processor"
-        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        tokenizer_component_instance = getattr(
+            self.backend_tokenizer, tokenizer_component, None
+        )
         if tokenizer_component_instance:
             state = json.loads(tokenizer_component_instance.__getstate__())
 
@@ -265,10 +295,14 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         return xpath_tags_list, xpath_subs_list
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         xpaths: Union[List[List[int]], List[List[List[int]]]] = None,
         node_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -331,7 +365,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = nodes
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError(
+                    "text input must of type `str` (single example) or `List[str]` (batch of examples). "
+                )
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
                     "Nodes must be of type `List[str]` (single pretokenized example), "
@@ -348,16 +384,26 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if text_pair is not None:
             is_batched = isinstance(text, (list, tuple))
         else:
-            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            is_batched = (
+                isinstance(text, (list, tuple))
+                and text
+                and isinstance(text[0], (list, tuple))
+            )
 
         nodes = text if text_pair is None else text_pair
         assert xpaths is not None, "You must provide corresponding xpaths"
         if is_batched:
-            assert len(nodes) == len(xpaths), "You must provide nodes and xpaths for an equal amount of examples"
+            assert len(nodes) == len(
+                xpaths
+            ), "You must provide nodes and xpaths for an equal amount of examples"
             for nodes_example, xpaths_example in zip(nodes, xpaths):
-                assert len(nodes_example) == len(xpaths_example), "You must provide as many nodes as there are xpaths"
+                assert len(nodes_example) == len(
+                    xpaths_example
+                ), "You must provide as many nodes as there are xpaths"
         else:
-            assert len(nodes) == len(xpaths), "You must provide as many nodes as there are xpaths"
+            assert len(nodes) == len(
+                xpaths
+            ), "You must provide as many nodes as there are xpaths"
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -365,7 +411,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
                     f" {len(text_pair)}."
                 )
-            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            batch_text_or_text_pairs = (
+                list(zip(text, text_pair)) if text_pair is not None else text
+            )
             is_pair = bool(text_pair is not None)
             return self.batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
@@ -413,7 +461,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                 **kwargs,
             )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -442,13 +492,15 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ) -> BatchEncoding:
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         return self._batch_encode_plus(
@@ -474,15 +526,26 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+    def tokenize(
+        self,
+        text: str,
+        pair: Optional[str] = None,
+        add_special_tokens: bool = False,
+        **kwargs,
+    ) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
-            batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
+            batched_input,
+            add_special_tokens=add_special_tokens,
+            is_pretokenized=False,
+            **kwargs,
         )
 
         return encodings[0].tokens
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],
@@ -519,13 +582,15 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         return self._encode_plus(
@@ -578,7 +643,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
     ) -> BatchEncoding:
         if not isinstance(batch_text_or_text_pairs, list):
-            raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
+            raise TypeError(
+                f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})"
+            )
 
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
@@ -591,7 +658,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         if is_pair:
-            batch_text_or_text_pairs = [([text], text_pair) for text, text_pair in batch_text_or_text_pairs]
+            batch_text_or_text_pairs = [
+                ([text], text_pair) for text, text_pair in batch_text_or_text_pairs
+            ]
 
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
@@ -609,9 +678,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=True
-                if node_labels is not None
-                else return_offsets_mapping,  # we use offsets to create the labels
+                return_offsets_mapping=(
+                    True if node_labels is not None else return_offsets_mapping
+                ),  # we use offsets to create the labels
                 return_length=return_length,
                 verbose=verbose,
             )
@@ -646,7 +715,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         xpath_subs_seq = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
             if return_overflowing_tokens:
-                original_index = sanitized_tokens["overflow_to_sample_mapping"][batch_index]
+                original_index = sanitized_tokens["overflow_to_sample_mapping"][
+                    batch_index
+                ]
             else:
                 original_index = batch_index
             xpath_tags_seq_example = []
@@ -661,7 +732,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                         xpath_tags_seq_example.append(self.pad_xpath_tags_seq)
                         xpath_subs_seq_example.append(self.pad_xpath_subs_seq)
                     else:
-                        xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpaths[original_index][word_id])
+                        xpath_tags_list, xpath_subs_list = self.get_xpath_seq(
+                            xpaths[original_index][word_id]
+                        )
                         xpath_tags_seq_example.extend([xpath_tags_list])
                         xpath_subs_seq_example.extend([xpath_subs_list])
                 else:
@@ -681,7 +754,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             labels = []
             for batch_index in range(len(sanitized_tokens["input_ids"])):
                 if return_overflowing_tokens:
-                    original_index = sanitized_tokens["overflow_to_sample_mapping"][batch_index]
+                    original_index = sanitized_tokens["overflow_to_sample_mapping"][
+                        batch_index
+                    ]
                 else:
                     original_index = batch_index
                 labels_example = []
@@ -694,7 +769,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                         if self.only_label_first_subword:
                             if offset[0] == 0:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                                labels_example.append(node_labels[original_index][word_id])
+                                labels_example.append(
+                                    node_labels[original_index][word_id]
+                                )
                             else:
                                 labels_example.append(self.pad_token_label)
                         else:
@@ -708,7 +785,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             if not return_offsets_mapping:
                 del sanitized_tokens["offset_mapping"]
 
-        return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
+        return BatchEncoding(
+            sanitized_tokens, sanitized_encodings, tensor_type=return_tensors
+        )
 
     def _encode_plus(
         self,
@@ -768,13 +847,19 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if return_tensors is None and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
-                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                    key: (
+                        value[0]
+                        if len(value) > 0 and isinstance(value[0], list)
+                        else value
+                    )
                     for key, value in batched_output.items()
                 },
                 batched_output.encodings,
             )
 
-        self._eventual_warn_about_too_long_sequence(batched_output["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            batched_output["input_ids"], max_length, verbose
+        )
 
         return batched_output
 
@@ -819,10 +904,17 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = (
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(required_input) != max_length
+        )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
@@ -830,47 +922,68 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [self.pad_token_type_id] * difference
                     )
                 if "xpath_tags_seq" in encoded_inputs:
                     encoded_inputs["xpath_tags_seq"] = (
-                        encoded_inputs["xpath_tags_seq"] + [self.pad_xpath_tags_seq] * difference
+                        encoded_inputs["xpath_tags_seq"]
+                        + [self.pad_xpath_tags_seq] * difference
                     )
                 if "xpath_subs_seq" in encoded_inputs:
                     encoded_inputs["xpath_subs_seq"] = (
-                        encoded_inputs["xpath_subs_seq"] + [self.pad_xpath_subs_seq] * difference
+                        encoded_inputs["xpath_subs_seq"]
+                        + [self.pad_xpath_subs_seq] * difference
                     )
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    encoded_inputs["labels"] = (
+                        encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs[self.model_input_names[0]] = (
+                    required_input + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        self.pad_token_type_id
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "xpath_tags_seq" in encoded_inputs:
-                    encoded_inputs["xpath_tags_seq"] = [self.pad_xpath_tags_seq] * difference + encoded_inputs[
-                        "xpath_tags_seq"
-                    ]
+                    encoded_inputs["xpath_tags_seq"] = [
+                        self.pad_xpath_tags_seq
+                    ] * difference + encoded_inputs["xpath_tags_seq"]
                 if "xpath_subs_seq" in encoded_inputs:
-                    encoded_inputs["xpath_subs_seq"] = [self.pad_xpath_subs_seq] * difference + encoded_inputs[
-                        "xpath_subs_seq"
-                    ]
+                    encoded_inputs["xpath_subs_seq"] = [
+                        self.pad_xpath_subs_seq
+                    ] * difference + encoded_inputs["xpath_subs_seq"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
+                    encoded_inputs["labels"] = [
+                        self.pad_token_label
+                    ] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [
+                    self.pad_token_id
+                ] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
@@ -921,7 +1034,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

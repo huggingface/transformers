@@ -24,16 +24,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...pytorch_utils import (find_pruneable_heads_and_indices,
+                              prune_linear_layer)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_glpn import GLPNConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -47,7 +43,9 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 15, 20]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -60,8 +58,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -113,7 +115,9 @@ class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
     paper](https://arxiv.org/abs/2102.12122)."""
 
-    def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
+    def __init__(
+        self, config, hidden_size, num_attention_heads, sequence_reduction_ratio
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -136,12 +140,18 @@ class GLPNEfficientSelfAttention(nn.Module):
         self.sr_ratio = sequence_reduction_ratio
         if sequence_reduction_ratio > 1:
             self.sr = nn.Conv2d(
-                hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio
+                hidden_size,
+                hidden_size,
+                kernel_size=sequence_reduction_ratio,
+                stride=sequence_reduction_ratio,
             )
             self.layer_norm = nn.LayerNorm(hidden_size)
 
     def transpose_for_scores(self, hidden_states):
-        new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_shape = hidden_states.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         hidden_states = hidden_states.view(new_shape)
         return hidden_states.permute(0, 2, 1, 3)
 
@@ -157,11 +167,15 @@ class GLPNEfficientSelfAttention(nn.Module):
         if self.sr_ratio > 1:
             batch_size, seq_len, num_channels = hidden_states.shape
             # Reshape to (batch_size, num_channels, height, width)
-            hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+            hidden_states = hidden_states.permute(0, 2, 1).reshape(
+                batch_size, num_channels, height, width
+            )
             # Apply sequence reduction
             hidden_states = self.sr(hidden_states)
             # Reshape back to (batch_size, seq_len, num_channels)
-            hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(
+                0, 2, 1
+            )
             hidden_states = self.layer_norm(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -185,7 +199,9 @@ class GLPNEfficientSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -205,7 +221,9 @@ class GLPNSelfOutput(nn.Module):
 
 # Copied from transformers.models.segformer.modeling_segformer.SegformerAttention with Segformer->GLPN
 class GLPNAttention(nn.Module):
-    def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
+    def __init__(
+        self, config, hidden_size, num_attention_heads, sequence_reduction_ratio
+    ):
         super().__init__()
         self.self = GLPNEfficientSelfAttention(
             config=config,
@@ -220,7 +238,10 @@ class GLPNAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -231,14 +252,18 @@ class GLPNAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, height, width, output_attentions=False):
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -250,7 +275,9 @@ class GLPNDWConv(nn.Module):
 
     def forward(self, hidden_states, height, width):
         batch_size, seq_len, num_channels = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2).view(batch_size, num_channels, height, width)
+        hidden_states = hidden_states.transpose(1, 2).view(
+            batch_size, num_channels, height, width
+        )
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
@@ -285,7 +312,15 @@ class GLPNMixFFN(nn.Module):
 class GLPNLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config, hidden_size, num_attention_heads, drop_path, sequence_reduction_ratio, mlp_ratio):
+    def __init__(
+        self,
+        config,
+        hidden_size,
+        num_attention_heads,
+        drop_path,
+        sequence_reduction_ratio,
+        mlp_ratio,
+    ):
         super().__init__()
         self.layer_norm_1 = nn.LayerNorm(hidden_size)
         self.attention = GLPNAttention(
@@ -297,18 +332,24 @@ class GLPNLayer(nn.Module):
         self.drop_path = GLPNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = GLPNMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = GLPNMixFFN(
+            config, in_features=hidden_size, hidden_features=mlp_hidden_size
+        )
 
     def forward(self, hidden_states, height, width, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layer_norm_1(hidden_states),  # in GLPN, layernorm is applied before self-attention
+            self.layer_norm_1(
+                hidden_states
+            ),  # in GLPN, layernorm is applied before self-attention
             height,
             width,
             output_attentions=output_attentions,
         )
 
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         # first residual connection (with stochastic depth)
         attention_output = self.drop_path(attention_output)
@@ -331,7 +372,10 @@ class GLPNEncoder(nn.Module):
         self.config = config
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
+        ]
 
         # patch embeddings
         embeddings = []
@@ -340,7 +384,9 @@ class GLPNEncoder(nn.Module):
                 GLPNOverlapPatchEmbeddings(
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
-                    num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
+                    num_channels=(
+                        config.num_channels if i == 0 else config.hidden_sizes[i - 1]
+                    ),
                     hidden_size=config.hidden_sizes[i],
                 )
             )
@@ -371,7 +417,10 @@ class GLPNEncoder(nn.Module):
 
         # Layer norms
         self.layer_norm = nn.ModuleList(
-            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
+            [
+                nn.LayerNorm(config.hidden_sizes[i])
+                for i in range(config.num_encoder_blocks)
+            ]
         )
 
     def forward(
@@ -387,7 +436,9 @@ class GLPNEncoder(nn.Module):
         batch_size = pixel_values.shape[0]
 
         hidden_states = pixel_values
-        for idx, x in enumerate(zip(self.patch_embeddings, self.block, self.layer_norm)):
+        for idx, x in enumerate(
+            zip(self.patch_embeddings, self.block, self.layer_norm)
+        ):
             embedding_layer, block_layer, norm_layer = x
             # first, obtain patch embeddings
             hidden_states, height, width = embedding_layer(hidden_states)
@@ -400,12 +451,20 @@ class GLPNEncoder(nn.Module):
             # third, apply layer norm
             hidden_states = norm_layer(hidden_states)
             # fourth, optionally reshape back to (batch_size, num_channels, height, width)
-            hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+            hidden_states = (
+                hidden_states.reshape(batch_size, height, width, -1)
+                .permute(0, 3, 1, 2)
+                .contiguous()
+            )
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -495,7 +554,9 @@ class GLPNModel(GLPNPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(
+        GLPN_INPUTS_DOCSTRING.format("(batch_size, sequence_length)")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -511,11 +572,19 @@ class GLPNModel(GLPNPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -545,19 +614,35 @@ class GLPNSelectiveFeatureFusion(nn.Module):
         super().__init__()
 
         self.convolutional_layer1 = nn.Sequential(
-            nn.Conv2d(in_channels=int(in_channel * 2), out_channels=in_channel, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(
+                in_channels=int(in_channel * 2),
+                out_channels=in_channel,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
             nn.BatchNorm2d(in_channel),
             nn.ReLU(),
         )
 
         self.convolutional_layer2 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channel, out_channels=int(in_channel / 2), kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(
+                in_channels=in_channel,
+                out_channels=int(in_channel / 2),
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
             nn.BatchNorm2d(int(in_channel / 2)),
             nn.ReLU(),
         )
 
         self.convolutional_layer3 = nn.Conv2d(
-            in_channels=int(in_channel / 2), out_channels=2, kernel_size=3, stride=1, padding=1
+            in_channels=int(in_channel / 2),
+            out_channels=2,
+            kernel_size=3,
+            stride=1,
+            padding=1,
         )
 
         self.sigmoid = nn.Sigmoid()
@@ -572,9 +657,9 @@ class GLPNSelectiveFeatureFusion(nn.Module):
         # apply sigmoid to get two-channel attention map
         attn = self.sigmoid(features)
         # construct hybrid features by adding element-wise
-        hybrid_features = local_features * attn[:, 0, :, :].unsqueeze(1) + global_features * attn[
-            :, 1, :, :
-        ].unsqueeze(1)
+        hybrid_features = local_features * attn[:, 0, :, :].unsqueeze(
+            1
+        ) + global_features * attn[:, 1, :, :].unsqueeze(1)
 
         return hybrid_features
 
@@ -583,9 +668,15 @@ class GLPNDecoderStage(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         should_skip = in_channels == out_channels
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1) if not should_skip else nn.Identity()
+        self.convolution = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1)
+            if not should_skip
+            else nn.Identity()
+        )
         self.fusion = GLPNSelectiveFeatureFusion(out_channels)
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.upsample = nn.Upsample(
+            scale_factor=2, mode="bilinear", align_corners=False
+        )
 
     def forward(self, hidden_state, residual=None):
         hidden_state = self.convolution(hidden_state)
@@ -607,12 +698,17 @@ class GLPNDecoder(nn.Module):
         out_channels = config.decoder_hidden_size
 
         self.stages = nn.ModuleList(
-            [GLPNDecoderStage(hidden_size, out_channels) for hidden_size in reserved_hidden_sizes]
+            [
+                GLPNDecoderStage(hidden_size, out_channels)
+                for hidden_size in reserved_hidden_sizes
+            ]
         )
         # don't fuse in first stage
         self.stages[0].fusion = None
 
-        self.final_upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.final_upsample = nn.Upsample(
+            scale_factor=2, mode="bilinear", align_corners=False
+        )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         stage_hidden_states = []
@@ -642,7 +738,9 @@ class SiLogLoss(nn.Module):
     def forward(self, pred, target):
         valid_mask = (target > 0).detach()
         diff_log = torch.log(target[valid_mask]) - torch.log(pred[valid_mask])
-        loss = torch.sqrt(torch.pow(diff_log, 2).mean() - self.lambd * torch.pow(diff_log.mean(), 2))
+        loss = torch.sqrt(
+            torch.pow(diff_log, 2).mean() - self.lambd * torch.pow(diff_log.mean(), 2)
+        )
 
         return loss
 
@@ -687,8 +785,12 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        GLPN_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -736,9 +838,13 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         outputs = self.glpn(

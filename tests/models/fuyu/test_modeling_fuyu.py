@@ -22,13 +22,15 @@ import requests
 from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (require_torch,
+                                        require_torch_accelerator, slow,
+                                        torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_vision_available():
     from PIL import Image
@@ -109,8 +111,12 @@ class FuyuModelTester:
         sequence_labels = None
         token_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -146,7 +152,10 @@ class FuyuModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -174,7 +183,10 @@ class FuyuModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -190,7 +202,9 @@ class FuyuModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -244,13 +258,17 @@ class FuyuModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -266,10 +284,14 @@ class FuyuModelTester:
 
 
 @require_torch
-class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class FuyuModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
+        {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM}
+        if is_torch_available()
+        else {}
     )
 
     test_head_masking = False
@@ -301,12 +323,16 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices")
+    @unittest.skip(
+        "Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices"
+    )
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices")
+    @unittest.skip(
+        "Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
@@ -325,7 +351,9 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
-    @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
+    @unittest.skip(
+        reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position."
+    )
     def test_generate_continue_from_inputs_embeds():
         pass
 
@@ -350,11 +378,15 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
 
-        inputs = processor(images=image, text=text_prompt_coco_captioning, return_tensors="pt")
+        inputs = processor(
+            images=image, text=text_prompt_coco_captioning, return_tensors="pt"
+        )
         generated_ids = model.generate(**inputs, max_new_tokens=10)
 
         # take the last 8 tokens (in order to skip special \n\x04 characters) and decode them
-        generated_text = processor.batch_decode(generated_ids[:, -8:], skip_special_tokens=True)[0]
+        generated_text = processor.batch_decode(
+            generated_ids[:, -8:], skip_special_tokens=True
+        )[0]
         self.assertEqual(generated_text, "A blue bus parked on the side of a road.")
 
 

@@ -19,16 +19,10 @@ import re
 import torch
 from safetensors.torch import load_file
 
-from transformers import (
-    Mistral3Config,
-    Mistral3ForConditionalGeneration,
-    MistralConfig,
-    PixtralImageProcessorFast,
-    PixtralProcessor,
-    PixtralVisionConfig,
-)
+from transformers import (Mistral3Config, Mistral3ForConditionalGeneration,
+                          MistralConfig, PixtralImageProcessorFast,
+                          PixtralProcessor, PixtralVisionConfig)
 from transformers.integrations.mistral import convert_tekken_tokenizer
-
 
 # fmt: off
 STATE_DICT_MAPPING = {
@@ -107,9 +101,13 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
             query_dim = head_dim * num_attention_heads
 
         if "q_proj" in new_key:
-            tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
+            tensor = permute_for_rope(
+                tensor, num_attention_heads, query_dim, hidden_size
+            )
         elif "k_proj" in new_key:
-            tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
+            tensor = permute_for_rope(
+                tensor, num_key_value_heads, key_value_dim, hidden_size
+            )
 
         new_dict[new_key] = tensor
     return new_dict
@@ -133,16 +131,28 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         "vocab_size",
         "rope_theta",
     ]
-    new_text_config_kwargs = {k: original_text_config[v] for k, v in text_key_mapping.items()}
-    new_text_config_kwargs.update({k: v for k, v in original_text_config.items() if k in similar_text_keys_to_keep})
+    new_text_config_kwargs = {
+        k: original_text_config[v] for k, v in text_key_mapping.items()
+    }
+    new_text_config_kwargs.update(
+        {
+            k: v
+            for k, v in original_text_config.items()
+            if k in similar_text_keys_to_keep
+        }
+    )
     # These are not always defined depending on `params.json`
-    new_text_config_kwargs["sliding_window"] = original_text_config.get("sliding_window", None)
+    new_text_config_kwargs["sliding_window"] = original_text_config.get(
+        "sliding_window", None
+    )
     new_text_config_kwargs["max_position_embeddings"] = original_text_config.get(
         "max_seq_len", max_position_embeddings
     )
     # This may sometimes be a string in `params.json`
     if new_text_config_kwargs["sliding_window"] is not None:
-        new_text_config_kwargs["sliding_window"] = int(new_text_config_kwargs["sliding_window"])
+        new_text_config_kwargs["sliding_window"] = int(
+            new_text_config_kwargs["sliding_window"]
+        )
     new_text_config = MistralConfig(**new_text_config_kwargs)
 
     # Vision config
@@ -168,7 +178,9 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
     return new_config
 
 
-def convert_and_write_model(input_dir: str, output_dir: str, max_position_embeddings: int):
+def convert_and_write_model(
+    input_dir: str, output_dir: str, max_position_embeddings: int
+):
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
     config = convert_config(params, max_position_embeddings)
@@ -199,7 +211,9 @@ def convert_and_write_processor(input_dir: str, output_dir: str):
     patch_size = config["vision_encoder"]["patch_size"]
     spatial_merge_size = config["vision_encoder"]["spatial_merge_size"]
     max_image_size = config["vision_encoder"]["max_image_size"]
-    image_processor = PixtralImageProcessorFast(patch_size=patch_size, size={"longest_edge": max_image_size})
+    image_processor = PixtralImageProcessorFast(
+        patch_size=patch_size, size={"longest_edge": max_image_size}
+    )
 
     processor = PixtralProcessor(
         tokenizer=tokenizer,
@@ -233,7 +247,9 @@ def main():
 
     args = parser.parse_args()
 
-    convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings)
+    convert_and_write_model(
+        args.input_dir, args.output_dir, args.max_position_embeddings
+    )
     convert_and_write_processor(args.input_dir, args.output_dir)
 
 

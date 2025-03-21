@@ -17,7 +17,6 @@
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
 from .tools import PipelineTool
 
-
 LANGUAGE_CODES = {
     "Acehnese Arabic": "ace_Arab",
     "Acehnese Latin": "ace_Latn",

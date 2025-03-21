@@ -71,11 +71,14 @@ import yaml
 from tokenizers import Tokenizer
 
 from transformers import OlmoeConfig, OlmoeForCausalLM
-from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.models.gpt_neox.tokenization_gpt_neox_fast import \
+    GPTNeoXTokenizerFast
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
+    return multiple_of * (
+        (int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of
+    )
 
 
 def read_json(path):
@@ -88,7 +91,13 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, tokenizer_path=None, safe_serialization=True, fix_eos_token_id=True):
+def write_model(
+    model_path,
+    input_base_path,
+    tokenizer_path=None,
+    safe_serialization=True,
+    fix_eos_token_id=True,
+):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -104,7 +113,9 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     dim = olmoe_config["d_model"]
     dims_per_head = dim // n_heads
     base = 10000.0
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
+    )
     max_position_embeddings = olmoe_config["max_sequence_length"]
 
     vocab_size = olmoe_config.get("embedding_size", olmoe_config["vocab_size"])
@@ -125,7 +136,11 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     index_dict = {"weight_map": {}}
     for layer_i in range(n_layers):
         filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
-        fused_dims = [dim, dims_per_head * num_key_value_heads, dims_per_head * num_key_value_heads]
+        fused_dims = [
+            dim,
+            dims_per_head * num_key_value_heads,
+            dims_per_head * num_key_value_heads,
+        ]
         q_proj_weight, k_proj_weight, v_proj_weight = torch.split(
             loaded[f"transformer.blocks.{layer_i}.att_proj.weight"], fused_dims, dim=0
         )
@@ -133,28 +148,49 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
             f"model.layers.{layer_i}.self_attn.q_proj.weight": q_proj_weight,
             f"model.layers.{layer_i}.self_attn.k_proj.weight": k_proj_weight,
             f"model.layers.{layer_i}.self_attn.v_proj.weight": v_proj_weight,
-            f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"transformer.blocks.{layer_i}.attn_out.weight"],
-            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"transformer.blocks.{layer_i}.q_norm.weight"],
-            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
-            f"model.layers.{layer_i}.mlp.gate.weight": loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"],
-            f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"transformer.blocks.{layer_i}.attn_norm.weight"],
+            f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
+                f"transformer.blocks.{layer_i}.attn_out.weight"
+            ],
+            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[
+                f"transformer.blocks.{layer_i}.q_norm.weight"
+            ],
+            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[
+                f"transformer.blocks.{layer_i}.k_norm.weight"
+            ],
+            f"model.layers.{layer_i}.mlp.gate.weight": loaded[
+                f"transformer.blocks.{layer_i}.ffn.router.layer.weight"
+            ],
+            f"model.layers.{layer_i}.input_layernorm.weight": loaded[
+                f"transformer.blocks.{layer_i}.attn_norm.weight"
+            ],
             f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
                 f"transformer.blocks.{layer_i}.ff_norm.weight"
             ],
         }
 
-        num_experts = loaded[f"transformer.blocks.{layer_i}.ffn.router.layer.weight"].shape[0]
-        dim_per_expert = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"].shape[0] // num_experts
+        num_experts = loaded[
+            f"transformer.blocks.{layer_i}.ffn.router.layer.weight"
+        ].shape[0]
+        dim_per_expert = (
+            loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"].shape[0]
+            // num_experts
+        )
         for expert_i in range(num_experts):
-            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"] = loaded[
-                f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"
-            ][dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :]
-            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"] = loaded[
-                f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"
-            ][dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :]
-            state_dict[f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"] = loaded[
-                f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"
-            ][dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :].T.contiguous()
+            state_dict[
+                f"model.layers.{layer_i}.mlp.experts.{expert_i}.gate_proj.weight"
+            ] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w1"][
+                dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :
+            ]
+            state_dict[
+                f"model.layers.{layer_i}.mlp.experts.{expert_i}.up_proj.weight"
+            ] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.v1"][
+                dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :
+            ]
+            state_dict[
+                f"model.layers.{layer_i}.mlp.experts.{expert_i}.down_proj.weight"
+            ] = loaded[f"transformer.blocks.{layer_i}.ffn.experts.mlp.w2"][
+                dim_per_expert * expert_i : dim_per_expert * (expert_i + 1), :
+            ].T.contiguous()
 
         state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
 
@@ -216,14 +252,23 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
 
 
 def _write_tokenizer(
-    output_path: Path, config: OlmoeConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True
+    output_path: Path,
+    config: OlmoeConfig,
+    input_tokenizer_path: Path,
+    fix_eos_token_id: bool = True,
 ) -> None:
     print(f"Saving a {GPTNeoXTokenizerFast.__name__} to {output_path}.")
 
     base_tokenizer = Tokenizer.from_file(str(input_tokenizer_path))
 
-    eos_token_id = config.eos_token_id if config.eos_token_id is not None else base_tokenizer.get_vocab_size() - 1
-    pad_token_id = config.pad_token_id if config.pad_token_id is not None else eos_token_id
+    eos_token_id = (
+        config.eos_token_id
+        if config.eos_token_id is not None
+        else base_tokenizer.get_vocab_size() - 1
+    )
+    pad_token_id = (
+        config.pad_token_id if config.pad_token_id is not None else eos_token_id
+    )
 
     if fix_eos_token_id and eos_token_id == 0:
         # Fixing a bug in OLMo where eos token id was incorrectly set
@@ -265,7 +310,10 @@ def main():
         help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
     )
     parser.add_argument(
-        "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
+        "--safe_serialization",
+        type=bool,
+        default=True,
+        help="Whether or not to save using `safetensors`.",
     )
     args = parser.parse_args()
     write_model(

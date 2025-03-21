@@ -25,9 +25,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DetaConfig, DetaForObjectDetection, DetaImageProcessor, SwinConfig
+from transformers import (DetaConfig, DetaForObjectDetection,
+                          DetaImageProcessor, SwinConfig)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -63,7 +63,9 @@ def get_deta_config(model_name):
         filename = "coco-detection-id2label.json"
 
     config.num_labels = num_labels
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(
+        Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text()
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -163,7 +165,10 @@ def rename_key(dct, old, new):
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_swin_q_k_v(state_dict, backbone_config):
-    num_features = [int(backbone_config.embed_dim * 2**i) for i in range(len(backbone_config.depths))]
+    num_features = [
+        int(backbone_config.embed_dim * 2**i)
+        for i in range(len(backbone_config.depths))
+    ]
     for i in range(len(backbone_config.depths)):
         dim = num_features[i]
         for j in range(backbone_config.depths[i]):
@@ -192,17 +197,31 @@ def read_in_decoder_q_k_v(state_dict, config):
     hidden_size = config.d_model
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"transformer.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"transformer.decoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"transformer.decoder.layers.{i}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"transformer.decoder.layers.{i}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[
+            :hidden_size
         ]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[
+            -hidden_size:
+        ]
 
 
 # We will verify our results on an image of cute cats
@@ -224,9 +243,13 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # load original state dict
     if model_name == "deta-swin-large":
-        checkpoint_path = hf_hub_download(repo_id="nielsr/deta-checkpoints", filename="adet_swin_ft.pth")
+        checkpoint_path = hf_hub_download(
+            repo_id="nielsr/deta-checkpoints", filename="adet_swin_ft.pth"
+        )
     elif model_name == "deta-swin-large-o365":
-        checkpoint_path = hf_hub_download(repo_id="jozhang97/deta-swin-l-o365", filename="deta_swin_pt_o365.pth")
+        checkpoint_path = hf_hub_download(
+            repo_id="jozhang97/deta-swin-l-o365", filename="deta_swin_pt_o365.pth"
+        )
     else:
         raise ValueError(f"Model name {model_name} not supported")
 
@@ -245,13 +268,21 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # fix some prefixes
     for key in state_dict.copy().keys():
-        if "transformer.decoder.class_embed" in key or "transformer.decoder.bbox_embed" in key:
+        if (
+            "transformer.decoder.class_embed" in key
+            or "transformer.decoder.bbox_embed" in key
+        ):
             val = state_dict.pop(key)
             state_dict[key.replace("transformer.decoder", "model.decoder")] = val
         if "input_proj" in key:
             val = state_dict.pop(key)
             state_dict["model." + key] = val
-        if "level_embed" in key or "pos_trans" in key or "pix_trans" in key or "enc_output" in key:
+        if (
+            "level_embed" in key
+            or "pos_trans" in key
+            or "pix_trans" in key
+            or "enc_output" in key
+        ):
             val = state_dict.pop(key)
             state_dict[key.replace("transformer", "model")] = val
 
@@ -277,21 +308,47 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("Boxes:", outputs.pred_boxes[0, :3, :3])
     if model_name == "deta-swin-large":
         expected_logits = torch.tensor(
-            [[-7.6308, -2.8485, -5.3737], [-7.2037, -4.5505, -4.8027], [-7.2943, -4.2611, -4.6617]]
+            [
+                [-7.6308, -2.8485, -5.3737],
+                [-7.2037, -4.5505, -4.8027],
+                [-7.2943, -4.2611, -4.6617],
+            ]
         )
-        expected_boxes = torch.tensor([[0.4987, 0.4969, 0.9999], [0.2549, 0.5498, 0.4805], [0.5498, 0.2757, 0.0569]])
+        expected_boxes = torch.tensor(
+            [
+                [0.4987, 0.4969, 0.9999],
+                [0.2549, 0.5498, 0.4805],
+                [0.5498, 0.2757, 0.0569],
+            ]
+        )
     elif model_name == "deta-swin-large-o365":
         expected_logits = torch.tensor(
-            [[-8.0122, -3.5720, -4.9717], [-8.1547, -3.6886, -4.6389], [-7.6610, -3.6194, -5.0134]]
+            [
+                [-8.0122, -3.5720, -4.9717],
+                [-8.1547, -3.6886, -4.6389],
+                [-7.6610, -3.6194, -5.0134],
+            ]
         )
-        expected_boxes = torch.tensor([[0.2523, 0.5549, 0.4881], [0.7715, 0.4149, 0.4601], [0.5503, 0.2753, 0.0575]])
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
+        expected_boxes = torch.tensor(
+            [
+                [0.2523, 0.5549, 0.4881],
+                [0.7715, 0.4149, 0.4601],
+                [0.5503, 0.2753, 0.0575],
+            ]
+        )
+    assert torch.allclose(
+        outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4
+    )
+    assert torch.allclose(
+        outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4
+    )
     print("Everything ok!")
 
     if pytorch_dump_folder_path:
         # Save model and processor
-        logger.info(f"Saving PyTorch model and processor to {pytorch_dump_folder_path}...")
+        logger.info(
+            f"Saving PyTorch model and processor to {pytorch_dump_folder_path}..."
+        )
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
@@ -320,7 +377,11 @@ if __name__ == "__main__":
         help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     args = parser.parse_args()
-    convert_deta_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_deta_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

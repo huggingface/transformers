@@ -30,30 +30,67 @@ import torch
 
 from transformers import TransfoXLCorpus, TransfoXLLMHeadModel
 
-
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Transformer Language Model")
-    parser.add_argument("--model_name", type=str, default="transfo-xl/transfo-xl-wt103", help="pretrained model name")
     parser.add_argument(
-        "--split", type=str, default="test", choices=["all", "valid", "test"], help="which split to evaluate"
+        "--model_name",
+        type=str,
+        default="transfo-xl/transfo-xl-wt103",
+        help="pretrained model name",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="test",
+        choices=["all", "valid", "test"],
+        help="which split to evaluate",
     )
     parser.add_argument("--batch_size", type=int, default=10, help="batch size")
-    parser.add_argument("--tgt_len", type=int, default=128, help="number of tokens to predict")
-    parser.add_argument("--ext_len", type=int, default=0, help="length of the extended context")
-    parser.add_argument("--mem_len", type=int, default=1600, help="length of the retained previous heads")
-    parser.add_argument("--clamp_len", type=int, default=1000, help="max positional embedding index")
-    parser.add_argument("--no_cuda", action="store_true", help="Do not use CUDA even though CUA is available")
-    parser.add_argument("--work_dir", type=str, required=True, help="path to the work_dir")
-    parser.add_argument("--no_log", action="store_true", help="do not log the eval result")
-    parser.add_argument("--same_length", action="store_true", help="set same length attention with masking")
-    parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
-    parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
+    parser.add_argument(
+        "--tgt_len", type=int, default=128, help="number of tokens to predict"
+    )
+    parser.add_argument(
+        "--ext_len", type=int, default=0, help="length of the extended context"
+    )
+    parser.add_argument(
+        "--mem_len",
+        type=int,
+        default=1600,
+        help="length of the retained previous heads",
+    )
+    parser.add_argument(
+        "--clamp_len", type=int, default=1000, help="max positional embedding index"
+    )
+    parser.add_argument(
+        "--no_cuda",
+        action="store_true",
+        help="Do not use CUDA even though CUA is available",
+    )
+    parser.add_argument(
+        "--work_dir", type=str, required=True, help="path to the work_dir"
+    )
+    parser.add_argument(
+        "--no_log", action="store_true", help="do not log the eval result"
+    )
+    parser.add_argument(
+        "--same_length",
+        action="store_true",
+        help="set same length attention with masking",
+    )
+    parser.add_argument(
+        "--server_ip", type=str, default="", help="Can be used for distant debugging."
+    )
+    parser.add_argument(
+        "--server_port", type=str, default="", help="Can be used for distant debugging."
+    )
     args = parser.parse_args()
     assert args.ext_len >= 0, "extended context length must be non-negative"
 
@@ -62,10 +99,14 @@ def main():
         import ptvsd
 
         print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+        ptvsd.enable_attach(
+            address=(args.server_ip, args.server_port), redirect_output=True
+        )
         ptvsd.wait_for_attach()
 
-    device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+    )
     logger.info("device: {}".format(device))
 
     # Load a pre-processed dataset
@@ -75,8 +116,12 @@ def main():
     # The pre-processed corpus is a convertion (using the conversion script )
     corpus = TransfoXLCorpus.from_pretrained(args.model_name)
 
-    va_iter = corpus.get_iterator("valid", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len)
-    te_iter = corpus.get_iterator("test", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len)
+    va_iter = corpus.get_iterator(
+        "valid", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len
+    )
+    te_iter = corpus.get_iterator(
+        "test", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len
+    )
 
     # Load a pre-trained model
     model = TransfoXLLMHeadModel.from_pretrained(args.model_name)
@@ -111,7 +156,11 @@ def main():
                 total_loss += seq_len * loss.item()
                 total_len += seq_len
             total_time = time.time() - start_time
-        logger.info("Time : {:.2f}s, {:.2f}ms/segment".format(total_time, 1000 * total_time / (idx + 1)))
+        logger.info(
+            "Time : {:.2f}s, {:.2f}ms/segment".format(
+                total_time, 1000 * total_time / (idx + 1)
+            )
+        )
         return total_loss / total_len
 
     # Run on test data.
@@ -126,7 +175,9 @@ def main():
         valid_loss = None
 
     def format_log(loss, split):
-        log_str = "| {0} loss {1:5.2f} | {0} ppl {2:9.3f} ".format(split, loss, math.exp(loss))
+        log_str = "| {0} loss {1:5.2f} | {0} ppl {2:9.3f} ".format(
+            split, loss, math.exp(loss)
+        )
         return log_str
 
     log_str = ""

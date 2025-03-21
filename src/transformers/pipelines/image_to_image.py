@@ -15,15 +15,9 @@ from typing import List, Union
 
 import numpy as np
 
-from ..utils import (
-    add_end_docstrings,
-    is_torch_available,
-    is_vision_available,
-    logging,
-    requires_backends,
-)
+from ..utils import (add_end_docstrings, is_torch_available,
+                     is_vision_available, logging, requires_backends)
 from .base import Pipeline, build_pipeline_init_args
-
 
 if is_vision_available():
     from PIL import Image
@@ -31,7 +25,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -85,7 +80,9 @@ class ImageToImagePipeline(Pipeline):
         return preprocess_params, forward_params, postprocess_params
 
     def __call__(
-        self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs
+        self,
+        images: Union[str, List[str], "Image.Image", List["Image.Image"]],
+        **kwargs
     ) -> Union["Image.Image", List["Image.Image"]]:
         """
         Transform the image(s) passed as inputs.

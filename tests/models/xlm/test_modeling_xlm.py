@@ -20,23 +20,20 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        XLMForMultipleChoice,
-        XLMForQuestionAnswering,
-        XLMForQuestionAnsweringSimple,
-        XLMForSequenceClassification,
-        XLMForTokenClassification,
-        XLMModel,
-        XLMWithLMHeadModel,
-    )
-    from transformers.models.xlm.modeling_xlm import create_sinusoidal_embeddings
+    from transformers import (XLMForMultipleChoice, XLMForQuestionAnswering,
+                              XLMForQuestionAnsweringSimple,
+                              XLMForSequenceClassification,
+                              XLMForTokenClassification, XLMModel,
+                              XLMWithLMHeadModel)
+    from transformers.models.xlm.modeling_xlm import \
+        create_sinusoidal_embeddings
 
 
 class XLMModelTester:
@@ -112,14 +109,20 @@ class XLMModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.n_langs)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.n_langs
+            )
 
         sequence_labels = None
         token_labels = None
         is_impossible_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             is_impossible_labels = ids_tensor([self.batch_size], 2).float()
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
@@ -177,7 +180,10 @@ class XLMModelTester:
         result = model(input_ids, lengths=input_lengths, langs=token_type_ids)
         result = model(input_ids, langs=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_xlm_lm_head(
         self,
@@ -197,7 +203,9 @@ class XLMModelTester:
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_xlm_simple_qa(
         self,
@@ -217,10 +225,16 @@ class XLMModelTester:
 
         outputs = model(input_ids)
 
-        outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+        outputs = model(
+            input_ids, start_positions=sequence_labels, end_positions=sequence_labels
+        )
         result = outputs
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_xlm_qa(
         self,
@@ -259,18 +273,27 @@ class XLMModelTester:
 
         (total_loss,) = result_with_labels.to_tuple()
 
-        result_with_labels = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+        result_with_labels = model(
+            input_ids, start_positions=sequence_labels, end_positions=sequence_labels
+        )
 
         (total_loss,) = result_with_labels.to_tuple()
 
         self.parent.assertEqual(result_with_labels.loss.shape, ())
-        self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
-        self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
         self.parent.assertEqual(
-            result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
+            result.start_top_log_probs.shape,
+            (self.batch_size, model.config.start_n_top),
         )
         self.parent.assertEqual(
-            result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
+            result.start_top_index.shape, (self.batch_size, model.config.start_n_top)
+        )
+        self.parent.assertEqual(
+            result.end_top_log_probs.shape,
+            (self.batch_size, model.config.start_n_top * model.config.end_n_top),
+        )
+        self.parent.assertEqual(
+            result.end_top_index.shape,
+            (self.batch_size, model.config.start_n_top * model.config.end_n_top),
         )
         self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
 
@@ -293,7 +316,9 @@ class XLMModelTester:
         result = model(input_ids)
         result = model(input_ids, labels=sequence_labels)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def create_and_check_xlm_token_classif(
         self,
@@ -313,7 +338,9 @@ class XLMModelTester:
         model.eval()
 
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_xlm_for_multiple_choice(
         self,
@@ -331,16 +358,24 @@ class XLMModelTester:
         model = XLMForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = (
+            input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_token_type_ids = (
+            token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_input_mask = (
+            input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -355,12 +390,18 @@ class XLMModelTester:
             choice_labels,
             input_mask,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "lengths": input_lengths}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "lengths": input_lengths,
+        }
         return config, inputs_dict
 
 
 @require_torch
-class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class XLMModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             XLMModel,
@@ -413,7 +454,9 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # XLM has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class.__name__ == "XLMForQuestionAnswering":
@@ -441,9 +484,15 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_xlm_model_with_sinusoidal_encodings(self):
         config = XLMConfig(sinusoidal_embeddings=True)
         model = XLMModel(config=config)
-        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.emb_dim), dtype=torch.float32)
-        create_sinusoidal_embeddings(config.max_position_embeddings, config.emb_dim, sinusoidal_pos_embds)
-        self.model_tester.parent.assertTrue(torch.equal(model.position_embeddings.weight, sinusoidal_pos_embds))
+        sinusoidal_pos_embds = torch.empty(
+            (config.max_position_embeddings, config.emb_dim), dtype=torch.float32
+        )
+        create_sinusoidal_embeddings(
+            config.max_position_embeddings, config.emb_dim, sinusoidal_pos_embds
+        )
+        self.model_tester.parent.assertTrue(
+            torch.equal(model.position_embeddings.weight, sinusoidal_pos_embds)
+        )
 
     def test_xlm_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -470,17 +519,34 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self,
+        batch_size,
+        attentions,
+        prompt_length,
+        output_length,
+        config,
+        decoder_past_key_values,
     ):
         # adds PAD dummy token, expected shape is off by 1
         prompt_length += 1
         output_length += 1
         super()._check_attentions_for_generate(
-            batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+            batch_size,
+            attentions,
+            prompt_length,
+            output_length,
+            config,
+            decoder_past_key_values,
         )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
+        self,
+        batch_size,
+        hidden_states,
+        prompt_length,
+        output_length,
+        config,
+        use_cache=False,
     ):
         # adds PAD dummy token, expected shape is off by 1
         prompt_length += 1
@@ -502,7 +568,9 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_xlm_mlm_en_2048(self):
         model = XLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-mlm-en-2048")
         model.to(torch_device)
-        input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=torch_device)  # the president
+        input_ids = torch.tensor(
+            [[14, 447]], dtype=torch.long, device=torch_device
+        )  # the president
         expected_output_ids = [
             14,
             447,

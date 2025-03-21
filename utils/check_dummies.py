@@ -39,7 +39,6 @@ import os
 import re
 from typing import Dict, List, Optional
 
-
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_dummies.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -99,7 +98,12 @@ def read_init() -> Dict[str, List[str]]:
     Returns:
         Dict[str, List[str]]: A dictionary mapping backend name to the list of object names requiring that backend.
     """
-    with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r", encoding="utf-8", newline="\n") as f:
+    with open(
+        os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
+        "r",
+        encoding="utf-8",
+        newline="\n",
+    ) as f:
         lines = f.readlines()
 
     # Get to the point we do the actual imports for type checking
@@ -156,7 +160,9 @@ def create_dummy_object(name: str, backend_name: str) -> str:
         return DUMMY_CLASS.format(name, backend_name)
 
 
-def create_dummy_files(backend_specific_objects: Optional[Dict[str, List[str]]] = None) -> Dict[str, str]:
+def create_dummy_files(
+    backend_specific_objects: Optional[Dict[str, List[str]]] = None,
+) -> Dict[str, str]:
     """
     Create the content of the dummy files.
 
@@ -199,7 +205,9 @@ def check_dummies(overwrite: bool = False):
     # Locate actual dummy modules and read their content.
     path = os.path.join(PATH_TO_TRANSFORMERS, "utils")
     dummy_file_paths = {
-        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py")
+        backend: os.path.join(
+            path, f"dummy_{short_names.get(backend, backend)}_objects.py"
+        )
         for backend in dummy_files.keys()
     }
 
@@ -219,12 +227,15 @@ def check_dummies(overwrite: bool = False):
                     f"Updating transformers.utils.dummy_{short_names.get(backend, backend)}_objects.py as the main "
                     "__init__ has new objects."
                 )
-                with open(dummy_file_paths[backend], "w", encoding="utf-8", newline="\n") as f:
+                with open(
+                    dummy_file_paths[backend], "w", encoding="utf-8", newline="\n"
+                ) as f:
                     f.write(dummy_files[backend])
             else:
                 # Temporary fix to help people identify which objects introduced are not correctly protected.
                 for _actual, _dummy in zip(
-                    actual_dummies["torch"].split("class"), dummy_files["torch"].split("class")
+                    actual_dummies["torch"].split("class"),
+                    dummy_files["torch"].split("class"),
                 ):
                     if _actual != _dummy:
                         actual_broken = _actual
@@ -244,7 +255,11 @@ def check_dummies(overwrite: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Whether to fix inconsistencies.",
+    )
     args = parser.parse_args()
 
     check_dummies(args.fix_and_overwrite)

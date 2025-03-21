@@ -17,18 +17,20 @@
 import unittest
 
 from transformers import EfficientNetConfig
-from transformers.testing_utils import is_pipeline_test, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (is_pipeline_test, require_torch,
+                                        require_vision, slow, torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import EfficientNetForImageClassification, EfficientNetModel
+    from transformers import (EfficientNetForImageClassification,
+                              EfficientNetModel)
 
 
 if is_vision_available():
@@ -72,7 +74,9 @@ class EfficientNetModelTester:
         self.use_labels = use_labels
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -103,7 +107,12 @@ class EfficientNetModelTester:
         # expected last hidden states: B, C, H // 4, W // 4
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, config.hidden_dim, self.image_size // 4, self.image_size // 4),
+            (
+                self.batch_size,
+                config.hidden_dim,
+                self.image_size // 4,
+                self.image_size // 4,
+            ),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -127,9 +136,16 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     attention_mask and seq_length.
     """
 
-    all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (EfficientNetModel, EfficientNetForImageClassification)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
+        {
+            "image-feature-extraction": EfficientNetModel,
+            "image-classification": EfficientNetForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -179,7 +195,11 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
             num_blocks = sum(config.num_block_repeats) * 4
             self.assertEqual(len(hidden_states), num_blocks)
 
@@ -241,11 +261,17 @@ def prepare_img():
 class EfficientNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("google/efficientnet-b7") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("google/efficientnet-b7")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = EfficientNetForImageClassification.from_pretrained("google/efficientnet-b7").to(torch_device)
+        model = EfficientNetForImageClassification.from_pretrained(
+            "google/efficientnet-b7"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -260,4 +286,6 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-0.2962, 0.4487, 0.4499]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

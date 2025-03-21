@@ -20,33 +20,24 @@ import unittest
 from parameterized import parameterized
 
 from transformers import PersimmonConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    backend_empty_cache,
-    require_bitsandbytes,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (backend_empty_cache,
+                                        require_bitsandbytes, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoTokenizer,
-        PersimmonForCausalLM,
-        PersimmonForSequenceClassification,
-        PersimmonForTokenClassification,
-        PersimmonModel,
-    )
-    from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding
+    from transformers import (AutoTokenizer, PersimmonForCausalLM,
+                              PersimmonForSequenceClassification,
+                              PersimmonForTokenClassification, PersimmonModel)
+    from transformers.models.persimmon.modeling_persimmon import \
+        PersimmonRotaryEmbedding
 
 
 # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Persimmon
@@ -110,19 +101,33 @@ class PersimmonModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return PersimmonConfig(
@@ -142,14 +147,24 @@ class PersimmonModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = PersimmonModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -179,7 +194,10 @@ class PersimmonModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -197,7 +215,9 @@ class PersimmonModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -253,13 +273,17 @@ class PersimmonModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -277,9 +301,16 @@ class PersimmonModelTester:
 
 
 @require_torch
-class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PersimmonModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification)
+        (
+            PersimmonModel,
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -302,7 +333,9 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Persimmon
     def setUp(self):
         self.model_tester = PersimmonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PersimmonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=PersimmonConfig, hidden_size=37
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):
@@ -326,12 +359,17 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = PersimmonForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->Persimmon,llama->persimmon
     def test_persimmon_sequence_classification_model_for_single_label(self):
@@ -340,12 +378,17 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = PersimmonForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->Persimmon,llama->persimmon
     def test_persimmon_sequence_classification_model_for_multi_label(self):
@@ -355,13 +398,17 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
         ).to(torch.float)
         model = PersimmonForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Persimmon,llama->persimmon
     def test_persimmon_token_classification_model(self):
@@ -369,17 +416,26 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        token_labels = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.seq_length],
+            config.num_labels,
+        )
         model = PersimmonForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+            (
+                self.model_tester.batch_size,
+                self.model_tester.seq_length,
+                self.model_tester.num_labels,
+            ),
         )
 
-    @unittest.skip(reason="Persimmon buffers include complex numbers, which breaks this test")
+    @unittest.skip(
+        reason="Persimmon buffers include complex numbers, which breaks this test"
+    )
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_save_load_fast_init_from_base
     def test_save_load_fast_init_from_base(self):
         pass
@@ -389,16 +445,22 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = PersimmonModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = PersimmonModel(config)
         scaled_model.to(torch_device)
@@ -409,12 +471,18 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     # Copied from tests.models.gpt_neox.test_modeling_gpt_neox.GPTNeoXModelTest.test_model_rope_scaling with GPTNeoX->Persimmon
     def test_model_rope_scaling(self):
@@ -427,17 +495,25 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         x = torch.randn(
             1, dtype=torch.float32, device=torch_device
         )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
         original_rope = PersimmonRotaryEmbedding(config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            original_cos_short, original_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            original_sin_short, original_sin_long[:, :short_input_length, :]
+        )
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
@@ -445,12 +521,22 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         linear_scaling_rope = PersimmonRotaryEmbedding(config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            linear_cos_short, linear_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            linear_sin_short, linear_sin_long[:, :short_input_length, :]
+        )
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+            torch.testing.assert_close(
+                linear_cos_long[:, new_position, :],
+                original_cos_long[:, original_position, :],
+            )
+            torch.testing.assert_close(
+                linear_sin_long[:, new_position, :],
+                original_sin_long[:, original_position, :],
+            )
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
@@ -476,22 +562,40 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.float16
+            "adept/persimmon-8b-chat",
+            load_in_8bit=True,
+            device_map={"": 0},
+            torch_dtype=torch.float16,
         )
         out = model(torch.tensor([input_ids], device=torch_device)).logits.float()
 
         EXPECTED_MEAN = torch.tensor(
-            [[-11.4726, -11.1495, -11.2694, -11.2223, -10.9452, -11.0663, -11.0031, -11.1028]]
+            [
+                [
+                    -11.4726,
+                    -11.1495,
+                    -11.2694,
+                    -11.2223,
+                    -10.9452,
+                    -11.0663,
+                    -11.0031,
+                    -11.1028,
+                ]
+            ]
         )
         # change dtype to `torch.float32` before calling `mean` to avoid `nan` values
-        torch.testing.assert_close(out.cpu().to(torch.float32).mean(-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            out.cpu().to(torch.float32).mean(-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4
+        )
         # fmt: off
         EXPECTED_SLICE = torch.tensor(
             [-16.9062, -16.9062, -16.9062, -16.9062, -16.8906, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9531, -16.9062, -16.9062],
             dtype=torch.float16
         )
         # fmt: on
-        torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(
+            out.cpu()[0, 0, :30], EXPECTED_SLICE, rtol=1e-5, atol=1e-5
+        )
 
         backend_empty_cache(torch_device)
         del model
@@ -504,10 +608,15 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that?\n\nadept: The theory of relativity states that the laws of physics are the same for all observers, regardless of their relative motion."""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
-        tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "adept/persimmon-8b-chat", use_fast=False
+        )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.float16
+            "adept/persimmon-8b-chat",
+            load_in_8bit=True,
+            device_map={"": 0},
+            torch_dtype=torch.float16,
         )
 
         # greedy generation outputs

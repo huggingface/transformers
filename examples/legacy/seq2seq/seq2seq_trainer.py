@@ -21,18 +21,13 @@ from torch.utils.data import DistributedSampler, RandomSampler
 from transformers import PreTrainedModel, Trainer, logging
 from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
-    Adafactor,
-    get_constant_schedule,
-    get_constant_schedule_with_warmup,
+    Adafactor, get_constant_schedule, get_constant_schedule_with_warmup,
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
-    get_linear_schedule_with_warmup,
-    get_polynomial_decay_schedule_with_warmup,
-)
+    get_linear_schedule_with_warmup, get_polynomial_decay_schedule_with_warmup)
 from transformers.trainer_pt_utils import get_tpu_sampler
 from transformers.training_args import ParallelMode
 from transformers.utils import is_torch_xla_available
-
 
 logger = logging.get_logger(__name__)
 
@@ -60,9 +55,15 @@ class Seq2SeqTrainer(Trainer):
             self.config = config
 
         self.data_args = data_args
-        self.vocab_size = self.config.tgt_vocab_size if isinstance(self.config, FSMTConfig) else self.config.vocab_size
+        self.vocab_size = (
+            self.config.tgt_vocab_size
+            if isinstance(self.config, FSMTConfig)
+            else self.config.vocab_size
+        )
 
-        if self.args.label_smoothing != 0 or (self.data_args is not None and self.data_args.ignore_pad_token_for_loss):
+        if self.args.label_smoothing != 0 or (
+            self.data_args is not None and self.data_args.ignore_pad_token_for_loss
+        ):
             assert self.config.pad_token_id is not None, (
                 "Make sure that `config.pad_token_id` is correctly defined when ignoring `pad_token` for loss"
                 " calculation or doing label smoothing."
@@ -75,7 +76,9 @@ class Seq2SeqTrainer(Trainer):
             )
 
         if self.args.label_smoothing == 0:
-            self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
+            self.loss_fn = torch.nn.CrossEntropyLoss(
+                ignore_index=self.config.pad_token_id
+            )
         else:
             # dynamically import label_smoothed_nll_loss
             from utils import label_smoothed_nll_loss
@@ -93,11 +96,19 @@ class Seq2SeqTrainer(Trainer):
             no_decay = ["bias", "LayerNorm.weight"]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "params": [
+                        p
+                        for n, p in self.model.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                    ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "params": [
+                        p
+                        for n, p in self.model.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                    ],
                     "weight_decay": 0.0,
                 },
             ]
@@ -111,22 +122,30 @@ class Seq2SeqTrainer(Trainer):
                     "eps": self.args.adam_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
-            self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            self.optimizer = optimizer_cls(
+                optimizer_grouped_parameters, **optimizer_kwargs
+            )
 
         if self.lr_scheduler is None:
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
         else:  # ignoring --lr_scheduler
-            logger.warning("scheduler is passed to `Seq2SeqTrainer`, `--lr_scheduler` arg is ignored.")
+            logger.warning(
+                "scheduler is passed to `Seq2SeqTrainer`, `--lr_scheduler` arg is ignored."
+            )
 
     def _get_lr_scheduler(self, num_training_steps):
         schedule_func = arg_to_scheduler[self.args.lr_scheduler]
         if self.args.lr_scheduler == "constant":
             scheduler = schedule_func(self.optimizer)
         elif self.args.lr_scheduler == "constant_w_warmup":
-            scheduler = schedule_func(self.optimizer, num_warmup_steps=self.args.warmup_steps)
+            scheduler = schedule_func(
+                self.optimizer, num_warmup_steps=self.args.warmup_steps
+            )
         else:
             scheduler = schedule_func(
-                self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+                self.optimizer,
+                num_warmup_steps=self.args.warmup_steps,
+                num_training_steps=num_training_steps,
             )
         return scheduler
 
@@ -161,7 +180,12 @@ class Seq2SeqTrainer(Trainer):
             # compute label smoothed loss
             logits = model(**inputs, use_cache=False)[0]
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-            loss, _ = self.loss_fn(lprobs, labels, self.args.label_smoothing, ignore_index=self.config.pad_token_id)
+            loss, _ = self.loss_fn(
+                lprobs,
+                labels,
+                self.args.label_smoothing,
+                ignore_index=self.config.pad_token_id,
+            )
         return loss, logits
 
     def compute_loss(self, model, inputs):
@@ -199,10 +223,16 @@ class Seq2SeqTrainer(Trainer):
         inputs = self._prepare_inputs(inputs)
 
         gen_kwargs = {
-            "max_length": self.data_args.val_max_target_length
-            if self.data_args is not None
-            else self.config.max_length,
-            "num_beams": self.data_args.eval_beams if self.data_args is not None else self.config.num_beams,
+            "max_length": (
+                self.data_args.val_max_target_length
+                if self.data_args is not None
+                else self.config.max_length
+            ),
+            "num_beams": (
+                self.data_args.eval_beams
+                if self.data_args is not None
+                else self.config.num_beams
+            ),
         }
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
@@ -213,7 +243,9 @@ class Seq2SeqTrainer(Trainer):
             )
             # in case the batch is shorter than max length, the output should be padded
             if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
-                generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
+                generated_tokens = self._pad_tensors_to_max_len(
+                    generated_tokens, gen_kwargs["max_length"]
+                )
 
         labels = inputs.pop("labels")
         with torch.no_grad():
@@ -233,7 +265,11 @@ class Seq2SeqTrainer(Trainer):
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
         # If PAD token is not defined at least EOS token has to be defined
-        pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else self.config.eos_token_id
+        pad_token_id = (
+            self.config.pad_token_id
+            if self.config.pad_token_id is not None
+            else self.config.eos_token_id
+        )
 
         if pad_token_id is None:
             raise ValueError(

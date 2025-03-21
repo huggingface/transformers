@@ -23,43 +23,30 @@ import unittest
 import numpy as np
 from pytest import mark
 
-from transformers import (
-    EncodecConfig,
-    MusicgenMelodyConfig,
-    MusicgenMelodyDecoderConfig,
-    PretrainedConfig,
-    T5Config,
-)
-from transformers.testing_utils import (
-    is_torch_available,
-    is_torchaudio_available,
-    require_flash_attn,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_torch_gpu,
-    require_torch_sdpa,
-    require_torchaudio,
-    slow,
-    torch_device,
-)
+from transformers import (EncodecConfig, MusicgenMelodyConfig,
+                          MusicgenMelodyDecoderConfig, PretrainedConfig,
+                          T5Config)
+from transformers.testing_utils import (is_torch_available,
+                                        is_torchaudio_available,
+                                        require_flash_attn, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, require_torch_gpu,
+                                        require_torch_sdpa, require_torchaudio,
+                                        slow, torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     ids_tensor, sdpa_kernel)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MusicgenMelodyForCausalLM,
-        MusicgenMelodyForConditionalGeneration,
-        MusicgenMelodyModel,
-        set_seed,
-    )
+    from transformers import (MusicgenMelodyForCausalLM,
+                              MusicgenMelodyForConditionalGeneration,
+                              MusicgenMelodyModel, set_seed)
 
 if is_torchaudio_available():
     from transformers import MusicgenMelodyProcessor
@@ -68,7 +55,12 @@ if is_torchaudio_available():
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+        if (
+            "_range" in key
+            or "_std" in key
+            or "initializer_factor" in key
+            or "layer_scale" in key
+        ):
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -85,12 +77,18 @@ def prepare_musicgen_melody_decoder_inputs_dict(
     encoder_attention_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])[:, 0, :]
+        attention_mask = input_ids.reshape(
+            -1, config.num_codebooks, input_ids.shape[-1]
+        )[:, 0, :]
         attention_mask = attention_mask.ne(config.pad_token_id)
     if head_mask is None:
-        head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
+        head_mask = torch.ones(
+            config.num_hidden_layers, config.num_attention_heads, device=torch_device
+        )
     if encoder_attention_mask is None and encoder_hidden_states is not None:
-        encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=torch_device)
+        encoder_attention_mask = torch.ones(
+            encoder_hidden_states.shape[:2], device=torch_device
+        )
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -143,8 +141,12 @@ class MusicgenMelodyDecoderTester:
         self.audio_channels = audio_channels
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
-        encoder_hidden_states = floats_tensor([self.batch_size, self.conditional_seq_length, self.hidden_size])
+        input_ids = ids_tensor(
+            [self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size
+        )
+        encoder_hidden_states = floats_tensor(
+            [self.batch_size, self.conditional_seq_length, self.hidden_size]
+        )
 
         config = self.get_config()
         inputs_dict = prepare_musicgen_melody_decoder_inputs_dict(
@@ -176,8 +178,12 @@ class MusicgenMelodyDecoderTester:
 
 
 @require_torch
-class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
+class MusicgenMelodyDecoderTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
+    )
     # Doesn't run generation tests. See `greedy_sample_model_classes` below
     all_generative_model_classes = ()
     greedy_sample_model_classes = (
@@ -188,7 +194,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     def setUp(self):
         self.model_tester = MusicgenMelodyDecoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=MusicgenMelodyDecoderConfig, hidden_size=16)
+        self.config_tester = ConfigTester(
+            self, config_class=MusicgenMelodyDecoderConfig, hidden_size=16
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -196,11 +204,17 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     # special case for labels
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest._prepare_for_class
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             inputs_dict["labels"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+                (
+                    self.model_tester.batch_size,
+                    self.model_tester.seq_length,
+                    self.model_tester.num_codebooks,
+                ),
                 dtype=torch.long,
                 device=torch_device,
             )
@@ -217,7 +231,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         model = MusicgenMelodyForCausalLM(config)
 
         model.to(torch_device)
-        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        model.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs=gradient_checkpointing_kwargs
+        )
         model.train()
 
         # Contrarily to the initial method, we don't unfreeze freezed parameters.
@@ -225,14 +241,19 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
-        inputs = self._prepare_for_class(inputs_dict, MusicgenMelodyForCausalLM, return_labels=True)
+        inputs = self._prepare_for_class(
+            inputs_dict, MusicgenMelodyForCausalLM, return_labels=True
+        )
         loss = model(**inputs).loss
         loss.backward()
         optimizer.step()
 
         for k, v in model.named_parameters():
             if v.requires_grad:
-                self.assertTrue(v.grad is not None, f"{k} in {MusicgenMelodyForCausalLM.__name__} has no gradient!")
+                self.assertTrue(
+                    v.grad is not None,
+                    f"{k} in {MusicgenMelodyForCausalLM.__name__} has no gradient!",
+                )
 
     # override since we have to compute the input embeddings over codebooks
     def test_inputs_embeds(self):
@@ -253,7 +274,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             input_ids = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])
 
             inputs["inputs_embeds"] = sum(
-                [embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)]
+                [
+                    embed_tokens[codebook](input_ids[:, codebook])
+                    for codebook in range(config.num_codebooks)
+                ]
             )
 
             with torch.no_grad():
@@ -268,7 +292,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             first_embed = model.get_input_embeddings()[0]
             self.assertIsInstance(first_embed, torch.nn.Embedding)
             lm_heads = model.get_output_embeddings()
-            self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
+            self.assertTrue(
+                lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear)
+            )
 
     @unittest.skip(reason="MusicGen melody does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
@@ -278,11 +304,15 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="this model has multiple inputs embeds and lm heads that should not be tied")
+    @unittest.skip(
+        reason="this model has multiple inputs embeds and lm heads that should not be tied"
+    )
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip(reason="this model has multiple inputs embeds and lm heads that should not be tied")
+    @unittest.skip(
+        reason="this model has multiple inputs embeds and lm heads that should not be tied"
+    )
     def test_tied_weights_keys(self):
         pass
 
@@ -304,9 +334,13 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -318,7 +352,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 # Ignore copy
@@ -386,9 +422,13 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -400,7 +440,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 # Ignore copy
@@ -416,10 +458,20 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                     dummy_attention_mask[:, -1:] = 0
 
                 if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
+                    decoder_input_ids = inputs_dict.get(
+                        "decoder_input_ids", dummy_input
+                    )
 
-                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs = model(
+                        dummy_input,
+                        decoder_input_ids=decoder_input_ids,
+                        output_hidden_states=True,
+                    )
+                    outputs_fa = model_fa(
+                        dummy_input,
+                        decoder_input_ids=decoder_input_ids,
+                        output_hidden_states=True,
+                    )
                 else:
                     outputs = model(dummy_input, output_hidden_states=True)
                     outputs_fa = model_fa(dummy_input, output_hidden_states=True)
@@ -486,11 +538,15 @@ def prepare_musicgen_melody_inputs_dict(
         decoder_attention_mask = decoder_attention_mask.ne(config.decoder.pad_token_id)
     if head_mask is None:
         head_mask = torch.ones(
-            config.text_encoder.num_hidden_layers, config.text_encoder.num_attention_heads, device=torch_device
+            config.text_encoder.num_hidden_layers,
+            config.text_encoder.num_attention_heads,
+            device=torch_device,
         )
     if decoder_head_mask is None:
         decoder_head_mask = torch.ones(
-            config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device
+            config.decoder.num_hidden_layers,
+            config.decoder.num_attention_heads,
+            device=torch_device,
         )
     return {
         "input_ids": input_ids,
@@ -552,11 +608,17 @@ class MusicgenMelodyTester:
         self.audio_channels = audio_channels
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.conditional_seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.conditional_seq_length], self.vocab_size
+        )
+        decoder_input_ids = ids_tensor(
+            [self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size
+        )
 
         config = self.get_config()
-        inputs_dict = prepare_musicgen_melody_inputs_dict(config, input_ids, decoder_input_ids=decoder_input_ids)
+        inputs_dict = prepare_musicgen_melody_inputs_dict(
+            config, input_ids, decoder_input_ids=decoder_input_ids
+        )
         return config, inputs_dict
 
     def get_config(self):
@@ -588,7 +650,10 @@ class MusicgenMelodyTester:
             audio_channels=self.audio_channels,
         )
         config = MusicgenMelodyConfig.from_sub_models_config(
-            text_encoder_config, audio_encoder_config, decoder_config, chroma_length=self.chroma_length
+            text_encoder_config,
+            audio_encoder_config,
+            decoder_config,
+            chroma_length=self.chroma_length,
         )
         return config
 
@@ -599,12 +664,22 @@ class MusicgenMelodyTester:
 
 @require_torch
 # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody, musicgen->musicgen_melody, EncoderDecoder->DecoderOnly, input_values->input_features
-class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
+class MusicgenMelodyTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
+    )
     # Doesn't run generation tests. See `greedy_sample_model_classes` below
     all_generative_model_classes = ()
-    greedy_sample_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-to-audio": MusicgenMelodyForConditionalGeneration} if is_torch_available() else {}
+    greedy_sample_model_classes = (
+        (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"text-to-audio": MusicgenMelodyForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False  # training is not supported yet for MusicGen
     test_headmasking = False
     test_resize_embeddings = False
@@ -618,11 +693,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     # special case for labels
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             inputs_dict["labels"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+                (
+                    self.model_tester.batch_size,
+                    self.model_tester.seq_length,
+                    self.model_tester.num_codebooks,
+                ),
                 dtype=torch.long,
                 device=torch_device,
             )
@@ -633,13 +714,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.use_cache = False
             config.return_dict = True
             model = model_class(config)
 
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=gradient_checkpointing_kwargs
+            )
             model.train()
 
             # The audio encoder weights are not used during the forward pass (only during the generate pass)
@@ -648,24 +733,35 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
             optimizer.step()
 
             for k, v in model.named_parameters():
                 if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                    self.assertTrue(
+                        v.grad is not None,
+                        f"{k} in {model_class.__name__} has no gradient!",
+                    )
 
     # Ignore copy
-    def _check_output_with_attentions(self, outputs, config, input_ids, decoder_input_ids):
+    def _check_output_with_attentions(
+        self, outputs, config, input_ids, decoder_input_ids
+    ):
         decoder_config = config.decoder
 
         decoder_attentions = outputs["attentions"]
         num_decoder_layers = decoder_config.num_hidden_layers
         self.assertEqual(len(decoder_attentions), num_decoder_layers)
 
-        output_shape = decoder_input_ids.shape[-1] + input_ids.shape[-1] + self.model_tester.chroma_length
+        output_shape = (
+            decoder_input_ids.shape[-1]
+            + input_ids.shape[-1]
+            + self.model_tester.chroma_length
+        )
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
             (decoder_config.num_attention_heads, output_shape, output_shape),
@@ -694,7 +790,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 output_attentions=True,
                 **kwargs,
             )
-        self._check_output_with_attentions(outputs, config, input_ids, decoder_input_ids)
+        self._check_output_with_attentions(
+            outputs, config, input_ids, decoder_input_ids
+        )
 
     # Ignore copy
     def check_musicgen_melody_model_output_attentions_from_config(
@@ -724,7 +822,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 decoder_attention_mask=decoder_attention_mask,
                 **kwargs,
             )
-        self.assertTrue(all(key not in outputs for key in ["encoder_attentions", "decoder_attentions"]))
+        self.assertTrue(
+            all(
+                key not in outputs
+                for key in ["encoder_attentions", "decoder_attentions"]
+            )
+        )
         config.text_encoder.output_attentions = True  # inner model config -> will work
         config.audio_encoder.output_attentions = True
         config.decoder.output_attentions = True
@@ -741,15 +844,21 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 decoder_attention_mask=decoder_attention_mask,
                 **kwargs,
             )
-        self._check_output_with_attentions(outputs, config, input_ids, decoder_input_ids)
+        self._check_output_with_attentions(
+            outputs, config, input_ids, decoder_input_ids
+        )
 
     # override since changing `output_attentions` from the top-level model config won't work
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            self.check_musicgen_melody_model_output_attentions(model_class, config, **inputs_dict)
-            self.check_musicgen_melody_model_output_attentions_from_config(model_class, config, **inputs_dict)
+            self.check_musicgen_melody_model_output_attentions(
+                model_class, config, **inputs_dict
+            )
+            self.check_musicgen_melody_model_output_attentions_from_config(
+                model_class, config, **inputs_dict
+            )
 
     # override since we have a specific forward signature for musicgen_melody
     # Ignore copy
@@ -772,7 +881,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             if "head_mask" and "decoder_head_mask" in arg_names:
                 expected_arg_names.extend(["head_mask", "decoder_head_mask"])
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     # override since changing `gradient_checkpointing` from the top-level model config won't work
     def test_gradient_checkpointing_backward_compatibility(self):
@@ -788,15 +899,21 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
 
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
+    @unittest.skip(
+        reason="MusicGen has multiple inputs embeds and lm heads that should not be tied."
+    )
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
+    @unittest.skip(
+        reason="MusicGen has multiple inputs embeds and lm heads that should not be tied."
+    )
     def test_tied_model_weights_key_ignore(self):
         pass
 
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
+    @unittest.skip(
+        reason="MusicGen has multiple inputs embeds and lm heads that should not be tied."
+    )
     def test_tied_weights_keys(self):
         pass
 
@@ -868,14 +985,19 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # Ignore copy
-            seq_length = self.model_tester.conditional_seq_length + self.model_tester.chroma_length
+            seq_length = (
+                self.model_tester.conditional_seq_length
+                + self.model_tester.chroma_length
+            )
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
 
             # Ignore copy
-            seq_length = self.model_tester.encoder_seq_length + self.model_tester.chroma_length
+            seq_length = (
+                self.model_tester.encoder_seq_length + self.model_tester.chroma_length
+            )
             # Ignore copy
             expected_num_layers = self.model_tester.num_hidden_layers + 1
             # Ignore copy
@@ -915,7 +1037,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     elif not any(x in name for x in ignore_init):
@@ -933,7 +1057,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), torch.nn.Embedding)
             lm_heads = model.get_output_embeddings()
-            self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
+            self.assertTrue(
+                lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear)
+            )
 
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         logits_processor_kwargs = {}
@@ -948,10 +1074,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config).eval().to(torch_device)
             model.half()
             # greedy
-            model.generate(input_dict["input_ids"], attention_mask=input_dict["attention_mask"], max_new_tokens=10)
+            model.generate(
+                input_dict["input_ids"],
+                attention_mask=input_dict["attention_mask"],
+                max_new_tokens=10,
+            )
             # sampling
             model.generate(
-                input_dict["input_ids"], attention_mask=input_dict["attention_mask"], do_sample=True, max_new_tokens=10
+                input_dict["input_ids"],
+                attention_mask=input_dict["attention_mask"],
+                do_sample=True,
+                max_new_tokens=10,
             )
 
     def test_greedy_generate_stereo_outputs(self):
@@ -974,9 +1107,13 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -984,11 +1121,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model_fa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.bfloat16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
+                    attn_implementation={
+                        "decoder": "flash_attention_2",
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                    },
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 # Ignore copy
@@ -1006,9 +1149,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 # Ignore copy
                 decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
                 # Ignore copy
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                outputs = model(
+                    dummy_input,
+                    decoder_input_ids=decoder_input_ids,
+                    output_hidden_states=True,
+                )
                 # Ignore copy
-                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                outputs_fa = model_fa(
+                    dummy_input,
+                    decoder_input_ids=decoder_input_ids,
+                    output_hidden_states=True,
+                )
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -1065,7 +1216,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
             model = model_class(config)
 
@@ -1074,7 +1227,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
+                    attn_implementation={
+                        "decoder": "flash_attention_2",
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                    },
                 ).to(torch_device)
 
                 for _, module in model.named_modules():
@@ -1095,13 +1252,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         major, _ = compute_capability
 
         if not torch.version.cuda or major < 8:
-            self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+            self.skipTest(
+                reason="This test requires an NVIDIA GPU with compute capability >= 8.0"
+            )
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
                 self.skipTest(
@@ -1112,7 +1273,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
-                self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+                self.skipTest(
+                    reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input"
+                )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1120,7 +1283,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    attn_implementation={"decoder": "sdpa", "audio_encoder": None, "text_encoder": None},
+                    attn_implementation={
+                        "decoder": "sdpa",
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                    },
                 )
                 model.to(torch_device)
 
@@ -1128,10 +1295,15 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 inputs_dict.pop("decoder_attention_mask", None)
 
                 for name, inp in inputs_dict.items():
-                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [
+                        torch.float32,
+                        torch.float16,
+                    ]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(
+                    enable_flash=True, enable_math=False, enable_mem_efficient=False
+                ):
                     _ = model(**inputs_dict)
 
     @require_flash_attn
@@ -1142,9 +1314,13 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(
+                    f"{model_class.__name__} does not support Flash Attention 2"
+                )
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1152,11 +1328,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model_fa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.bfloat16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
+                    attn_implementation={
+                        "decoder": "flash_attention_2",
+                        "audio_encoder": None,
+                        "text_encoder": None,
+                    },
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 # Ignore copy
@@ -1174,9 +1356,17 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 # Ignore copy
                 decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
                 # Ignore copy
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                outputs = model(
+                    dummy_input,
+                    decoder_input_ids=decoder_input_ids,
+                    output_hidden_states=True,
+                )
                 # Ignore copy
-                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                outputs_fa = model_fa(
+                    dummy_input,
+                    decoder_input_ids=decoder_input_ids,
+                    output_hidden_states=True,
+                )
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -1227,7 +1417,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1235,27 +1427,49 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                audio_encoder_attn = "sdpa" if model.audio_encoder._supports_sdpa else "eager"
-                text_encoder_attn = "sdpa" if model.text_encoder._supports_sdpa else "eager"
+                audio_encoder_attn = (
+                    "sdpa" if model.audio_encoder._supports_sdpa else "eager"
+                )
+                text_encoder_attn = (
+                    "sdpa" if model.text_encoder._supports_sdpa else "eager"
+                )
                 decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model_sdpa.audio_encoder.config._attn_implementation == audio_encoder_attn)
-                self.assertTrue(model_sdpa.text_encoder.config._attn_implementation == text_encoder_attn)
-                self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+                self.assertTrue(
+                    model_sdpa.audio_encoder.config._attn_implementation
+                    == audio_encoder_attn
+                )
+                self.assertTrue(
+                    model_sdpa.text_encoder.config._attn_implementation
+                    == text_encoder_attn
+                )
+                self.assertTrue(
+                    model_sdpa.decoder.config._attn_implementation == decoder_attn
+                )
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_class.from_pretrained(
+                    tmpdirname, attn_implementation="eager"
+                )
                 model_eager = model_eager.eval().to(torch_device)
 
-                self.assertTrue(model_eager.audio_encoder.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
+                self.assertTrue(
+                    model_eager.audio_encoder.config._attn_implementation == "eager"
+                )
+                self.assertTrue(
+                    model_eager.text_encoder.config._attn_implementation == "eager"
+                )
+                self.assertTrue(
+                    model_eager.decoder.config._attn_implementation == "eager"
+                )
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                        raise ValueError(
+                            "The eager model should not have SDPA attention layers"
+                        )
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
@@ -1271,8 +1485,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
             model.freeze_audio_encoder()
 
-            audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
-            text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
+            audio_encoder_grads = [
+                param.requires_grad for param in model.audio_encoder.parameters()
+            ]
+            text_encoder_grads = [
+                param.requires_grad for param in model.text_encoder.parameters()
+            ]
 
             self.assertFalse(all(audio_encoder_grads))
             self.assertTrue(all(text_encoder_grads))
@@ -1280,8 +1498,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
             model.freeze_text_encoder()
 
-            audio_encoder_grads = [param.requires_grad for param in model.audio_encoder.parameters()]
-            text_encoder_grads = [param.requires_grad for param in model.text_encoder.parameters()]
+            audio_encoder_grads = [
+                param.requires_grad for param in model.audio_encoder.parameters()
+            ]
+            text_encoder_grads = [
+                param.requires_grad for param in model.text_encoder.parameters()
+            ]
 
             self.assertTrue(all(audio_encoder_grads))
             self.assertFalse(all(text_encoder_grads))
@@ -1311,7 +1533,9 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 class MusicgenMelodyIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
+        return MusicgenMelodyForConditionalGeneration.from_pretrained(
+            "ylacombe/musicgen-melody"
+        ).to(torch_device)
 
     @cached_property
     def processor(self):
@@ -1322,7 +1546,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         model = self.model
         processor = self.processor
 
-        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+        inputs = processor(
+            text=["80s music", "Club techno"], padding=True, return_tensors="pt"
+        )
 
         # prepare the encoder inputs
         input_ids = inputs.input_ids.to(torch_device)
@@ -1331,7 +1557,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # prepare the decoder inputs
         pad_token_id = model.generation_config.pad_token_id
         decoder_input_ids = (
-            torch.ones((input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long).to(torch_device)
+            torch.ones(
+                (input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long
+            ).to(torch_device)
             * pad_token_id
         )
 
@@ -1348,7 +1576,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
             1.0504, -2.5358, -4.3497,  0.7338,  0.4823, -2.5260,  1.2717,  1.5427
         ])
         # fmt: on
-        EXPECTED_OUTPUT_LENGTH = input_ids.shape[1] + 1 + self.model.config.chroma_length
+        EXPECTED_OUTPUT_LENGTH = (
+            input_ids.shape[1] + 1 + self.model.config.chroma_length
+        )
 
         logits_shape = (
             input_ids.shape[0] * model.decoder.num_codebooks,
@@ -1357,7 +1587,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         )
 
         self.assertTrue(logits.shape == logits_shape)
-        torch.testing.assert_close(logits[0, -1, :16].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            logits[0, -1, :16].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_logits_text_audio_prompt(self):
@@ -1379,7 +1611,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # prepare the decoder inputs
         pad_token_id = model.generation_config.pad_token_id
         decoder_input_ids = (
-            torch.ones((input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long).to(torch_device)
+            torch.ones(
+                (input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long
+            ).to(torch_device)
             * pad_token_id
         )
 
@@ -1399,16 +1633,25 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(logits.shape == (8, 240, 2048))
-        torch.testing.assert_close(logits[1:3, -1, 32:40].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            logits[1:3, -1, 32:40].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_generate_unconditional_greedy(self):
         model = self.model
 
         # only generate 1 sample with greedy - since it's deterministic all elements of the batch will be the same
-        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1).to(torch_device)
+        unconditional_inputs = self.processor.get_unconditional_inputs(
+            num_samples=1
+        ).to(torch_device)
 
-        output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=10, guidance_scale=1.0)
+        output_values = model.generate(
+            **unconditional_inputs,
+            do_sample=False,
+            max_new_tokens=10,
+            guidance_scale=1.0,
+        )
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1421,19 +1664,28 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (1, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_generate_unconditional_sampling(self):
         model = self.model
 
         # for stochastic sampling we can generate multiple outputs
-        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=2).to(torch_device)
+        unconditional_inputs = self.processor.get_unconditional_inputs(
+            num_samples=2
+        ).to(torch_device)
 
         set_seed(0)
 
         output_values = model.generate(
-            **unconditional_inputs, do_sample=True, max_new_tokens=10, guidance_scale=1.0, temperature=1.0, top_k=250
+            **unconditional_inputs,
+            do_sample=True,
+            max_new_tokens=10,
+            guidance_scale=1.0,
+            temperature=1.0,
+            top_k=250,
         )
 
         # fmt: off
@@ -1446,21 +1698,29 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_generate_text_prompt_greedy(self):
         model = self.model
         processor = self.processor
 
-        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+        inputs = processor(
+            text=["80s music", "Club techno"], padding=True, return_tensors="pt"
+        )
 
         # prepare the encoder inputs
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
         output_values = model.generate(
-            input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=None, max_new_tokens=10
+            input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            guidance_scale=None,
+            max_new_tokens=10,
         )
 
         # fmt: off
@@ -1473,21 +1733,29 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :10].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :10].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_generate_text_prompt_greedy_with_classifier_free_guidance(self):
         model = self.model
         processor = self.processor
 
-        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+        inputs = processor(
+            text=["80s music", "Club techno"], padding=True, return_tensors="pt"
+        )
 
         # prepare the encoder inputs
         input_ids = inputs.input_ids.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
         output_values = model.generate(
-            input_ids, attention_mask=attention_mask, do_sample=False, guidance_scale=3, max_new_tokens=10
+            input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            guidance_scale=3,
+            max_new_tokens=10,
         )
 
         # fmt: off
@@ -1501,14 +1769,18 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_generate_text_prompt_sampling(self):
         model = self.model
         processor = self.processor
 
-        inputs = processor(text=["80s music", "Club techno"], padding=True, return_tensors="pt")
+        inputs = processor(
+            text=["80s music", "Club techno"], padding=True, return_tensors="pt"
+        )
 
         # prepare the encoder inputs
         input_ids = inputs.input_ids.to(torch_device)
@@ -1535,7 +1807,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_generate_text_audio_prompt(self):
@@ -1545,9 +1819,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         audio = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
         text = ["80s music", "Club techno"]
 
-        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            audio=audio, text=text, padding=True, return_tensors="pt"
+        ).to(torch_device)
 
-        output_values = model.generate(**inputs, do_sample=False, guidance_scale=None, max_new_tokens=10)
+        output_values = model.generate(
+            **inputs, do_sample=False, guidance_scale=None, max_new_tokens=10
+        )
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1560,7 +1838,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4
+        )
 
 
 @require_torch
@@ -1568,22 +1848,31 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-stereo-melody").to(
-            torch_device
-        )
+        return MusicgenMelodyForConditionalGeneration.from_pretrained(
+            "ylacombe/musicgen-stereo-melody"
+        ).to(torch_device)
 
     @cached_property
     def processor(self):
-        return MusicgenMelodyProcessor.from_pretrained("ylacombe/musicgen-stereo-melody")
+        return MusicgenMelodyProcessor.from_pretrained(
+            "ylacombe/musicgen-stereo-melody"
+        )
 
     @slow
     def test_generate_unconditional_greedy(self):
         model = self.model
 
         # only generate 1 sample with greedy - since it's deterministic all elements of the batch will be the same
-        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1).to(torch_device)
+        unconditional_inputs = self.processor.get_unconditional_inputs(
+            num_samples=1
+        ).to(torch_device)
 
-        output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=12, guidance_scale=1.0)
+        output_values = model.generate(
+            **unconditional_inputs,
+            do_sample=False,
+            max_new_tokens=12,
+            guidance_scale=1.0,
+        )
 
         # fmt: off
         EXPECTED_VALUES_LEFT = torch.tensor(
@@ -1597,8 +1886,12 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
 
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (1, 2, 5760))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT, rtol=6e-4, atol=6e-4)
-        torch.testing.assert_close(output_values[0, 1, :16].cpu(), EXPECTED_VALUES_LEFT, rtol=6e-4, atol=6e-4)
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT, rtol=6e-4, atol=6e-4
+        )
+        torch.testing.assert_close(
+            output_values[0, 1, :16].cpu(), EXPECTED_VALUES_LEFT, rtol=6e-4, atol=6e-4
+        )
 
     @slow
     def test_generate_text_audio_prompt(self):
@@ -1608,9 +1901,13 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         audio = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
         text = ["80s music", "Club techno"]
 
-        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            audio=audio, text=text, padding=True, return_tensors="pt"
+        ).to(torch_device)
 
-        output_values = model.generate(**inputs, do_sample=False, guidance_scale=3.0, max_new_tokens=12)
+        output_values = model.generate(
+            **inputs, do_sample=False, guidance_scale=3.0, max_new_tokens=12
+        )
 
         # fmt: off
         EXPECTED_VALUES_LEFT_FIRST_SAMPLE = torch.tensor(
@@ -1630,8 +1927,14 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (2, 2, 5760))
         torch.testing.assert_close(
-            output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT_FIRST_SAMPLE, rtol=1e-4, atol=1e-4
+            output_values[0, 0, :16].cpu(),
+            EXPECTED_VALUES_LEFT_FIRST_SAMPLE,
+            rtol=1e-4,
+            atol=1e-4,
         )
         torch.testing.assert_close(
-            output_values[1, 1, :16].cpu(), EXPECTED_VALUES_RIGHT_SECOND_SAMPLE, rtol=1e-4, atol=1e-4
+            output_values[1, 1, :16].cpu(),
+            EXPECTED_VALUES_RIGHT_SECOND_SAMPLE,
+            rtol=1e-4,
+            atol=1e-4,
         )

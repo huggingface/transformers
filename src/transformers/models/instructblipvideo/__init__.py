@@ -13,8 +13,8 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
-
+from ...utils import (OptionalDependencyNotAvailable, _LazyModule,
+                      is_torch_available, is_vision_available)
 
 _import_structure = {
     "configuration_instructblipvideo": [
@@ -32,7 +32,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_instructblipvideo"] = ["InstructBlipVideoImageProcessor"]
+    _import_structure["image_processing_instructblipvideo"] = [
+        "InstructBlipVideoImageProcessor"
+    ]
 
 
 try:
@@ -50,10 +52,8 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_instructblipvideo import (
-        InstructBlipVideoConfig,
-        InstructBlipVideoQFormerConfig,
-        InstructBlipVideoVisionConfig,
-    )
+        InstructBlipVideoConfig, InstructBlipVideoQFormerConfig,
+        InstructBlipVideoVisionConfig)
     from .processing_instructblipvideo import InstructBlipVideoProcessor
 
     try:
@@ -62,7 +62,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_instructblipvideo import InstructBlipVideoImageProcessor
+        from .image_processing_instructblipvideo import \
+            InstructBlipVideoImageProcessor
 
     try:
         if not is_torch_available():
@@ -72,12 +73,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_instructblipvideo import (
             InstructBlipVideoForConditionalGeneration,
-            InstructBlipVideoPreTrainedModel,
-            InstructBlipVideoQFormerModel,
-            InstructBlipVideoVisionModel,
-        )
+            InstructBlipVideoPreTrainedModel, InstructBlipVideoQFormerModel,
+            InstructBlipVideoVisionModel)
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

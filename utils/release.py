@@ -49,16 +49,24 @@ from pathlib import Path
 
 import packaging.version
 
-
 # All paths are defined with the intent that this script should be run from the root of the repo.
 PATH_TO_EXAMPLES = "examples/"
 PATH_TO_MODELS = "src/transformers/models"
 # This maps a type of file to the pattern to look for when searching where the version is defined, as well as the
 # template to follow when replacing it with the new version.
 REPLACE_PATTERNS = {
-    "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
-    "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
-    "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
+    "examples": (
+        re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE),
+        'check_min_version("VERSION")\n',
+    ),
+    "init": (
+        re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE),
+        '__version__ = "VERSION"\n',
+    ),
+    "setup": (
+        re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE),
+        r'\1version="VERSION",',
+    ),
 }
 # This maps a type of file to its path in Transformers
 REPLACE_FILES = {
@@ -99,7 +107,9 @@ def update_version_in_examples(version: str):
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
+                update_version_in_file(
+                    os.path.join(folder, fname), version, file_type="examples"
+                )
 
 
 def global_version_update(version: str, patch: bool = False):
@@ -151,7 +161,9 @@ def pre_release_work(patch: bool = False):
     # First let's get the default version: base version if we are in dev, bump minor otherwise.
     default_version = get_version()
     if patch and default_version.is_devrelease:
-        raise ValueError("Can't create a patch version from the dev branch, checkout a released version!")
+        raise ValueError(
+            "Can't create a patch version from the dev branch, checkout a released version!"
+        )
     if default_version.is_devrelease:
         default_version = default_version.base_version
     elif patch:
@@ -193,8 +205,14 @@ def post_release_work():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--post_release", action="store_true", help="Whether this is pre or post release.")
-    parser.add_argument("--patch", action="store_true", help="Whether or not this is a patch release.")
+    parser.add_argument(
+        "--post_release",
+        action="store_true",
+        help="Whether this is pre or post release.",
+    )
+    parser.add_argument(
+        "--patch", action="store_true", help="Whether or not this is a patch release."
+    )
     args = parser.parse_args()
     if not args.post_release:
         pre_release_work(patch=args.patch)

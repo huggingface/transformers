@@ -21,14 +21,16 @@ with extra methods beings exposed
 from array import array
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import (Tokenizer, decoders, normalizers, pre_tokenizers,
+                        processors)
 from tokenizers.models import BPE, Unigram
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import GemmaConverter, GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter
+from ..convert_slow_tokenizer import (GemmaConverter, GPT2Converter,
+                                      LlamaConverter, Qwen2Converter,
+                                      T5Converter)
 from ..utils import logging
 from ..utils.logging import tqdm
-
 
 logger = logging.get_logger(__name__)
 
@@ -240,7 +242,9 @@ def _gguf_parse_value(_value, data_type):
         array_data_type = None
     else:
         if data_type[0] != 9:
-            raise ValueError("Received multiple types, therefore expected the first type to indicate an array.")
+            raise ValueError(
+                "Received multiple types, therefore expected the first type to indicate an array."
+            )
         data_type, array_data_type = data_type
 
     if data_type in [0, 1, 2, 3, 4, 5, 10, 11]:
@@ -278,7 +282,9 @@ class GGUFTokenizerSkeleton:
                     piece_l, piece_r = merge[:index], merge[index:]
                     if piece_l in tokens and piece_r in tokens:
                         local.append((piece_l, piece_r, piece_score))
-                local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]), reverse=True)
+                local = sorted(
+                    local, key=lambda x: (vocab[x[0]], vocab[x[1]]), reverse=True
+                )
                 merges.extend(local)
             merges = sorted(merges, key=lambda val: val[2], reverse=True)
             merges = [(val[0], val[1]) for val in merges]
@@ -304,7 +310,9 @@ class GGUFLlamaConverter(LlamaConverter):
         self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
         self.original_tokenizer = self.proto
         self.additional_kwargs = {}
-        self.is_llama_3_tokenizer = getattr(self.proto, "tokenizer_type", "llama") != "llama"
+        self.is_llama_3_tokenizer = (
+            getattr(self.proto, "tokenizer_type", "llama") != "llama"
+        )
 
     def vocab(self, proto):
         return list(zip(proto.tokens, proto.scores))
@@ -317,9 +325,19 @@ class GGUFLlamaConverter(LlamaConverter):
         merges = self.merges(self.proto)
         bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
 
-        unk_token = proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
-        bos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "bos_token_id", None) is not None else None
-        eos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "eos_token_id", None) is not None else None
+        unk_token = (
+            proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        )
+        bos_token = (
+            proto.tokens[proto.bos_token_id]
+            if getattr(proto, "bos_token_id", None) is not None
+            else None
+        )
+        eos_token = (
+            proto.tokens[proto.bos_token_id]
+            if getattr(proto, "eos_token_id", None) is not None
+            else None
+        )
 
         tokenizer = Tokenizer(
             BPE(
@@ -335,26 +353,37 @@ class GGUFLlamaConverter(LlamaConverter):
 
         if not hasattr(self.proto, "token_type"):
             if unk_token is not None:
-                special_tokens.append(AddedToken(unk_token, normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(unk_token, normalized=False, special=True)
+                )
 
             if bos_token is not None:
-                special_tokens.append(AddedToken(bos_token, normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(bos_token, normalized=False, special=True)
+                )
 
             if eos_token is not None:
-                special_tokens.append(AddedToken(eos_token, normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(eos_token, normalized=False, special=True)
+                )
         else:
             # 3 stands for special tokens
             special_tokens_idx = np.where(np.array(self.proto.token_type) == 3)[0]
 
             for idx in special_tokens_idx:
-                special_tokens.append(AddedToken(self.proto.tokens[idx], normalized=False, special=True))
+                special_tokens.append(
+                    AddedToken(self.proto.tokens[idx], normalized=False, special=True)
+                )
 
         if len(special_tokens) != 0:
             tokenizer.add_special_tokens(special_tokens)
 
         if len(self.proto.added_tokens) != 0:
             tokenizer.add_tokens(
-                [AddedToken(added_token, normalized=False, special=False) for added_token in self.proto.added_tokens]
+                [
+                    AddedToken(added_token, normalized=False, special=False)
+                    for added_token in self.proto.added_tokens
+                ]
             )
 
         self.additional_kwargs["unk_token"] = unk_token
@@ -378,7 +407,11 @@ class GGUFLlamaConverter(LlamaConverter):
         ]
 
         if self.is_llama_3_tokenizer:
-            sequence += [decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)]
+            sequence += [
+                decoders.ByteLevel(
+                    add_prefix_space=False, trim_offsets=False, use_regex=True
+                )
+            ]
 
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
@@ -461,17 +494,33 @@ class GGUFPhi3Converter(LlamaConverter):
         # add the special tokens from phi3 tokenizer config
         tokenizer.add_special_tokens(
             [
-                AddedToken("</s>", rstrip=True, lstrip=False, normalized=False, special=True),
+                AddedToken(
+                    "</s>", rstrip=True, lstrip=False, normalized=False, special=True
+                ),
                 AddedToken("<|endoftext|>", normalized=False, special=True),
-                AddedToken("<|assistant|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|placeholder1|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|placeholder2|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|placeholder3|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|placeholder4|>", rstrip=True, normalized=False, special=True),
+                AddedToken(
+                    "<|assistant|>", rstrip=True, normalized=False, special=True
+                ),
+                AddedToken(
+                    "<|placeholder1|>", rstrip=True, normalized=False, special=True
+                ),
+                AddedToken(
+                    "<|placeholder2|>", rstrip=True, normalized=False, special=True
+                ),
+                AddedToken(
+                    "<|placeholder3|>", rstrip=True, normalized=False, special=True
+                ),
+                AddedToken(
+                    "<|placeholder4|>", rstrip=True, normalized=False, special=True
+                ),
                 AddedToken("<|system|>", rstrip=True, normalized=False, special=True),
                 AddedToken("<|end|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|placeholder5|>", rstrip=True, normalized=False, special=True),
-                AddedToken("<|placeholder6|>", rstrip=True, normalized=False, special=True),
+                AddedToken(
+                    "<|placeholder5|>", rstrip=True, normalized=False, special=True
+                ),
+                AddedToken(
+                    "<|placeholder6|>", rstrip=True, normalized=False, special=True
+                ),
                 AddedToken("<|user|>", rstrip=True, normalized=False, special=True),
             ]
         )

@@ -17,20 +17,16 @@ import gc
 import tempfile
 import unittest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
-from transformers.testing_utils import (
-    backend_empty_cache,
-    require_accelerate,
-    require_auto_awq,
-    require_intel_extension_for_pytorch,
-    require_torch_accelerator,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
+from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
+                          AwqConfig, OPTForCausalLM)
+from transformers.testing_utils import (backend_empty_cache,
+                                        require_accelerate, require_auto_awq,
+                                        require_intel_extension_for_pytorch,
+                                        require_torch_accelerator,
+                                        require_torch_gpu,
+                                        require_torch_multi_gpu, slow,
+                                        torch_device)
 from transformers.utils import is_accelerate_available, is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -124,7 +120,9 @@ class AwqTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device_map)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name, device_map=cls.device_map
+        )
 
     def tearDown(self):
         gc.collect()
@@ -140,7 +138,9 @@ class AwqTest(unittest.TestCase):
         from transformers.integrations.awq import replace_with_awq_linear
 
         model_id = "facebook/opt-350m"
-        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        config = AutoConfig.from_pretrained(
+            model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5"
+        )
         quantization_config = AwqConfig(bits=4)
 
         with init_empty_weights():
@@ -151,7 +151,9 @@ class AwqTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_awq_linear(model, quantization_config=quantization_config)
+        model, _ = replace_with_awq_linear(
+            model, quantization_config=quantization_config
+        )
         nb_awq_linear = 0
         for module in model.modules():
             if isinstance(module, (WQLinear_GEMM, WQLinear_GEMV)):
@@ -164,7 +166,9 @@ class AwqTest(unittest.TestCase):
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_awq_linear(
-            model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
+            model,
+            quantization_config=quantization_config,
+            modules_to_not_convert=["lm_head"],
         )
         nb_awq_linear = 0
         for module in model.modules():
@@ -177,55 +181,81 @@ class AwqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model is working properly
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     def test_raise_if_non_quantized(self):
         model_id = "facebook/opt-125m"
         quantization_config = AwqConfig(bits=4)
 
         with self.assertRaises(ValueError):
-            _ = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+            _ = AutoModelForCausalLM.from_pretrained(
+                model_id, quantization_config=quantization_config
+            )
 
     def test_quantized_model_bf16(self):
         """
         Simple test that checks if the quantized model is working properly with bf16
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16).to(
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
             torch_device
         )
 
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.bfloat16
+        ).to(torch_device)
+
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT_BF16,
+        )
 
     def test_quantized_model_exllama(self):
         """
         Simple test that checks if the quantized model is working properly with exllama backend
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
         quantization_config = AwqConfig(version="exllama")
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=quantization_config, device_map=torch_device
+            self.model_name,
+            quantization_config=quantization_config,
+            device_map=torch_device,
         )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_EXLLAMA)
+        self.assertIn(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT_EXLLAMA,
+        )
 
     def test_quantized_model_no_device_map(self):
         """
         Simple test that checks if the quantized model is working properly
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name).to(torch_device)
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name).to(
+            torch_device
+        )
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     def test_save_pretrained(self):
         """
@@ -233,27 +263,41 @@ class AwqTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map=self.device_map
+            )
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+                torch_device
+            )
 
             output = model.generate(**input_ids, max_new_tokens=40)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertEqual(
+                self.tokenizer.decode(output[0], skip_special_tokens=True),
+                self.EXPECTED_OUTPUT,
+            )
 
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, device_map="auto"
+        )
 
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     def test_quantized_model_no_k_proj_quantized(self):
         """
@@ -261,14 +305,26 @@ class AwqTest(unittest.TestCase):
         """
         dummy_input = torch.LongTensor([[0, 1, 0]]).to(torch_device)
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_with_no_k_proj_quantized).to(torch_device)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_with_no_k_proj_quantized
+        ).to(torch_device)
 
-        self.assertTrue(isinstance(quantized_model.model.decoder.layers[0].self_attn.k_proj, torch.nn.Linear))
-        self.assertFalse(isinstance(quantized_model.model.decoder.layers[0].self_attn.v_proj, torch.nn.Linear))
-
-        EXPECTED_OUTPUT = torch.LongTensor([[0, 1, 0, 50118, 50118, 133, 248, 12, 134, 16, 10, 372, 2031]]).to(
-            torch_device
+        self.assertTrue(
+            isinstance(
+                quantized_model.model.decoder.layers[0].self_attn.k_proj,
+                torch.nn.Linear,
+            )
         )
+        self.assertFalse(
+            isinstance(
+                quantized_model.model.decoder.layers[0].self_attn.v_proj,
+                torch.nn.Linear,
+            )
+        )
+
+        EXPECTED_OUTPUT = torch.LongTensor(
+            [[0, 1, 0, 50118, 50118, 133, 248, 12, 134, 16, 10, 372, 2031]]
+        ).to(torch_device)
 
         output = quantized_model.generate(dummy_input, max_new_tokens=10)
         self.assertTrue((EXPECTED_OUTPUT == output).all())
@@ -297,7 +353,9 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
+    EXPECTED_GENERATION = (
+        prompt + "\n\nThis is a classic puzzle that has been around for"
+    )
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
@@ -308,7 +366,11 @@ class AwqFusedTest(unittest.TestCase):
 
     def _check_fused_modules(self, model):
         has_fused_modules = False
-        fused_modules_name = ["QuantAttentionFused", "QuantFusedMLP", "FasterTransformerRMSNorm"]
+        fused_modules_name = [
+            "QuantAttentionFused",
+            "QuantFusedMLP",
+            "FasterTransformerRMSNorm",
+        ]
 
         for _, module in model.named_modules():
             if module.__class__.__name__ in fused_modules_name:
@@ -351,7 +413,9 @@ class AwqFusedTest(unittest.TestCase):
         # Check if model has been correctly fused
         self._check_fused_modules(model)
         # Checks if the modules_to_not_convert (here gate layer) is a Linear
-        self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
+        self.assertTrue(
+            isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear)
+        )
 
     def test_generation_fused(self):
         """
@@ -368,13 +432,18 @@ class AwqFusedTest(unittest.TestCase):
 
         self._check_fused_modules(model)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, revision=self.model_revision
+        )
 
         inputs = tokenizer(self.prompt, return_tensors="pt").to(torch_device)
 
         outputs = model.generate(**inputs, max_new_tokens=12)
 
-        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
+        self.assertEqual(
+            tokenizer.decode(outputs[0], skip_special_tokens=True),
+            self.EXPECTED_GENERATION,
+        )
 
     def test_generation_fused_batched(self):
         """
@@ -391,14 +460,21 @@ class AwqFusedTest(unittest.TestCase):
 
         self._check_fused_modules(model)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, revision=self.model_revision
+        )
 
         tokenizer.pad_token_id = tokenizer.eos_token_id
-        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(
+            [self.prompt, self.prompt], return_tensors="pt", padding=True
+        ).to(torch_device)
 
         outputs = model.generate(**inputs, max_new_tokens=12)
 
-        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
+        self.assertEqual(
+            tokenizer.decode(outputs[0], skip_special_tokens=True),
+            self.EXPECTED_GENERATION,
+        )
 
     def test_generation_llava_fused(self):
         from transformers import pipeline
@@ -451,13 +527,18 @@ class AwqFusedTest(unittest.TestCase):
 
         self._check_fused_modules(model)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.custom_mapping_model_id, revision=self.custom_model_revision)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.custom_mapping_model_id, revision=self.custom_model_revision
+        )
 
         prompt = "Hello"
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
         outputs = model.generate(**inputs, max_new_tokens=12)
-        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
+        self.assertEqual(
+            tokenizer.decode(outputs[0], skip_special_tokens=True),
+            self.EXPECTED_GENERATION_CUSTOM_MODEL,
+        )
 
     @unittest.skip(reason="Not enough GPU memory on CI runners")
     @require_torch_multi_gpu
@@ -476,10 +557,15 @@ class AwqFusedTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_name)
         tokenizer.pad_token = tokenizer.eos_token
 
-        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(
+            [self.prompt, self.prompt], return_tensors="pt", padding=True
+        ).to(torch_device)
 
         outputs = model.generate(**inputs, max_new_tokens=12)
-        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
+        self.assertEqual(
+            tokenizer.decode(outputs[0], skip_special_tokens=True),
+            self.EXPECTED_GENERATION_MIXTRAL,
+        )
 
 
 @slow
@@ -496,9 +582,13 @@ class AwqScaleTest(unittest.TestCase):
         Simple test that checks if the scales have been replaced in the quantized model
         """
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
+            "TechxGenus/starcoder2-3b-AWQ",
+            torch_dtype=torch.float16,
+            device_map=torch_device,
         )
-        self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
+        self.assertTrue(
+            isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation)
+        )
 
 
 @slow
@@ -517,13 +607,17 @@ class AwqIPEXTest(unittest.TestCase):
             quantization_config=quantization_config,
             device_map="cpu",
         )
-        tokenizer = AutoTokenizer.from_pretrained("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ"
+        )
         input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
         pad_token_id = tokenizer.eos_token_id
-        output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=pad_token_id)
+        output = model.generate(
+            input_ids, do_sample=False, max_length=20, pad_token_id=pad_token_id
+        )
         print(tokenizer.decode(output[0], skip_special_tokens=True))
 
-        expected_output = (
-            "How to make a cake with a round tin?\nHow to make a cake with a round tin?\n1. Preheat the oven to 180°"
+        expected_output = "How to make a cake with a round tin?\nHow to make a cake with a round tin?\n1. Preheat the oven to 180°"
+        self.assertIn(
+            tokenizer.decode(output[0], skip_special_tokens=True), expected_output
         )
-        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)

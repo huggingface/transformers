@@ -17,9 +17,9 @@
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .auto_factory import (_BaseAutoModelClass, _LazyAutoMapping,
+                           auto_class_update)
 from .configuration_auto import CONFIG_MAPPING_NAMES
-
 
 logger = logging.get_logger(__name__)
 
@@ -245,16 +245,24 @@ FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 )
 
 FLAX_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_MAPPING_NAMES)
-FLAX_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
-FLAX_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+FLAX_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES
+)
+FLAX_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES
+)
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 )
 FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
-FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
-FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
+)
+FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+)
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 )
@@ -289,21 +297,27 @@ class FlaxAutoModelForPreTraining(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_PRETRAINING_MAPPING
 
 
-FlaxAutoModelForPreTraining = auto_class_update(FlaxAutoModelForPreTraining, head_doc="pretraining")
+FlaxAutoModelForPreTraining = auto_class_update(
+    FlaxAutoModelForPreTraining, head_doc="pretraining"
+)
 
 
 class FlaxAutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
 
 
-FlaxAutoModelForCausalLM = auto_class_update(FlaxAutoModelForCausalLM, head_doc="causal language modeling")
+FlaxAutoModelForCausalLM = auto_class_update(
+    FlaxAutoModelForCausalLM, head_doc="causal language modeling"
+)
 
 
 class FlaxAutoModelForMaskedLM(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_MASKED_LM_MAPPING
 
 
-FlaxAutoModelForMaskedLM = auto_class_update(FlaxAutoModelForMaskedLM, head_doc="masked language modeling")
+FlaxAutoModelForMaskedLM = auto_class_update(
+    FlaxAutoModelForMaskedLM, head_doc="masked language modeling"
+)
 
 
 class FlaxAutoModelForSeq2SeqLM(_BaseAutoModelClass):
@@ -330,7 +344,9 @@ class FlaxAutoModelForQuestionAnswering(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
-FlaxAutoModelForQuestionAnswering = auto_class_update(FlaxAutoModelForQuestionAnswering, head_doc="question answering")
+FlaxAutoModelForQuestionAnswering = auto_class_update(
+    FlaxAutoModelForQuestionAnswering, head_doc="question answering"
+)
 
 
 class FlaxAutoModelForTokenClassification(_BaseAutoModelClass):
@@ -346,7 +362,9 @@ class FlaxAutoModelForMultipleChoice(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING
 
 
-FlaxAutoModelForMultipleChoice = auto_class_update(FlaxAutoModelForMultipleChoice, head_doc="multiple choice")
+FlaxAutoModelForMultipleChoice = auto_class_update(
+    FlaxAutoModelForMultipleChoice, head_doc="multiple choice"
+)
 
 
 class FlaxAutoModelForNextSentencePrediction(_BaseAutoModelClass):
@@ -371,7 +389,9 @@ class FlaxAutoModelForVision2Seq(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
 
 
-FlaxAutoModelForVision2Seq = auto_class_update(FlaxAutoModelForVision2Seq, head_doc="vision-to-text modeling")
+FlaxAutoModelForVision2Seq = auto_class_update(
+    FlaxAutoModelForVision2Seq, head_doc="vision-to-text modeling"
+)
 
 
 class FlaxAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
@@ -379,5 +399,6 @@ class FlaxAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 
 
 FlaxAutoModelForSpeechSeq2Seq = auto_class_update(
-    FlaxAutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
+    FlaxAutoModelForSpeechSeq2Seq,
+    head_doc="sequence-to-sequence speech-to-text modeling",
 )

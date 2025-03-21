@@ -19,29 +19,17 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    center_crop,
-    center_to_corners_format,
-    rescale,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, logging
-
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (center_crop, center_to_corners_format,
+                                 rescale, resize, to_channel_dimension_format)
+from ...image_utils import (OPENAI_CLIP_MEAN, OPENAI_CLIP_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            infer_channel_dimension_format, is_scaled_image,
+                            make_list_of_images, to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs,
+                      is_torch_available, logging)
 
 if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTObjectDetectionOutput
@@ -83,7 +71,9 @@ def _scale_boxes(boxes, target_sizes):
     else:
         raise ValueError("`target_sizes` must be a list, tuple or torch.Tensor")
 
-    scale_factor = torch.stack([image_width, image_height, image_width, image_height], dim=1)
+    scale_factor = torch.stack(
+        [image_width, image_height, image_width, image_height], dim=1
+    )
     scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
     boxes = boxes * scale_factor
     return boxes
@@ -176,7 +166,9 @@ class OwlViTImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"height": 768, "width": 768}
         size = get_size_dict(size, default_to_square=True)
 
-        crop_size = crop_size if crop_size is not None else {"height": 768, "width": 768}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 768, "width": 768}
+        )
         crop_size = get_size_dict(crop_size, default_to_square=True)
 
         # Early versions of the OWL-ViT config on the hub had "rescale" as a flag. This clashes with the
@@ -297,7 +289,12 @@ class OwlViTImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
+        return rescale(
+            image,
+            rescale_factor,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -372,10 +369,14 @@ class OwlViTImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -416,31 +417,53 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_center_crop:
             images = [
-                self.center_crop(image, crop_size=crop_size, input_data_format=input_data_format) for image in images
+                self.center_crop(
+                    image, crop_size=crop_size, input_data_format=input_data_format
+                )
+                for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image, rescale_factor=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image,
+                    rescale_factor=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
-        encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(
+            data={"pixel_values": images}, tensor_type=return_tensors
+        )
         return encoded_inputs
 
     def post_process(self, outputs, target_sizes):
@@ -469,9 +492,13 @@ class OwlViTImageProcessor(BaseImageProcessor):
         logits, boxes = outputs.logits, outputs.pred_boxes
 
         if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
         if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         probs = torch.max(logits, dim=-1)
         scores = torch.sigmoid(probs.values)
@@ -485,7 +512,10 @@ class OwlViTImageProcessor(BaseImageProcessor):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = [
+            {"scores": s, "labels": l, "boxes": b}
+            for s, l, b in zip(scores, labels, boxes)
+        ]
 
         return results
 
@@ -518,7 +548,9 @@ class OwlViTImageProcessor(BaseImageProcessor):
         batch_size = len(batch_logits)
 
         if target_sizes is not None and len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as images")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as images"
+            )
 
         # batch_logits of shape (batch_size, num_queries, num_classes)
         batch_class_logits = torch.max(batch_logits, dim=-1)
@@ -542,7 +574,9 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return results
 
-    def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
+    def post_process_image_guided_detection(
+        self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None
+    ):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
@@ -567,9 +601,13 @@ class OwlViTImageProcessor(BaseImageProcessor):
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
         if target_sizes is not None and target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         probs = torch.max(logits, dim=-1)
         scores = torch.sigmoid(probs.values)
@@ -584,7 +622,9 @@ class OwlViTImageProcessor(BaseImageProcessor):
                     if not scores[idx][i]:
                         continue
 
-                    ious = box_iou(target_boxes[idx][i, :].unsqueeze(0), target_boxes[idx])[0][0]
+                    ious = box_iou(
+                        target_boxes[idx][i, :].unsqueeze(0), target_boxes[idx]
+                    )[0][0]
                     ious[i] = -1.0  # Mask self-IoU.
                     scores[idx][ious > nms_threshold] = 0.0
 

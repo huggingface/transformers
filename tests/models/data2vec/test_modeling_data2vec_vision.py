@@ -17,33 +17,23 @@
 import unittest
 
 from transformers import Data2VecVisionConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_multi_gpu,
-    require_vision,
-    slow,
-    torch_device,
-)
-from transformers.utils import (
-    cached_property,
-    is_torch_available,
-    is_vision_available,
-)
+from transformers.testing_utils import (require_torch, require_torch_multi_gpu,
+                                        require_vision, slow, torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        Data2VecVisionForImageClassification,
-        Data2VecVisionForSemanticSegmentation,
-        Data2VecVisionModel,
-    )
+    from transformers import (Data2VecVisionForImageClassification,
+                              Data2VecVisionForSemanticSegmentation,
+                              Data2VecVisionModel)
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
@@ -108,13 +98,17 @@ class Data2VecVisionModelTester:
         self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            pixel_labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -146,28 +140,49 @@ class Data2VecVisionModelTester:
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (self.image_size // self.patch_size) ** 2
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_classification(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.type_sequence_label_size
         model = Data2VecVisionForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
-    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_segmentation(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = Data2VecVisionForSemanticSegmentation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size * 2,
+                self.image_size * 2,
+            ),
         )
         result = model(pixel_values, labels=pixel_labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size * 2,
+                self.image_size * 2,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -185,7 +200,11 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     """
 
     all_model_classes = (
-        (Data2VecVisionModel, Data2VecVisionForImageClassification, Data2VecVisionForSemanticSegmentation)
+        (
+            Data2VecVisionModel,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForSemanticSegmentation,
+        )
         if is_torch_available()
         else ()
     )
@@ -206,7 +225,10 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=Data2VecVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -254,7 +276,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -267,12 +291,17 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_gradient_checkpointing
+            ):
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
             elif model_class.__name__ == "Data2VecVisionForSemanticSegmentation":
-                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                batch_size, num_channels, height, width = inputs_dict[
+                    "pixel_values"
+                ].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device
                 ).long()
@@ -280,7 +309,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             model.gradient_checkpointing_enable()
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -325,14 +356,16 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
+            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k").to(
-            torch_device
-        )
+        model = Data2VecVisionForImageClassification.from_pretrained(
+            "facebook/data2vec-vision-base-ft1k"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -351,19 +384,26 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
-        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
+        expected_top2 = [
+            model.config.label2id[i]
+            for i in ["remote control, remote", "tabby, tabby cat"]
+        ]
         self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
         model_name = "facebook/data2vec-vision-base-ft1k"
-        model = Data2VecVisionModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(
-            torch_device
-        )
+        model = Data2VecVisionModel.from_pretrained(
+            model_name, **{"use_absolute_position_embeddings": True}
+        ).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
-        inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
+        processor = BeitImageProcessor.from_pretrained(
+            "facebook/data2vec-vision-base-ft1k"
+        )
+        inputs = processor(
+            images=image, return_tensors="pt", size={"height": 480, "width": 480}
+        )
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # with interpolate_pos_encoding being True the model should process the higher resolution image

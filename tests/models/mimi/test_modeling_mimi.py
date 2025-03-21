@@ -24,19 +24,13 @@ from datasets import Audio, load_dataset
 from pytest import mark
 
 from transformers import AutoFeatureExtractor, MimiConfig
-from transformers.testing_utils import (
-    is_flaky,
-    is_torch_available,
-    require_flash_attn,
-    require_torch,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (is_flaky, is_torch_available,
+                                        require_flash_attn, require_torch,
+                                        require_torch_gpu, slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
-
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 
 if is_torch_available():
     import torch
@@ -61,7 +55,11 @@ def prepare_inputs_dict(
     else:
         encoder_dict = {"input_values": input_values}
 
-    decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
+    decoder_dict = (
+        {"decoder_input_ids": decoder_input_ids}
+        if decoder_input_ids is not None
+        else {}
+    )
 
     return {**encoder_dict, **decoder_dict}
 
@@ -109,7 +107,9 @@ class MimiModelTester:
         self.use_cache = use_cache
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.intermediate_size], scale=1.0
+        )
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
@@ -120,9 +120,9 @@ class MimiModelTester:
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
         config, inputs_dict = self.prepare_config_and_inputs()
-        inputs_dict["audio_codes"] = ids_tensor([self.batch_size, 1, self.num_channels], self.codebook_size).type(
-            torch.int32
-        )
+        inputs_dict["audio_codes"] = ids_tensor(
+            [self.batch_size, 1, self.num_channels], self.codebook_size
+        ).type(torch.int32)
 
         return config, inputs_dict
 
@@ -151,7 +151,8 @@ class MimiModelTester:
         input_values = inputs_dict["input_values"]
         result = model(input_values)
         self.parent.assertEqual(
-            result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
+            result.audio_values.shape,
+            (self.batch_size, self.num_channels, self.intermediate_size),
         )
 
 
@@ -166,7 +167,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
         if "output_attentions" in inputs_dict:
             inputs_dict.pop("output_attentions")
         if "output_hidden_states" in inputs_dict:
@@ -176,7 +179,11 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = MimiModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MimiConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self,
+            config_class=MimiConfig,
+            hidden_size=37,
+            common_properties=[],
+            has_text_modality=False,
         )
 
     def test_config(self):
@@ -196,7 +203,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["input_values", "padding_mask", "num_quantizers"]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @unittest.skip(reason="The MimiModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
@@ -269,10 +278,14 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -354,8 +367,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                )
 
                 self.assertTrue(isinstance(tuple_output, tuple))
                 self.assertTrue(isinstance(dict_output, dict))
@@ -363,7 +380,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
                     self.assertTrue(
                         torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
+                            set_nan_tensor_to_zero(tuple_value),
+                            set_nan_tensor_to_zero(dict_value),
+                            atol=1e-5,
                         ),
                         msg=(
                             "Tuple and dict output are not equal. Difference:"
@@ -393,7 +412,9 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
@@ -410,17 +431,23 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -467,14 +494,18 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 0.0012330565,
         }
 
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_id = "kyutai/mimi"
 
         model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
         processor = AutoFeatureExtractor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
         inputs = processor(
@@ -486,11 +517,15 @@ class MimiIntegrationTest(unittest.TestCase):
         for num_codebooks, expected_rmse in expected_rmse.items():
             with torch.no_grad():
                 # use max bandwith for best possible reconstruction
-                encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
+                encoder_outputs = model.encode(
+                    inputs["input_values"], num_quantizers=int(num_codebooks)
+                )
 
                 audio_codes = encoder_outputs[0]
 
-                decoder_outputs_first_part = model.decode(audio_codes[:, :, : audio_codes.shape[2] // 2])
+                decoder_outputs_first_part = model.decode(
+                    audio_codes[:, :, : audio_codes.shape[2] // 2]
+                )
                 decoder_outputs_second_part = model.decode(
                     audio_codes[:, :, audio_codes.shape[2] // 2 :],
                     decoder_past_key_values=decoder_outputs_first_part.decoder_past_key_values,
@@ -498,7 +533,8 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 audio_output_entire_context = model.decode(audio_codes)[0]
                 audio_output_concat_context = torch.cat(
-                    [decoder_outputs_first_part[0], decoder_outputs_second_part[0]], dim=2
+                    [decoder_outputs_first_part[0], decoder_outputs_second_part[0]],
+                    dim=2,
                 )
 
             # make sure audios are more or less equal
@@ -518,13 +554,17 @@ class MimiIntegrationTest(unittest.TestCase):
             "8": 426176,
             "32": 1795819,
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_id = "kyutai/mimi"
 
         processor = AutoFeatureExtractor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[-1]["audio"]["array"]
 
         inputs = processor(
@@ -534,11 +574,15 @@ class MimiIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         for use_cache in [False, True]:
-            model = MimiModel.from_pretrained(model_id, use_cache=use_cache).to(torch_device)
+            model = MimiModel.from_pretrained(model_id, use_cache=use_cache).to(
+                torch_device
+            )
             for num_codebooks, expected_rmse in expected_rmses.items():
                 with torch.no_grad():
                     # use max bandwith for best possible reconstruction
-                    encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
+                    encoder_outputs = model.encode(
+                        inputs["input_values"], num_quantizers=int(num_codebooks)
+                    )
 
                     audio_code_sums = encoder_outputs[0].sum().cpu().item()
 
@@ -546,19 +590,26 @@ class MimiIntegrationTest(unittest.TestCase):
                     # assert relative difference less than a threshold, because `audio_code_sums` varies a bit
                     # depending on torch version
                     self.assertTrue(
-                        np.abs(audio_code_sums - expected_codesums[num_codebooks]) <= (3e-3 * audio_code_sums)
+                        np.abs(audio_code_sums - expected_codesums[num_codebooks])
+                        <= (3e-3 * audio_code_sums)
                     )
 
-                    input_values_dec = model.decode(encoder_outputs[0], padding_mask=inputs["padding_mask"])[0]
+                    input_values_dec = model.decode(
+                        encoder_outputs[0], padding_mask=inputs["padding_mask"]
+                    )[0]
                     input_values_enc_dec = model(
-                        inputs["input_values"], inputs["padding_mask"], num_quantizers=int(num_codebooks)
+                        inputs["input_values"],
+                        inputs["padding_mask"],
+                        num_quantizers=int(num_codebooks),
                     )[1]
 
                 # make sure forward and decode gives same result
                 torch.testing.assert_close(input_values_dec, input_values_enc_dec)
 
                 # make sure shape matches
-                self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
+                self.assertTrue(
+                    inputs["input_values"].shape == input_values_enc_dec.shape
+                )
 
                 arr = inputs["input_values"][0].cpu().numpy()
                 arr_enc_dec = input_values_enc_dec[0].cpu().numpy()

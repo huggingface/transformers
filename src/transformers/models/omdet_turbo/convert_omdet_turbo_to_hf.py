@@ -22,14 +22,8 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import (
-    CLIPTokenizer,
-    DetrImageProcessor,
-    OmDetTurboConfig,
-    OmDetTurboForObjectDetection,
-    OmDetTurboProcessor,
-)
-
+from transformers import (CLIPTokenizer, DetrImageProcessor, OmDetTurboConfig,
+                          OmDetTurboForObjectDetection, OmDetTurboProcessor)
 
 IMAGE_MEAN = [123.675, 116.28, 103.53]
 IMAGE_STD = [58.395, 57.12, 57.375]
@@ -161,77 +155,125 @@ def rename_key(dct, old, new):
 def read_in_q_k_v_vision(state_dict, config):
     state_dict_keys = list(state_dict.keys())
     for layer_name_vision in state_dict_keys:
-        if layer_name_vision.startswith("vision_backbone") and "qkv" in layer_name_vision:
+        if (
+            layer_name_vision.startswith("vision_backbone")
+            and "qkv" in layer_name_vision
+        ):
             layer_num = int(layer_name_vision.split(".")[4])
             hidden_size = config.backbone_config.embed_dim * 2**layer_num
             if "weight" in layer_name_vision:
                 in_proj_weight = state_dict.pop(layer_name_vision)
-                state_dict[layer_name_vision.replace("qkv.weight", "key.weight")] = in_proj_weight[:hidden_size, :]
-                state_dict[layer_name_vision.replace("qkv.weight", "query.weight")] = in_proj_weight[
-                    hidden_size : hidden_size * 2, :
-                ]
-                state_dict[layer_name_vision.replace("qkv.weight", "value.weight")] = in_proj_weight[-hidden_size:, :]
+                state_dict[layer_name_vision.replace("qkv.weight", "key.weight")] = (
+                    in_proj_weight[:hidden_size, :]
+                )
+                state_dict[layer_name_vision.replace("qkv.weight", "query.weight")] = (
+                    in_proj_weight[hidden_size : hidden_size * 2, :]
+                )
+                state_dict[layer_name_vision.replace("qkv.weight", "value.weight")] = (
+                    in_proj_weight[-hidden_size:, :]
+                )
             elif "bias" in layer_name_vision:
                 in_proj_bias = state_dict.pop(layer_name_vision)
-                state_dict[layer_name_vision.replace("qkv.bias", "key.bias")] = in_proj_bias[:hidden_size]
-                state_dict[layer_name_vision.replace("qkv.bias", "query.bias")] = in_proj_bias[
-                    hidden_size : hidden_size * 2
-                ]
-                state_dict[layer_name_vision.replace("qkv.bias", "value.bias")] = in_proj_bias[-hidden_size:]
+                state_dict[layer_name_vision.replace("qkv.bias", "key.bias")] = (
+                    in_proj_bias[:hidden_size]
+                )
+                state_dict[layer_name_vision.replace("qkv.bias", "query.bias")] = (
+                    in_proj_bias[hidden_size : hidden_size * 2]
+                )
+                state_dict[layer_name_vision.replace("qkv.bias", "value.bias")] = (
+                    in_proj_bias[-hidden_size:]
+                )
 
 
 def read_in_q_k_v_text(state_dict, config):
     state_dict_keys = list(state_dict.keys())
     hidden_size = config.text_config.projection_dim
     for layer_name_text in state_dict_keys:
-        if layer_name_text.startswith("language_backbone") and "in_proj" in layer_name_text:
+        if (
+            layer_name_text.startswith("language_backbone")
+            and "in_proj" in layer_name_text
+        ):
             if "weight" in layer_name_text:
                 in_proj_weight = state_dict.pop(layer_name_text)
-                state_dict[layer_name_text.replace("in_proj_weight", "q_proj.weight")] = in_proj_weight[
-                    :hidden_size, :
-                ]
-                state_dict[layer_name_text.replace("in_proj_weight", "k_proj.weight")] = in_proj_weight[
-                    hidden_size : hidden_size * 2, :
-                ]
-                state_dict[layer_name_text.replace("in_proj_weight", "v_proj.weight")] = in_proj_weight[
-                    -hidden_size:, :
-                ]
+                state_dict[
+                    layer_name_text.replace("in_proj_weight", "q_proj.weight")
+                ] = in_proj_weight[:hidden_size, :]
+                state_dict[
+                    layer_name_text.replace("in_proj_weight", "k_proj.weight")
+                ] = in_proj_weight[hidden_size : hidden_size * 2, :]
+                state_dict[
+                    layer_name_text.replace("in_proj_weight", "v_proj.weight")
+                ] = in_proj_weight[-hidden_size:, :]
             elif "bias" in layer_name_text:
                 in_proj_bias = state_dict.pop(layer_name_text)
-                state_dict[layer_name_text.replace("in_proj_bias", "q_proj.bias")] = in_proj_bias[:hidden_size]
-                state_dict[layer_name_text.replace("in_proj_bias", "k_proj.bias")] = in_proj_bias[
-                    hidden_size : hidden_size * 2
-                ]
-                state_dict[layer_name_text.replace("in_proj_bias", "v_proj.bias")] = in_proj_bias[-hidden_size:]
+                state_dict[layer_name_text.replace("in_proj_bias", "q_proj.bias")] = (
+                    in_proj_bias[:hidden_size]
+                )
+                state_dict[layer_name_text.replace("in_proj_bias", "k_proj.bias")] = (
+                    in_proj_bias[hidden_size : hidden_size * 2]
+                )
+                state_dict[layer_name_text.replace("in_proj_bias", "v_proj.bias")] = (
+                    in_proj_bias[-hidden_size:]
+                )
 
 
 def read_in_q_k_v_encoder(state_dict, config):
     embed_dim = config.encoder_hidden_dim
     # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-    in_proj_weight = state_dict.pop("encoder.encoder.0.layers.0.self_attn.in_proj_weight")
+    in_proj_weight = state_dict.pop(
+        "encoder.encoder.0.layers.0.self_attn.in_proj_weight"
+    )
     in_proj_bias = state_dict.pop("encoder.encoder.0.layers.0.self_attn.in_proj_bias")
     # next, add query, keys and values (in that order) to the state dict
-    state_dict["encoder.encoder.0.layers.0.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
-    state_dict["encoder.encoder.0.layers.0.self_attn.query.bias"] = in_proj_bias[:embed_dim]
-    state_dict["encoder.encoder.0.layers.0.self_attn.key.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
-    state_dict["encoder.encoder.0.layers.0.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
-    state_dict["encoder.encoder.0.layers.0.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
-    state_dict["encoder.encoder.0.layers.0.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
+    state_dict["encoder.encoder.0.layers.0.self_attn.query.weight"] = in_proj_weight[
+        :embed_dim, :
+    ]
+    state_dict["encoder.encoder.0.layers.0.self_attn.query.bias"] = in_proj_bias[
+        :embed_dim
+    ]
+    state_dict["encoder.encoder.0.layers.0.self_attn.key.weight"] = in_proj_weight[
+        embed_dim : embed_dim * 2, :
+    ]
+    state_dict["encoder.encoder.0.layers.0.self_attn.key.bias"] = in_proj_bias[
+        embed_dim : embed_dim * 2
+    ]
+    state_dict["encoder.encoder.0.layers.0.self_attn.value.weight"] = in_proj_weight[
+        -embed_dim:, :
+    ]
+    state_dict["encoder.encoder.0.layers.0.self_attn.value.bias"] = in_proj_bias[
+        -embed_dim:
+    ]
 
 
 def read_in_q_k_v_decoder(state_dict, config):
     for layer_num in range(config.decoder_num_layers):
         embed_dim = config.decoder_hidden_dim
         # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"decoder.layers.{layer_num}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"decoder.layers.{layer_num}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"decoder.layers.{layer_num}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"decoder.layers.{layer_num}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"decoder.layers.{layer_num}.self_attn.query.weight"] = in_proj_weight[:embed_dim, :]
-        state_dict[f"decoder.layers.{layer_num}.self_attn.query.bias"] = in_proj_bias[:embed_dim]
-        state_dict[f"decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[embed_dim : embed_dim * 2, :]
-        state_dict[f"decoder.layers.{layer_num}.self_attn.key.bias"] = in_proj_bias[embed_dim : embed_dim * 2]
-        state_dict[f"decoder.layers.{layer_num}.self_attn.value.weight"] = in_proj_weight[-embed_dim:, :]
-        state_dict[f"decoder.layers.{layer_num}.self_attn.value.bias"] = in_proj_bias[-embed_dim:]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.query.weight"] = (
+            in_proj_weight[:embed_dim, :]
+        )
+        state_dict[f"decoder.layers.{layer_num}.self_attn.query.bias"] = in_proj_bias[
+            :embed_dim
+        ]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.key.weight"] = in_proj_weight[
+            embed_dim : embed_dim * 2, :
+        ]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.key.bias"] = in_proj_bias[
+            embed_dim : embed_dim * 2
+        ]
+        state_dict[f"decoder.layers.{layer_num}.self_attn.value.weight"] = (
+            in_proj_weight[-embed_dim:, :]
+        )
+        state_dict[f"decoder.layers.{layer_num}.self_attn.value.bias"] = in_proj_bias[
+            -embed_dim:
+        ]
 
 
 def run_test(model, processor):
@@ -249,7 +291,9 @@ def run_test(model, processor):
 
     predicted_slice = outputs[1][0, :3, :3]
     print(predicted_slice)
-    expected_slice = torch.tensor([[0.9427, -2.5958], [0.2105, -3.4569], [-2.6364, -4.1610]])
+    expected_slice = torch.tensor(
+        [[0.9427, -2.5958], [0.2105, -3.4569], [-2.6364, -4.1610]]
+    )
 
     assert torch.allclose(predicted_slice, expected_slice, atol=1e-4)
     print("Looks ok!")
@@ -273,8 +317,12 @@ def convert_omdet_turbo_checkpoint(args):
 
     # Load original checkpoint
     checkpoint_url = checkpoint_mapping[model_name]
-    original_state_dict_vision = torch.hub.load_state_dict_from_url(checkpoint_url[0], map_location="cpu")["model"]
-    original_state_dict_vision = {k.replace("module.", ""): v for k, v in original_state_dict_vision.items()}
+    original_state_dict_vision = torch.hub.load_state_dict_from_url(
+        checkpoint_url[0], map_location="cpu"
+    )["model"]
+    original_state_dict_vision = {
+        k.replace("module.", ""): v for k, v in original_state_dict_vision.items()
+    }
 
     # Rename keys
     new_state_dict = original_state_dict_vision.copy()
@@ -304,14 +352,19 @@ def convert_omdet_turbo_checkpoint(args):
     print("Unexpected keys:", unexpected_keys)
 
     image_processor = DetrImageProcessor(
-        size={"height": config.backbone_image_size, "width": config.backbone_image_size},
+        size={
+            "height": config.backbone_image_size,
+            "width": config.backbone_image_size,
+        },
         do_rescale=False,
         image_mean=IMAGE_MEAN,
         image_std=IMAGE_STD,
         do_pad=False,
     )
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-    processor = OmDetTurboProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = OmDetTurboProcessor(
+        image_processor=image_processor, tokenizer=tokenizer
+    )
 
     # end-to-end consistency test
     run_test(model, processor)
@@ -336,13 +389,20 @@ if __name__ == "__main__":
         help="Name of the OmDetTurbo model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     parser.add_argument(
-        "--use_timm_backbone", action="store_true", help="Whether or not to use timm backbone for vision backbone."
+        "--use_timm_backbone",
+        action="store_true",
+        help="Whether or not to use timm backbone for vision backbone.",
     )
 
     args = parser.parse_args()

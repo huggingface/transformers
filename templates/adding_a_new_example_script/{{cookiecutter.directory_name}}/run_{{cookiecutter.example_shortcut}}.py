@@ -25,29 +25,20 @@ import math
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import List, Optional
 
 import datasets
 import torch
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
-    AutoConfig,
-    {{cookiecutter.model_class}},
-    AutoTokenizer,
-    DataCollatorWithPadding,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    default_data_collator,
-    set_seed,
-)
+from transformers import (CONFIG_MAPPING, MODEL_MAPPING, AutoConfig,
+                          AutoTokenizer, DataCollatorWithPadding,
+                          HfArgumentParser, Trainer, TrainingArguments,
+                          default_data_collator, set_seed,
+                          {{cookiecutter.model_class}})
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import send_example_telemetry
-
 
 logger = logging.getLogger(__name__)
 
@@ -526,27 +517,18 @@ import os
 import random
 
 import datasets
+from accelerate import Accelerator
 from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
-    AutoConfig,
-    {{cookiecutter.model_class}},
-    AutoTokenizer,
-    DataCollatorWithPadding,
-    PretrainedConfig,
-    SchedulerType,
-    default_data_collator,
-    get_scheduler,
-    set_seed,
-)
+from transformers import (CONFIG_MAPPING, MODEL_MAPPING, AutoConfig,
+                          AutoTokenizer, DataCollatorWithPadding,
+                          PretrainedConfig, SchedulerType,
+                          default_data_collator, get_scheduler, set_seed,
+                          {{cookiecutter.model_class}})
 from transformers.utils import send_example_telemetry
-
 
 logger = logging.getLogger(__name__)
 

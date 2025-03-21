@@ -20,18 +20,12 @@ import torch
 from torch import nn
 
 from transformers.models.llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast,
-    LlavaForConditionalGeneration,
-    LlavaPreTrainedModel,
-)
+    LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration,
+    LlavaPreTrainedModel)
 
 from ...activations import ACT2FN
-from ...utils import (
-    add_start_docstrings,
-    logging,
-)
+from ...utils import add_start_docstrings, logging
 from .configuration_aya_vision import AyaVisionConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -47,7 +41,8 @@ class AyaVisionMultiModalProjector(nn.Module):
             config, "alignment_intermediate_size", config.text_config.hidden_size
         )
         self.layernorm = nn.LayerNorm(
-            config.vision_config.hidden_size * (config.downsample_factor**2), eps=config.adapter_layer_norm_eps
+            config.vision_config.hidden_size * (config.downsample_factor**2),
+            eps=config.adapter_layer_norm_eps,
         )
 
         self.linear_1 = nn.Linear(
@@ -58,7 +53,11 @@ class AyaVisionMultiModalProjector(nn.Module):
 
         self.act = ACT2FN["silu"]  # SwiGLU uses SiLU activation
         # For SwiGLU, project down to half size since we split intermediate dim
-        self.linear_2 = nn.Linear(self.alignment_intermediate_size // 2, config.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(
+            self.alignment_intermediate_size // 2,
+            config.text_config.hidden_size,
+            bias=True,
+        )
 
     def forward(self, image_features):
         image_features = self.pixel_shuffle(image_features)
@@ -75,14 +74,22 @@ class AyaVisionMultiModalProjector(nn.Module):
     def pixel_shuffle(self, image_features):  # B, S, D
         batch_size, seq_length, feature_dim = image_features.shape
         height = width = int(seq_length**0.5)
-        image_features = image_features.reshape(image_features.shape[0], width, height, -1)
+        image_features = image_features.reshape(
+            image_features.shape[0], width, height, -1
+        )
         channels = image_features.shape[-1]
         image_features = image_features.reshape(
-            batch_size, width, int(height / self.downsample_factor), int(channels * self.downsample_factor)
+            batch_size,
+            width,
+            int(height / self.downsample_factor),
+            int(channels * self.downsample_factor),
         )
         image_features = image_features.permute(0, 2, 1, 3)
         image_features = image_features.reshape(
-            batch_size, int(height / self.downsample_factor), int(width / self.downsample_factor), -1
+            batch_size,
+            int(height / self.downsample_factor),
+            int(width / self.downsample_factor),
+            -1,
         )
         image_features = image_features.permute(0, 2, 1, 3)
         return image_features
@@ -203,8 +210,12 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+    def resize_token_embeddings(
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None
+    ) -> nn.Embedding:
+        model_embeds = self.language_model.resize_token_embeddings(
+            new_num_tokens, pad_to_multiple_of
+        )
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings

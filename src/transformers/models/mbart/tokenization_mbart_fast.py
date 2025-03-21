@@ -23,7 +23,6 @@ from ...tokenization_utils import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 
-
 if is_sentencepiece_available():
     from .tokenization_mbart import MBartTokenizer
 else:
@@ -33,7 +32,10 @@ else:
 logger = logging.get_logger(__name__)
 
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "sentencepiece.bpe.model",
+    "tokenizer_file": "tokenizer.json",
+}
 
 
 FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", "fi_FI", "fr_XX", "gu_IN", "hi_IN", "it_IT", "ja_XX", "kk_KZ", "ko_KR", "lt_LT", "lv_LV", "my_MM", "ne_NP", "nl_XX", "ro_RO", "ru_RU", "si_LK", "tr_TR", "vi_VN", "zh_CN"]  # fmt: skip
@@ -87,14 +89,22 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
             _additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+                [
+                    t
+                    for t in additional_special_tokens
+                    if t not in _additional_special_tokens
+                ]
             )
 
         super().__init__(
@@ -115,7 +125,8 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
         self.lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
+            lang_code: self.convert_tokens_to_ids(lang_code)
+            for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
 
         self._src_lang = src_lang if src_lang is not None else "en_XX"
@@ -191,13 +202,25 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self,
+        raw_inputs,
+        return_tensors: str,
+        src_lang: Optional[str],
+        tgt_lang: Optional[str],
+        **extra_kwargs,
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
-            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+            raise ValueError(
+                "Translation requires a `src_lang` and a `tgt_lang` for this model"
+            )
         self.src_lang = src_lang
-        inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
+        inputs = self(
+            raw_inputs,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            **extra_kwargs,
+        )
         tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
@@ -232,7 +255,12 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
             pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+            special_tokens=list(
+                zip(
+                    prefix_tokens_str + suffix_tokens_str,
+                    self.prefix_tokens + self.suffix_tokens,
+                )
+            ),
         )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
@@ -247,10 +275,17 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
             pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+            special_tokens=list(
+                zip(
+                    prefix_tokens_str + suffix_tokens_str,
+                    self.prefix_tokens + self.suffix_tokens,
+                )
+            ),
         )
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -261,7 +296,9 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):

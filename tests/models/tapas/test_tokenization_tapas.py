@@ -24,24 +24,21 @@ import pandas as pd
 from parameterized import parameterized
 
 from transformers import AddedToken
-from transformers.models.tapas.tokenization_tapas import (
-    VOCAB_FILES_NAMES,
-    BasicTokenizer,
-    TapasTokenizer,
-    WordpieceTokenizer,
-    _is_control,
-    _is_punctuation,
-    _is_whitespace,
-)
-from transformers.testing_utils import (
-    require_pandas,
-    require_tensorflow_probability,
-    require_tokenizers,
-    require_torch,
-    slow,
-)
+from transformers.models.tapas.tokenization_tapas import (VOCAB_FILES_NAMES,
+                                                          BasicTokenizer,
+                                                          TapasTokenizer,
+                                                          WordpieceTokenizer,
+                                                          _is_control,
+                                                          _is_punctuation,
+                                                          _is_whitespace)
+from transformers.testing_utils import (require_pandas,
+                                        require_tensorflow_probability,
+                                        require_tokenizers, require_torch,
+                                        slow)
 
-from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
+from ...test_tokenization_common import (TokenizerTesterMixin,
+                                         filter_non_english,
+                                         merge_model_tokenizer_mappings)
 
 
 @require_tokenizers
@@ -59,7 +56,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer: TapasTokenizer,
         length=5,
     ):
-        toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
+        toks = [
+            tokenizer.decode([i], clean_up_tokenization_spaces=False)
+            for i in range(len(tokenizer))
+        ]
 
         if length == 0:
             data = {}
@@ -75,7 +75,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer: TapasTokenizer,
         length=5,
     ):
-        toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
+        toks = [
+            tokenizer.decode([i], clean_up_tokenization_spaces=False)
+            for i in range(len(tokenizer))
+        ]
         table = self.get_table(tokenizer, length=length - 3)
         query = " ".join(toks[:3])
 
@@ -91,7 +94,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         add_special_tokens: bool = True,
         return_table_and_query: bool = False,
     ):
-        toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
+        toks = [
+            tokenizer.decode([i], clean_up_tokenization_spaces=False)
+            for i in range(len(tokenizer))
+        ]
 
         if empty_table:
             table = pd.DataFrame.from_dict({})
@@ -101,11 +107,17 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             table = pd.DataFrame.from_dict(data)
             query = " ".join(toks[:3])
 
-        output_ids = tokenizer.encode(table, query, add_special_tokens=add_special_tokens)
+        output_ids = tokenizer.encode(
+            table, query, add_special_tokens=add_special_tokens
+        )
         output_txt = tokenizer.decode(output_ids)
 
-        assert len(output_ids) >= min_length, "Update the code to generate the sequences so that they are larger"
-        assert len(output_ids) <= max_length, "Update the code to generate the sequences so that they are smaller"
+        assert (
+            len(output_ids) >= min_length
+        ), "Update the code to generate the sequences so that they are larger"
+        assert (
+            len(output_ids) <= max_length
+        ), "Update the code to generate the sequences so that they are smaller"
 
         if return_table_and_query:
             return output_txt, output_ids, table, query
@@ -146,19 +158,25 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tf_encode_plus_sent_to_model(self):
         from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
 
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(
+            TF_MODEL_MAPPING, TOKENIZER_MAPPING
+        )
 
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
+                    self.skipTest(
+                        f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING"
+                    )
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is an encoder-decoder or does not have a pad token id set")
+                    self.skipTest(
+                        reason="Model is an encoder-decoder or does not have a pad token id set"
+                    )
 
                 model = model_class(config)
 
@@ -169,8 +187,12 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
                 sequence = " ".join(first_ten_tokens)
                 table = self.get_table(tokenizer, length=0)
-                encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="tf")
-                batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="tf")
+                encoded_sequence = tokenizer.encode_plus(
+                    table, sequence, return_tensors="tf"
+                )
+                batch_encoded_sequence = tokenizer.batch_encode_plus(
+                    table, [sequence, sequence], return_tensors="tf"
+                )
 
                 # This should not fail
                 model(encoded_sequence)
@@ -217,20 +239,25 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
 
-    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    @unittest.skip(
+        reason="Chat template tests don't play well with table/layout models."
+    )
     def test_chat_template_batched(self):
         pass
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()
 
-        self.assertListEqual(tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"])
+        self.assertListEqual(
+            tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"]
+        )
 
     def test_basic_tokenizer_lower(self):
         tokenizer = BasicTokenizer(do_lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["hello", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "),
+            ["hello", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
@@ -238,7 +265,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["hällo", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["h\u00e9llo"])
 
@@ -246,7 +274,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["hallo", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
@@ -254,7 +283,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["hallo", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
@@ -262,32 +292,47 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
+            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "),
+            ["HeLLo", "!", "how", "Are", "yoU", "?"],
         )
 
     def test_basic_tokenizer_no_lower_strip_accents_false(self):
         tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HäLLo", "!", "how", "Are", "yoU", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["HäLLo", "!", "how", "Are", "yoU", "?"],
         )
 
     def test_basic_tokenizer_no_lower_strip_accents_true(self):
         tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HaLLo", "!", "how", "Are", "yoU", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["HaLLo", "!", "how", "Are", "yoU", "?"],
         )
 
     def test_basic_tokenizer_respects_never_split_tokens(self):
         tokenizer = BasicTokenizer(do_lower_case=False, never_split=["[UNK]"])
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
+            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"),
+            ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"],
         )
 
     def test_wordpiece_tokenizer(self):
-        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
+        vocab_tokens = [
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "want",
+            "##want",
+            "##ed",
+            "wa",
+            "un",
+            "runn",
+            "##ing",
+        ]
 
         vocab = {}
         for i, token in enumerate(vocab_tokens):
@@ -296,9 +341,14 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokenizer.tokenize(""), [])
 
-        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
+        self.assertListEqual(
+            tokenizer.tokenize("unwanted running"),
+            ["un", "##want", "##ed", "runn", "##ing"],
+        )
 
-        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
+        self.assertListEqual(
+            tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"]
+        )
 
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(" "))
@@ -332,18 +382,23 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
         self.assertListEqual(
-            [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
+            [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]],
+            [["[UNK]"], ["[EMPTY]"], ["[UNK]"]],
         )
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("google/tapas-base-finetuned-wtq")
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "google/tapas-base-finetuned-wtq"
+        )
 
         empty_table = self.get_table(tokenizer, length=0)
         table = self.get_table(tokenizer, length=10)
 
         text = tokenizer.encode(table, add_special_tokens=False)
-        text_2 = tokenizer.encode(empty_table, "multi-sequence build", add_special_tokens=False)
+        text_2 = tokenizer.encode(
+            empty_table, "multi-sequence build", add_special_tokens=False
+        )
 
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
@@ -352,7 +407,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
                 tokens = tokenizer_r.encode_plus(
@@ -363,7 +420,11 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     add_special_tokens=True,
                 )
 
-                do_lower_case = tokenizer_r.do_lower_case if hasattr(tokenizer_r, "do_lower_case") else False
+                do_lower_case = (
+                    tokenizer_r.do_lower_case
+                    if hasattr(tokenizer_r, "do_lower_case")
+                    else False
+                )
                 expected_results = (
                     [
                         ((0, 0), tokenizer_r.cls_token),
@@ -397,9 +458,12 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 self.assertEqual(
-                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
+                    [e[1] for e in expected_results],
+                    tokenizer_r.convert_ids_to_tokens(tokens["input_ids"]),
                 )
-                self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
+                self.assertEqual(
+                    [e[0] for e in expected_results], tokens["offset_mapping"]
+                )
 
     def test_add_special_tokens(self):
         tokenizers: List[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
@@ -410,10 +474,14 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 special_token = "[SPECIAL_TOKEN]"
 
                 tokenizer.add_special_tokens({"cls_token": special_token})
-                encoded_special_token = tokenizer.encode(input_table, special_token, add_special_tokens=False)
+                encoded_special_token = tokenizer.encode(
+                    input_table, special_token, add_special_tokens=False
+                )
                 self.assertEqual(len(encoded_special_token), 1)
 
-                decoded = tokenizer.decode(encoded_special_token, skip_special_tokens=True)
+                decoded = tokenizer.decode(
+                    encoded_special_token, skip_special_tokens=True
+                )
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
@@ -440,13 +508,20 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
-                tokens = tokenizer.encode(table, "aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
+                tokens = tokenizer.encode(
+                    table,
+                    "aaaaa bbbbbb low cccccccccdddddddd l",
+                    add_special_tokens=False,
+                )
 
                 self.assertGreaterEqual(len(tokens), 4)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
 
-                new_toks_2 = {"eos_token": ">>>>|||<||<<|<<", "pad_token": "<<<<<|||>|>>>>|>"}
+                new_toks_2 = {
+                    "eos_token": ">>>>|||<||<<|<<",
+                    "pad_token": "<<<<<|||>|>>>>|>",
+                }
                 added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
                 vocab_size_3 = tokenizer.vocab_size
                 all_size_3 = len(tokenizer)
@@ -477,7 +552,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 table = self.get_table(tokenizer, length=0)
 
-                new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
+                new_toks = [
+                    AddedToken("[ABC]", normalized=False),
+                    AddedToken("[DEF]", normalized=False),
+                ]
                 tokenizer.add_tokens(new_toks)
                 input = "[ABC][DEF][ABC][DEF]"
                 if self.space_between_special_tokens:
@@ -485,7 +563,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 else:
                     output = input
                 encoded = tokenizer.encode(table, input, add_special_tokens=False)
-                decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
+                decoded = tokenizer.decode(
+                    encoded,
+                    spaces_between_special_tokens=self.space_between_special_tokens,
+                )
                 self.assertIn(decoded, [output, output.lower()])
 
     @parameterized.expand([(True,), (False,)])
@@ -503,7 +584,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 padding_idx = tokenizer.pad_token_id
                 token_type_padding_idx = tokenizer.pad_token_type_id
 
-                encoded_sequence = tokenizer.encode_plus(table, sequence, return_special_tokens_mask=True)
+                encoded_sequence = tokenizer.encode_plus(
+                    table, sequence, return_special_tokens_mask=True
+                )
                 input_ids = encoded_sequence["input_ids"]
                 special_tokens_mask = encoded_sequence["special_tokens_mask"]
                 sequence_length = len(input_ids)
@@ -519,7 +602,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
-                not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
+                not_padded_special_tokens_mask = not_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 not_padded_sequence_length = len(not_padded_input_ids)
 
                 assert sequence_length == not_padded_sequence_length
@@ -534,7 +619,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
-                not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
+                not_padded_special_tokens_mask = not_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 not_padded_sequence_length = len(not_padded_input_ids)
 
                 assert sequence_length == not_padded_sequence_length
@@ -553,15 +640,24 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 else:
                     tokenizer_kwargs_right["padding_side"] = "right"
 
-                right_padded_sequence = tokenizer.encode_plus(table, sequence, **tokenizer_kwargs_right)
+                right_padded_sequence = tokenizer.encode_plus(
+                    table, sequence, **tokenizer_kwargs_right
+                )
                 right_padded_input_ids = right_padded_sequence["input_ids"]
 
-                right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
+                right_padded_special_tokens_mask = right_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 right_padded_sequence_length = len(right_padded_input_ids)
 
                 assert sequence_length + padding_size == right_padded_sequence_length
-                assert input_ids + [padding_idx] * padding_size == right_padded_input_ids
-                assert special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask
+                assert (
+                    input_ids + [padding_idx] * padding_size == right_padded_input_ids
+                )
+                assert (
+                    special_tokens_mask + [1] * padding_size
+                    == right_padded_special_tokens_mask
+                )
 
                 # Test left padding
                 tokenizer_kwargs_left = {
@@ -575,32 +671,51 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 else:
                     tokenizer_kwargs_left["padding_side"] = "left"
 
-                left_padded_sequence = tokenizer.encode_plus(table, sequence, **tokenizer_kwargs_left)
+                left_padded_sequence = tokenizer.encode_plus(
+                    table, sequence, **tokenizer_kwargs_left
+                )
                 left_padded_input_ids = left_padded_sequence["input_ids"]
-                left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
+                left_padded_special_tokens_mask = left_padded_sequence[
+                    "special_tokens_mask"
+                ]
                 left_padded_sequence_length = len(left_padded_input_ids)
 
                 assert sequence_length + padding_size == left_padded_sequence_length
                 assert [padding_idx] * padding_size + input_ids == left_padded_input_ids
-                assert [1] * padding_size + special_tokens_mask == left_padded_special_tokens_mask
+                assert (
+                    [1] * padding_size + special_tokens_mask
+                    == left_padded_special_tokens_mask
+                )
 
                 if "token_type_ids" in tokenizer.model_input_names:
                     token_type_ids = encoded_sequence["token_type_ids"]
                     left_padded_token_type_ids = left_padded_sequence["token_type_ids"]
-                    right_padded_token_type_ids = right_padded_sequence["token_type_ids"]
+                    right_padded_token_type_ids = right_padded_sequence[
+                        "token_type_ids"
+                    ]
 
                     assert (
-                        token_type_ids + [[token_type_padding_idx] * 7] * padding_size == right_padded_token_type_ids
+                        token_type_ids + [[token_type_padding_idx] * 7] * padding_size
+                        == right_padded_token_type_ids
                     )
-                    assert [[token_type_padding_idx] * 7] * padding_size + token_type_ids == left_padded_token_type_ids
+                    assert [
+                        [token_type_padding_idx] * 7
+                    ] * padding_size + token_type_ids == left_padded_token_type_ids
 
                 if "attention_mask" in tokenizer.model_input_names:
                     attention_mask = encoded_sequence["attention_mask"]
-                    right_padded_attention_mask = right_padded_sequence["attention_mask"]
+                    right_padded_attention_mask = right_padded_sequence[
+                        "attention_mask"
+                    ]
                     left_padded_attention_mask = left_padded_sequence["attention_mask"]
 
-                    assert attention_mask + [0] * padding_size == right_padded_attention_mask
-                    assert [0] * padding_size + attention_mask == left_padded_attention_mask
+                    assert (
+                        attention_mask + [0] * padding_size
+                        == right_padded_attention_mask
+                    )
+                    assert [
+                        0
+                    ] * padding_size + attention_mask == left_padded_attention_mask
 
     def test_internal_consistency(self):
         tokenizers = self.get_tokenizers()
@@ -628,11 +743,19 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 table, query = self.get_table_and_query(tokenizer)
 
                 if (
-                    tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
+                    tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[
+                        0
+                    ]
+                    != "PreTrainedTokenizer"
                     and "token_type_ids" in tokenizer.model_input_names
                 ):
-                    information = tokenizer.encode_plus(table, query, add_special_tokens=True)
-                    sequences, mask = information["input_ids"], information["token_type_ids"]
+                    information = tokenizer.encode_plus(
+                        table, query, add_special_tokens=True
+                    )
+                    sequences, mask = (
+                        information["input_ids"],
+                        information["token_type_ids"],
+                    )
                     self.assertEqual(len(sequences), len(mask))
 
     @unittest.skip(reason="TAPAS tokenizer only handles two sequences.")
@@ -650,12 +773,15 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 table, query = self.get_table_and_query(tokenizer)
 
                 sequences = tokenizer.encode(table, query, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(table, query, add_special_tokens=True)
+                attached_sequences = tokenizer.encode(
+                    table, query, add_special_tokens=True
+                )
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
                     self.assertEqual(
-                        tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
+                        tokenizer.num_special_tokens_to_add(pair=True),
+                        len(attached_sequences) - len(sequences),
                     )
 
     def test_padding_to_max_length(self):
@@ -678,18 +804,25 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence_length = len(encoded_sequence)
                 # FIXME: the next line should be padding(max_length) to avoid warning
                 padded_sequence = tokenizer.encode(
-                    table, sequence, max_length=sequence_length + padding_size, padding=True
+                    table,
+                    sequence,
+                    max_length=sequence_length + padding_size,
+                    padding=True,
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                assert (
+                    encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                )
 
                 # Check that nothing is done when a maximum length is not specified
                 encoded_sequence = tokenizer.encode(table, sequence)
                 sequence_length = len(encoded_sequence)
 
                 tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(table, sequence, pad_to_max_length=True)
+                padded_sequence_right = tokenizer.encode(
+                    table, sequence, pad_to_max_length=True
+                )
                 padded_sequence_right_length = len(padded_sequence_right)
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
@@ -735,32 +868,53 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     "Testing batch encode plus with different sequence lengths correctly pads",
                 ]
 
-                encoded_sequences = [tokenizer.encode_plus(table, sequence) for sequence in sequences]
-                encoded_sequences_batch = tokenizer.batch_encode_plus(table, sequences, padding=False)
+                encoded_sequences = [
+                    tokenizer.encode_plus(table, sequence) for sequence in sequences
+                ]
+                encoded_sequences_batch = tokenizer.batch_encode_plus(
+                    table, sequences, padding=False
+                )
                 self.assertListEqual(
-                    encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+                    encoded_sequences,
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch
+                    ),
                 )
 
                 maximum_length = len(
-                    max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len)
+                    max(
+                        [
+                            encoded_sequence["input_ids"]
+                            for encoded_sequence in encoded_sequences
+                        ],
+                        key=len,
+                    )
                 )
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
                 self._check_no_pad_token_padding(tokenizer, sequences)
 
                 encoded_sequences_padded = [
-                    tokenizer.encode_plus(table, sequence, max_length=maximum_length, padding="max_length")
+                    tokenizer.encode_plus(
+                        table, sequence, max_length=maximum_length, padding="max_length"
+                    )
                     for sequence in sequences
                 ]
 
-                encoded_sequences_batch_padded = tokenizer.batch_encode_plus(table, sequences, padding=True)
+                encoded_sequences_batch_padded = tokenizer.batch_encode_plus(
+                    table, sequences, padding=True
+                )
                 self.assertListEqual(
                     encoded_sequences_padded,
-                    self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch_padded),
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch_padded
+                    ),
                 )
 
                 # check 'longest' is unsensitive to a max length
-                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(table, sequences, padding=True)
+                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(
+                    table, sequences, padding=True
+                )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     table, sequences, max_length=maximum_length + 10, padding="longest"
                 )
@@ -771,7 +925,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
                 # check 'no_padding' is unsensitive to a max length
-                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(table, sequences, padding=False)
+                encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(
+                    table, sequences, padding=False
+                )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     table, sequences, max_length=maximum_length + 10, padding=False
                 )
@@ -805,14 +961,19 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self._check_no_pad_token_padding(tokenizer, sequences)
 
                 encoded_sequences = [
-                    tokenizer.encode_plus(table, sequence, max_length=max_length, padding="max_length")
+                    tokenizer.encode_plus(
+                        table, sequence, max_length=max_length, padding="max_length"
+                    )
                     for sequence in sequences
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
                     table, sequences, max_length=max_length, padding="max_length"
                 )
                 self.assertListEqual(
-                    encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+                    encoded_sequences,
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch
+                    ),
                 )
 
         # Left padding tests
@@ -832,14 +993,19 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self._check_no_pad_token_padding(tokenizer, sequences)
 
                 encoded_sequences = [
-                    tokenizer.encode_plus(table, sequence, max_length=max_length, padding="max_length")
+                    tokenizer.encode_plus(
+                        table, sequence, max_length=max_length, padding="max_length"
+                    )
                     for sequence in sequences
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
                     table, sequences, max_length=max_length, padding="max_length"
                 )
                 self.assertListEqual(
-                    encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+                    encoded_sequences,
+                    self.convert_batch_encode_plus_format_to_encode_plus(
+                        encoded_sequences_batch
+                    ),
                 )
 
     def test_padding_to_multiple_of(self):
@@ -851,20 +1017,47 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.skipTest(reason="No padding token.")
                 else:
                     empty_tokens = tokenizer(table, padding=True, pad_to_multiple_of=8)
-                    normal_tokens = tokenizer(table, "This is a sample input", padding=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        table,
+                        "This is a sample input",
+                        padding=True,
+                        pad_to_multiple_of=8,
+                    )
                     for key, value in empty_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
                     for key, value in normal_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     normal_tokens = tokenizer(table, "This", pad_to_multiple_of=8)
                     for key, value in normal_tokens.items():
-                        self.assertNotEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertNotEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     # Should also work with truncation
-                    normal_tokens = tokenizer(table, "This", padding=True, truncation=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        table,
+                        "This",
+                        padding=True,
+                        truncation=True,
+                        pad_to_multiple_of=8,
+                    )
                     for key, value in normal_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
     @unittest.skip(
         reason="TAPAS cannot handle `prepare_for_model` without passing by `encode_plus` or `batch_encode_plus`"
@@ -887,8 +1080,12 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence_0 = "Encode this."
                 empty_table = self.get_table(tokenizer, length=0)
                 table = self.get_table(tokenizer, length=10)
-                encoded_sequence = tokenizer.encode(empty_table, sequence_0, add_special_tokens=False)
-                encoded_sequence += tokenizer.encode(table, "", add_special_tokens=False)
+                encoded_sequence = tokenizer.encode(
+                    empty_table, sequence_0, add_special_tokens=False
+                )
+                encoded_sequence += tokenizer.encode(
+                    table, "", add_special_tokens=False
+                )
                 encoded_sequence_dict = tokenizer.encode_plus(
                     table,
                     sequence_0,
@@ -898,10 +1095,13 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
-                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
+                self.assertEqual(
+                    len(special_tokens_mask), len(encoded_sequence_w_special)
+                )
 
                 filtered_sequence = [
-                    (x if not special_tokens_mask[i] else None) for i, x in enumerate(encoded_sequence_w_special)
+                    (x if not special_tokens_mask[i] else None)
+                    for i, x in enumerate(encoded_sequence_w_special)
                 ]
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
@@ -913,15 +1113,26 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 table = self.get_table(tokenizer, length=0)
                 sequence_0 = "Encode this."
                 # Testing single inputs
-                encoded_sequence = tokenizer.encode(table, sequence_0, add_special_tokens=False)
+                encoded_sequence = tokenizer.encode(
+                    table, sequence_0, add_special_tokens=False
+                )
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    table, sequence_0, add_special_tokens=True, return_special_tokens_mask=True
+                    table,
+                    sequence_0,
+                    add_special_tokens=True,
+                    return_special_tokens_mask=True,
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
-                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
+                self.assertEqual(
+                    len(special_tokens_mask), len(encoded_sequence_w_special)
+                )
 
-                filtered_sequence = [x for i, x in enumerate(encoded_sequence_w_special) if not special_tokens_mask[i]]
+                filtered_sequence = [
+                    x
+                    for i, x in enumerate(encoded_sequence_w_special)
+                    if not special_tokens_mask[i]
+                ]
                 self.assertEqual(encoded_sequence, filtered_sequence)
 
     def test_save_and_load_tokenizer(self):
@@ -940,12 +1151,16 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tmpdirname = tempfile.mkdtemp()
 
                 sample_text = " He is very happy, UNwant\u00e9d,running"
-                before_tokens = tokenizer.encode(table, sample_text, add_special_tokens=False)
+                before_tokens = tokenizer.encode(
+                    table, sample_text, add_special_tokens=False
+                )
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
 
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
-                after_tokens = after_tokenizer.encode(table, sample_text, add_special_tokens=False)
+                after_tokens = after_tokenizer.encode(
+                    table, sample_text, add_special_tokens=False
+                )
                 after_vocab = after_tokenizer.get_vocab()
                 self.assertListEqual(before_tokens, after_tokens)
                 self.assertDictEqual(before_vocab, after_vocab)
@@ -974,22 +1189,32 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequence = tokenizer.encode(table, sequence)
                 sequence_length = len(encoded_sequence)
                 padded_sequence = tokenizer.encode(
-                    table, sequence, max_length=sequence_length + padding_size, padding="max_length"
+                    table,
+                    sequence,
+                    max_length=sequence_length + padding_size,
+                    padding="max_length",
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                assert (
+                    encoded_sequence + [padding_idx] * padding_size == padded_sequence
+                )
 
                 # LEFT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
                 tokenizer.padding_side = "left"
                 encoded_sequence = tokenizer.encode(table, sequence)
                 sequence_length = len(encoded_sequence)
                 padded_sequence = tokenizer.encode(
-                    table, sequence, max_length=sequence_length + padding_size, padding="max_length"
+                    table,
+                    sequence,
+                    max_length=sequence_length + padding_size,
+                    padding="max_length",
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
-                assert [padding_idx] * padding_size + encoded_sequence == padded_sequence
+                assert [
+                    padding_idx
+                ] * padding_size + encoded_sequence == padded_sequence
 
                 # RIGHT & LEFT PADDING - Check that nothing is done for 'longest' and 'no_padding'
                 encoded_sequence = tokenizer.encode(table, sequence)
@@ -1002,7 +1227,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 assert encoded_sequence == padded_sequence_right
 
                 tokenizer.padding_side = "left"
-                padded_sequence_left = tokenizer.encode(table, sequence, padding="longest")
+                padded_sequence_left = tokenizer.encode(
+                    table, sequence, padding="longest"
+                )
                 padded_sequence_left_length = len(padded_sequence_left)
                 assert sequence_length == padded_sequence_left_length
                 assert encoded_sequence == padded_sequence_left
@@ -1033,10 +1260,17 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 output = tokenizer(empty_table, seq_0, return_token_type_ids=True)
 
                 # Assert that the token type IDs have the same length as the input IDs
-                self.assertEqual(len(output["token_type_ids"]), len(output["input_ids"]))
+                self.assertEqual(
+                    len(output["token_type_ids"]), len(output["input_ids"])
+                )
 
                 # Assert that each token type ID has 7 values
-                self.assertTrue(all(len(token_type_ids) == 7 for token_type_ids in output["token_type_ids"]))
+                self.assertTrue(
+                    all(
+                        len(token_type_ids) == 7
+                        for token_type_ids in output["token_type_ids"]
+                    )
+                )
 
                 # Do the same test as modeling common.
                 self.assertIn(0, output["token_type_ids"][0])
@@ -1048,24 +1282,32 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(
+            MODEL_MAPPING, TOKENIZER_MAPPING
+        )
 
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
+                    self.skipTest(
+                        f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING"
+                    )
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is an encoder-decoder or has no padding token set.")
+                    self.skipTest(
+                        reason="Model is an encoder-decoder or has no padding token set."
+                    )
 
                 model = model_class(config)
 
                 # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
+                is_using_common_embeddings = hasattr(
+                    model.get_input_embeddings(), "weight"
+                )
                 assert (
                     (model.get_input_embeddings().weight.shape[0] >= len(tokenizer))
                     if is_using_common_embeddings
@@ -1076,8 +1318,12 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
                 sequence = " ".join(first_ten_tokens)
                 table = self.get_table(tokenizer, length=0)
-                encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="pt")
-                batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="pt")
+                encoded_sequence = tokenizer.encode_plus(
+                    table, sequence, return_tensors="pt"
+                )
+                batch_encoded_sequence = tokenizer.batch_encode_plus(
+                    table, [sequence, sequence], return_tensors="pt"
+                )
                 # This should not fail
 
                 with torch.no_grad():  # saves some time
@@ -1103,24 +1349,38 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         table = pd.DataFrame.from_dict(data)
 
-        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
+        tokenizer = TapasTokenizer.from_pretrained(
+            "lysandre/tapas-temporary-repo", model_max_length=512
+        )
 
         for i in range(12):
             # The table cannot even encode the headers, so raise an error
             with self.assertRaises(ValueError):
-                tokenizer.encode(table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit")
+                tokenizer.encode(
+                    table=table,
+                    query=queries[0],
+                    max_length=i,
+                    truncation="drop_rows_to_fit",
+                )
 
         for i in range(12, 512):
             new_encoded_inputs = tokenizer.encode(
-                table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit"
+                table=table,
+                query=queries[0],
+                max_length=i,
+                truncation="drop_rows_to_fit",
             )
 
             # Ensure that the input IDs are less than the max length defined.
             self.assertLessEqual(len(new_encoded_inputs), i)
 
         tokenizer.model_max_length = 20
-        new_encoded_inputs = tokenizer.encode(table=table, query=queries[0], truncation=True)
-        dropped_encoded_inputs = tokenizer.encode(table=table, query=queries[0], truncation="drop_rows_to_fit")
+        new_encoded_inputs = tokenizer.encode(
+            table=table, query=queries[0], truncation=True
+        )
+        dropped_encoded_inputs = tokenizer.encode(
+            table=table, query=queries[0], truncation="drop_rows_to_fit"
+        )
 
         # Ensure that the input IDs are still truncated when no max_length is specified
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
@@ -1138,7 +1398,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         table = pd.DataFrame.from_dict(data)
 
         # test max_question_length
-        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", max_question_length=2)
+        tokenizer = TapasTokenizer.from_pretrained(
+            "lysandre/tapas-temporary-repo", max_question_length=2
+        )
 
         encoding = tokenizer(table=table, queries=queries)
 
@@ -1148,7 +1410,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding.input_ids[:2], expected_results)
 
         # test min_question_length
-        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", min_question_length=30)
+        tokenizer = TapasTokenizer.from_pretrained(
+            "lysandre/tapas-temporary-repo", min_question_length=30
+        )
 
         encoding = tokenizer(table=table, queries=queries)
 
@@ -1172,7 +1436,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         table = pd.DataFrame.from_dict(data)
 
-        tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq", model_max_length=512)
+        tokenizer = TapasTokenizer.from_pretrained(
+            "google/tapas-base-finetuned-wtq", model_max_length=512
+        )
 
         expected_results = {'input_ids':[101,2043,2001,8226,15091,2141,1029,102,5889,2287,2193,1997,5691,3058,1997,4182,8226,15091,5179,6584,2324,2285,3699,14720,4487,6178,9488,3429,5187,2340,2281,3326,2577,18856,7828,3240,5354,6353,1020,2089,3777],'attention_mask':[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],'token_type_ids':[[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[1,1,0,0,0,0,0],[1,2,0,0,0,0,0],[1,3,0,0,0,0,0],[1,3,0,0,0,0,0],[1,3,0,0,0,0,0],[1,4,0,0,0,0,0],[1,4,0,0,0,0,0],[1,4,0,0,0,0,0],[1,1,1,0,0,0,0],[1,1,1,0,0,0,0],[1,2,1,0,2,2,0],[1,3,1,0,3,1,0],[1,4,1,0,2,2,0],[1,4,1,0,2,2,0],[1,4,1,0,2,2,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,2,2,0,1,3,0],[1,3,2,0,1,3,0],[1,4,2,0,3,1,0],[1,4,2,0,3,1,0],[1,4,2,0,3,1,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,2,3,0,3,1,0],[1,3,3,0,2,2,0],[1,4,3,0,1,3,0],[1,4,3,0,1,3,0],[1,4,3,0,1,3,0]]}  # fmt: skip
 
@@ -1184,30 +1450,176 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         data = [
             ["Pos", "No", "Driver", "Team", "Laps", "Time/Retired", "Grid", "Points"],
-            ["1", "32", "Patrick Carpentier", "Team Player's", "87", "1:48:11.023", "1", "22"],
-            ["2", "1", "Bruno Junqueira", "Newman/Haas Racing", "87", "+0.8 secs", "2", "17"],
+            [
+                "1",
+                "32",
+                "Patrick Carpentier",
+                "Team Player's",
+                "87",
+                "1:48:11.023",
+                "1",
+                "22",
+            ],
+            [
+                "2",
+                "1",
+                "Bruno Junqueira",
+                "Newman/Haas Racing",
+                "87",
+                "+0.8 secs",
+                "2",
+                "17",
+            ],
             ["3", "3", "Paul Tracy", "Team Player's", "87", "+28.6 secs", "3", "14"],
-            ["4", "9", "Michel Jourdain, Jr.", "Team Rahal", "87", "+40.8 secs", "13", "12"],
-            ["5", "34", "Mario Haberfeld", "Mi-Jack Conquest Racing", "87", "+42.1 secs", "6", "10"],
+            [
+                "4",
+                "9",
+                "Michel Jourdain, Jr.",
+                "Team Rahal",
+                "87",
+                "+40.8 secs",
+                "13",
+                "12",
+            ],
+            [
+                "5",
+                "34",
+                "Mario Haberfeld",
+                "Mi-Jack Conquest Racing",
+                "87",
+                "+42.1 secs",
+                "6",
+                "10",
+            ],
             ["6", "20", "Oriol Servia", "Patrick Racing", "87", "+1:00.2", "10", "8"],
-            ["7", "51", "Adrian Fernandez", "Fernandez Racing", "87", "+1:01.4", "5", "6"],
-            ["8", "12", "Jimmy Vasser", "American Spirit Team Johansson", "87", "+1:01.8", "8", "5"],
-            ["9", "7", "Tiago Monteiro", "Fittipaldi-Dingman Racing", "86", "+ 1 Lap", "15", "4"],
-            ["10", "55", "Mario Dominguez", "Herdez Competition", "86", "+ 1 Lap", "11", "3"],
+            [
+                "7",
+                "51",
+                "Adrian Fernandez",
+                "Fernandez Racing",
+                "87",
+                "+1:01.4",
+                "5",
+                "6",
+            ],
+            [
+                "8",
+                "12",
+                "Jimmy Vasser",
+                "American Spirit Team Johansson",
+                "87",
+                "+1:01.8",
+                "8",
+                "5",
+            ],
+            [
+                "9",
+                "7",
+                "Tiago Monteiro",
+                "Fittipaldi-Dingman Racing",
+                "86",
+                "+ 1 Lap",
+                "15",
+                "4",
+            ],
+            [
+                "10",
+                "55",
+                "Mario Dominguez",
+                "Herdez Competition",
+                "86",
+                "+ 1 Lap",
+                "11",
+                "3",
+            ],
             ["11", "27", "Bryan Herta", "PK Racing", "86", "+ 1 Lap", "12", "2"],
-            ["12", "31", "Ryan Hunter-Reay", "American Spirit Team Johansson", "86", "+ 1 Lap", "17", "1"],
-            ["13", "19", "Joel Camathias", "Dale Coyne Racing", "85", "+ 2 Laps", "18", "0"],
-            ["14", "33", "Alex Tagliani", "Rocketsports Racing", "85", "+ 2 Laps", "14", "0"],
-            ["15", "4", "Roberto Moreno", "Herdez Competition", "85", "+ 2 Laps", "9", "0"],
-            ["16", "11", "Geoff Boss", "Dale Coyne Racing", "83", "Mechanical", "19", "0"],
-            ["17", "2", "Sebastien Bourdais", "Newman/Haas Racing", "77", "Mechanical", "4", "0"],
-            ["18", "15", "Darren Manning", "Walker Racing", "12", "Mechanical", "7", "0"],
-            ["19", "5", "Rodolfo Lavin", "Walker Racing", "10", "Mechanical", "16", "0"],
+            [
+                "12",
+                "31",
+                "Ryan Hunter-Reay",
+                "American Spirit Team Johansson",
+                "86",
+                "+ 1 Lap",
+                "17",
+                "1",
+            ],
+            [
+                "13",
+                "19",
+                "Joel Camathias",
+                "Dale Coyne Racing",
+                "85",
+                "+ 2 Laps",
+                "18",
+                "0",
+            ],
+            [
+                "14",
+                "33",
+                "Alex Tagliani",
+                "Rocketsports Racing",
+                "85",
+                "+ 2 Laps",
+                "14",
+                "0",
+            ],
+            [
+                "15",
+                "4",
+                "Roberto Moreno",
+                "Herdez Competition",
+                "85",
+                "+ 2 Laps",
+                "9",
+                "0",
+            ],
+            [
+                "16",
+                "11",
+                "Geoff Boss",
+                "Dale Coyne Racing",
+                "83",
+                "Mechanical",
+                "19",
+                "0",
+            ],
+            [
+                "17",
+                "2",
+                "Sebastien Bourdais",
+                "Newman/Haas Racing",
+                "77",
+                "Mechanical",
+                "4",
+                "0",
+            ],
+            [
+                "18",
+                "15",
+                "Darren Manning",
+                "Walker Racing",
+                "12",
+                "Mechanical",
+                "7",
+                "0",
+            ],
+            [
+                "19",
+                "5",
+                "Rodolfo Lavin",
+                "Walker Racing",
+                "10",
+                "Mechanical",
+                "16",
+                "0",
+            ],
         ]
         query = "what were the drivers names?"
         table = pd.DataFrame.from_records(data[1:], columns=data[0])
 
-        tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq", model_max_length=512)
+        tokenizer = TapasTokenizer.from_pretrained(
+            "google/tapas-base-finetuned-wtq", model_max_length=512
+        )
         model_inputs = tokenizer(table, query, padding="max_length")
 
         input_ids = model_inputs["input_ids"]

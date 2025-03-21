@@ -21,12 +21,12 @@ import numpy as np
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import require_flax, slow
 
-from ...test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import (floats_tensor, ids_tensor,
+                                          random_attention_mask)
 from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..bert.test_modeling_flax_bert import FlaxBertModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
 from ..wav2vec2.test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
-
 
 if is_flax_available():
     import jax
@@ -34,14 +34,10 @@ if is_flax_available():
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
 
-    from transformers import (
-        FlaxBartForCausalLM,
-        FlaxBertForCausalLM,
-        FlaxGPT2LMHeadModel,
-        FlaxSpeechEncoderDecoderModel,
-        FlaxWav2Vec2Model,
-        SpeechEncoderDecoderConfig,
-    )
+    from transformers import (FlaxBartForCausalLM, FlaxBertForCausalLM,
+                              FlaxGPT2LMHeadModel,
+                              FlaxSpeechEncoderDecoderModel, FlaxWav2Vec2Model,
+                              SpeechEncoderDecoderConfig)
     from transformers.modeling_flax_outputs import FlaxBaseModelOutput
 
 if is_torch_available():
@@ -70,7 +66,11 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            SpeechEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
 
         enc_dec_model = FlaxSpeechEncoderDecoderModel(encoder_decoder_config)
@@ -86,7 +86,8 @@ class FlaxEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
 
     def check_encoder_decoder_model(
@@ -100,8 +101,12 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = SpeechEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         self.assertTrue(enc_dec_model.config.decoder.is_decoder)
         self.assertTrue(enc_dec_model.config.decoder.add_cross_attention)
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
@@ -114,17 +119,24 @@ class FlaxEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
 
-        encoder_outputs = FlaxBaseModelOutput(last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1])
+        encoder_outputs = FlaxBaseModelOutput(
+            last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1]
+        )
 
         outputs_encoder_decoder = enc_dec_model(
-            attention_mask, decoder_input_ids, decoder_attention_mask, encoder_outputs=encoder_outputs
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
 
     def check_encoder_decoder_model_from_pretrained(
@@ -139,9 +151,17 @@ class FlaxEncoderDecoderMixin:
         return_dict,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
-        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        kwargs = {
+            "encoder_model": encoder_model,
+            "decoder_model": decoder_model,
+            "return_dict": return_dict,
+        }
+        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
         outputs_encoder_decoder = enc_dec_model(
             inputs=inputs,
             attention_mask=attention_mask,
@@ -152,7 +172,8 @@ class FlaxEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
 
     def check_save_and_load(
@@ -166,9 +187,13 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
 
         outputs = enc_dec_model(
             inputs=inputs,
@@ -205,7 +230,9 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         # assert that loading encoder and decoder models from configs has been correctly executed
         self.assertEqual(config.add_adapter, encoder_model.config.add_adapter)
         self.assertEqual(decoder_config.use_cache, decoder_model.config.use_cache)
@@ -215,16 +242,22 @@ class FlaxEncoderDecoderMixin:
                 encoder_model.save_pretrained(enc_tmpdir)
                 decoder_model.save_pretrained(dec_tmpdir)
                 # load a model from pretrained encoder and decoder checkpoints, setting one encoder and one decoder kwarg opposite to that specified in their respective configs
-                enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-                    encoder_pretrained_model_name_or_path=enc_tmpdir,
-                    decoder_pretrained_model_name_or_path=dec_tmpdir,
-                    encoder_add_adapter=not config.add_adapter,
-                    decoder_use_cache=not decoder_config.use_cache,
+                enc_dec_model = (
+                    FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+                        encoder_pretrained_model_name_or_path=enc_tmpdir,
+                        decoder_pretrained_model_name_or_path=dec_tmpdir,
+                        encoder_add_adapter=not config.add_adapter,
+                        decoder_use_cache=not decoder_config.use_cache,
+                    )
                 )
 
         # assert that setting encoder and decoder kwargs opposite to those in the configs has correctly been applied
-        self.assertNotEqual(config.add_adapter, enc_dec_model.config.encoder.add_adapter)
-        self.assertNotEqual(decoder_config.use_cache, enc_dec_model.config.decoder.use_cache)
+        self.assertNotEqual(
+            config.add_adapter, enc_dec_model.config.encoder.add_adapter
+        )
+        self.assertNotEqual(
+            decoder_config.use_cache, enc_dec_model.config.decoder.use_cache
+        )
 
         outputs_encoder_decoder = enc_dec_model(
             inputs=inputs,
@@ -236,7 +269,8 @@ class FlaxEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
 
     def check_encoder_decoder_model_output_attentions(
@@ -253,9 +287,13 @@ class FlaxEncoderDecoderMixin:
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
         outputs_encoder_decoder = enc_dec_model(
             inputs=inputs,
             attention_mask=attention_mask,
@@ -268,7 +306,10 @@ class FlaxEncoderDecoderMixin:
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
         seq_len = enc_dec_model._get_feat_extract_output_lengths(inputs.shape[1])
-        self.assertEqual(encoder_attentions[0].shape[-3:], (config.num_attention_heads, seq_len, seq_len))
+        self.assertEqual(
+            encoder_attentions[0].shape[-3:],
+            (config.num_attention_heads, seq_len, seq_len),
+        )
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
         num_decoder_layers = (
@@ -280,7 +321,11 @@ class FlaxEncoderDecoderMixin:
 
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                decoder_input_ids.shape[-1],
+                decoder_input_ids.shape[-1],
+            ),
         )
 
         cross_attentions = outputs_encoder_decoder["cross_attentions"]
@@ -290,13 +335,23 @@ class FlaxEncoderDecoderMixin:
 
         self.assertEqual(
             cross_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, cross_attention_input_seq_len, seq_len),
+            (
+                decoder_config.num_attention_heads,
+                cross_attention_input_seq_len,
+                seq_len,
+            ),
         )
 
-    def check_encoder_decoder_model_generate(self, inputs, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+    def check_encoder_decoder_model_generate(
+        self, inputs, config, decoder_config, **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+            **kwargs
+        )
 
         pad_token_id = enc_dec_model.config.decoder.pad_token_id
         eos_token_id = enc_dec_model.config.decoder.eos_token_id
@@ -320,7 +375,9 @@ class FlaxEncoderDecoderMixin:
             decoder_start_token_id=decoder_start_token_id,
         )
         generated_sequences = generated_output.sequences
-        self.assertEqual(generated_sequences.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_sequences.shape, (inputs.shape[0],) + (decoder_config.max_length,)
+        )
 
     def check_freeze_feature_encoder(
         self,
@@ -333,7 +390,11 @@ class FlaxEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = (
+            SpeechEncoderDecoderConfig.from_encoder_decoder_configs(
+                config, decoder_config
+            )
+        )
         enc_dec_model = FlaxSpeechEncoderDecoderModel(encoder_decoder_config)
         params = enc_dec_model.params
 
@@ -357,7 +418,9 @@ class FlaxEncoderDecoderMixin:
             )
             logits = outputs_enc_dec.logits
             vocab_size = logits.shape[-1]
-            loss = cross_entropy(logits, onehot(labels=decoder_input_ids, num_classes=vocab_size)).sum()
+            loss = cross_entropy(
+                logits, onehot(labels=decoder_input_ids, num_classes=vocab_size)
+            ).sum()
             return (loss, logits)
 
         # transform the loss function to get the gradients
@@ -365,12 +428,20 @@ class FlaxEncoderDecoderMixin:
 
         # compute the loss, logits, and gradients for the unfrozen model
         (loss, logits), grads = grad_fn(
-            params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=False
+            params,
+            inputs,
+            attention_mask,
+            decoder_input_ids,
+            freeze_feature_encoder=False,
         )
 
         # compare to the loss, logits and gradients for the frozen model
         (loss_frozen, logits_frozen), grads_frozen = grad_fn(
-            params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder=True
+            params,
+            inputs,
+            attention_mask,
+            decoder_input_ids,
+            freeze_feature_encoder=True,
         )
 
         # ensure that the logits and losses remain precisely equal
@@ -384,8 +455,12 @@ class FlaxEncoderDecoderMixin:
         self.assertEqual(grads.keys(), grads_frozen.keys())
 
         # ensure that the gradients of the feature extractor layers are precisely zero when frozen and contain non-zero entries when unfrozen
-        feature_extractor_grads = tuple(grads[k] for k in grads if "feature_extractor" in k)
-        feature_extractor_grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" in k)
+        feature_extractor_grads = tuple(
+            grads[k] for k in grads if "feature_extractor" in k
+        )
+        feature_extractor_grads_frozen = tuple(
+            grads_frozen[k] for k in grads_frozen if "feature_extractor" in k
+        )
 
         for feature_extractor_grad, feature_extractor_grad_frozen in zip(
             feature_extractor_grads, feature_extractor_grads_frozen
@@ -395,7 +470,9 @@ class FlaxEncoderDecoderMixin:
 
         # ensure that the gradients of all unfrozen layers remain precisely equal, i.e. all layers excluding the frozen 'feature_extractor'
         grads = tuple(grads[k] for k in grads if "feature_extractor" not in k)
-        grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k)
+        grads_frozen = tuple(
+            grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k
+        )
 
         for grad, grad_frozen in zip(grads, grads_frozen):
             self.assertTrue((grad == grad_frozen).all())
@@ -406,11 +483,15 @@ class FlaxEncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=False)
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict, return_dict=False
+        )
 
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict, return_dict=True
+        )
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -418,7 +499,9 @@ class FlaxEncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_encoder_decoder_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_encoder_decoder_pretrained(**input_ids_dict)
+        self.check_encoder_decoder_model_from_encoder_decoder_pretrained(
+            **input_ids_dict
+        )
 
     def test_encoder_decoder_model_output_attentions(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -434,7 +517,9 @@ class FlaxEncoderDecoderMixin:
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
+        self.assertLessEqual(
+            diff, tol, f"Difference between torch and flax is {diff} (>= {tol})."
+        )
 
     @slow
     def test_real_model_save_load_from_pretrained(self):
@@ -495,7 +580,9 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = FlaxWav2Vec2ModelTester(self, batch_size=13)
         model_tester_decoder = FlaxGPT2ModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (config, inputs, attention_mask) = encoder_config_and_inputs
         (
             decoder_config,
@@ -547,7 +634,9 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = FlaxWav2Vec2ModelTester(self, batch_size=13)
         model_tester_decoder = FlaxBartStandaloneDecoderModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (config, inputs, attention_mask) = encoder_config_and_inputs
         (
             decoder_config,
@@ -599,7 +688,9 @@ class FlaxWav2Vec2BertModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = FlaxWav2Vec2ModelTester(self, batch_size=13)
         model_tester_decoder = FlaxBertModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (config, inputs, attention_mask) = encoder_config_and_inputs
         (
             decoder_config,

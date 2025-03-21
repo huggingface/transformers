@@ -22,31 +22,24 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers import (CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig,
+                          CLIPSegVisionConfig)
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import CLIPSegForImageSegmentation, CLIPSegModel, CLIPSegTextModel, CLIPSegVisionModel
+    from transformers import (CLIPSegForImageSegmentation, CLIPSegModel,
+                              CLIPSegTextModel, CLIPSegVisionModel)
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
@@ -92,7 +85,9 @@ class CLIPSegVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -120,9 +115,16 @@ class CLIPSegVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -147,7 +149,10 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=CLIPSegVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -202,11 +207,15 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="CLIPSegVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="CLIPSegVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="CLIPSegVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="CLIPSegVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -292,8 +301,13 @@ class CLIPSegTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -312,7 +326,9 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPSegTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPSegTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=CLIPSegTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -345,11 +361,15 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="CLIPSegTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="CLIPSegTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="CLIPSegTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="CLIPSegTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -378,13 +398,19 @@ class CLIPSegModelTester:
         self.parent = parent
         self.text_model_tester = CLIPSegTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = CLIPSegVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
         self.extract_layers = extract_layers
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -404,13 +430,17 @@ class CLIPSegModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
-    def create_and_check_model_for_image_segmentation(self, config, input_ids, attention_maks, pixel_values):
+    def create_and_check_model_for_image_segmentation(
+        self, config, input_ids, attention_maks, pixel_values
+    ):
         model = CLIPSegForImageSegmentation(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, pixel_values)
@@ -423,7 +453,8 @@ class CLIPSegModelTester:
             ),
         )
         self.parent.assertEqual(
-            result.conditional_embeddings.shape, (self.text_model_tester.batch_size, config.projection_dim)
+            result.conditional_embeddings.shape,
+            (self.text_model_tester.batch_size, config.projection_dim),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -439,8 +470,12 @@ class CLIPSegModelTester:
 
 @require_torch
 class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
+    all_model_classes = (
+        (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -462,7 +497,10 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester = CLIPSegModelTester(self)
         common_properties = ["projection_dim", "logit_scale_init_value"]
         self.config_tester = ConfigTester(
-            self, config_class=CLIPSegConfig, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=CLIPSegConfig,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_model(self):
@@ -474,7 +512,9 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_model_for_image_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_for_image_segmentation(*config_and_inputs)
+        self.model_tester.create_and_check_model_for_image_segmentation(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -527,7 +567,9 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             delta=1e-3,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif "film" in name or "transposed_conv" in name or "reduce" in name:
+                    elif (
+                        "film" in name or "transposed_conv" in name or "reduce" in name
+                    ):
                         # those parameters use PyTorch' default nn.Linear initialization scheme
                         pass
                     else:
@@ -584,10 +626,14 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -615,7 +661,9 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = CLIPSegVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save CLIPSegConfig and check if we can load CLIPSegTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -625,10 +673,14 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_training(self):
         if not self.model_tester.is_training:
-            self.skipTest(reason="Training test is skipped as the model was not trained")
+            self.skipTest(
+                reason="Training test is skipped as the model was not trained"
+            )
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             if model_class.__name__ in MODEL_MAPPING_NAMES.values():
@@ -639,7 +691,9 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             for k, v in inputs.items():
                 print(k, v.shape)
             loss = model(**inputs).loss
@@ -670,7 +724,9 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         texts = ["a cat", "a remote", "a blanket"]
-        inputs = processor(text=texts, images=[image] * len(texts), padding=True, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text=texts, images=[image] * len(texts), padding=True, return_tensors="pt"
+        ).to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -682,16 +738,31 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
-            [[-7.4613, -7.4785, -7.3628], [-7.3268, -7.0899, -7.1333], [-6.9838, -6.7900, -6.8913]]
+            [
+                [-7.4613, -7.4785, -7.3628],
+                [-7.3268, -7.0899, -7.1333],
+                [-6.9838, -6.7900, -6.8913],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_masks_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.logits[0, :3, :3], expected_masks_slice, rtol=1e-3, atol=1e-3
+        )
 
         # verify conditional and pooled output
         expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980]).to(torch_device)
-        expected_pooled_output = torch.tensor([0.5036, -0.2681, -0.2644]).to(torch_device)
-        torch.testing.assert_close(outputs.conditional_embeddings[0, :3], expected_conditional, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(outputs.pooled_output[0, :3], expected_pooled_output, rtol=1e-3, atol=1e-3)
+        expected_pooled_output = torch.tensor([0.5036, -0.2681, -0.2644]).to(
+            torch_device
+        )
+        torch.testing.assert_close(
+            outputs.conditional_embeddings[0, :3],
+            expected_conditional,
+            rtol=1e-3,
+            atol=1e-3,
+        )
+        torch.testing.assert_close(
+            outputs.pooled_output[0, :3], expected_pooled_output, rtol=1e-3, atol=1e-3
+        )
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -699,14 +770,20 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = CLIPSegModel.from_pretrained("openai/clip-vit-base-patch32").to(torch_device)
+        model = CLIPSegModel.from_pretrained("openai/clip-vit-base-patch32").to(
+            torch_device
+        )
 
         processor = CLIPSegProcessor.from_pretrained(
-            "openai/clip-vit-base-patch32", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+            "openai/clip-vit-base-patch32",
+            size={"height": 180, "width": 180},
+            crop_size={"height": 180, "width": 180},
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text="what's in the image", images=image, return_tensors="pt"
+        ).to(torch_device)
 
         # interpolate_pos_encodiung false should return value error
         with self.assertRaises(ValueError, msg="doesn't match model"):
@@ -720,12 +797,21 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 26, 768))
 
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        self.assertEqual(
+            outputs.vision_model_output.last_hidden_state.shape, expected_shape
+        )
 
         expected_slice = torch.tensor(
-            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
+            [
+                [-0.1538, 0.0322, -0.3235],
+                [0.2893, 0.1135, -0.5708],
+                [0.0461, 0.1540, -0.6018],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(
-            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+            outputs.vision_model_output.last_hidden_state[0, :3, :3],
+            expected_slice,
+            rtol=1e-4,
+            atol=1e-4,
         )

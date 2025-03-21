@@ -23,35 +23,20 @@ import pytest
 from datasets import Audio, load_dataset
 from parameterized import parameterized
 
-from transformers import (
-    MoshiConfig,
-    PretrainedConfig,
-)
-from transformers.integrations.deepspeed import (
-    is_deepspeed_available,
-    is_deepspeed_zero3_enabled,
-)
-from transformers.testing_utils import (
-    is_flaky,
-    is_torch_available,
-    require_torch,
-    require_torch_fp16,
-    require_torch_sdpa,
-    slow,
-    torch_device,
-)
+from transformers import MoshiConfig, PretrainedConfig
+from transformers.integrations.deepspeed import (is_deepspeed_available,
+                                                 is_deepspeed_zero3_enabled)
+from transformers.testing_utils import (is_flaky, is_torch_available,
+                                        require_torch, require_torch_fp16,
+                                        require_torch_sdpa, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin,
+    floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_deepspeed_available():
     import deepspeed
@@ -59,19 +44,20 @@ if is_deepspeed_available():
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoFeatureExtractor,
-        AutoTokenizer,
-        MoshiForCausalLM,
-        MoshiForConditionalGeneration,
-        MoshiModel,
-    )
+    from transformers import (AutoFeatureExtractor, AutoTokenizer,
+                              MoshiForCausalLM, MoshiForConditionalGeneration,
+                              MoshiModel)
 
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+        if (
+            "_range" in key
+            or "_std" in key
+            or "initializer_factor" in key
+            or "layer_scale" in key
+        ):
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -155,7 +141,9 @@ class MoshiDecoderTester:
 
 
 @require_torch
-class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MoshiDecoderTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = True
@@ -183,7 +171,9 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     def _get_input_ids_and_config(self, batch_size=1):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
+            batch_size
+        )
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
         attention_mask = inputs_dict.pop("attention_mask").to(torch_device)
 
@@ -196,9 +186,17 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self,
+        name,
+        torch_dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
     ):
-        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+        if use_attention_mask or (
+            not use_attention_mask and torch_dtype == "fp32" and not output_attentions
+        ):
             self.skipTest("Test is failing, fix me :) ")
         parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
         parent_parameterized_test(self)
@@ -238,19 +236,33 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check to make sure the type of embeddings returned post resizing is same as type of input
             type_model_embed_post_resize = type(model_embed)
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that added embeddings mean is close to the old embeddings mean
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
-                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
-                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+                with deepspeed.zero.GatheredParameters(
+                    model_embed.weight, modifier_rank=None
+                ):
+                    old_embeddings_mean = torch.mean(
+                        model_embed.weight.data[:-10, :], axis=0
+                    )
+                    new_embeddings_mean = torch.mean(
+                        model_embed.weight.data[-10:, :], axis=0
+                    )
             else:
-                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
-                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+                old_embeddings_mean = torch.mean(
+                    model_embed.weight.data[:-10, :], axis=0
+                )
+                new_embeddings_mean = torch.mean(
+                    model_embed.weight.data[-10:, :], axis=0
+                )
+            torch.testing.assert_close(
+                old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3
+            )
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             if not is_deepspeed_zero3_enabled():
@@ -262,7 +274,9 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15
+            )
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary
@@ -272,7 +286,9 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             if not is_deepspeed_zero3_enabled():
                 # A distriputed launcher is needed for the forward pass when deepspeed is enabled
                 if "decoder_input_ids" in inputs_dict:
-                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                    inputs_dict["decoder_input_ids"].clamp_(
+                        max=model_vocab_size - 15 - 1
+                    )
                 model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
@@ -296,19 +312,25 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
-            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                model_vocab_size, pad_to_multiple_of=64
+            )
             new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
             self.assertTrue(new_model_vocab_size, model.vocab_size)
 
-            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                model_vocab_size + 13, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
             # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
             target_dimension = 128
-            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            model_embed = model.resize_token_embeddings(
+                target_dimension, pad_to_multiple_of=64
+            )
             self.assertTrue(model_embed.weight.shape[0], target_dimension)
 
             with self.assertRaisesRegex(
@@ -338,33 +360,55 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             new_model_vocab_size = model.config.get_text_config().vocab_size
             self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check to make sure the type of embeddings returned post resizing is same as type of input
             type_model_embed_post_resize = type(model_embed)
             self.assertEqual(type_model_embed_pre_resize, type_model_embed_post_resize)
             # Check that added embeddings mean is close to the old embeddings mean
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.GatheredParameters(model_embed.weight, modifier_rank=None):
-                    old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
-                    new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
+                with deepspeed.zero.GatheredParameters(
+                    model_embed.weight, modifier_rank=None
+                ):
+                    old_embeddings_mean = torch.mean(
+                        model_embed.weight.data[:-10, :], axis=0
+                    )
+                    new_embeddings_mean = torch.mean(
+                        model_embed.weight.data[-10:, :], axis=0
+                    )
             else:
-                old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
-                new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+                old_embeddings_mean = torch.mean(
+                    model_embed.weight.data[:-10, :], axis=0
+                )
+                new_embeddings_mean = torch.mean(
+                    model_embed.weight.data[-10:, :], axis=0
+                )
+            torch.testing.assert_close(
+                old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3
+            )
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple input modalities.")
+    @unittest.skip(
+        reason="Test becomes too complex with Moshi requiring multiple input modalities."
+    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -450,7 +494,9 @@ class MoshiTester:
         self.mimi_num_residual_layers = mimi_num_residual_layers
         self.mimi_upsampling_ratios = mimi_upsampling_ratios
         self.mimi_codebook_size = mimi_codebook_size
-        self.mimi_vector_quantization_hidden_dimension = mimi_vector_quantization_hidden_dimension
+        self.mimi_vector_quantization_hidden_dimension = (
+            mimi_vector_quantization_hidden_dimension
+        )
         self.mimi_codebook_dim = mimi_codebook_dim
         self.mimi_upsample_groups = mimi_upsample_groups
         self.mimi_num_hidden_layers = mimi_num_hidden_layers
@@ -466,8 +512,12 @@ class MoshiTester:
 
         input_ids = ids_tensor([batch_size, self.seq_length], self.vocab_size)
 
-        moshi_audio_codes = ids_tensor([batch_size, self.num_codebooks, self.seq_length], self.mimi_codebook_size)
-        user_audio_codes = ids_tensor([batch_size, self.num_codebooks, self.seq_length], self.mimi_codebook_size)
+        moshi_audio_codes = ids_tensor(
+            [batch_size, self.num_codebooks, self.seq_length], self.mimi_codebook_size
+        )
+        user_audio_codes = ids_tensor(
+            [batch_size, self.num_codebooks, self.seq_length], self.mimi_codebook_size
+        )
         attention_mask = input_ids.ne(self.pad_token_id)
 
         config = self.get_config()
@@ -544,7 +594,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     # special case for labels
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             inputs_dict["text_labels"] = torch.zeros(
@@ -555,7 +607,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def _get_input_ids_and_config(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
+            batch_size
+        )
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
         attention_mask = inputs_dict.pop("attention_mask").to(torch_device)
 
@@ -569,7 +623,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, input_ids, attention_mask, inputs_dict
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(
+            batch_size=batch_size
+        )
 
         # Make sure we only return `input_ids`.
         # Note that audio_codes will still be generated internally, so the ability to test audio codes is still there.
@@ -580,10 +636,16 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         return config, filtered_inputs_dict
 
-    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+    def _check_generate_outputs(
+        self, output, config, use_cache=False, num_return_sequences=1, num_beams=1
+    ):
         # Overwrite because the generate method actually always uses `inputs_embeds` so `use_cache` is always `True`
         super()._check_generate_outputs(
-            output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
+            output,
+            config,
+            use_cache=True,
+            num_return_sequences=num_return_sequences,
+            num_beams=num_beams,
         )
 
     def test_initialization(self):
@@ -597,11 +659,15 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
+    @unittest.skip(
+        reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs"
+    )
     def test_generate_continue_from_past_key_values(self):
         pass
 
@@ -630,9 +696,17 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
+    @unittest.skip(
+        reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness."
+    )
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self,
+        name,
+        torch_dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
     ):
         pass
 
@@ -648,36 +722,51 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         # Then, test left-padding
 
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, input_dict = self._get_input_ids_and_config()
+            config, input_ids, attention_mask, input_dict = (
+                self._get_input_ids_and_config()
+            )
             model = model_class(config).to(torch_device).eval()
 
             # no cache as some models require special cache classes to be init outside forward
             model.generation_config.use_cache = False
 
             # Without padding
-            next_logits_wo_padding = model(input_ids=input_ids, attention_mask=attention_mask, **input_dict).logits[
-                :, -1, :
-            ]
+            next_logits_wo_padding = model(
+                input_ids=input_ids, attention_mask=attention_mask, **input_dict
+            ).logits[:, -1, :]
 
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_text_config().pad_token_id
+                if config.get_text_config().pad_token_id is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
+            padding = (
+                torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device)
+                * pad_token_id
+            )
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
 
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            padded_attention_mask = torch.cat(
+                (torch.zeros_like(padding), attention_mask), dim=1
+            )
 
             padding = (
                 torch.ones(
-                    (pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device
+                    (pad_size[0], self.model_tester.num_codebooks, 32),
+                    dtype=input_ids.dtype,
+                    device=torch_device,
                 )
                 * config.audio_vocab_size
             )
-            padded_moshi_audio_codes = torch.cat((padding, input_dict["moshi_audio_codes"]), dim=2)
-            padded_user_audio_codes = torch.cat((padding, input_dict["user_audio_codes"]), dim=2)
+            padded_moshi_audio_codes = torch.cat(
+                (padding, input_dict["moshi_audio_codes"]), dim=2
+            )
+            padded_user_audio_codes = torch.cat(
+                (padding, input_dict["user_audio_codes"]), dim=2
+            )
 
             model_kwargs = {
                 "input_ids": padded_input_ids,
@@ -689,7 +778,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5
+            )
 
     @require_torch_sdpa
     @slow
@@ -703,7 +794,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             if not model_class._supports_sdpa:
                 self.skipTest(f"{model_class.__name__} does not support SDPA")
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
 
             dummy_input = inputs_dict[model_class.main_input_name]
             if dummy_input.dtype in [torch.float32, torch.bfloat16]:
@@ -713,7 +806,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             # make sure that all models have enough positions for generation
             if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+                config.max_position_embeddings = (
+                    max_new_tokens + dummy_input.shape[1] + 1
+                )
 
             model = model_class(config)
 
@@ -739,13 +834,21 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                    if (
+                        "SdpaAttention" in class_name
+                        or "SdpaSelfAttention" in class_name
+                    ):
+                        raise ValueError(
+                            "The eager model should not have SDPA attention layers"
+                        )
 
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        "SdpaAttention" in class_name
+                        or "SdpaSelfAttention" in class_name
+                    ):
                         has_sdpa = True
                         break
                 if not has_sdpa:
@@ -767,7 +870,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 )
 
                 torch.testing.assert_close(res_eager.sequences, res_sdpa.sequences)
-                torch.testing.assert_close(res_eager.audio_sequences, res_sdpa.audio_sequences)
+                torch.testing.assert_close(
+                    res_eager.audio_sequences, res_sdpa.audio_sequences
+                )
 
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
@@ -778,7 +883,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model.eval()
 
             output_ids_generate = model.generate(
-                do_sample=False, max_new_tokens=self.max_new_tokens, remove_invalid_values=True
+                do_sample=False,
+                max_new_tokens=self.max_new_tokens,
+                remove_invalid_values=True,
             )
             print(output_ids_generate)
             self.assertIsNotNone(output_ids_generate)
@@ -802,26 +909,50 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
 
             input_values_length = int(
-                self.model_tester.seq_length * config.sampling_rate / config.audio_encoder_config.frame_rate
+                self.model_tester.seq_length
+                * config.sampling_rate
+                / config.audio_encoder_config.frame_rate
             )
 
-            user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
-            moshi_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+            user_input_values = floats_tensor(
+                (input_ids.shape[0], 1, input_values_length)
+            )
+            moshi_input_values = floats_tensor(
+                (input_ids.shape[0], 1, input_values_length)
+            )
 
-            user_audio_codes = model.audio_encoder.encode(user_input_values, num_quantizers=model.num_codebooks)[0]
-            moshi_audio_codes = model.audio_encoder.encode(moshi_input_values, num_quantizers=model.num_codebooks)[0]
+            user_audio_codes = model.audio_encoder.encode(
+                user_input_values, num_quantizers=model.num_codebooks
+            )[0]
+            moshi_audio_codes = model.audio_encoder.encode(
+                moshi_input_values, num_quantizers=model.num_codebooks
+            )[0]
 
             outputs_from_audio_codes = model.generate(
-                input_ids, max_new_tokens=5, user_audio_codes=user_audio_codes, moshi_audio_codes=moshi_audio_codes
+                input_ids,
+                max_new_tokens=5,
+                user_audio_codes=user_audio_codes,
+                moshi_audio_codes=moshi_audio_codes,
             )
 
             outputs_from_audio_values = model.generate(
-                input_ids, max_new_tokens=5, user_input_values=user_input_values, moshi_input_values=moshi_input_values
+                input_ids,
+                max_new_tokens=5,
+                user_input_values=user_input_values,
+                moshi_input_values=moshi_input_values,
             )
 
-            self.assertTrue((outputs_from_audio_values.sequences == outputs_from_audio_codes.sequences).all())
             self.assertTrue(
-                torch.allclose(outputs_from_audio_codes.audio_sequences, outputs_from_audio_values.audio_sequences)
+                (
+                    outputs_from_audio_values.sequences
+                    == outputs_from_audio_codes.sequences
+                ).all()
+            )
+            self.assertTrue(
+                torch.allclose(
+                    outputs_from_audio_codes.audio_sequences,
+                    outputs_from_audio_values.audio_sequences,
+                )
             )
 
     def test_generate_depth_decoder_kwargs(self):
@@ -831,10 +962,16 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             model = model_class(config).to(torch_device).eval()
 
-            model.generate(input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True)
+            model.generate(
+                input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True
+            )
 
             model.generate(
-                input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True, depth_decoder_num_beams=5
+                input_ids,
+                max_new_tokens=5,
+                **input_dict,
+                depth_decoder_do_sample=True,
+                depth_decoder_num_beams=5,
             )
 
     def test_generate_from_unconditional(self):
@@ -846,37 +983,56 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
             # check bs>1
             model.generate(
-                **model.get_unconditional_inputs(num_samples=4), max_new_tokens=5, concat_unconditional_inputs=False
+                **model.get_unconditional_inputs(num_samples=4),
+                max_new_tokens=5,
+                concat_unconditional_inputs=False,
             )
 
             # check same results from unconditional or no inputs
             outputs_from_unconditional = model.generate(
-                **model.get_unconditional_inputs(num_samples=1), max_new_tokens=5, concat_unconditional_inputs=False
+                **model.get_unconditional_inputs(num_samples=1),
+                max_new_tokens=5,
+                concat_unconditional_inputs=False,
             )
             outputs_from_none = model.generate(max_new_tokens=5)
 
-            self.assertTrue((outputs_from_unconditional.sequences == outputs_from_none.sequences).all())
             self.assertTrue(
-                torch.allclose(outputs_from_unconditional.audio_sequences, outputs_from_none.audio_sequences)
+                (
+                    outputs_from_unconditional.sequences == outputs_from_none.sequences
+                ).all()
+            )
+            self.assertTrue(
+                torch.allclose(
+                    outputs_from_unconditional.audio_sequences,
+                    outputs_from_none.audio_sequences,
+                )
             )
 
     @unittest.skip(reason="Compile not yet supported because in Moshi models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple modalities")
+    @unittest.skip(
+        reason="Test becomes too complex with Moshi requiring multiple modalities"
+    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -887,7 +1043,9 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:
-        if dict_to_place[key] is not None and isinstance(dict_to_place[key], torch.Tensor):
+        if dict_to_place[key] is not None and isinstance(
+            dict_to_place[key], torch.Tensor
+        ):
             dict_to_place[key] = dict_to_place[key].to(device)
     return dict_to_place
 
@@ -903,8 +1061,12 @@ class MoshiIntegrationTests(unittest.TestCase):
         return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
 
     def _load_datasample(self):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        dataset = ds.cast_column("audio", Audio(sampling_rate=self.feature_extractor.sampling_rate))
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
+        dataset = ds.cast_column(
+            "audio", Audio(sampling_rate=self.feature_extractor.sampling_rate)
+        )
         # automatic decoding with librispeech
         speech_sample = dataset.sort("id")[0]["audio"]["array"]
         return speech_sample
@@ -914,15 +1076,17 @@ class MoshiIntegrationTests(unittest.TestCase):
         model = MoshiForConditionalGeneration.from_pretrained(
             "kmhf/hf-moshika", torch_dtype=torch.float16, device_map="auto"
         )
-        inputs = self.feature_extractor(self._load_datasample(), return_tensors="pt").to(
-            device=torch_device, dtype=torch.float16
-        )
+        inputs = self.feature_extractor(
+            self._load_datasample(), return_tensors="pt"
+        ).to(device=torch_device, dtype=torch.float16)
 
-        user_audio_codes = model.audio_encoder.encode(**inputs, num_quantizers=8).audio_codes
+        user_audio_codes = model.audio_encoder.encode(
+            **inputs, num_quantizers=8
+        ).audio_codes
 
-        input_ids = self.tokenizer.encode("<pad><pad><pad><pad><unk> Hello,<pad><unk>", return_tensors="pt").to(
-            torch_device
-        )
+        input_ids = self.tokenizer.encode(
+            "<pad><pad><pad><pad><unk> Hello,<pad><unk>", return_tensors="pt"
+        ).to(torch_device)
 
         # fmt: off
         moshi_audio_codes = [[[1049, 127, 1880, 972, 972, 1156, 1913, 415, 1933],
@@ -951,8 +1115,12 @@ class MoshiIntegrationTests(unittest.TestCase):
         expected_text_token = 452
         expected_audio_tokens = [916, 1396, 1238, 579, 1105, 914, 1257, 810]  # fmt: skip
 
-        self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].cpu().item())
-        self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist())
+        self.assertTrue(
+            expected_text_token == model_outputs.sequences[0, -2].cpu().item()
+        )
+        self.assertTrue(
+            expected_audio_tokens == model_outputs.audio_codes[0, :, -1].cpu().tolist()
+        )
 
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
@@ -962,11 +1130,17 @@ class MoshiIntegrationTests(unittest.TestCase):
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
         model_outputs = model.generate(
-            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+            do_sample=False,
+            depth_decoder_do_sample=False,
+            return_audio_codes=True,
+            max_new_tokens=10,
         )
 
         # eager equivalence is not as strict as sdpa.
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(
+            some_expected_audio_tokens
+            == model_outputs.audio_codes[0, :, :2].cpu().tolist()
+        )
 
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
@@ -979,15 +1153,25 @@ class MoshiIntegrationTests(unittest.TestCase):
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
         model_outputs = model.generate(
-            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+            do_sample=False,
+            depth_decoder_do_sample=False,
+            return_audio_codes=True,
+            max_new_tokens=10,
         )
 
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
-        self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
+        self.assertTrue(
+            np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums)
+        )
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(
+            expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist()
+        )
+        self.assertTrue(
+            some_expected_audio_tokens
+            == model_outputs.audio_codes[0, :, :2].cpu().tolist()
+        )
 
     @slow
     @require_torch_fp16
@@ -1001,15 +1185,25 @@ class MoshiIntegrationTests(unittest.TestCase):
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
 
         model_outputs = model.generate(
-            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+            do_sample=False,
+            depth_decoder_do_sample=False,
+            return_audio_codes=True,
+            max_new_tokens=10,
         )
 
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
-        self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
+        self.assertTrue(
+            np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums)
+        )
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(
+            expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist()
+        )
+        self.assertTrue(
+            some_expected_audio_tokens
+            == model_outputs.audio_codes[0, :, :2].cpu().tolist()
+        )
 
     @slow
     @require_torch_fp16
@@ -1023,12 +1217,20 @@ class MoshiIntegrationTests(unittest.TestCase):
         some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 347], [1871, 428], [2008, 2008]]  # fmt: skip
 
         model_outputs = model.generate(
-            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
+            do_sample=False,
+            depth_decoder_do_sample=False,
+            return_audio_codes=True,
+            max_new_tokens=10,
         )
 
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= 2048)
 
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist())
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].cpu().tolist())
+        self.assertTrue(
+            expected_text_tokens == model_outputs.sequences[0, 1:].cpu().tolist()
+        )
+        self.assertTrue(
+            some_expected_audio_tokens
+            == model_outputs.audio_codes[0, :, :2].cpu().tolist()
+        )

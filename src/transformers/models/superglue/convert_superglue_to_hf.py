@@ -20,16 +20,15 @@ from typing import List
 import torch
 from datasets import load_dataset
 
-from transformers import (
-    AutoModelForKeypointDetection,
-    SuperGlueConfig,
-    SuperGlueForKeypointMatching,
-    SuperGlueImageProcessor,
-)
+from transformers import (AutoModelForKeypointDetection, SuperGlueConfig,
+                          SuperGlueForKeypointMatching,
+                          SuperGlueImageProcessor)
 
 
 def prepare_imgs():
-    dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
+    dataset = load_dataset(
+        "hf-internal-testing/image-matching-test-dataset", split="train"
+    )
     image1 = dataset[0]["image"]
     image2 = dataset[1]["image"]
     image3 = dataset[2]["image"]
@@ -51,27 +50,41 @@ def verify_model_outputs(model, model_name, device):
 
     if "outdoor" in model_name:
         expected_max_number_keypoints = 865
-        expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
-        expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+        expected_matches_shape = torch.Size(
+            (len(images), 2, expected_max_number_keypoints)
+        )
+        expected_matching_scores_shape = torch.Size(
+            (len(images), 2, expected_max_number_keypoints)
+        )
 
         expected_matches_values = torch.tensor(
-            [125, 630, 137, 138, 136, 143, 135, -1, -1, 153], dtype=torch.int64, device=device
+            [125, 630, 137, 138, 136, 143, 135, -1, -1, 153],
+            dtype=torch.int64,
+            device=device,
         )
         expected_matching_scores_values = torch.tensor(
-            [0.9899, 0.0033, 0.9897, 0.9889, 0.9879, 0.7464, 0.7109, 0, 0, 0.9841], device=device
+            [0.9899, 0.0033, 0.9897, 0.9889, 0.9879, 0.7464, 0.7109, 0, 0, 0.9841],
+            device=device,
         )
 
         expected_number_of_matches = 281
     elif "indoor" in model_name:
         expected_max_number_keypoints = 865
-        expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
-        expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+        expected_matches_shape = torch.Size(
+            (len(images), 2, expected_max_number_keypoints)
+        )
+        expected_matching_scores_shape = torch.Size(
+            (len(images), 2, expected_max_number_keypoints)
+        )
 
         expected_matches_values = torch.tensor(
-            [125, 144, 137, 138, 136, 155, 135, -1, -1, 153], dtype=torch.int64, device=device
+            [125, 144, 137, 138, 136, 155, 135, -1, -1, 153],
+            dtype=torch.int64,
+            device=device,
         )
         expected_matching_scores_values = torch.tensor(
-            [0.9694, 0.0010, 0.9006, 0.8753, 0.8521, 0.5688, 0.6321, 0.0, 0.0, 0.7235], device=device
+            [0.9694, 0.0010, 0.9006, 0.8753, 0.8521, 0.5688, 0.6321, 0.0, 0.0, 0.7235],
+            device=device,
         )
 
         expected_number_of_matches = 282
@@ -80,7 +93,9 @@ def verify_model_outputs(model, model_name, device):
     assert outputs.matching_scores.shape == expected_matching_scores_shape
 
     assert torch.allclose(predicted_matches_values, expected_matches_values, atol=1e-4)
-    assert torch.allclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-4)
+    assert torch.allclose(
+        predicted_matching_scores_values, expected_matching_scores_values, atol=1e-4
+    )
 
     assert predicted_number_of_matches == expected_number_of_matches
 
@@ -98,7 +113,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: List[str], conversion_mapping=ORIGINAL_TO_CONVERTED_KEY_MAPPING):
+def convert_old_keys_to_new_keys(
+    state_dict_keys: List[str], conversion_mapping=ORIGINAL_TO_CONVERTED_KEY_MAPPING
+):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -139,10 +156,16 @@ def convert_state_dict(state_dict, config):
             if len(shape) == 2:
                 dim_in = shape[1]
                 tensor = (
-                    tensor.reshape(dim_out // num_heads, num_heads, dim_in).permute(1, 0, 2).reshape(dim_out, dim_in)
+                    tensor.reshape(dim_out // num_heads, num_heads, dim_in)
+                    .permute(1, 0, 2)
+                    .reshape(dim_out, dim_in)
                 )
             if len(shape) == 1:
-                tensor = tensor.reshape(dim_out // num_heads, num_heads).permute(1, 0).reshape(dim_out)
+                tensor = (
+                    tensor.reshape(dim_out // num_heads, num_heads)
+                    .permute(1, 0)
+                    .reshape(dim_out)
+                )
             state_dict[key] = tensor
 
     def output_permute_weights(keys, num_heads=4):
@@ -150,7 +173,11 @@ def convert_state_dict(state_dict, config):
             tensor = state_dict[key]
             dim_in = tensor.shape[1]
             dim_out = tensor.shape[0]
-            tensor = tensor.reshape(dim_out, dim_in // num_heads, num_heads).permute(0, 2, 1).reshape(dim_out, dim_in)
+            tensor = (
+                tensor.reshape(dim_out, dim_in // num_heads, num_heads)
+                .permute(0, 2, 1)
+                .reshape(dim_out, dim_in)
+            )
             state_dict[key] = tensor
 
     conv_keys = []
@@ -168,7 +195,9 @@ def convert_state_dict(state_dict, config):
         if i < len(config.keypoint_encoder_sizes) + 1:
             old_batch_norm_key = f"{keypoint_encoder_key}.{(i - 1) * 3 + 1}.old"
             new_batch_norm_key = f"{keypoint_encoder_key}.{new_index}.batch_norm."
-            converted_to_final_key_mapping[rf"{old_batch_norm_key}\."] = new_batch_norm_key
+            converted_to_final_key_mapping[rf"{old_batch_norm_key}\."] = (
+                new_batch_norm_key
+            )
 
         conv_keys.append(f"{old_conv_key}.weight")
 
@@ -198,7 +227,9 @@ def convert_state_dict(state_dict, config):
         output_permute_keys.append(f"{attention_key}.output.dense.weight")
 
         ## MLP
-        conv_keys.extend([f"{gnn_layer_key}.mlp.0.linear.weight", f"{gnn_layer_key}.mlp.1.weight"])
+        conv_keys.extend(
+            [f"{gnn_layer_key}.mlp.0.linear.weight", f"{gnn_layer_key}.mlp.1.weight"]
+        )
 
     # Final Projection
     conv_keys.append("final_projection.final_proj.weight")
@@ -213,7 +244,9 @@ def convert_state_dict(state_dict, config):
 
 
 def add_keypoint_detector_state_dict(superglue_state_dict):
-    keypoint_detector = AutoModelForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+    keypoint_detector = AutoModelForKeypointDetection.from_pretrained(
+        "magic-leap-community/superpoint"
+    )
     keypoint_detector_state_dict = keypoint_detector.state_dict()
     for k, v in keypoint_detector_state_dict.items():
         superglue_state_dict[f"keypoint_detector.{k}"] = v
@@ -338,5 +371,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     write_model(
-        args.pytorch_dump_folder_path, args.checkpoint_url, safe_serialization=True, push_to_hub=args.push_to_hub
+        args.pytorch_dump_folder_path,
+        args.checkpoint_url,
+        safe_serialization=True,
+        push_to_hub=args.push_to_hub,
     )

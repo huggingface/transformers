@@ -22,9 +22,9 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
 if is_vision_available():
-    from transformers import AutoProcessor, BertTokenizer, CLIPImageProcessor, GitProcessor, PreTrainedTokenizerFast
+    from transformers import (AutoProcessor, BertTokenizer, CLIPImageProcessor,
+                              GitProcessor, PreTrainedTokenizerFast)
 
 
 @require_vision
@@ -36,7 +36,8 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_processor = CLIPImageProcessor()
         tokenizer = BertTokenizer.from_pretrained(
-            "hf-internal-testing/tiny-random-BertModel", model_input_names=["input_ids", "attention_mask"]
+            "hf-internal-testing/tiny-random-BertModel",
+            model_input_names=["input_ids", "attention_mask"],
         )
 
         processor = GitProcessor(image_processor, tokenizer)
@@ -53,20 +54,33 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = GitProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = GitProcessor(
+            tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = GitProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        image_processor_add_kwargs = self.get_image_processor(
+            do_normalize=False, padding_value=1.0
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = GitProcessor.from_pretrained(
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_normalize=False,
+            padding_value=1.0,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
 
     def test_image_processor(self):
@@ -81,7 +95,9 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
@@ -109,7 +125,9 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(
+            list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"]
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -140,4 +158,6 @@ class GitProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         # For now the processor supports only ['input_ids', 'attention_mask', 'pixel_values']
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(
+            list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"]
+        )

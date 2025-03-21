@@ -21,17 +21,14 @@ from unittest import skip
 
 from packaging import version
 
-from transformers import AqlmConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
-from transformers.testing_utils import (
-    require_accelerate,
-    require_aqlm,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
-from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
-
+from transformers import (AqlmConfig, AutoConfig, AutoModelForCausalLM,
+                          AutoTokenizer, OPTForCausalLM, StaticCache)
+from transformers.testing_utils import (require_accelerate, require_aqlm,
+                                        require_torch_gpu,
+                                        require_torch_multi_gpu, slow,
+                                        torch_device)
+from transformers.utils import (is_accelerate_available, is_aqlm_available,
+                                is_torch_available)
 
 if is_torch_available():
     import torch
@@ -66,8 +63,13 @@ class AqlmConfigTest(unittest.TestCase):
 
         self.assertEqual(dict["in_group_size"], quantization_config.in_group_size)
         self.assertEqual(dict["num_codebooks"], quantization_config.num_codebooks)
-        self.assertEqual(dict["nbits_per_codebook"], quantization_config.nbits_per_codebook)
-        self.assertEqual(dict["linear_weights_not_to_quantize"], quantization_config.linear_weights_not_to_quantize)
+        self.assertEqual(
+            dict["nbits_per_codebook"], quantization_config.nbits_per_codebook
+        )
+        self.assertEqual(
+            dict["linear_weights_not_to_quantize"],
+            quantization_config.linear_weights_not_to_quantize,
+        )
 
 
 @slow
@@ -110,7 +112,9 @@ class AqlmTest(unittest.TestCase):
         from transformers.integrations import replace_with_aqlm_linear
 
         model_id = "facebook/opt-350m"
-        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        config = AutoConfig.from_pretrained(
+            model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5"
+        )
         quantization_config = AqlmConfig()
 
         with init_empty_weights():
@@ -121,7 +125,9 @@ class AqlmTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_aqlm_linear(model, quantization_config=quantization_config)
+        model, _ = replace_with_aqlm_linear(
+            model, quantization_config=quantization_config
+        )
         nb_aqlm_linear = 0
         for module in model.modules():
             if isinstance(module, QuantizedLinear):
@@ -134,7 +140,9 @@ class AqlmTest(unittest.TestCase):
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_aqlm_linear(
-            model, quantization_config=quantization_config, linear_weights_not_to_quantize=["lm_head.weight"]
+            model,
+            quantization_config=quantization_config,
+            linear_weights_not_to_quantize=["lm_head.weight"],
         )
         nb_aqlm_linear = 0
         for module in model.modules():
@@ -150,17 +158,26 @@ class AqlmTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model is working properly
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
-        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output = self.quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens
+        )
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     def test_raise_if_non_quantized(self):
         model_id = "facebook/opt-125m"
         quantization_config = AqlmConfig(bits=4)
 
         with self.assertRaises(ValueError):
-            _ = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+            _ = AutoModelForCausalLM.from_pretrained(
+                model_id, quantization_config=quantization_config
+            )
 
     @skip(
         "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
@@ -171,12 +188,19 @@ class AqlmTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map=self.device_map
+            )
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+                torch_device
+            )
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertEqual(
+                self.tokenizer.decode(output[0], skip_special_tokens=True),
+                self.EXPECTED_OUTPUT,
+            )
 
     @skip(
         "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
@@ -186,18 +210,28 @@ class AqlmTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, device_map="auto"
+        )
 
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        output = quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens
+        )
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     @unittest.skipUnless(
-        is_aqlm_available() and version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.3"),
+        is_aqlm_available()
+        and version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.3"),
         "test requires `aqlm>=1.0.3`",
     )
     def test_quantized_model_compile(self):
@@ -206,7 +240,9 @@ class AqlmTest(unittest.TestCase):
         """
 
         # Sample tokens greedily
-        def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_values):
+        def decode_one_tokens(
+            model, cur_token, input_pos, cache_position, past_key_values
+        ):
             logits = model(
                 cur_token,
                 position_ids=input_pos,
@@ -220,7 +256,9 @@ class AqlmTest(unittest.TestCase):
             return new_token
 
         # Tokenize the test input
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)["input_ids"]
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )["input_ids"]
         seq_length = input_ids.shape[1]
 
         # Setup static KV cache for generation
@@ -234,7 +272,9 @@ class AqlmTest(unittest.TestCase):
 
         # Allocate token ids to be generated and copy prefix ids
         cache_position = torch.arange(seq_length, device=torch_device)
-        generated_ids = torch.zeros(1, seq_length + self.max_new_tokens, dtype=torch.int, device=torch_device)
+        generated_ids = torch.zeros(
+            1, seq_length + self.max_new_tokens, dtype=torch.int, device=torch_device
+        )
         generated_ids[:, cache_position] = input_ids.to(torch_device).to(torch.int)
 
         # Do a forward pass to fill the prefix cache and compile the kernels if necessary
@@ -250,17 +290,28 @@ class AqlmTest(unittest.TestCase):
 
         with torch.no_grad():
             # Compile the CUDA graph
-            decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
+            decode_one_tokens = torch.compile(
+                decode_one_tokens, mode="reduce-overhead", fullgraph=True
+            )
 
             # Generate tokens one by one
             cache_position = torch.tensor([seq_length + 1], device=torch_device)
             for _ in range(1, self.max_new_tokens):
-                with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+                with torch.backends.cuda.sdp_kernel(
+                    enable_flash=False, enable_mem_efficient=False, enable_math=True
+                ):
                     next_token = decode_one_tokens(
-                        self.quantized_model, next_token.clone(), None, cache_position, past_key_values
+                        self.quantized_model,
+                        next_token.clone(),
+                        None,
+                        cache_position,
+                        past_key_values,
                     )
                     generated_ids.index_copy_(1, cache_position, next_token)
                 cache_position += 1
 
         # Check generated text
-        self.assertEqual(self.tokenizer.decode(generated_ids[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(
+            self.tokenizer.decode(generated_ids[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )

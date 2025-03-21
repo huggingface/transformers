@@ -18,22 +18,19 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import M2M100Tokenizer, is_torch_available
-from transformers.testing_utils import (
-    get_tests_dir,
-    nested_simplify,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    slow,
-)
+from transformers.testing_utils import (get_tests_dir, nested_simplify,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        slow)
 from transformers.utils import is_sentencepiece_available
 
-
 if is_sentencepiece_available():
-    from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
+    from transformers.models.m2m_100.tokenization_m2m_100 import (
+        VOCAB_FILES_NAMES,
+        save_json,
+    )
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 if is_sentencepiece_available():
     SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -167,7 +164,9 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         self.assertIn(FR_CODE, self.tokenizer.all_special_ids)
         generated_ids = [FR_CODE, 5364, 82, 8642, 4, 294, 47, 8, 14028, 136, 3286, 9706, 6, 90797, 6, 144012, 162, 88128, 30061, 5, 2]  # fmt: skip
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_french = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        expected_french = self.tokenizer.decode(
+            generated_ids[1:], skip_special_tokens=True
+        )
         self.assertEqual(result, expected_french)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
@@ -183,7 +182,9 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         self.tokenizer.src_lang = "en"
         self.tokenizer.tgt_lang = "fr"
 
-        batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
+        batch = self.tokenizer(
+            self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt"
+        )
 
         batch["decoder_input_ids"] = shift_tokens_right(
             batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.eos_token_id
@@ -203,32 +204,56 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
     @require_torch
     def test_src_lang_setter(self):
         self.tokenizer.src_lang = "mr"
-        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("mr")])
-        self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.assertListEqual(
+            self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("mr")]
+        )
+        self.assertListEqual(
+            self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id]
+        )
 
         self.tokenizer.src_lang = "zh"
-        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")])
-        self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.assertListEqual(
+            self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")]
+        )
+        self.assertListEqual(
+            self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id]
+        )
 
     @require_torch
     def test_tokenizer_target_mode(self):
         self.tokenizer.tgt_lang = "mr"
         self.tokenizer._switch_to_target_mode()
-        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("mr")])
-        self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.assertListEqual(
+            self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("mr")]
+        )
+        self.assertListEqual(
+            self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id]
+        )
         self.tokenizer._switch_to_input_mode()
-        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id(self.tokenizer.src_lang)])
+        self.assertListEqual(
+            self.tokenizer.prefix_tokens,
+            [self.tokenizer.get_lang_id(self.tokenizer.src_lang)],
+        )
 
         self.tokenizer.tgt_lang = "zh"
         self.tokenizer._switch_to_target_mode()
-        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")])
-        self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.assertListEqual(
+            self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")]
+        )
+        self.assertListEqual(
+            self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id]
+        )
         self.tokenizer._switch_to_input_mode()
-        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id(self.tokenizer.src_lang)])
+        self.assertListEqual(
+            self.tokenizer.prefix_tokens,
+            [self.tokenizer.get_lang_id(self.tokenizer.src_lang)],
+        )
 
     @require_torch
     def test_tokenizer_translation(self):
-        inputs = self.tokenizer._build_translation_inputs("A test", return_tensors="pt", src_lang="en", tgt_lang="ar")
+        inputs = self.tokenizer._build_translation_inputs(
+            "A test", return_tensors="pt", src_lang="en", tgt_lang="ar"
+        )
 
         self.assertEqual(
             nested_simplify(inputs),

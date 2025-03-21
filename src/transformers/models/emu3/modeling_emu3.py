@@ -37,17 +37,12 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (LossKwargs, add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_torch_flex_attn_available, logging,
+                      replace_return_docstrings)
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
-
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
@@ -87,9 +82,15 @@ class Emu3MLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.up_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.down_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.mlp_bias
+        )
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -139,7 +140,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -161,8 +164,12 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -176,23 +183,35 @@ class Emu3Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.head_dim = getattr(
+            config, "head_dim", config.hidden_size // config.num_attention_heads
+        )
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.num_key_value_heads
+        )
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
         )
 
     def forward(
@@ -212,22 +231,30 @@ class Emu3Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -254,7 +281,9 @@ class Emu3DecoderLayer(nn.Module):
 
         self.mlp = Emu3MLP(config)
         self.input_layernorm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Emu3RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         self.dropout = nn.Dropout(config.attention_dropout)
 
     def forward(
@@ -268,7 +297,9 @@ class Emu3DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -334,7 +365,9 @@ class Emu3VQVAEVectorQuantizer(nn.Module):
     def __init__(self, config: Emu3VQVAEConfig):
         super().__init__()
         self.embedding = nn.Embedding(config.codebook_size, config.embed_dim)
-        self.embedding.weight.data.uniform_(-1.0 / config.codebook_size, 1.0 / config.codebook_size)
+        self.embedding.weight.data.uniform_(
+            -1.0 / config.codebook_size, 1.0 / config.codebook_size
+        )
 
     def forward(self, hidden_state: torch.Tensor):
         batch_size, temporal, channels, height, width = hidden_state.shape
@@ -346,18 +379,24 @@ class Emu3VQVAEVectorQuantizer(nn.Module):
         embedding_sum = torch.sum(self.embedding.weight**2, dim=1)
 
         # "bd,dn->bn",
-        distances = 2 * torch.matmul(hidden_state_flattened, self.embedding.weight.transpose(0, 1))
+        distances = 2 * torch.matmul(
+            hidden_state_flattened, self.embedding.weight.transpose(0, 1)
+        )
         distances = hidden_state_sum + embedding_sum - distances
 
         min_encoding_indices = torch.argmin(distances, dim=1)
-        min_encoding_indices = min_encoding_indices.view(batch_size, temporal, height, width)
+        min_encoding_indices = min_encoding_indices.view(
+            batch_size, temporal, height, width
+        )
         return min_encoding_indices
 
 
 class Emu3VQVAEEncoderConvDownsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
+        self.conv = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=2, padding=0
+        )
 
     def forward(self, hidden_states):
         # no asymmetric padding in torch conv, must do it ourselves
@@ -369,7 +408,9 @@ class Emu3VQVAEEncoderConvDownsample(nn.Module):
 class Emu3VQVAEEncoderConvUpsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
+        self.conv = nn.Conv2d(
+            in_channels, in_channels, kernel_size=3, stride=1, padding=1
+        )
 
     def forward(self, hidden_states):
         hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
@@ -387,7 +428,10 @@ class Emu3VQVAEConv3d(nn.Module):
     ):
         super().__init__()
 
-        padding_sizes = [one_kernel - one_stride for one_kernel, one_stride in zip(kernel_size[1:], stride[1:])]
+        padding_sizes = [
+            one_kernel - one_stride
+            for one_kernel, one_stride in zip(kernel_size[1:], stride[1:])
+        ]
         self.padding = ()
         for pad_size in padding_sizes[::-1]:
             self.padding += (pad_size // 2 + pad_size % 2, pad_size // 2)
@@ -436,9 +480,13 @@ class Emu3VQVAESpatialNorm(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor, quant_states: torch.Tensor):
-        quant_states = F.interpolate(quant_states, size=hidden_states.shape[-2:], mode="nearest")
+        quant_states = F.interpolate(
+            quant_states, size=hidden_states.shape[-2:], mode="nearest"
+        )
         hidden_states = self.norm_layer(hidden_states)
-        hidden_states = hidden_states * self.conv_y(quant_states) + self.conv_b(quant_states)
+        hidden_states = hidden_states * self.conv_y(quant_states) + self.conv_b(
+            quant_states
+        )
         return hidden_states
 
 
@@ -458,9 +506,17 @@ class Emu3VQVAETemporalUpsample(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, channels, temporal, height, width = hidden_states.shape
-        hidden_states = hidden_states.permute(0, 1, 3, 4, 2).contiguous().view(batch_size, -1, temporal)
+        hidden_states = (
+            hidden_states.permute(0, 1, 3, 4, 2)
+            .contiguous()
+            .view(batch_size, -1, temporal)
+        )
         hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
-        hidden_states = hidden_states.view(batch_size, channels, height, width, -1).permute(0, 1, 4, 2, 3).contiguous()
+        hidden_states = (
+            hidden_states.view(batch_size, channels, height, width, -1)
+            .permute(0, 1, 4, 2, 3)
+            .contiguous()
+        )
         hidden_states = self.conv(hidden_states)
         return hidden_states
 
@@ -547,8 +603,12 @@ class Emu3VQVAEResnetBlock(nn.Module):
         self.quant_channels = quant_channels
 
         if quant_channels is None:
-            self.norm1 = nn.GroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
-            self.norm2 = nn.GroupNorm(num_channels=out_channels, num_groups=32, eps=1e-6, affine=True)
+            self.norm1 = nn.GroupNorm(
+                num_channels=in_channels, num_groups=32, eps=1e-6, affine=True
+            )
+            self.norm2 = nn.GroupNorm(
+                num_channels=out_channels, num_groups=32, eps=1e-6, affine=True
+            )
         else:
             self.norm1 = Emu3VQVAESpatialNorm(quant_channels, in_channels)
             self.norm2 = Emu3VQVAESpatialNorm(quant_channels, out_channels)
@@ -578,7 +638,9 @@ class Emu3VQVAEResnetBlock(nn.Module):
                 padding=0,
             )
 
-    def forward(self, hidden_states: torch.Tensor, quant_channels: Optional[torch.Tensor] = None):
+    def forward(
+        self, hidden_states: torch.Tensor, quant_channels: Optional[torch.Tensor] = None
+    ):
         norm_args = () if self.quant_channels is None else (quant_channels,)
 
         residual = hidden_states
@@ -632,12 +694,20 @@ class Emu3VQVAEAttentionBlock(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            batch_size, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            batch_size, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            batch_size, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         k_v_seq_len = key_states.shape[-2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
+        attn_weights = (
+            torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
+        )
 
         if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
             raise ValueError(
@@ -653,8 +723,12 @@ class Emu3VQVAEAttentionBlock(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -696,7 +770,9 @@ class Emu3VQVAEMiddleBlock(nn.Module):
         )
         self.attn_1 = Emu3VQVAEAttentionBlock(config)
         if quant_channels is None:
-            self.attn_norm = Emu3VQVAEGroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
+            self.attn_norm = Emu3VQVAEGroupNorm(
+                num_channels=in_channels, num_groups=32, eps=1e-6, affine=True
+            )
         else:
             self.attn_norm = Emu3VQVAESpatialNorm(quant_channels, in_channels)
 
@@ -706,14 +782,20 @@ class Emu3VQVAEMiddleBlock(nn.Module):
             quant_channels=quant_channels,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None):
+    def forward(
+        self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None
+    ):
         hidden_states = self.block_1(hidden_states, quant_states)
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states, quant_states)
         batch_size, channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+        hidden_states = hidden_states.view(
+            batch_size, channels, height * width
+        ).transpose(1, 2)
         hidden_states = self.attn_1(hidden_states)[0]
-        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        hidden_states = hidden_states.reshape(
+            batch_size, height, width, channels
+        ).permute(0, 3, 1, 2)
         hidden_states = residual + hidden_states
         hidden_states = self.block_2(hidden_states, quant_states)
         return hidden_states
@@ -745,9 +827,16 @@ class Emu3VQVAEDownBlock(nn.Module):
                     )
                 )
                 block_in = block_out
-                if config.attn_resolutions is not None and i_level in config.attn_resolutions:
+                if (
+                    config.attn_resolutions is not None
+                    and i_level in config.attn_resolutions
+                ):
                     attn.append(Emu3VQVAEAttentionBlock(config))
-                    attn_norms.append(nn.GroupNorm(num_channels=block_in, num_groups=32, eps=1e-6, affine=True))
+                    attn_norms.append(
+                        nn.GroupNorm(
+                            num_channels=block_in, num_groups=32, eps=1e-6, affine=True
+                        )
+                    )
 
             down = nn.Module()
             down.block = block
@@ -766,10 +855,14 @@ class Emu3VQVAEDownBlock(nn.Module):
                     hidden_states = blocks.attn_norms[i_block](hidden_states)
 
                     batch_size, channels, height, width = hidden_states.shape
-                    hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+                    hidden_states = hidden_states.view(
+                        batch_size, channels, height * width
+                    ).transpose(1, 2)
                     hidden_states = blocks.attn[i_block](hidden_states)[0]
 
-                    hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+                    hidden_states = hidden_states.reshape(
+                        batch_size, height, width, channels
+                    ).permute(0, 3, 1, 2)
                     hidden_states = residual + hidden_states
 
             if i_level != self.num_resolutions - 1:
@@ -816,19 +909,27 @@ class Emu3VQVAEUpBlock(nn.Module):
 
             self.up.insert(0, up)
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor):
+    def forward(
+        self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor
+    ):
         for i_level, blocks in enumerate(self.up[::-1]):
             for i_block in range(self.num_res_blocks + 1):
                 hidden_states = blocks.block[i_block](hidden_states, quant_states)
                 if len(blocks.attn) > 0:
                     residual = hidden_states
-                    hidden_states = blocks.attn_norms[i_block](hidden_states, quant_states)
+                    hidden_states = blocks.attn_norms[i_block](
+                        hidden_states, quant_states
+                    )
 
                     batch_size, channels, height, width = hidden_states.shape
-                    hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+                    hidden_states = hidden_states.view(
+                        batch_size, channels, height * width
+                    ).transpose(1, 2)
                     hidden_states = blocks.attn[i_block](hidden_states)[0]
 
-                    hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+                    hidden_states = hidden_states.reshape(
+                        batch_size, height, width, channels
+                    ).permute(0, 3, 1, 2)
                     hidden_states = residual + hidden_states
             if i_level != len(self.up) - 1:
                 hidden_states = blocks.upsample(hidden_states)
@@ -848,11 +949,15 @@ class Emu3VQVAEEncoder(nn.Module):
         out_channels = 2 * latent_channels if double_latent else latent_channels
         block_in = base_channels * channel_multiplier[-1]
 
-        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
+        self.conv_in = torch.nn.Conv2d(
+            in_channels, base_channels, kernel_size=3, stride=1, padding=1
+        )
         self.down_block = Emu3VQVAEDownBlock(config)
         self.middle_block = Emu3VQVAEMiddleBlock(config, block_in)
 
-        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.norm_out = torch.nn.GroupNorm(
+            num_groups=32, num_channels=block_in, eps=1e-6, affine=True
+        )
         self.conv_out = torch.nn.Conv2d(
             block_in,
             out_channels,
@@ -890,7 +995,9 @@ class Emu3VQVAEEncoder(nn.Module):
         hidden_states *= torch.sigmoid(hidden_states)
         hidden_states = self.conv_out(hidden_states)
 
-        hidden_states = hidden_states.reshape(-1, temporal_dim, *hidden_states.shape[1:])
+        hidden_states = hidden_states.reshape(
+            -1, temporal_dim, *hidden_states.shape[1:]
+        )
         hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
 
         # temporal convs
@@ -922,7 +1029,9 @@ class Emu3VQVAEDecoder(nn.Module):
         temp_upsample_block_num = int(math.log2(config.temporal_downsample_factor))
         self.time_conv = nn.ModuleList()
         for i in range(temp_upsample_block_num):
-            conv = Emu3VQVAETemporalUpsample(config.latent_channels, config.latent_channels)
+            conv = Emu3VQVAETemporalUpsample(
+                config.latent_channels, config.latent_channels
+            )
             self.time_conv.append(conv)
 
         self.conv_in = nn.Conv2d(
@@ -933,7 +1042,9 @@ class Emu3VQVAEDecoder(nn.Module):
             padding=1,
         )
 
-        self.middle_block = Emu3VQVAEMiddleBlock(config, block_in, quant_channels=quant_channels)
+        self.middle_block = Emu3VQVAEMiddleBlock(
+            config, block_in, quant_channels=quant_channels
+        )
         self.up_block = Emu3VQVAEUpBlock(config)
 
         block_in = config.base_channels * config.channel_multiplier[0]
@@ -1035,10 +1146,16 @@ class Emu3VQVAE(PreTrainedModel):
         self.vision_spatial_factor = 2 ** (len(config.channel_multiplier) - 1)
 
         self.quant_conv = Emu3VQVAEConv3d(
-            config.latent_channels, config.embed_dim, kernel_size=(3, 1, 1), stride=(1, 1, 1)
+            config.latent_channels,
+            config.embed_dim,
+            kernel_size=(3, 1, 1),
+            stride=(1, 1, 1),
         )
         self.post_quant_conv = Emu3VQVAEConv3d(
-            config.embed_dim, config.latent_channels, kernel_size=(3, 1, 1), stride=(1, 1, 1)
+            config.embed_dim,
+            config.latent_channels,
+            kernel_size=(3, 1, 1),
+            stride=(1, 1, 1),
         )
         self.spatial_scale_factor = 2 ** (len(config.channel_multiplier) - 1)
         self.eval()  # Emu3's VQ model is frozen
@@ -1067,7 +1184,10 @@ class Emu3VQVAE(PreTrainedModel):
         image_tokens = codes.squeeze(1) if is_image else codes
 
         image_tokens = [
-            single_image[: int(size[0] / self.vision_spatial_factor), : int(size[1] / self.vision_spatial_factor)]
+            single_image[
+                : int(size[0] / self.vision_spatial_factor),
+                : int(size[1] / self.vision_spatial_factor),
+            ]
             for single_image, size in zip(image_tokens, image_sizes)
         ]
 
@@ -1082,7 +1202,11 @@ class Emu3VQVAE(PreTrainedModel):
         quant = self.quantize.embedding(hidden_states.flatten())
 
         channels = quant.shape[-1]
-        quant = quant.view(batch_size, temporal, height, width, channels).permute(0, 4, 1, 2, 3).contiguous()
+        quant = (
+            quant.view(batch_size, temporal, height, width, channels)
+            .permute(0, 4, 1, 2, 3)
+            .contiguous()
+        )
         post_quant = self.post_quant_conv(quant)
 
         quant = quant.permute(0, 2, 1, 3, 4)
@@ -1111,15 +1235,29 @@ class Emu3ImageVocabularyMapping:
 
     @cached_property
     def image_tokens(self):
-        return sorted([val for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
+        return sorted(
+            [
+                val
+                for name, val in self.vocab_map.items()
+                if name.startswith("<|visual token")
+            ]
+        )
 
     @cached_property
     def image_tokens_str(self):
-        return sorted([name for name, val in self.vocab_map.items() if name.startswith("<|visual token")])
+        return sorted(
+            [
+                name
+                for name, val in self.vocab_map.items()
+                if name.startswith("<|visual token")
+            ]
+        )
 
     @cached_property
     def img2bpe(self):
-        return {int(token[-8:-2]): self.vocab_map[token] for token in self.image_tokens_str}
+        return {
+            int(token[-8:-2]): self.vocab_map[token] for token in self.image_tokens_str
+        }
 
     @cached_property
     def bpe2img(self):
@@ -1141,7 +1279,9 @@ class Emu3ImageVocabularyMapping:
 
     def convert_img2bpe(self, img_batch: List[torch.Tensor]) -> torch.Tensor:
         device = img_batch.device
-        eol_row = torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
+        eol_row = (
+            torch.ones((img_batch.shape[0], 1), dtype=torch.int) * self.eol_token_id
+        )
         img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
         img_tokens = torch.cat([img_tokens, eol_row], dim=-1)
         return img_tokens.to(device)
@@ -1209,7 +1349,9 @@ class Emu3RotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -1230,11 +1372,18 @@ class Emu3RotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -1247,13 +1396,21 @@ class Emu3RotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -1353,9 +1510,14 @@ class Emu3TextModel(Emu3PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
         self.layers = nn.ModuleList(
-            [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Emu3DecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Emu3RotaryEmbedding(config=config)
@@ -1385,15 +1547,25 @@ class Emu3TextModel(Emu3PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1408,16 +1580,24 @@ class Emu3TextModel(Emu3PreTrainedModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         hidden_states = inputs_embeds
@@ -1498,11 +1678,17 @@ class Emu3TextModel(Emu3PreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1543,7 +1729,9 @@ class Emu3TextModel(Emu3PreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -1586,22 +1774,29 @@ class Emu3TextModel(Emu3PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -1644,7 +1839,9 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig")
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig"
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1692,11 +1889,19 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1715,12 +1920,21 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1833,7 +2047,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+    def get_image_tokens(
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor
+    ):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -1846,12 +2062,17 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
                 The sizes of the images in the batch, being (height, width) for each image.
         """
         image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
-        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
+        bpe_tokens_list = [
+            self.vocabulary_mapping.convert_img2bpe(tokens).flatten()
+            for tokens in image_tokens_list
+        ]
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
 
     @torch.no_grad
-    def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
+    def decode_image_tokens(
+        self, image_tokens: torch.LongTensor, height: int, width: int
+    ):
         """
         Decodes generated image tokens from language model to continuous pixel values
         with VQGAN module via upsampling.
@@ -1870,7 +2091,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return image
 
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1938,11 +2161,19 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -2009,4 +2240,10 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Emu3ForConditionalGeneration", "Emu3ForCausalLM", "Emu3TextModel", "Emu3PreTrainedModel", "Emu3VQVAE"]
+__all__ = [
+    "Emu3ForConditionalGeneration",
+    "Emu3ForCausalLM",
+    "Emu3TextModel",
+    "Emu3PreTrainedModel",
+    "Emu3VQVAE",
+]

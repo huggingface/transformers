@@ -4,15 +4,17 @@ from typing import Dict
 
 import numpy as np
 
-from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import (ExplicitEnum, add_end_docstrings, is_tf_available,
+                     is_torch_available)
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
-
 if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+    from ..models.auto.modeling_tf_auto import \
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 
 def sigmoid(_outputs):
@@ -90,13 +92,22 @@ class TextClassificationPipeline(Pipeline):
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
         )
 
-    def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
+    def _sanitize_parameters(
+        self,
+        return_all_scores=None,
+        function_to_apply=None,
+        top_k="",
+        **tokenizer_kwargs,
+    ):
         # Using "" as default argument because we're going to use `top_k=None` in user code to declare
         # "No top_k"
         preprocess_params = tokenizer_kwargs
 
         postprocess_params = {}
-        if hasattr(self.model.config, "return_all_scores") and return_all_scores is None:
+        if (
+            hasattr(self.model.config, "return_all_scores")
+            and return_all_scores is None
+        ):
             return_all_scores = self.model.config.return_all_scores
 
         if isinstance(top_k, int) or top_k is None:
@@ -168,11 +179,21 @@ class TextClassificationPipeline(Pipeline):
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
         if isinstance(inputs, dict):
-            return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)
-        elif isinstance(inputs, list) and len(inputs) == 1 and isinstance(inputs[0], list) and len(inputs[0]) == 2:
+            return self.tokenizer(
+                **inputs, return_tensors=return_tensors, **tokenizer_kwargs
+            )
+        elif (
+            isinstance(inputs, list)
+            and len(inputs) == 1
+            and isinstance(inputs[0], list)
+            and len(inputs[0]) == 2
+        ):
             # It used to be valid to use a list of list of list for text pairs, keeping this path for BC
             return self.tokenizer(
-                text=inputs[0][0], text_pair=inputs[0][1], return_tensors=return_tensors, **tokenizer_kwargs
+                text=inputs[0][0],
+                text_pair=inputs[0][1],
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
             )
         elif isinstance(inputs, list):
             # This is likely an invalid usage of the pipeline attempting to pass text pairs.
@@ -184,7 +205,9 @@ class TextClassificationPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
-        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        model_forward = (
+            self.model.forward if self.framework == "pt" else self.model.call
+        )
         if "use_cache" in inspect.signature(model_forward).parameters.keys():
             model_inputs["use_cache"] = False
         return self.model(**model_inputs)
@@ -197,11 +220,20 @@ class TextClassificationPipeline(Pipeline):
         if function_to_apply is None:
             if self.model.config.problem_type == "regression":
                 function_to_apply = ClassificationFunction.NONE
-            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
+            elif (
+                self.model.config.problem_type == "multi_label_classification"
+                or self.model.config.num_labels == 1
+            ):
                 function_to_apply = ClassificationFunction.SIGMOID
-            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
+            elif (
+                self.model.config.problem_type == "single_label_classification"
+                or self.model.config.num_labels > 1
+            ):
                 function_to_apply = ClassificationFunction.SOFTMAX
-            elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
+            elif (
+                hasattr(self.model.config, "function_to_apply")
+                and function_to_apply is None
+            ):
                 function_to_apply = self.model.config.function_to_apply
             else:
                 function_to_apply = ClassificationFunction.NONE
@@ -221,13 +253,19 @@ class TextClassificationPipeline(Pipeline):
         elif function_to_apply == ClassificationFunction.NONE:
             scores = outputs
         else:
-            raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
+            raise ValueError(
+                f"Unrecognized `function_to_apply` argument: {function_to_apply}"
+            )
 
         if top_k == 1 and _legacy:
-            return {"label": self.model.config.id2label[scores.argmax().item()], "score": scores.max().item()}
+            return {
+                "label": self.model.config.id2label[scores.argmax().item()],
+                "score": scores.max().item(),
+            }
 
         dict_scores = [
-            {"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(scores)
+            {"label": self.model.config.id2label[i], "score": score.item()}
+            for i, score in enumerate(scores)
         ]
         if not _legacy:
             dict_scores.sort(key=lambda x: x["score"], reverse=True)

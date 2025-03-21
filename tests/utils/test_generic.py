@@ -19,18 +19,10 @@ import warnings
 import numpy as np
 
 from transformers.testing_utils import require_flax, require_tf, require_torch
-from transformers.utils import (
-    expand_dims,
-    filter_out_non_signature_kwargs,
-    flatten_dict,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-    reshape,
-    squeeze,
-    transpose,
-)
-
+from transformers.utils import (expand_dims, filter_out_non_signature_kwargs,
+                                flatten_dict, is_flax_available,
+                                is_tf_available, is_torch_available, reshape,
+                                squeeze, transpose)
 
 if is_flax_available():
     import jax.numpy as jnp
@@ -46,9 +38,24 @@ class GenericTester(unittest.TestCase):
     def test_flatten_dict(self):
         input_dict = {
             "task_specific_params": {
-                "summarization": {"length_penalty": 1.0, "max_length": 128, "min_length": 12, "num_beams": 4},
-                "summarization_cnn": {"length_penalty": 2.0, "max_length": 142, "min_length": 56, "num_beams": 4},
-                "summarization_xsum": {"length_penalty": 1.0, "max_length": 62, "min_length": 11, "num_beams": 6},
+                "summarization": {
+                    "length_penalty": 1.0,
+                    "max_length": 128,
+                    "min_length": 12,
+                    "num_beams": 4,
+                },
+                "summarization_cnn": {
+                    "length_penalty": 2.0,
+                    "max_length": 142,
+                    "min_length": 56,
+                    "num_beams": 4,
+                },
+                "summarization_xsum": {
+                    "length_penalty": 1.0,
+                    "max_length": 62,
+                    "min_length": 11,
+                    "num_beams": 6,
+                },
             }
         }
         expected_dict = {
@@ -73,7 +80,9 @@ class GenericTester(unittest.TestCase):
         self.assertTrue(np.allclose(transpose(x), x.transpose()))
 
         x = np.random.randn(3, 4, 5)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), x.transpose((1, 2, 0))))
+        self.assertTrue(
+            np.allclose(transpose(x, axes=(1, 2, 0)), x.transpose((1, 2, 0)))
+        )
 
     @require_torch
     def test_transpose_torch(self):
@@ -83,7 +92,11 @@ class GenericTester(unittest.TestCase):
 
         x = np.random.randn(3, 4, 5)
         t = torch.tensor(x)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()))
+        self.assertTrue(
+            np.allclose(
+                transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()
+            )
+        )
 
     @require_tf
     def test_transpose_tf(self):
@@ -93,7 +106,11 @@ class GenericTester(unittest.TestCase):
 
         x = np.random.randn(3, 4, 5)
         t = tf.constant(x)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()))
+        self.assertTrue(
+            np.allclose(
+                transpose(x, axes=(1, 2, 0)), transpose(t, axes=(1, 2, 0)).numpy()
+            )
+        )
 
     @require_flax
     def test_transpose_flax(self):
@@ -103,7 +120,11 @@ class GenericTester(unittest.TestCase):
 
         x = np.random.randn(3, 4, 5)
         t = jnp.array(x)
-        self.assertTrue(np.allclose(transpose(x, axes=(1, 2, 0)), np.asarray(transpose(t, axes=(1, 2, 0)))))
+        self.assertTrue(
+            np.allclose(
+                transpose(x, axes=(1, 2, 0)), np.asarray(transpose(t, axes=(1, 2, 0)))
+            )
+        )
 
     def test_reshape_numpy(self):
         x = np.random.randn(3, 4)
@@ -140,7 +161,9 @@ class GenericTester(unittest.TestCase):
 
         x = np.random.randn(3, 4, 5)
         t = jnp.array(x)
-        self.assertTrue(np.allclose(reshape(x, (12, 5)), np.asarray(reshape(t, (12, 5)))))
+        self.assertTrue(
+            np.allclose(reshape(x, (12, 5)), np.asarray(reshape(t, (12, 5))))
+        )
 
     def test_squeeze_numpy(self):
         x = np.random.randn(1, 3, 4)
@@ -187,19 +210,25 @@ class GenericTester(unittest.TestCase):
     def test_expand_dims_torch(self):
         x = np.random.randn(3, 4)
         t = torch.tensor(x)
-        self.assertTrue(np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy()))
+        self.assertTrue(
+            np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy())
+        )
 
     @require_tf
     def test_expand_dims_tf(self):
         x = np.random.randn(3, 4)
         t = tf.constant(x)
-        self.assertTrue(np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy()))
+        self.assertTrue(
+            np.allclose(expand_dims(x, axis=1), expand_dims(t, axis=1).numpy())
+        )
 
     @require_flax
     def test_expand_dims_flax(self):
         x = np.random.randn(3, 4)
         t = jnp.array(x)
-        self.assertTrue(np.allclose(expand_dims(x, axis=1), np.asarray(expand_dims(t, axis=1))))
+        self.assertTrue(
+            np.allclose(expand_dims(x, axis=1), np.asarray(expand_dims(t, axis=1)))
+        )
 
 
 class ValidationDecoratorTester(unittest.TestCase):
@@ -246,7 +275,11 @@ class ValidationDecoratorTester(unittest.TestCase):
             self.assertEqual(kwargs, {"extra_arg": 2, "extra_arg2": 3})
 
             # Check that no warnings were raised
-            self.assertEqual(len(raised_warnings), 0, f"Warning raised: {[w.message for w in raised_warnings]}")
+            self.assertEqual(
+                len(raised_warnings),
+                0,
+                f"Warning raised: {[w.message for w in raised_warnings]}",
+            )
 
     def test_cases_with_warnings(self):
         @filter_out_non_signature_kwargs()

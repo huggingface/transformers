@@ -18,7 +18,8 @@ import os
 import unittest
 
 from transformers import MPNetTokenizerFast
-from transformers.models.mpnet.tokenization_mpnet import VOCAB_FILES_NAMES, MPNetTokenizer
+from transformers.models.mpnet.tokenization_mpnet import (VOCAB_FILES_NAMES,
+                                                          MPNetTokenizer)
 from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -66,7 +67,9 @@ class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11]
+        )
 
     @slow
     def test_sequence_builders(self):

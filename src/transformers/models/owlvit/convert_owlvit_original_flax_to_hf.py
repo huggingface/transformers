@@ -26,15 +26,9 @@ from clip.model import CLIP
 from flax.training import checkpoints
 from huggingface_hub import Repository
 
-from transformers import (
-    CLIPTokenizer,
-    OwlViTConfig,
-    OwlViTForObjectDetection,
-    OwlViTImageProcessor,
-    OwlViTModel,
-    OwlViTProcessor,
-)
-
+from transformers import (CLIPTokenizer, OwlViTConfig,
+                          OwlViTForObjectDetection, OwlViTImageProcessor,
+                          OwlViTModel, OwlViTProcessor)
 
 CONFIGS = {
     "vit_b32": {
@@ -90,7 +84,9 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 def to_f32(params):
-    return jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params)
+    return jax.tree_util.tree_map(
+        lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, params
+    )
 
 
 def copy_attn_layer(hf_attn_layer, pt_attn_layer):
@@ -169,16 +165,24 @@ def copy_vision_model_and_projection(hf_model, pt_model):
     copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
 
     # copy embeds
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
+    hf_model.vision_model.embeddings.patch_embedding.weight.data = (
+        pt_model.visual.conv1.weight.data
+    )
     hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
+    hf_model.vision_model.embeddings.position_embedding.weight.data = (
+        pt_model.visual.positional_embedding.data
+    )
 
     # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
+    copy_layers(
+        hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks
+    )
 
 
 def copy_class_merge_token(hf_model, flax_params):
-    flax_class_token_params = flatten_nested_dict(flax_params["backbone"]["merged_class_token"])
+    flax_class_token_params = flatten_nested_dict(
+        flax_params["backbone"]["merged_class_token"]
+    )
 
     weight = torch.from_numpy(flax_class_token_params["scale"])
     bias = torch.from_numpy(flax_class_token_params["bias"])
@@ -229,7 +233,9 @@ def copy_flax_attn_params(hf_backbone, flax_attn_params):
         if k.startswith("transformer"):
             torch_key = k.replace("transformer.resblocks", "text_model.encoder.layers")
         else:
-            torch_key = k.replace("visual.transformer.resblocks", "vision_model.encoder.layers")
+            torch_key = k.replace(
+                "visual.transformer.resblocks", "vision_model.encoder.layers"
+            )
 
         torch_key = torch_key.replace("attn", "self_attn")
         torch_key = torch_key.replace("key", "k_proj")
@@ -266,7 +272,9 @@ def _convert_attn_layers(params):
 
             processed_attn_layers.append(base)
             dim = params[base + "out.weight"].shape[-1]
-            new_params[base + "out_proj.weight"] = params[base + "out.weight"].reshape(dim, dim).T
+            new_params[base + "out_proj.weight"] = (
+                params[base + "out.weight"].reshape(dim, dim).T
+            )
             new_params[base + "out_proj.bias"] = params[base + "out.bias"]
         else:
             new_params[k] = v
@@ -283,7 +291,9 @@ def convert_clip_backbone(flax_params, torch_config):
 
     for flax_key, v in flax_clip_params.items():
         torch_key = flax_key.replace("/", ".")
-        torch_key = torch_key.replace("text.token_embedding.embedding", "token_embedding.kernel")
+        torch_key = torch_key.replace(
+            "text.token_embedding.embedding", "token_embedding.kernel"
+        )
 
         if (
             torch_key.startswith("text.transformer")
@@ -323,11 +333,15 @@ def convert_clip_backbone(flax_params, torch_config):
 
 
 @torch.no_grad()
-def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dump_folder_path, config_path=None):
+def convert_owlvit_checkpoint(
+    pt_backbone, flax_params, attn_params, pytorch_dump_folder_path, config_path=None
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    repo = Repository(pytorch_dump_folder_path, clone_from=f"google/{pytorch_dump_folder_path}")
+    repo = Repository(
+        pytorch_dump_folder_path, clone_from=f"google/{pytorch_dump_folder_path}"
+    )
     repo.git_pull()
 
     if config_path is not None:
@@ -355,7 +369,9 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
         size=config.vision_config.image_size, crop_size=config.vision_config.image_size
     )
     # Initialize tokenizer
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
+    tokenizer = CLIPTokenizer.from_pretrained(
+        "openai/clip-vit-base-patch32", pad_token="!", model_max_length=16
+    )
 
     # Initialize processor
     processor = OwlViTProcessor(image_processor=image_processor, tokenizer=tokenizer)
@@ -378,11 +394,24 @@ if __name__ == "__main__":
         help="OWL-ViT model name [clip_b16, clip_b32, clip_l14].",
     )
     parser.add_argument(
-        "--owlvit_checkpoint", default=None, type=str, required=True, help="Path to flax model checkpoint."
+        "--owlvit_checkpoint",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to flax model checkpoint.",
     )
-    parser.add_argument("--hf_config", default=None, type=str, required=True, help="Path to HF model config.")
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="hf_model", type=str, help="Path to the output PyTorch model."
+        "--hf_config",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to HF model config.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default="hf_model",
+        type=str,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
 
@@ -396,11 +425,19 @@ if __name__ == "__main__":
         torch_config = CONFIGS["vit_l14"]
 
     # Load from checkpoint and convert params to float-32
-    variables = checkpoints.restore_checkpoint(args.owlvit_checkpoint, target=None)["optimizer"]["target"]
-    flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
+    variables = checkpoints.restore_checkpoint(args.owlvit_checkpoint, target=None)[
+        "optimizer"
+    ]["target"]
+    flax_params = jax.tree_util.tree_map(
+        lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables
+    )
     del variables
 
     # Convert CLIP backbone
-    pt_backbone_params, clip_pt, attn_params = convert_clip_backbone(flax_params, torch_config)
+    pt_backbone_params, clip_pt, attn_params = convert_clip_backbone(
+        flax_params, torch_config
+    )
 
-    convert_owlvit_checkpoint(clip_pt, flax_params, attn_params, args.pytorch_dump_folder_path, args.hf_config)
+    convert_owlvit_checkpoint(
+        clip_pt, flax_params, attn_params, args.pytorch_dump_folder_path, args.hf_config
+    )

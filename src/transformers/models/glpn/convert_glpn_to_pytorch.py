@@ -25,7 +25,6 @@ from PIL import Image
 from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNImageProcessor
 from transformers.utils import logging
 
-
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -45,7 +44,9 @@ def rename_keys(state_dict):
             key = key.replace("norm", "layer_norm")
         if "glpn.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
-            idx = key[key.find("glpn.encoder.layer_norm") + len("glpn.encoder.layer_norm")]
+            idx = key[
+                key.find("glpn.encoder.layer_norm") + len("glpn.encoder.layer_norm")
+            ]
             key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx)-1}")
         if "layer_norm1" in key:
             key = key.replace("layer_norm1", "layer_norm_1")
@@ -100,17 +101,25 @@ def read_in_k_v(state_dict, config):
     for i in range(config.num_encoder_blocks):
         for j in range(config.depths[i]):
             # read in weights + bias of keys and values (which is a single matrix in the original implementation)
-            kv_weight = state_dict.pop(f"glpn.encoder.block.{i}.{j}.attention.self.kv.weight")
-            kv_bias = state_dict.pop(f"glpn.encoder.block.{i}.{j}.attention.self.kv.bias")
+            kv_weight = state_dict.pop(
+                f"glpn.encoder.block.{i}.{j}.attention.self.kv.weight"
+            )
+            kv_bias = state_dict.pop(
+                f"glpn.encoder.block.{i}.{j}.attention.self.kv.bias"
+            )
             # next, add keys and values (in that order) to the state dict
-            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.key.weight"] = kv_weight[
-                : config.hidden_sizes[i], :
+            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.key.weight"] = (
+                kv_weight[: config.hidden_sizes[i], :]
+            )
+            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.key.bias"] = kv_bias[
+                : config.hidden_sizes[i]
             ]
-            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.key.bias"] = kv_bias[: config.hidden_sizes[i]]
-            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.weight"] = kv_weight[
-                config.hidden_sizes[i] :, :
-            ]
-            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.bias"] = kv_bias[config.hidden_sizes[i] :]
+            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.weight"] = (
+                kv_weight[config.hidden_sizes[i] :, :]
+            )
+            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.bias"] = (
+                kv_bias[config.hidden_sizes[i] :]
+            )
 
 
 # We will verify our results on a COCO image
@@ -122,13 +131,17 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=False, model_name=None):
+def convert_glpn_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, push_to_hub=False, model_name=None
+):
     """
     Copy/paste/tweak model's weights to our GLPN structure.
     """
 
     # load GLPN configuration (Segformer-B4 size)
-    config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=64, depths=[3, 8, 27, 3])
+    config = GLPNConfig(
+        hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=64, depths=[3, 8, 27, 3]
+    )
 
     # load image processor (only resize + rescale)
     image_processor = GLPNImageProcessor()
@@ -161,11 +174,19 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     if model_name is not None:
         if "nyu" in model_name:
             expected_slice = torch.tensor(
-                [[4.4147, 4.0873, 4.0673], [3.7890, 3.2881, 3.1525], [3.7674, 3.5423, 3.4913]]
+                [
+                    [4.4147, 4.0873, 4.0673],
+                    [3.7890, 3.2881, 3.1525],
+                    [3.7674, 3.5423, 3.4913],
+                ]
             )
         elif "kitti" in model_name:
             expected_slice = torch.tensor(
-                [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
+                [
+                    [3.4291, 2.7865, 2.5151],
+                    [3.2841, 2.7021, 2.3502],
+                    [3.1147, 2.4625, 2.2481],
+                ]
             )
         else:
             raise ValueError(f"Unknown model name: {model_name}")
@@ -203,10 +224,15 @@ if __name__ == "__main__":
         help="Path to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether to upload the model to the HuggingFace hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to upload the model to the HuggingFace hub.",
     )
     parser.add_argument(
         "--model_name",
@@ -215,4 +241,9 @@ if __name__ == "__main__":
         help="Name of the model in case you're pushing to the hub.",
     )
     args = parser.parse_args()
-    convert_glpn_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.model_name)
+    convert_glpn_checkpoint(
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.model_name,
+    )

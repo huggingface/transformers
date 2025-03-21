@@ -23,16 +23,14 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPoolingAndNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
+from ...file_utils import (add_code_sample_docstrings, add_start_docstrings,
+                           add_start_docstrings_to_model_forward)
+from ...modeling_outputs import (BaseModelOutputWithNoAttention,
+                                 BaseModelOutputWithPoolingAndNoAttention,
+                                 ImageClassifierOutputWithNoAttention)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_regnet import RegNetConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -69,7 +67,9 @@ class RegNetConvLayer(nn.Module):
             bias=False,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.activation = (
+            ACT2FN[activation] if activation is not None else nn.Identity()
+        )
 
     def forward(self, hidden_state):
         hidden_state = self.convolution(hidden_state)
@@ -86,7 +86,11 @@ class RegNetEmbeddings(nn.Module):
     def __init__(self, config: RegNetConfig):
         super().__init__()
         self.embedder = RegNetConvLayer(
-            config.num_channels, config.embedding_size, kernel_size=3, stride=2, activation=config.hidden_act
+            config.num_channels,
+            config.embedding_size,
+            kernel_size=3,
+            stride=2,
+            activation=config.hidden_act,
         )
         self.num_channels = config.num_channels
 
@@ -109,7 +113,9 @@ class RegNetShortCut(nn.Module):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+        self.convolution = nn.Conv2d(
+            in_channels, out_channels, kernel_size=1, stride=stride, bias=False
+        )
         self.normalization = nn.BatchNorm2d(out_channels)
 
     def forward(self, input: Tensor) -> Tensor:
@@ -147,16 +153,28 @@ class RegNetXLayer(nn.Module):
     RegNet's layer composed by three `3x3` convolutions, same as a ResNet bottleneck layer with reduction = 1.
     """
 
-    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1):
+    def __init__(
+        self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1
+    ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            RegNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            RegNetShortCut(in_channels, out_channels, stride=stride)
+            if should_apply_shortcut
+            else nn.Identity()
         )
         self.layer = nn.Sequential(
-            RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
-            RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
+            RegNetConvLayer(
+                in_channels, out_channels, kernel_size=1, activation=config.hidden_act
+            ),
+            RegNetConvLayer(
+                out_channels,
+                out_channels,
+                stride=stride,
+                groups=groups,
+                activation=config.hidden_act,
+            ),
             RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
         self.activation = ACT2FN[config.hidden_act]
@@ -175,16 +193,28 @@ class RegNetYLayer(nn.Module):
     RegNet's Y layer: an X layer with Squeeze and Excitation.
     """
 
-    def __init__(self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1):
+    def __init__(
+        self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 1
+    ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            RegNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            RegNetShortCut(in_channels, out_channels, stride=stride)
+            if should_apply_shortcut
+            else nn.Identity()
         )
         self.layer = nn.Sequential(
-            RegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act),
-            RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act),
+            RegNetConvLayer(
+                in_channels, out_channels, kernel_size=1, activation=config.hidden_act
+            ),
+            RegNetConvLayer(
+                out_channels,
+                out_channels,
+                stride=stride,
+                groups=groups,
+                activation=config.hidden_act,
+            ),
             RegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4))),
             RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
@@ -247,11 +277,18 @@ class RegNetEncoder(nn.Module):
             )
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
-        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(RegNetStage(config, in_channels, out_channels, depth=depth))
+        for (in_channels, out_channels), depth in zip(
+            in_out_channels, config.depths[1:]
+        ):
+            self.stages.append(
+                RegNetStage(config, in_channels, out_channels, depth=depth)
+            )
 
     def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
+        self,
+        hidden_state: Tensor,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> BaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
@@ -267,7 +304,9 @@ class RegNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state, hidden_states=hidden_states
+        )
 
 
 class RegNetPreTrainedModel(PreTrainedModel):
@@ -346,17 +385,26 @@ class RegNetModel(RegNetPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         embedding_output = self.embedder(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -389,7 +437,11 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
+            (
+                nn.Linear(config.hidden_sizes[-1], config.num_labels)
+                if config.num_labels > 0
+                else nn.Identity()
+            ),
         )
         # initialize weights and apply final processing
         self.post_init()
@@ -413,9 +465,15 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.regnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.regnet(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -427,7 +485,9 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -448,7 +508,9 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
 
 __all__ = ["RegNetForImageClassification", "RegNetModel", "RegNetPreTrainedModel"]

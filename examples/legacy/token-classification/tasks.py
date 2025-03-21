@@ -5,7 +5,6 @@ from typing import List, TextIO, Union
 from conllu import parse_incr
 from utils_ner import InputExample, Split, TokenClassificationTask
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -14,7 +13,9 @@ class NER(TokenClassificationTask):
         # in NER datasets, the last column is usually reserved for NER label
         self.label_idx = label_idx
 
-    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def read_examples_from_file(
+        self, data_dir, mode: Union[Split, str]
+    ) -> List[InputExample]:
         if isinstance(mode, Split):
             mode = mode.value
         file_path = os.path.join(data_dir, f"{mode}.txt")
@@ -26,7 +27,11 @@ class NER(TokenClassificationTask):
             for line in f:
                 if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                     if words:
-                        examples.append(InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels))
+                        examples.append(
+                            InputExample(
+                                guid=f"{mode}-{guid_index}", words=words, labels=labels
+                            )
+                        )
                         guid_index += 1
                         words = []
                         labels = []
@@ -39,10 +44,16 @@ class NER(TokenClassificationTask):
                         # Examples could have no label for mode = "test"
                         labels.append("O")
             if words:
-                examples.append(InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels))
+                examples.append(
+                    InputExample(
+                        guid=f"{mode}-{guid_index}", words=words, labels=labels
+                    )
+                )
         return examples
 
-    def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: List):
+    def write_predictions_to_file(
+        self, writer: TextIO, test_input_reader: TextIO, preds_list: List
+    ):
         example_id = 0
         for line in test_input_reader:
             if line.startswith("-DOCSTART-") or line == "" or line == "\n":
@@ -50,10 +61,15 @@ class NER(TokenClassificationTask):
                 if not preds_list[example_id]:
                     example_id += 1
             elif preds_list[example_id]:
-                output_line = line.split()[0] + " " + preds_list[example_id].pop(0) + "\n"
+                output_line = (
+                    line.split()[0] + " " + preds_list[example_id].pop(0) + "\n"
+                )
                 writer.write(output_line)
             else:
-                logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+                logger.warning(
+                    "Maximum sequence length exceeded: No prediction for '%s'.",
+                    line.split()[0],
+                )
 
     def get_labels(self, path: str) -> List[str]:
         if path:
@@ -63,7 +79,17 @@ class NER(TokenClassificationTask):
                 labels = ["O"] + labels
             return labels
         else:
-            return ["O", "B-MISC", "I-MISC", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC"]
+            return [
+                "O",
+                "B-MISC",
+                "I-MISC",
+                "B-PER",
+                "I-PER",
+                "B-ORG",
+                "I-ORG",
+                "B-LOC",
+                "I-LOC",
+            ]
 
 
 class Chunk(NER):
@@ -105,7 +131,9 @@ class Chunk(NER):
 
 
 class POS(TokenClassificationTask):
-    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def read_examples_from_file(
+        self, data_dir, mode: Union[Split, str]
+    ) -> List[InputExample]:
         if isinstance(mode, Split):
             mode = mode.value
         file_path = os.path.join(data_dir, f"{mode}.txt")
@@ -121,11 +149,17 @@ class POS(TokenClassificationTask):
                     labels.append(token["upos"])
                 assert len(words) == len(labels)
                 if words:
-                    examples.append(InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels))
+                    examples.append(
+                        InputExample(
+                            guid=f"{mode}-{guid_index}", words=words, labels=labels
+                        )
+                    )
                     guid_index += 1
         return examples
 
-    def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: List):
+    def write_predictions_to_file(
+        self, writer: TextIO, test_input_reader: TextIO, preds_list: List
+    ):
         example_id = 0
         for sentence in parse_incr(test_input_reader):
             s_p = preds_list[example_id]

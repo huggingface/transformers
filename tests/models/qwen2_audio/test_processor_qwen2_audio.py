@@ -14,7 +14,8 @@
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
+from transformers import (AutoProcessor, AutoTokenizer, Qwen2AudioProcessor,
+                          WhisperFeatureExtractor)
 from transformers.testing_utils import require_torch, require_torchaudio
 
 
@@ -35,18 +36,25 @@ class Qwen2AudioProcessorTest(unittest.TestCase):
         processor = Qwen2AudioProcessor.from_pretrained(self.checkpoint)
         feature_extractor = processor.feature_extractor
 
-        processor = Qwen2AudioProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Qwen2AudioProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2AudioProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
 
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
-        fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(
+            self.checkpoint, from_slow=True, legacy=False
+        )
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<|audio_bos|><|AUDIO|><|audio_eos|>\nWhat is it in this audio?<|im_end|><|im_start|>assistant\n"
         EXPECTED_OUTPUT = [
@@ -110,5 +118,7 @@ class Qwen2AudioProcessorTest(unittest.TestCase):
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = processor.apply_chat_template(
+            messages, add_generation_prompt=True
+        )
         self.assertEqual(expected_prompt, formatted_prompt)

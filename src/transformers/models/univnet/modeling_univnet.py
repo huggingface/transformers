@@ -21,9 +21,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_utils import ModelOutput, PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_univnet import UnivNetConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -73,8 +74,12 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         padding = (self.kernel_size - 1) // 2
 
         self.dropout = nn.Dropout(self.dropout_prob)
-        self.conv1 = nn.Conv1d(self.channels, self.channels, self.kernel_size, padding=padding, bias=True)
-        self.conv2 = nn.Conv1d(self.channels, self.channels, self.kernel_size, padding=padding, bias=True)
+        self.conv1 = nn.Conv1d(
+            self.channels, self.channels, self.kernel_size, padding=padding, bias=True
+        )
+        self.conv2 = nn.Conv1d(
+            self.channels, self.channels, self.kernel_size, padding=padding, bias=True
+        )
 
     def forward(self, hidden_states: torch.FloatTensor):
         # hidden_states should have shape (batch_size, channels, seq_length)
@@ -130,7 +135,10 @@ class UnivNetKernelPredictor(nn.Module):
         self.conv_layers = conv_layers
 
         self.kernel_channels = (
-            self.conv_in_channels * self.conv_out_channels * self.conv_kernel_size * self.conv_layers
+            self.conv_in_channels
+            * self.conv_out_channels
+            * self.conv_kernel_size
+            * self.conv_layers
         )
         self.bias_channels = self.conv_out_channels * self.conv_layers
 
@@ -143,15 +151,34 @@ class UnivNetKernelPredictor(nn.Module):
 
         padding = (self.resnet_kernel_size - 1) // 2
 
-        self.input_conv = nn.Conv1d(self.resnet_in_channels, self.resnet_hidden_channels, 5, padding=2, bias=True)
+        self.input_conv = nn.Conv1d(
+            self.resnet_in_channels,
+            self.resnet_hidden_channels,
+            5,
+            padding=2,
+            bias=True,
+        )
 
-        self.resblocks = nn.ModuleList([UnivNetKernelPredictorResidualBlock(config) for _ in range(self.num_blocks)])
+        self.resblocks = nn.ModuleList(
+            [
+                UnivNetKernelPredictorResidualBlock(config)
+                for _ in range(self.num_blocks)
+            ]
+        )
 
         self.kernel_conv = nn.Conv1d(
-            self.resnet_hidden_channels, self.kernel_channels, self.resnet_kernel_size, padding=padding, bias=True
+            self.resnet_hidden_channels,
+            self.kernel_channels,
+            self.resnet_kernel_size,
+            padding=padding,
+            bias=True,
         )
         self.bias_conv = nn.Conv1d(
-            self.resnet_hidden_channels, self.bias_channels, self.resnet_kernel_size, padding=padding, bias=True
+            self.resnet_hidden_channels,
+            self.bias_channels,
+            self.resnet_kernel_size,
+            padding=padding,
+            bias=True,
         )
 
     def forward(self, spectrogram: torch.FloatTensor):
@@ -259,11 +286,13 @@ class UnivNetLvcResidualBlock(nn.Module):
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         hidden_states = self.conv(hidden_states)
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
-        hidden_states = self.location_variable_convolution(hidden_states, kernel, bias, hop_size=hop_size)
-        # Gated activation unit
-        hidden_states = torch.sigmoid(hidden_states[:, : self.hidden_channels, :]) * torch.tanh(
-            hidden_states[:, self.hidden_channels :, :]
+        hidden_states = self.location_variable_convolution(
+            hidden_states, kernel, bias, hop_size=hop_size
         )
+        # Gated activation unit
+        hidden_states = torch.sigmoid(
+            hidden_states[:, : self.hidden_channels, :]
+        ) * torch.tanh(hidden_states[:, self.hidden_channels :, :])
         # Skip connection
         hidden_states = residual + hidden_states
 
@@ -311,12 +340,16 @@ class UnivNetLvcResidualBlock(nn.Module):
         padding = dilation * int((kernel_size - 1) / 2)
 
         # (batch, in_channels, in_length + 2*padding)
-        hidden_states = nn.functional.pad(hidden_states, (padding, padding), "constant", 0)
+        hidden_states = nn.functional.pad(
+            hidden_states, (padding, padding), "constant", 0
+        )
         # (batch, in_channels, kernel_length, hop_size + 2*padding)
         hidden_states = hidden_states.unfold(2, hop_size + 2 * padding, hop_size)
 
         if hop_size < dilation:
-            hidden_states = nn.functional.pad(hidden_states, (0, dilation), "constant", 0)
+            hidden_states = nn.functional.pad(
+                hidden_states, (0, dilation), "constant", 0
+            )
         # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
         hidden_states = hidden_states.unfold(3, dilation, dilation)
         hidden_states = hidden_states[:, :, :, :, :hop_size]
@@ -326,12 +359,18 @@ class UnivNetLvcResidualBlock(nn.Module):
         hidden_states = hidden_states.unfold(4, kernel_size, 1)
 
         # Apply local convolution kernel to hidden_states.
-        output_hidden_states = torch.einsum("bildsk,biokl->bolsd", hidden_states, kernel)
+        output_hidden_states = torch.einsum(
+            "bildsk,biokl->bolsd", hidden_states, kernel
+        )
 
-        output_hidden_states = output_hidden_states.to(memory_format=torch.channels_last_3d)
+        output_hidden_states = output_hidden_states.to(
+            memory_format=torch.channels_last_3d
+        )
         bias = bias.unsqueeze(-1).unsqueeze(-1).to(memory_format=torch.channels_last_3d)
         output_hidden_states = output_hidden_states + bias
-        output_hidden_states = output_hidden_states.contiguous().view(batch, out_channels, -1)
+        output_hidden_states = output_hidden_states.contiguous().view(
+            batch, out_channels, -1
+        )
 
         return output_hidden_states
 
@@ -388,10 +427,15 @@ class UnivNetLvcBlock(nn.Module):
             output_padding=self.stride % 2,
         )
 
-        self.kernel_predictor = UnivNetKernelPredictor(config, self.kernel_size, self.num_blocks)
+        self.kernel_predictor = UnivNetKernelPredictor(
+            config, self.kernel_size, self.num_blocks
+        )
 
         self.resblocks = nn.ModuleList(
-            [UnivNetLvcResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)]
+            [
+                UnivNetLvcResidualBlock(config, self.kernel_size, self.dilations[i])
+                for i in range(self.num_blocks)
+            ]
         )
 
     def forward(self, hidden_states: torch.FloatTensor, spectrogram: torch.FloatTensor):
@@ -405,7 +449,9 @@ class UnivNetLvcBlock(nn.Module):
         for i, resblock in enumerate(self.resblocks):
             kernel = kernels[:, i, :, :, :, :]
             bias = biases[:, i, :, :]
-            hidden_states = resblock(hidden_states, kernel, bias, hop_size=self.cond_hop_length)
+            hidden_states = resblock(
+                hidden_states, kernel, bias, hop_size=self.cond_hop_length
+            )
 
         return hidden_states
 
@@ -514,13 +560,17 @@ class UnivNetModel(PreTrainedModel):
             ]
         )
 
-        self.conv_post = nn.Conv1d(config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect")
+        self.conv_post = nn.Conv1d(
+            config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect"
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(UNIVNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=UnivNetModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=UnivNetModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_features: torch.FloatTensor,
@@ -552,7 +602,9 @@ class UnivNetModel(PreTrainedModel):
          [1, 140288]
          ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # Resolve batch sizes for noise_sequence and spectrogram
         spectrogram_batched = input_features.dim() == 3
@@ -566,9 +618,16 @@ class UnivNetModel(PreTrainedModel):
                 noise_sequence = noise_sequence.unsqueeze(0)
         else:
             # Randomly generate noise_sequence
-            noise_sequence_shape = (spectrogram_batch_size, spectrogram_length, self.config.model_in_channels)
+            noise_sequence_shape = (
+                spectrogram_batch_size,
+                spectrogram_length,
+                self.config.model_in_channels,
+            )
             noise_sequence = torch.randn(
-                noise_sequence_shape, generator=generator, dtype=input_features.dtype, device=input_features.device
+                noise_sequence_shape,
+                generator=generator,
+                dtype=input_features.dtype,
+                device=input_features.device,
             )
         noise_sequence_batch_size = noise_sequence.shape[0]
 

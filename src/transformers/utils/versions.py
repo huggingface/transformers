@@ -23,7 +23,6 @@ from typing import Optional
 
 from packaging import version
 
-
 ops = {
     "<": operator.lt,
     "<=": operator.le,
@@ -88,7 +87,9 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
             op, want_ver = match[0]
             wanted[op] = want_ver
             if op not in ops:
-                raise ValueError(f"{requirement}: need one of {list(ops.keys())}, but got {op}")
+                raise ValueError(
+                    f"{requirement}: need one of {list(ops.keys())}, but got {op}"
+                )
 
     # special case
     if pkg == "python":

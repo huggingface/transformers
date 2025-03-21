@@ -21,7 +21,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
-
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
     from ...utils import TensorType
@@ -106,7 +105,12 @@ class GroupViTTextConfig(PretrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -257,7 +261,10 @@ class GroupViTConfig(PretrainedConfig):
     """
 
     model_type = "groupvit"
-    sub_configs = {"text_config": GroupViTTextConfig, "vision_config": GroupViTVisionConfig}
+    sub_configs = {
+        "text_config": GroupViTTextConfig,
+        "vision_config": GroupViTVisionConfig,
+    }
 
     def __init__(
         self,
@@ -288,7 +295,11 @@ class GroupViTConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in text_config
+                    and value != text_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -315,12 +326,17 @@ class GroupViTConfig(PretrainedConfig):
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
-                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                    str(key): value
+                    for key, value in _vision_config_dict["id2label"].items()
                 }
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in vision_config
+                    and value != vision_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -340,11 +356,15 @@ class GroupViTConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `GroupViTTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `GroupViTTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `GroupViTVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. initializing the `GroupViTVisionConfig` with default values."
+            )
 
         self.text_config = GroupViTTextConfig(**text_config)
         self.vision_config = GroupViTVisionConfig(**vision_config)
@@ -357,7 +377,12 @@ class GroupViTConfig(PretrainedConfig):
         self.output_segmentation = False
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: GroupViTTextConfig, vision_config: GroupViTVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls,
+        text_config: GroupViTTextConfig,
+        vision_config: GroupViTVisionConfig,
+        **kwargs,
+    ):
         r"""
         Instantiate a [`GroupViTConfig`] (or a derived class) from groupvit text model configuration and groupvit
         vision model configuration.
@@ -366,7 +391,11 @@ class GroupViTConfig(PretrainedConfig):
             [`GroupViTConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 class GroupViTOnnxConfig(OnnxConfig):
@@ -375,7 +404,10 @@ class GroupViTOnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                (
+                    "pixel_values",
+                    {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                ),
                 ("attention_mask", {0: "batch", 1: "sequence"}),
             ]
         )
@@ -403,7 +435,10 @@ class GroupViTOnnxConfig(OnnxConfig):
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            framework=framework,
         )
         image_input_dict = super().generate_dummy_inputs(
             processor.image_processor, batch_size=batch_size, framework=framework
@@ -415,4 +450,9 @@ class GroupViTOnnxConfig(OnnxConfig):
         return 14
 
 
-__all__ = ["GroupViTConfig", "GroupViTOnnxConfig", "GroupViTTextConfig", "GroupViTVisionConfig"]
+__all__ = [
+    "GroupViTConfig",
+    "GroupViTOnnxConfig",
+    "GroupViTTextConfig",
+    "GroupViTVisionConfig",
+]

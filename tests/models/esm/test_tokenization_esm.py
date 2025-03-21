@@ -19,7 +19,8 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
+from transformers.models.esm.tokenization_esm import (VOCAB_FILES_NAMES,
+                                                      EsmTokenizer)
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
@@ -70,7 +71,9 @@ class ESMTokenizationTest(unittest.TestCase):
         seq_batch = ["LAGVS", "WCB"]
         tokens_batch = tokenizer(seq_batch, padding=True)["input_ids"]
 
-        self.assertListEqual(tokens_batch, [[0, 4, 5, 6, 7, 8, 2], [0, 22, 23, 25, 2, 1, 1]])
+        self.assertListEqual(
+            tokens_batch, [[0, 4, 5, 6, 7, 8, 2], [0, 22, 23, 25, 2, 1, 1]]
+        )
 
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
@@ -98,14 +101,35 @@ class ESMTokenizationTest(unittest.TestCase):
         self.assertEqual(len(tokenizer), vocab_size + 3)
 
         self.assertEqual(tokenizer.add_special_tokens({}), 0)
-        self.assertEqual(tokenizer.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
-        self.assertRaises(AssertionError, tokenizer.add_special_tokens, {"additional_special_tokens": "<testtoken1>"})
-        self.assertEqual(tokenizer.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
         self.assertEqual(
-            tokenizer.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
+            tokenizer.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}),
+            2,
         )
-        self.assertIn("<testtoken3>", tokenizer.special_tokens_map["additional_special_tokens"])
-        self.assertIsInstance(tokenizer.special_tokens_map["additional_special_tokens"], list)
-        self.assertGreaterEqual(len(tokenizer.special_tokens_map["additional_special_tokens"]), 2)
+        self.assertRaises(
+            AssertionError,
+            tokenizer.add_special_tokens,
+            {"additional_special_tokens": "<testtoken1>"},
+        )
+        self.assertEqual(
+            tokenizer.add_special_tokens(
+                {"additional_special_tokens": ["<testtoken2>"]}
+            ),
+            1,
+        )
+        self.assertEqual(
+            tokenizer.add_special_tokens(
+                {"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}
+            ),
+            2,
+        )
+        self.assertIn(
+            "<testtoken3>", tokenizer.special_tokens_map["additional_special_tokens"]
+        )
+        self.assertIsInstance(
+            tokenizer.special_tokens_map["additional_special_tokens"], list
+        )
+        self.assertGreaterEqual(
+            len(tokenizer.special_tokens_map["additional_special_tokens"]), 2
+        )
 
         self.assertEqual(len(tokenizer), vocab_size + 8)

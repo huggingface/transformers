@@ -2,7 +2,6 @@ import sys
 
 from transformers import AutoTokenizer
 
-
 dataset = sys.argv[1]
 model_name_or_path = sys.argv[2]
 max_len = int(sys.argv[3])

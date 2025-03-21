@@ -20,9 +20,9 @@ import os
 import unicodedata
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import (PreTrainedTokenizer, _is_control,
+                                   _is_punctuation, _is_whitespace)
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -117,7 +117,9 @@ class SplinterTokenizer(PreTrainedTokenizer):
                 " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()]
+        )
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
@@ -126,7 +128,9 @@ class SplinterTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+        self.wordpiece_tokenizer = WordpieceTokenizer(
+            vocab=self.vocab, unk_token=str(unk_token)
+        )
         self.question_token = question_token
         super().__init__(
             do_lower_case=do_lower_case,
@@ -165,7 +169,9 @@ class SplinterTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
+            for token in self.basic_tokenizer.tokenize(
+                text, never_split=self.all_special_tokens
+            ):
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -221,7 +227,10 @@ class SplinterTokenizer(PreTrainedTokenizer):
             return cls + token_ids_0 + sep + token_ids_1 + question_suffix + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -241,7 +250,9 @@ class SplinterTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is not None:
@@ -272,19 +283,29 @@ class SplinterTokenizer(PreTrainedTokenizer):
 
         if self.padding_side == "right":
             # Input is question-then-context
-            return len(cls + token_ids_0 + question_suffix + sep) * [0] + len(token_ids_1 + sep) * [1]
+            return len(cls + token_ids_0 + question_suffix + sep) * [0] + len(
+                token_ids_1 + sep
+            ) * [1]
         else:
             # Input is context-then-question
-            return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + question_suffix + sep) * [1]
+            return len(cls + token_ids_0 + sep) * [0] + len(
+                token_ids_1 + question_suffix + sep
+            ) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["vocab_file"],
             )
         else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+            vocab_file = (
+                filename_prefix + "-" if filename_prefix else ""
+            ) + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
@@ -318,7 +339,13 @@ class BasicTokenizer:
             value for `lowercase` (as in the original BERT).
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
@@ -337,7 +364,11 @@ class BasicTokenizer:
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        never_split = (
+            self.never_split.union(set(never_split))
+            if never_split
+            else self.never_split
+        )
         text = self._clean_text(text)
 
         # This was added on November 1st, 2018 for the multilingual and Chinese

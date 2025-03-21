@@ -16,33 +16,22 @@
 
 import unittest
 
-from transformers import (
-    AutoProcessor,
-    Mistral3Config,
-    is_bitsandbytes_available,
-    is_torch_available,
-)
-from transformers.testing_utils import (
-    cleanup,
-    require_bitsandbytes,
-    require_torch,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers import (AutoProcessor, Mistral3Config,
+                          is_bitsandbytes_available, is_torch_available)
+from transformers.testing_utils import (cleanup, require_bitsandbytes,
+                                        require_torch, require_torch_gpu, slow,
+                                        torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Mistral3ForConditionalGeneration,
-    )
+    from transformers import Mistral3ForConditionalGeneration
 
 
 if is_bitsandbytes_available():
@@ -134,7 +123,9 @@ class Mistral3VisionText2TextModelTester:
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         return config, pixel_values
 
@@ -142,9 +133,13 @@ class Mistral3VisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            input_ids.shape, dtype=torch.long, device=torch_device
+        )
         image_sizes = torch.tensor(
-            [[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long, device=torch_device
+            [[self.image_size, self.image_size]] * self.batch_size,
+            dtype=torch.long,
+            device=torch_device,
         )
 
         # input_ids[:, -1] = self.pad_token_id
@@ -159,7 +154,9 @@ class Mistral3VisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
+    def create_and_check_model_fp16_forward(
+        self, config, input_ids, pixel_values, attention_mask
+    ):
         model = Mistral3ForConditionalGeneration(config=config)
         model.to(torch_device)
         model.half()
@@ -172,7 +169,9 @@ class Mistral3VisionText2TextModelTester:
         )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
-    def create_and_check_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
+    def create_and_check_model_fp16_autocast_forward(
+        self, config, input_ids, pixel_values, attention_mask
+    ):
         config.torch_dtype = torch.float16
         model = Mistral3ForConditionalGeneration(config=config)
         model.to(torch_device)
@@ -188,9 +187,15 @@ class Mistral3VisionText2TextModelTester:
 
 
 @require_torch
-class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Mistral3ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Mistral3ForConditionalGeneration,) if is_torch_available() else ()
+class Mistral3ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (Mistral3ForConditionalGeneration,) if is_torch_available() else ()
+    )
+    all_generative_model_classes = (
+        (Mistral3ForConditionalGeneration,) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "image-text-to-text": Mistral3ForConditionalGeneration,
@@ -204,7 +209,9 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Mistral3Config, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Mistral3Config, has_text_modality=False
+        )
 
     def test_config(self):
         # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
@@ -213,7 +220,9 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             config = self.config_tester.config_class()
             self.config_tester.parent.assertIsNotNone(config)
 
-        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
+        self.config_tester.check_config_can_be_init_without_params = (
+            check_config_can_be_init_without_params
+        )
         self.config_tester.run_common_tests()
 
     def test_initialization(self):
@@ -331,13 +340,18 @@ class Mistral3IntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
         ).to(torch_device, dtype=torch.bfloat16)
 
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
             decoded_output = processor.decode(
-                generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+                generate_ids[0, inputs["input_ids"].shape[1] :],
+                skip_special_tokens=True,
             )
         expected_output = "Sure, here's a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace."
         self.assertEqual(decoded_output, expected_output)
@@ -351,19 +365,27 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                    },
                     {"type": "text", "text": "Describe this image"},
                 ],
             }
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
         ).to(torch_device, dtype=torch.bfloat16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
-                generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+                generate_ids[0, inputs["input_ids"].shape[1] :],
+                skip_special_tokens=True,
             )
         expected_output = "The image depicts two cats lying on a pink blanket. The larger cat, which appears to be an"
         self.assertEqual(decoded_output, expected_output)
@@ -378,7 +400,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -387,7 +412,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://www.ilankelman.org/stopsigns/australia.jpg",
+                        },
                         {"type": "text", "text": "Describe this image"},
                     ],
                 },
@@ -395,7 +423,12 @@ class Mistral3IntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor.apply_chat_template(
-            messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            padding=True,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -432,7 +465,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -458,7 +494,12 @@ class Mistral3IntegrationTest(unittest.TestCase):
             ],
         ]
         inputs = processor.apply_chat_template(
-            messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            padding=True,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
         ).to(model.device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)

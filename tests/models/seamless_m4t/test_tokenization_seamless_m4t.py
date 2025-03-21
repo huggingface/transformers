@@ -14,25 +14,14 @@
 
 import unittest
 
-from transformers import (
-    SPIECE_UNDERLINE,
-    AddedToken,
-    BatchEncoding,
-    PreTrainedTokenizerFast,
-    SeamlessM4TTokenizer,
-    SeamlessM4TTokenizerFast,
-    is_torch_available,
-)
-from transformers.testing_utils import (
-    get_tests_dir,
-    nested_simplify,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-)
+from transformers import (SPIECE_UNDERLINE, AddedToken, BatchEncoding,
+                          PreTrainedTokenizerFast, SeamlessM4TTokenizer,
+                          SeamlessM4TTokenizerFast, is_torch_available)
+from transformers.testing_utils import (get_tests_dir, nested_simplify,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch)
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -109,7 +98,29 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ids,
             [
                 value + tokenizer.fairseq_offset
-                for value in [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4]
+                for value in [
+                    8,
+                    21,
+                    84,
+                    55,
+                    24,
+                    19,
+                    7,
+                    0,
+                    602,
+                    347,
+                    347,
+                    347,
+                    3,
+                    12,
+                    66,
+                    46,
+                    72,
+                    80,
+                    6,
+                    0,
+                    4,
+                ]
             ],
         )
 
@@ -141,7 +152,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
 
-    @unittest.skip(reason="This fails currently and is a blocker. No idea why TODO @ylacombe")
+    @unittest.skip(
+        reason="This fails currently and is a blocker. No idea why TODO @ylacombe"
+    )
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -152,7 +165,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 total_length = len(sequence)
 
                 self.assertGreater(
-                    total_length, 4, "Issue with the testing sequence, please update it, it's too short"
+                    total_length,
+                    4,
+                    "Issue with the testing sequence, please update it, it's too short",
                 )
 
                 # Test with max model input length
@@ -170,24 +185,42 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Simple
                 padding_strategies = (
-                    [False, True, "longest"] if tokenizer.pad_token and tokenizer.pad_token_id >= 0 else [False]
+                    [False, True, "longest"]
+                    if tokenizer.pad_token and tokenizer.pad_token_id >= 0
+                    else [False]
                 )
                 for padding_state in padding_strategies:
                     with self.subTest(f"Padding: {padding_state}"):
                         for truncation_state in [True, "longest_first", "only_first"]:
                             with self.subTest(f"Truncation: {truncation_state}"):
-                                output = tokenizer(seq_1, padding=padding_state, truncation=truncation_state)
-                                self.assertEqual(len(output["input_ids"]), model_max_length)
+                                output = tokenizer(
+                                    seq_1,
+                                    padding=padding_state,
+                                    truncation=truncation_state,
+                                )
+                                self.assertEqual(
+                                    len(output["input_ids"]), model_max_length
+                                )
 
-                                output = tokenizer([seq_1], padding=padding_state, truncation=truncation_state)
-                                self.assertEqual(len(output["input_ids"][0]), model_max_length)
+                                output = tokenizer(
+                                    [seq_1],
+                                    padding=padding_state,
+                                    truncation=truncation_state,
+                                )
+                                self.assertEqual(
+                                    len(output["input_ids"][0]), model_max_length
+                                )
 
                         # Simple with no truncation
                         # Reset warnings
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer(seq_1, padding=padding_state, truncation=False)
-                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
+                            output = tokenizer(
+                                seq_1, padding=padding_state, truncation=False
+                            )
+                            self.assertNotEqual(
+                                len(output["input_ids"]), model_max_length
+                            )
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -198,8 +231,12 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                         tokenizer.deprecation_warnings = {}
                         with self.assertLogs("transformers", level="WARNING") as cm:
-                            output = tokenizer([seq_1], padding=padding_state, truncation=False)
-                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+                            output = tokenizer(
+                                [seq_1], padding=padding_state, truncation=False
+                            )
+                            self.assertNotEqual(
+                                len(output["input_ids"][0]), model_max_length
+                            )
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -256,21 +293,43 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.skipTest(reason="No padding token.")
                 else:
                     empty_tokens = tokenizer("", padding=True, pad_to_multiple_of=8)
-                    normal_tokens = tokenizer("This is a sample input", padding=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        "This is a sample input", padding=True, pad_to_multiple_of=8
+                    )
                     for key, value in empty_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
                     for key, value in normal_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     # default to padding=True so need to precise which padding is called
-                    normal_tokens = tokenizer("This", pad_to_multiple_of=8, padding=False)
+                    normal_tokens = tokenizer(
+                        "This", pad_to_multiple_of=8, padding=False
+                    )
                     for key, value in normal_tokens.items():
-                        self.assertNotEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertNotEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     # Should also work with truncation
-                    normal_tokens = tokenizer("This", padding=True, truncation=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        "This", padding=True, truncation=True, pad_to_multiple_of=8
+                    )
                     for key, value in normal_tokens.items():
-                        self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
+                        self.assertEqual(
+                            len(value) % 8,
+                            0,
+                            f"BatchEncoding.{key} is not multiple of 8",
+                        )
 
                     # truncation to something which is not a multiple of pad_to_multiple_of raises an error
                     self.assertRaises(
@@ -316,7 +375,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         pad_to_multiple_of=None,
                     )
                 except NotImplementedError:
-                    self.skipTest(reason="Encountered NotImplementedError when calling prepare_seq2seq_batch")
+                    self.skipTest(
+                        reason="Encountered NotImplementedError when calling prepare_seq2seq_batch"
+                    )
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
 
@@ -343,7 +404,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 4)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(
+        reason="Unfortunately way too slow to build a BPE with SentencePiece."
+    )
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -358,7 +421,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
 
-                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+                special_token_id = tokenizer_r.encode(
+                    "<special>", add_special_tokens=False
+                )[0]
 
                 self.assertTrue(special_token_id in r_output)
 
@@ -369,7 +434,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                        pretrained_name,
+                        additional_special_tokens=added_tokens,
+                        **kwargs,
                     )
 
                     p_output = tokenizer_p.encode("Hey this is a <special> token")
@@ -396,13 +463,19 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
 
         # Test we can use the new tokenizer with something not seen during training
-        inputs = new_tokenizer(["This is the first sentence", "This sentence is different 🤗."])
+        inputs = new_tokenizer(
+            ["This is the first sentence", "This sentence is different 🤗."]
+        )
         self.assertEqual(len(inputs["input_ids"]), 2)
-        decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        decoded_input = new_tokenizer.decode(
+            inputs["input_ids"][0], skip_special_tokens=True
+        )
         expected_result = "This is the first sentence"
 
         if tokenizer.backend_tokenizer.normalizer is not None:
-            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
+            expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(
+                expected_result
+            )
         self.assertEqual(expected_result, decoded_input)
 
         # We check that the parameters of the tokenizer remained the same
@@ -410,12 +483,22 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # make sure it has the same prefix tokens first
         new_tokenizer.tgt_lang = tokenizer.tgt_lang
         tokenizer.tgt_lang = tokenizer.tgt_lang
-        self.assertEqual(tokenizer.num_special_tokens_to_add(False), new_tokenizer.num_special_tokens_to_add(False))
-        self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
+        self.assertEqual(
+            tokenizer.num_special_tokens_to_add(False),
+            new_tokenizer.num_special_tokens_to_add(False),
+        )
+        self.assertEqual(
+            tokenizer.num_special_tokens_to_add(True),
+            new_tokenizer.num_special_tokens_to_add(True),
+        )
 
         # Check we have the correct max_length for both pair and non-pair inputs.
-        self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
-        self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
+        self.assertEqual(
+            tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence
+        )
+        self.assertEqual(
+            tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair
+        )
 
         # Assert the set of special tokens match as we didn't ask to change them
         self.assertSequenceEqual(
@@ -423,7 +506,9 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             new_tokenizer.all_special_tokens_extended,
         )
 
-        self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
+        self.assertDictEqual(
+            tokenizer.special_tokens_map, new_tokenizer.special_tokens_map
+        )
 
     @unittest.skip(reason="Fails because of the hack of adding <unk> in _tokenize")
     def test_pickle_subword_regularization_tokenizer(self):
@@ -469,14 +554,18 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
 
     def test_tokenizer_tgt_lang(self):
         ids = self.tokenizer(self.src_text, src_lang="fra").input_ids[0]
-        self.assertListEqual(self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)])
+        self.assertListEqual(
+            self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)]
+        )
         self.assertEqual(256057, ids[0])
 
         rest_ids = ids[len(self.expected_src_tokens) :]
         self.assertListEqual([0] * len(rest_ids), rest_ids)
 
         ids = self.tokenizer(self.src_text, src_lang="__shn__").input_ids[0]
-        self.assertListEqual(self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)])
+        self.assertListEqual(
+            self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)]
+        )
         self.assertEqual(256152, ids[0])
 
     # Copied from tests.models.nllb.test_tokenization_nllb.NllbDistilledIntegrationTest.test_enro_tokenizer_decode_ignores_language_codes
@@ -485,7 +574,9 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         generated_ids = [RO_CODE, 4254, 98068, 112923, 39072, 3909, 713, 102767, 26, 17314, 35642, 14683, 33118, 2022, 66987, 2, 256047]  # fmt: skip
 
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        expected_romanian = self.tokenizer.decode(
+            generated_ids[1:], skip_special_tokens=True
+        )
         self.assertEqual(result, expected_romanian)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
@@ -493,7 +584,9 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         src_text = ["this is gunna be a long sentence " * 20]
         assert isinstance(src_text[0], str)
         desired_max_length = 10
-        ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
+        ids = self.tokenizer(
+            src_text, max_length=desired_max_length, truncation=True
+        ).input_ids[0]
         self.assertEqual(ids[-1], 3)
         self.assertEqual(ids[0], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
@@ -510,7 +603,9 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
         batch["decoder_input_ids"] = shift_tokens_right(
-            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.convert_tokens_to_ids("__ron__")
+            batch["labels"],
+            self.tokenizer.pad_token_id,
+            self.tokenizer.convert_tokens_to_ids("__ron__"),
         )
 
         self.assertIsInstance(batch, BatchEncoding)
@@ -526,16 +621,27 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
 
     def test_seq2seq_max_length(self):
         batch = self.tokenizer(
-            self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt", pad_to_multiple_of=None
+            self.src_text,
+            padding=True,
+            truncation=True,
+            max_length=3,
+            return_tensors="pt",
+            pad_to_multiple_of=None,
         )
         targets = self.tokenizer(
-            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
+            text_target=self.tgt_text,
+            padding=True,
+            truncation=True,
+            max_length=10,
+            return_tensors="pt",
         )
         labels = targets["input_ids"]
         batch["decoder_input_ids"] = shift_tokens_right(
             labels,
             self.tokenizer.pad_token_id,
-            decoder_start_token_id=self.tokenizer.convert_tokens_to_ids(self.tokenizer.tgt_lang),
+            decoder_start_token_id=self.tokenizer.convert_tokens_to_ids(
+                self.tokenizer.tgt_lang
+            ),
         )
 
         self.assertEqual(batch.input_ids.shape[1], 3)
@@ -568,8 +674,16 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
+        tokenizer = SeamlessM4TTokenizer(
+            SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False
+        )
+        tokenizer.add_special_tokens(
+            {
+                "additional_special_tokens": [
+                    AddedToken("<s>", rstrip=False, lstrip=False)
+                ]
+            }
+        )
         cls.tokenizer = tokenizer
         return cls
 
@@ -581,7 +695,10 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
 
         # [bos, lang_id, _] + offset_sp_encode
-        self.assertEqual(input_ids[:-1], [3, 1, 8] + [i + self.tokenizer.fairseq_offset for i in sp_encode])
+        self.assertEqual(
+            input_ids[:-1],
+            [3, 1, 8] + [i + self.tokenizer.fairseq_offset for i in sp_encode],
+        )
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -604,7 +721,10 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("       . Hello")
         self.assertEqual(input_ids, [3, 1, 8, 5, 157, 87, 21, 3])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual([i - self.tokenizer.fairseq_offset for i in input_ids[2:-1]], [7] + sp_encode)
+        self.assertEqual(
+            [i - self.tokenizer.fairseq_offset for i in input_ids[2:-1]],
+            [7] + sp_encode,
+        )
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -617,19 +737,25 @@ class CommonSpmIntegrationTests(unittest.TestCase):
             self.tokenizer.sp_model.piece_to_id("▁is"),
             self.tokenizer.sp_model.piece_to_id("▁not"),
         ]
-        self.assertEqual([i - self.tokenizer.fairseq_offset for i in input_ids[2:-1]], sp_encode)
+        self.assertEqual(
+            [i - self.tokenizer.fairseq_offset for i in input_ids[2:-1]], sp_encode
+        )
         self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
 
         input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
         self.assertEqual(input_ids, [3, 1, 157, 47, 45, 2, 157, 3])
         tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"])  # spaces are eaten by spm + our strip
+        self.assertEqual(
+            tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"]
+        )  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
         self.assertEqual(input_ids, [3, 1, 157, 47, 45, 157, 3])
         tokens = self.tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
+        self.assertEqual(
+            tokens, ["▁He", "▁is", "▁not", "▁He"]
+        )  # spaces are eaten by spm even if not start
 
     def test_character_after_special_token(self):
         # Make sure that `tokenizer.tokenize` is similar to
@@ -658,4 +784,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("No <s> ▁He")
         self.assertEqual(input_ids, [3, 1, 285, 2, 157, 3])
         tokens = self.tokenizer.tokenize("No <s> ▁He")
-        self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
+        self.assertEqual(
+            tokens, ["▁No", "<s>", "▁He"]
+        )  # spaces are eaten by rstrip / lstrip

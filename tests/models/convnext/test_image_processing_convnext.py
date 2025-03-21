@@ -19,8 +19,8 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_vision_available():
     from transformers import ConvNextImageProcessor
@@ -72,7 +72,9 @@ class ConvNextImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -88,7 +90,9 @@ class ConvNextImageProcessingTester:
 @require_vision
 class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ConvNextImageProcessor if is_vision_available() else None
-    fast_image_processing_class = ConvNextImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        ConvNextImageProcessorFast if is_torchvision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -110,10 +114,14 @@ class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=42
+            )
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
 
     @unittest.skip(

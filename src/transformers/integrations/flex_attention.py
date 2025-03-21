@@ -11,6 +11,7 @@ Citation:
   year = {2024}
 }
 """
+
 # coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
@@ -32,15 +33,11 @@ import torch
 
 from ..utils import is_torch_flex_attn_available
 
-
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import (
-        BlockMask,
-        flex_attention,
-    )
-    from torch.nn.attention.flex_attention import (
-        create_block_mask as create_block_causal_mask_flex,
-    )
+    from torch.nn.attention.flex_attention import BlockMask
+    from torch.nn.attention.flex_attention import \
+        create_block_mask as create_block_causal_mask_flex
+    from torch.nn.attention.flex_attention import flex_attention
 
 
 class WrappedFlexAttention:
@@ -113,7 +110,9 @@ def make_flex_block_causal_mask(attention_mask_2d: torch.Tensor) -> "BlockMask":
         for an illustration.
         """
         causal_mask = q_idx >= kv_idx
-        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        document_mask = (
+            document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        )
         padding_mask = document_ids[batch_idx, q_idx] > 0
         return causal_mask & document_mask & padding_mask
 

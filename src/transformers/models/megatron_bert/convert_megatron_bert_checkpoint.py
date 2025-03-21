@@ -41,7 +41,6 @@ import torch
 
 from transformers import MegatronBertConfig
 
-
 ####################################################################################################
 
 
@@ -65,7 +64,9 @@ def recursive_print(name, val, spaces=0):
         print(msg, ":", val)
 
 
-def fix_query_key_value_ordering(param, checkpoint_version, num_splits, num_heads, hidden_size):
+def fix_query_key_value_ordering(
+    param, checkpoint_version, num_splits, num_heads, hidden_size
+):
     # Permutes layout of param tensor to [num_splits * num_heads * hidden_size, :]
     # for compatibility with later versions of NVIDIA Megatron-LM.
     # The inverse operation is performed inside Megatron-LM to read checkpoints:
@@ -108,7 +109,11 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         config.hidden_size = ds_args.hidden_size
         config.num_hidden_layers = ds_args.num_layers
         config.num_attention_heads = ds_args.num_attention_heads
-        config.intermediate_size = ds_args.ffn_hidden_size if "ffn_hidden_size" in ds_args else 4 * ds_args.hidden_size
+        config.intermediate_size = (
+            ds_args.ffn_hidden_size
+            if "ffn_hidden_size" in ds_args
+            else 4 * ds_args.hidden_size
+        )
         # pprint(config)
 
     # The number of heads.
@@ -137,14 +142,19 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
     # The position embeddings.
     pos_embeddings = embeddings["position_embeddings"]["weight"]
-    assert pos_embeddings.size(0) == config.max_position_embeddings and pos_embeddings.size(1) == config.hidden_size
+    assert (
+        pos_embeddings.size(0) == config.max_position_embeddings
+        and pos_embeddings.size(1) == config.hidden_size
+    )
     # Store the position embeddings.
     output_state_dict["bert.embeddings.position_embeddings.weight"] = pos_embeddings
 
     # The token-type embeddings.
     tokentype_embeddings = embeddings["tokentype_embeddings"]["weight"]
     # Store the position embeddings.
-    output_state_dict["bert.embeddings.token_type_embeddings.weight"] = tokentype_embeddings
+    output_state_dict["bert.embeddings.token_type_embeddings.weight"] = (
+        tokentype_embeddings
+    )
 
     # The transformer.
     transformer = lm["transformer"] if "transformer" in lm.keys() else lm["encoder"]
@@ -189,18 +199,22 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
         # Transpose the QKV matrix.
         elif (
-            op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
+            op_name == "attention.query_key_value"
+            or op_name == "self_attention.query_key_value"
         ) and weight_or_bias == "weight":
             # Make sure the QKV pointer is nil.
             assert attention_qkv_weight is None, ""
 
-            out_val = fix_query_key_value_ordering(val, checkpoint_version, 3, heads, hidden_size_per_head)
+            out_val = fix_query_key_value_ordering(
+                val, checkpoint_version, 3, heads, hidden_size_per_head
+            )
             # Store the tensor as we need the bias as well to interleave QKV and biases.
             attention_qkv_weight = out_val
 
         # Transpose the bias.
         elif (
-            op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
+            op_name == "attention.query_key_value"
+            or op_name == "self_attention.query_key_value"
         ) and weight_or_bias == "bias":
             # Make sure we read the weight tensor.
             assert attention_qkv_weight is not None, ""
@@ -210,7 +224,9 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
             k = attention_qkv_weight[1 * config.hidden_size : 2 * config.hidden_size, :]
             v = attention_qkv_weight[2 * config.hidden_size : 3 * config.hidden_size, :]
 
-            out_val = fix_query_key_value_ordering(val, checkpoint_version, 3, heads, hidden_size_per_head)
+            out_val = fix_query_key_value_ordering(
+                val, checkpoint_version, 3, heads, hidden_size_per_head
+            )
             # Split the bias.
             q_bias = out_val[0 * config.hidden_size : 1 * config.hidden_size]
             k_bias = out_val[1 * config.hidden_size : 2 * config.hidden_size]
@@ -247,12 +263,18 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     lm_head = model["lm_head"]
 
     # The transform matrix.
-    output_state_dict["cls.predictions.transform.dense.weight"] = lm_head["dense.weight"]
+    output_state_dict["cls.predictions.transform.dense.weight"] = lm_head[
+        "dense.weight"
+    ]
     output_state_dict["cls.predictions.transform.dense.bias"] = lm_head["dense.bias"]
 
     # The transform LN.
-    output_state_dict["cls.predictions.transform.LayerNorm.weight"] = lm_head["layernorm.weight"]
-    output_state_dict["cls.predictions.transform.LayerNorm.bias"] = lm_head["layernorm.bias"]
+    output_state_dict["cls.predictions.transform.LayerNorm.weight"] = lm_head[
+        "layernorm.weight"
+    ]
+    output_state_dict["cls.predictions.transform.LayerNorm.bias"] = lm_head[
+        "layernorm.bias"
+    ]
 
     # For the decoder, we replicate the weights.
     output_state_dict["cls.predictions.decoder.weight"] = word_embeddings
@@ -276,7 +298,11 @@ def main():
     # Create the argument parser.
     parser = argparse.ArgumentParser()
     parser.add_argument("--print-checkpoint-structure", action="store_true")
-    parser.add_argument("path_to_checkpoint", type=str, help="Path to the ZIP file containing the checkpoint")
+    parser.add_argument(
+        "path_to_checkpoint",
+        type=str,
+        help="Path to the ZIP file containing the checkpoint",
+    )
     parser.add_argument(
         "--config_file",
         default="",
@@ -293,7 +319,9 @@ def main():
     print(f'Extracting PyTorch state dictionary from "{args.path_to_checkpoint}"')
     if args.path_to_checkpoint.endswith(".zip"):
         with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
-            with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
+            with checkpoint.open(
+                "release/mp_rank_00/model_optim_rng.pt"
+            ) as pytorch_dict:
                 input_state_dict = torch.load(pytorch_dict, map_location="cpu")
     else:
         input_state_dict = torch.load(args.path_to_checkpoint, map_location="cpu")

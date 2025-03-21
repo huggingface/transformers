@@ -19,15 +19,17 @@ import argparse
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoTokenizer, RobertaPreLayerNormConfig, RobertaPreLayerNormForMaskedLM
+from transformers import (AutoTokenizer, RobertaPreLayerNormConfig,
+                          RobertaPreLayerNormForMaskedLM)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def convert_roberta_prelayernorm_checkpoint_to_pytorch(checkpoint_repo: str, pytorch_dump_folder_path: str):
+def convert_roberta_prelayernorm_checkpoint_to_pytorch(
+    checkpoint_repo: str, pytorch_dump_folder_path: str
+):
     """
     Copy/paste/tweak roberta_prelayernorm's weights to our BERT structure.
     """
@@ -37,7 +39,9 @@ def convert_roberta_prelayernorm_checkpoint_to_pytorch(checkpoint_repo: str, pyt
     )
 
     # convert state_dict
-    original_state_dict = torch.load(hf_hub_download(repo_id=checkpoint_repo, filename="pytorch_model.bin"))
+    original_state_dict = torch.load(
+        hf_hub_download(repo_id=checkpoint_repo, filename="pytorch_model.bin")
+    )
     state_dict = {}
     for tensor_key, tensor_value in original_state_dict.items():
         # The transformer implementation gives the model a unique name, rather than overwiriting 'roberta'
@@ -45,7 +49,9 @@ def convert_roberta_prelayernorm_checkpoint_to_pytorch(checkpoint_repo: str, pyt
             tensor_key = "roberta_prelayernorm." + tensor_key[len("roberta.") :]
 
         # The original implementation contains weights which are not used, remove them from the state_dict
-        if tensor_key.endswith(".self.LayerNorm.weight") or tensor_key.endswith(".self.LayerNorm.bias"):
+        if tensor_key.endswith(".self.LayerNorm.weight") or tensor_key.endswith(
+            ".self.LayerNorm.bias"
+        ):
             continue
 
         state_dict[tensor_key] = tensor_value
@@ -71,7 +77,13 @@ if __name__ == "__main__":
         help="Path the official PyTorch dump, e.g. 'andreasmadsen/efficient_mlm_m0.40'.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_roberta_prelayernorm_checkpoint_to_pytorch(args.checkpoint_repo, args.pytorch_dump_folder_path)
+    convert_roberta_prelayernorm_checkpoint_to_pytorch(
+        args.checkpoint_repo, args.pytorch_dump_folder_path
+    )

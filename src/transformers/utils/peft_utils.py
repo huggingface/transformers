@@ -20,7 +20,6 @@ from packaging import version
 from .hub import cached_file
 from .import_utils import is_peft_available
 
-
 ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
 ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
@@ -114,9 +113,13 @@ def check_peft_version(min_version: str) -> None:
             The version of PEFT to check against.
     """
     if not is_peft_available():
-        raise ValueError("PEFT is not installed. Please install it with `pip install peft`")
+        raise ValueError(
+            "PEFT is not installed. Please install it with `pip install peft`"
+        )
 
-    is_peft_version_compatible = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version)
+    is_peft_version_compatible = version.parse(
+        importlib.metadata.version("peft")
+    ) >= version.parse(min_version)
 
     if not is_peft_version_compatible:
         raise ValueError(

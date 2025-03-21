@@ -9,7 +9,6 @@ from parameterized import parameterized_class
 
 from . import is_sagemaker_available
 
-
 if is_sagemaker_available():
     from sagemaker import Session, TrainingJobAnalytics
     from sagemaker.huggingface import HuggingFace
@@ -59,13 +58,18 @@ class SingleNodeTest(unittest.TestCase):
             instance_count=instance_count,
             instance_type=self.instance_type,
             debugger_hook_config=False,
-            hyperparameters={**self.env.hyperparameters, "model_name_or_path": self.model_name_or_path},
+            hyperparameters={
+                **self.env.hyperparameters,
+                "model_name_or_path": self.model_name_or_path,
+            },
             metric_definitions=self.env.metric_definitions,
             py_version="py36",
         )
 
     def save_results_as_csv(self, job_name):
-        TrainingJobAnalytics(job_name).export_csv(f"{self.env.test_path}/{job_name}_metrics.csv")
+        TrainingJobAnalytics(job_name).export_csv(
+            f"{self.env.test_path}/{job_name}_metrics.csv"
+        )
 
     def test_glue(self):
         # create estimator
@@ -75,14 +79,22 @@ class SingleNodeTest(unittest.TestCase):
         estimator.fit()
 
         # result dataframe
-        result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
+        result_metrics_df = TrainingJobAnalytics(
+            estimator.latest_training_job.name
+        ).dataframe()
 
         # extract kpis
-        eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
-        eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+        eval_accuracy = list(
+            result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"]
+        )
+        eval_loss = list(
+            result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"]
+        )
         # get train time from SageMaker job, this includes starting, preprocessing, stopping
         train_runtime = (
-            Session().describe_training_job(estimator.latest_training_job.name).get("TrainingTimeInSeconds", 999999)
+            Session()
+            .describe_training_job(estimator.latest_training_job.name)
+            .get("TrainingTimeInSeconds", 999999)
         )
 
         # assert kpis
@@ -92,4 +104,11 @@ class SingleNodeTest(unittest.TestCase):
 
         # dump tests result into json file to share in PR
         with open(f"{estimator.latest_training_job.name}.json", "w") as outfile:
-            json.dump({"train_time": train_runtime, "eval_accuracy": eval_accuracy, "eval_loss": eval_loss}, outfile)
+            json.dump(
+                {
+                    "train_time": train_runtime,
+                    "eval_accuracy": eval_accuracy,
+                    "eval_loss": eval_loss,
+                },
+                outfile,
+            )

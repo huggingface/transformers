@@ -30,7 +30,6 @@ from get_previous_daily_ci import get_last_daily_ci_reports
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
-
 api = HfApi()
 client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
@@ -115,24 +114,38 @@ class Message:
 
         # Failures and success of the modeling tests
         self.n_model_success = sum(r["success"] for r in model_results.values())
-        self.n_model_single_gpu_failures = sum(dicts_to_sum(r["failed"])["single"] for r in model_results.values())
-        self.n_model_multi_gpu_failures = sum(dicts_to_sum(r["failed"])["multi"] for r in model_results.values())
+        self.n_model_single_gpu_failures = sum(
+            dicts_to_sum(r["failed"])["single"] for r in model_results.values()
+        )
+        self.n_model_multi_gpu_failures = sum(
+            dicts_to_sum(r["failed"])["multi"] for r in model_results.values()
+        )
 
         # Some suites do not have a distinction between single and multi GPU.
-        self.n_model_unknown_failures = sum(dicts_to_sum(r["failed"])["unclassified"] for r in model_results.values())
+        self.n_model_unknown_failures = sum(
+            dicts_to_sum(r["failed"])["unclassified"] for r in model_results.values()
+        )
         self.n_model_failures = (
-            self.n_model_single_gpu_failures + self.n_model_multi_gpu_failures + self.n_model_unknown_failures
+            self.n_model_single_gpu_failures
+            + self.n_model_multi_gpu_failures
+            + self.n_model_unknown_failures
         )
 
         # Failures and success of the additional tests
-        self.n_additional_success = sum(r["success"] for r in additional_results.values())
+        self.n_additional_success = sum(
+            r["success"] for r in additional_results.values()
+        )
 
         if len(additional_results) > 0:
             # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
-            all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+            all_additional_failures = dicts_to_sum(
+                [r["failed"] for r in additional_results.values()]
+            )
             self.n_additional_single_gpu_failures = all_additional_failures["single"]
             self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
-            self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+            self.n_additional_unknown_gpu_failures = all_additional_failures[
+                "unclassified"
+            ]
         else:
             self.n_additional_single_gpu_failures = 0
             self.n_additional_multi_gpu_failures = 0
@@ -163,7 +176,9 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
+        time_spent = [
+            r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])
+        ]
         total_secs = 0
 
         for time in time_spent:
@@ -173,10 +188,18 @@ class Message:
             if len(time_parts) == 1:
                 time_parts = [0, 0, time_parts[0]]
 
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
+            hours, minutes, seconds = (
+                int(time_parts[0]),
+                int(time_parts[1]),
+                float(time_parts[2]),
+            )
             total_secs += hours * 3600 + minutes * 60 + seconds
 
-        hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
+        hours, minutes, seconds = (
+            total_secs // 3600,
+            (total_secs % 3600) // 60,
+            total_secs % 60,
+        )
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
     @property
@@ -198,7 +221,11 @@ class Message:
             },
             "accessory": {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "text": {
+                    "type": "plain_text",
+                    "text": "Check Action results",
+                    "emoji": True,
+                },
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
             },
         }
@@ -218,7 +245,11 @@ class Message:
             },
             "accessory": {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "text": {
+                    "type": "plain_text",
+                    "text": "Check Action results",
+                    "emoji": True,
+                },
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
             },
         }
@@ -231,13 +262,18 @@ class Message:
         job_link = f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}"
 
         for job in github_actions_jobs:
-            if "Extract warnings in CI artifacts" in job["name"] and job["conclusion"] == "success":
+            if (
+                "Extract warnings in CI artifacts" in job["name"]
+                and job["conclusion"] == "success"
+            ):
                 button_text = "Check warnings"
                 # Use the actual job link
                 job_link = job["html_url"]
                 break
 
-        huggingface_hub_warnings = [x for x in self.selected_warnings if "huggingface_hub" in x]
+        huggingface_hub_warnings = [
+            x for x in self.selected_warnings if "huggingface_hub" in x
+        ]
         text = f"There are {len(self.selected_warnings)} warnings being selected."
         text += f"\n{len(huggingface_hub_warnings)} of them are from `huggingface_hub`."
 
@@ -291,12 +327,19 @@ class Message:
 
         header = "Single |  Multi | Category\n"
         category_failures_report = prepare_reports(
-            title="The following modeling categories had failures", header=header, reports=individual_reports
+            title="The following modeling categories had failures",
+            header=header,
+            reports=individual_reports,
         )
 
-        return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
+        return {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": category_failures_report},
+        }
 
-    def compute_diff_for_failure_reports(self, curr_failure_report, prev_failure_report):  # noqa
+    def compute_diff_for_failure_reports(
+        self, curr_failure_report, prev_failure_report
+    ):  # noqa
         # Remove the leading and training parts that don't contain failure count information.
         model_failures = curr_failure_report.split("\n")[3:-2]
         prev_model_failures = prev_failure_report.split("\n")[3:-2]
@@ -324,7 +367,9 @@ class Message:
         entries_changed = []
         for model_name, diff_values in diff_map.items():
             diff = [str(x) for x in diff_values]
-            diff = [f"+{x}" if (x != "0" and not x.startswith("-")) else x for x in diff]
+            diff = [
+                f"+{x}" if (x != "0" and not x.startswith("-")) else x for x in diff
+            ]
             diff = [x.rjust(9) for x in diff]
             device_report = " | ".join(diff) + " | "
             report = f"{device_report}{model_name}"
@@ -341,7 +386,9 @@ class Message:
 
         failures = {}
         non_model_failures = {
-            k: per_model_sum(v) for k, v in self.model_results.items() if sum(per_model_sum(v).values())
+            k: per_model_sum(v)
+            for k, v in self.model_results.items()
+            if sum(per_model_sum(v).values())
         }
 
         for k, v in self.model_results.items():
@@ -385,28 +432,44 @@ class Message:
             ]
 
             if sum(device_report_values):
-                device_report = " | ".join([str(x).rjust(9) for x in device_report_values]) + " | "
+                device_report = (
+                    " | ".join([str(x).rjust(9) for x in device_report_values]) + " | "
+                )
                 report = f"{device_report}{key}"
 
                 model_reports.append(report)
 
         # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
-        model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+        model_header = (
+            "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+        )
         sorted_model_reports = sorted(model_reports, key=lambda s: s.split("| ")[-1])
         model_failures_report = prepare_reports(
-            title="These following model modules had failures", header=model_header, reports=sorted_model_reports
+            title="These following model modules had failures",
+            header=model_header,
+            reports=sorted_model_reports,
         )
 
         module_header = "Single |  Multi | Category\n"
-        sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("| ")[-1])
+        sorted_module_reports = sorted(
+            other_module_reports, key=lambda s: s.split("| ")[-1]
+        )
         module_failures_report = prepare_reports(
-            title="The following non-model modules had failures", header=module_header, reports=sorted_module_reports
+            title="The following non-model modules had failures",
+            header=module_header,
+            reports=sorted_module_reports,
         )
 
         # To be sent to Slack channels
         model_failure_sections = [
-            {"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": model_failures_report},
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": module_failures_report},
+            },
         ]
 
         # Save the complete (i.e. no truncation) failure tables (of the current workflow run)
@@ -418,7 +481,9 @@ class Message:
             reports=sorted_model_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/model_failures_report.txt")
+        file_path = os.path.join(
+            os.getcwd(), f"ci_results_{job_name}/model_failures_report.txt"
+        )
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
 
@@ -428,7 +493,9 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/module_failures_report.txt")
+        file_path = os.path.join(
+            os.getcwd(), f"ci_results_{job_name}/module_failures_report.txt"
+        )
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
@@ -436,11 +503,16 @@ class Message:
             # if the last run produces artifact named `ci_results_{job_name}`
             if (
                 f"ci_results_{job_name}" in self.prev_ci_artifacts
-                and "model_failures_report.txt" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
+                and "model_failures_report.txt"
+                in self.prev_ci_artifacts[f"ci_results_{job_name}"]
             ):
                 # Compute the difference of the previous/current (model failure) table
-                prev_model_failures = self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_failures_report.txt"]
-                entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
+                prev_model_failures = self.prev_ci_artifacts[f"ci_results_{job_name}"][
+                    "model_failures_report.txt"
+                ]
+                entries_changed = self.compute_diff_for_failure_reports(
+                    model_failures_report, prev_model_failures
+                )
                 if len(entries_changed) > 0:
                     # Save the complete difference
                     diff_report = prepare_reports(
@@ -449,7 +521,10 @@ class Message:
                         reports=entries_changed,
                         to_truncate=False,
                     )
-                    file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/changed_model_failures_report.txt")
+                    file_path = os.path.join(
+                        os.getcwd(),
+                        f"ci_results_{job_name}/changed_model_failures_report.txt",
+                    )
                     with open(file_path, "w", encoding="UTF-8") as fp:
                         fp.write(diff_report)
 
@@ -460,7 +535,10 @@ class Message:
                         reports=entries_changed,
                     )
                     model_failure_sections.append(
-                        {"type": "section", "text": {"type": "mrkdwn", "text": diff_report}},
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": diff_report},
+                        },
                     )
 
         return model_failure_sections
@@ -485,7 +563,9 @@ class Message:
 
         header = "Single |  Multi | Category\n"
         failures_report = prepare_reports(
-            title="The following non-modeling tests had failures", header=header, reports=individual_reports
+            title="The following non-modeling tests had failures",
+            header=header,
+            reports=individual_reports,
         )
 
         return {"type": "section", "text": {"type": "mrkdwn", "text": failures_report}}
@@ -523,12 +603,16 @@ class Message:
         extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
         if extra_blocks:
             failure_text = extra_blocks[-1]["text"]["text"]
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            file_path = os.path.join(
+                os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt"
+            )
             with open(file_path, "w", encoding="UTF-8") as fp:
                 fp.write(failure_text)
 
             # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            file_path = os.path.join(
+                os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt"
+            )
             commit_info = api.upload_file(
                 path_or_fileobj=file_path,
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
@@ -550,12 +634,16 @@ class Message:
                         new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
                     for url, device in items:
                         new_failed_tests[model][f"{device}-gpu"].append(line)
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+            file_path = os.path.join(
+                os.getcwd(), f"ci_results_{job_name}/new_model_failures.json"
+            )
             with open(file_path, "w", encoding="UTF-8") as fp:
                 json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
 
             # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+            file_path = os.path.join(
+                os.getcwd(), f"ci_results_{job_name}/new_model_failures.json"
+            )
             _ = api.upload_file(
                 path_or_fileobj=file_path,
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.json",
@@ -581,13 +669,22 @@ class Message:
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out(title, ci_title="", runner_not_available=False, runner_failed=False, setup_failed=False):
+    def error_out(
+        title,
+        ci_title="",
+        runner_not_available=False,
+        runner_failed=False,
+        setup_failed=False,
+    ):
         blocks = []
         title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
         blocks.append(title_block)
 
         if ci_title:
-            ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
+            ci_title_block = {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": ci_title},
+            }
             blocks.append(ci_title_block)
 
         offline_runners = []
@@ -625,7 +722,11 @@ class Message:
             },
             "accessory": {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "text": {
+                    "type": "plain_text",
+                    "text": "Check Action results",
+                    "emoji": True,
+                },
                 "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
             },
         }
@@ -647,7 +748,11 @@ class Message:
         print("Sending the following payload")
         print(json.dumps({"blocks": json.loads(payload)}))
 
-        text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
+        text = (
+            f"{self.n_failures} failures out of {self.n_tests} tests,"
+            if self.n_failures
+            else "All tests passed."
+        )
 
         self.thread_ts = client.chat_postMessage(
             channel=SLACK_REPORT_CHANNEL_ID,
@@ -684,15 +789,25 @@ class Message:
         # If a device is found, the job name should contain the device type, for example, `XXX (single-gpu)`.
         # This could be done by adding `machine_type` in a job's `strategy`.
         # (If `job_result["job_link"][device]` is `None`, we get an error: `... [ERROR] must provide a string ...`)
-        if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
+        if (
+            job_result["job_link"] is not None
+            and job_result["job_link"][device] is not None
+        ):
             content["accessory"] = {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "GitHub Action job", "emoji": True},
+                "text": {
+                    "type": "plain_text",
+                    "text": "GitHub Action job",
+                    "emoji": True,
+                },
                 "url": job_result["job_link"][device],
             }
 
         return [
-            {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": title.upper(), "emoji": True},
+            },
             content,
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
@@ -708,7 +823,9 @@ class Message:
             f"ci_results_{job_name}" in self.prev_ci_artifacts
             and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
         ):
-            prev_model_results = json.loads(self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
+            prev_model_results = json.loads(
+                self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"]
+            )
 
         all_failure_lines = {}
         for job, job_result in sorted_dict:
@@ -717,11 +834,20 @@ class Message:
                 for device in devices:
                     failures = job_result["failures"][device]
                     prev_error_lines = {}
-                    if job in prev_model_results and device in prev_model_results[job]["failures"]:
-                        prev_error_lines = {error["line"] for error in prev_model_results[job]["failures"][device]}
+                    if (
+                        job in prev_model_results
+                        and device in prev_model_results[job]["failures"]
+                    ):
+                        prev_error_lines = {
+                            error["line"]
+                            for error in prev_model_results[job]["failures"][device]
+                        }
 
                     url = None
-                    if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
+                    if (
+                        job_result["job_link"] is not None
+                        and job_result["job_link"][device] is not None
+                    ):
                         url = job_result["job_link"][device]
 
                     for idx, error in enumerate(failures):
@@ -733,7 +859,9 @@ class Message:
                         if new_text not in all_failure_lines:
                             all_failure_lines[new_text] = []
 
-                        all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
+                        all_failure_lines[new_text].append(
+                            f"<{url}|{device}>" if url is not None else device
+                        )
 
         MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
         if not to_truncate:
@@ -752,11 +880,20 @@ class Message:
         if failure_text:
             if with_header:
                 blocks.append(
-                    {"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}}
+                    {
+                        "type": "header",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "New model failures",
+                            "emoji": True,
+                        },
+                    }
                 )
             else:
                 failure_text = f"*New model failures*\n\n{failure_text}"
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
+            blocks.append(
+                {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}}
+            )
 
         return blocks
 
@@ -769,10 +906,18 @@ class Message:
             if len(job_result["failures"]):
                 for device, failures in job_result["failures"].items():
                     text = "\n".join(
-                        sorted([f"*{k}*: {v[device]}" for k, v in job_result["failed"].items() if v[device]])
+                        sorted(
+                            [
+                                f"*{k}*: {v[device]}"
+                                for k, v in job_result["failed"].items()
+                                if v[device]
+                            ]
+                        )
                     )
 
-                    blocks = self.get_reply_blocks(job, job_result, failures, device, text=text)
+                    blocks = self.get_reply_blocks(
+                        job, job_result, failures, device, text=text
+                    )
 
                     print("Sending the following reply")
                     print(json.dumps({"blocks": blocks}))
@@ -837,14 +982,18 @@ def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
                 with open(os.path.join(artifact_path, file)) as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
-                raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
+                raise ValueError(
+                    f"Could not open {os.path.join(artifact_path, file)}."
+                ) from e
 
     return _artifact
 
 
 def retrieve_available_artifacts():
     class Artifact:
-        def __init__(self, name: str, single_gpu: bool = False, multi_gpu: bool = False):
+        def __init__(
+            self, name: str, single_gpu: bool = False, multi_gpu: bool = False
+        ):
             self.name = name
             self.single_gpu = single_gpu
             self.multi_gpu = multi_gpu
@@ -872,7 +1021,9 @@ def retrieve_available_artifacts():
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].single_gpu = True
             else:
-                _available_artifacts[artifact_name] = Artifact(artifact_name, single_gpu=True)
+                _available_artifacts[artifact_name] = Artifact(
+                    artifact_name, single_gpu=True
+                )
 
             _available_artifacts[artifact_name].add_path(directory, gpu="single")
 
@@ -882,7 +1033,9 @@ def retrieve_available_artifacts():
             if artifact_name in _available_artifacts:
                 _available_artifacts[artifact_name].multi_gpu = True
             else:
-                _available_artifacts[artifact_name] = Artifact(artifact_name, multi_gpu=True)
+                _available_artifacts[artifact_name] = Artifact(
+                    artifact_name, multi_gpu=True
+                )
 
             _available_artifacts[artifact_name].add_path(directory, gpu="multi")
         else:
@@ -975,7 +1128,9 @@ if __name__ == "__main__":
         numbers = pr_number_re.findall(ci_title)
         if len(numbers) > 0:
             pr_number = numbers[0]
-            ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
+            ci_detail_url = (
+                f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
+            )
             ci_details = requests.get(ci_detail_url).json()
 
             ci_author = ci_details["user"]["login"]
@@ -986,7 +1141,9 @@ if __name__ == "__main__":
         if merged_by is None:
             ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+            ci_title = (
+                f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+            )
 
     elif ci_sha:
         ci_title = f"<{ci_url}|commit: {ci_sha}>"
@@ -995,7 +1152,9 @@ if __name__ == "__main__":
         ci_title = ""
 
     if runner_not_available or runner_failed or setup_failed:
-        Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
+        Message.error_out(
+            title, ci_title, runner_not_available, runner_failed, setup_failed
+        )
         exit(0)
 
     # sys.argv[0] is always `utils/notification_service.py`.
@@ -1009,15 +1168,22 @@ if __name__ == "__main__":
         try:
             folder_slices = ast.literal_eval(model_list_as_str)
             # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-            models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
+            models = [
+                x.replace("models/", "models_")
+                for folders in folder_slices
+                for x in folders
+            ]
         except Exception:
             Message.error_out(title, ci_title)
             raise ValueError("Errored out.")
 
     github_actions_jobs = get_jobs(
-        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        workflow_run_id=os.environ["GITHUB_RUN_ID"],
+        token=os.environ["ACCESS_REPO_INFO_TOKEN"],
     )
-    github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs}
+    github_actions_job_links = {
+        job["name"]: job["html_url"] for job in github_actions_jobs
+    }
 
     artifact_name_to_job_map = {}
     for job in github_actions_jobs:
@@ -1048,7 +1214,10 @@ if __name__ == "__main__":
     # - Failures: as a line-break separated list of errors
     model_results = {
         model: {
-            "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in modeling_categories},
+            "failed": {
+                m: {"unclassified": 0, "single": 0, "multi": 0}
+                for m in modeling_categories
+            },
             "success": 0,
             "time_spent": "",
             "failures": {},
@@ -1061,7 +1230,9 @@ if __name__ == "__main__":
     unclassified_model_failures = []
 
     for model in model_results.keys():
-        for artifact_path in available_artifacts[f"run_models_gpu_{model}_test_reports"].paths:
+        for artifact_path in available_artifacts[
+            f"run_models_gpu_{model}_test_reports"
+        ].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -1091,31 +1262,49 @@ if __name__ == "__main__":
                         )
 
                         if re.search("test_modeling_tf_", line):
-                            model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["TensorFlow"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("test_modeling_flax_", line):
-                            model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Flax"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("test_modeling", line):
-                            model_results[model]["failed"]["PyTorch"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["PyTorch"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("test_tokenization", line):
-                            model_results[model]["failed"]["Tokenizers"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Tokenizers"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("test_pipelines", line):
-                            model_results[model]["failed"]["Pipelines"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Pipelines"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("test_trainer", line):
-                            model_results[model]["failed"]["Trainer"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Trainer"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("onnx", line):
-                            model_results[model]["failed"]["ONNX"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["ONNX"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         elif re.search("auto", line):
-                            model_results[model]["failed"]["Auto"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Auto"][
+                                artifact_path["gpu"]
+                            ] += 1
 
                         else:
-                            model_results[model]["failed"]["Unclassified"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Unclassified"][
+                                artifact_path["gpu"]
+                            ] += 1
                             unclassified_model_failures.append(line)
 
     # Additional runs
@@ -1180,7 +1369,9 @@ if __name__ == "__main__":
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])
-            additional_results[key]["failed"][artifact_path["gpu"] or "unclassified"] += failed
+            additional_results[key]["failed"][
+                artifact_path["gpu"] or "unclassified"
+            ] += failed
             additional_results[key]["success"] += success
             additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
 
@@ -1198,12 +1389,17 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path["gpu"] not in additional_results[key]["failures"]:
-                            additional_results[key]["failures"][artifact_path["gpu"]] = []
+                        if (
+                            artifact_path["gpu"]
+                            not in additional_results[key]["failures"]
+                        ):
+                            additional_results[key]["failures"][
+                                artifact_path["gpu"]
+                            ] = []
 
-                        additional_results[key]["failures"][artifact_path["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
-                        )
+                        additional_results[key]["failures"][
+                            artifact_path["gpu"]
+                        ].append({"line": line, "trace": stacktraces.pop(0)})
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
     # when `inputs.job` (in the workflow file) is `run_models_gpu`. The reason is: otherwise we need to save several
@@ -1224,7 +1420,9 @@ if __name__ == "__main__":
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
     if job_name == "run_models_gpu":
-        with open(f"ci_results_{job_name}/model_results.json", "w", encoding="UTF-8") as fp:
+        with open(
+            f"ci_results_{job_name}/model_results.json", "w", encoding="UTF-8"
+        ) as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
@@ -1246,7 +1444,11 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "deepspeed",
     }
     for job, job_result in additional_results.items():
-        with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
+        with open(
+            f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+            "w",
+            encoding="UTF-8",
+        ) as fp:
             json.dump(job_result, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
@@ -1267,7 +1469,9 @@ if __name__ == "__main__":
             output_dir = os.path.join(os.getcwd(), "previous_reports")
             os.makedirs(output_dir, exist_ok=True)
             prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+                artifact_names=artifact_names,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
             )
 
     message = Message(
@@ -1280,6 +1484,8 @@ if __name__ == "__main__":
     )
 
     # send report only if there is any failure (for push CI)
-    if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
+    if message.n_failures or (
+        ci_event != "push" and not ci_event.startswith("Push CI (AMD)")
+    ):
         message.post()
         message.post_reply()

@@ -96,7 +96,9 @@ def convert_ssm_config_to_hf_config(
     # Set important values from config and recalculate other resulting entries
     hf_config.hidden_size = config_ssm["d_model"]
     hf_config.intermediate_size = config_ssm["d_intermediate"]
-    hf_config.mamba_n_heads = (hf_config.hidden_size * hf_config.mamba_expand) // hf_config.mamba_d_head
+    hf_config.mamba_n_heads = (
+        hf_config.hidden_size * hf_config.mamba_expand
+    ) // hf_config.mamba_d_head
     hf_config.num_hidden_layers = config_ssm["n_layer"]
     hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
 
@@ -157,7 +159,9 @@ def save_sharded_safetensors(
         "weight_map": state_dict_split.tensor_to_filename,
     }
     # Save the index
-    with open(os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8"
+    ) as f:
         content = json.dumps(index, indent=2, sort_keys=True) + "\n"
         f.write(content)
 
@@ -222,7 +226,11 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
     state_dict = convert_state_dict_from_mamba_ssm(state_dict)
 
     # Save new model to pytorch_dump_path
-    dtype = torch.float32 if precision == "fp32" else (torch.bfloat16 if precision == "bf16" else torch.float16)
+    dtype = (
+        torch.float32
+        if precision == "fp32"
+        else (torch.bfloat16 if precision == "bf16" else torch.float16)
+    )
 
     save_file_fn = None
     if isinstance(save_model, bool) and save_model:
@@ -231,7 +239,11 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
         save_file_fn = save_sharded_safetensors
 
     if save_file_fn:
-        save_file_fn({k: v.to(dtype) for k, v in state_dict.items()}, output_dir, metadata={"format": "pt"})
+        save_file_fn(
+            {k: v.to(dtype) for k, v in state_dict.items()},
+            output_dir,
+            metadata={"format": "pt"},
+        )
 
 
 if __name__ == "__main__":
@@ -254,7 +266,11 @@ if __name__ == "__main__":
         help="The precision the model will be saved in. Select from fp32, fp16 or bf16.",
     )
     parser.add_argument(
-        "-o", "--output_dir", type=str, required=True, help="Path to directory to save the converted output model to."
+        "-o",
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Path to directory to save the converted output model to.",
     )
     parser.add_argument(
         "-t",

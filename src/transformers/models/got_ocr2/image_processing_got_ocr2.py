@@ -19,27 +19,17 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (convert_to_rgb, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (OPENAI_CLIP_MEAN, OPENAI_CLIP_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            infer_channel_dimension_format, is_scaled_image,
+                            make_flat_list_of_images, to_numpy_array,
+                            valid_images, validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs,
+                      is_vision_available, logging)
 
 if is_vision_available():
     import PIL
@@ -50,7 +40,9 @@ logger = logging.get_logger(__name__)
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
+def get_all_supported_aspect_ratios(
+    min_image_tiles: int, max_image_tiles: int
+) -> List[Tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
 
@@ -98,7 +90,9 @@ def get_optimal_tiled_canvas(
     more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
     excessive tiling.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+    possible_tile_arrangements = get_all_supported_aspect_ratios(
+        min_image_tiles, max_image_tiles
+    )
 
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
@@ -239,7 +233,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
         return resize(
             image,
@@ -326,16 +322,22 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        crop_to_patches = crop_to_patches if crop_to_patches is not None else self.crop_to_patches
+        crop_to_patches = (
+            crop_to_patches if crop_to_patches is not None else self.crop_to_patches
+        )
         min_patches = min_patches if min_patches is not None else self.min_patches
         max_patches = max_patches if max_patches is not None else self.max_patches
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -392,10 +394,19 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
 
         for i, image in enumerate(images):
             if do_resize:
-                images[i] = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                images[i] = self.resize(
+                    image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
             if do_rescale:
-                images[i] = self.rescale(image=images[i], scale=rescale_factor, input_data_format=input_data_format)
+                images[i] = self.rescale(
+                    image=images[i],
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 images[i] = self.normalize(
@@ -405,10 +416,13 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                     input_data_format=input_data_format,
                 )
 
-            images[i] = to_channel_dimension_format(images[i], data_format, input_channel_dim=input_data_format)
+            images[i] = to_channel_dimension_format(
+                images[i], data_format, input_channel_dim=input_data_format
+            )
 
         encoded_outputs = BatchFeature(
-            data={"pixel_values": images, "num_patches": num_patches}, tensor_type=return_tensors
+            data={"pixel_values": images, "num_patches": num_patches},
+            tensor_type=return_tensors,
         )
 
         return encoded_outputs
@@ -447,12 +461,17 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         """
         if data_format is None:
             data_format = infer_channel_dimension_format(images)
-        images = to_channel_dimension_format(images, ChannelDimension.FIRST, data_format)
+        images = to_channel_dimension_format(
+            images, ChannelDimension.FIRST, data_format
+        )
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
         original_height, original_width = images.shape[-2:]
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+            (original_height, original_width),
+            (patch_size_height, patch_size_width),
+            min_patches,
+            max_patches,
         )
 
         # calculate the target width and height
@@ -480,12 +499,17 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             )
             # split the image
             patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
-            patch_image = to_channel_dimension_format(patch_image, data_format, ChannelDimension.FIRST)
+            patch_image = to_channel_dimension_format(
+                patch_image, data_format, ChannelDimension.FIRST
+            )
             processed_images.append(patch_image)
 
         if use_thumbnail and len(processed_images) != 1:
             thumbnail_img = self.resize(
-                images, patch_size, data_format=data_format, input_data_format=ChannelDimension.FIRST
+                images,
+                patch_size,
+                data_format=data_format,
+                input_data_format=ChannelDimension.FIRST,
             )
             processed_images.append(thumbnail_img)
 

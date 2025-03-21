@@ -14,21 +14,11 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
-    AutoImageProcessor,
-    AutoModelForImageToImage,
-    ImageToImagePipeline,
-    is_vision_available,
-    pipeline,
-)
-from transformers.testing_utils import (
-    is_pipeline_test,
-    require_torch,
-    require_vision,
-    slow,
-)
-
+from transformers import (MODEL_FOR_IMAGE_TO_IMAGE_MAPPING, AutoImageProcessor,
+                          AutoModelForImageToImage, ImageToImagePipeline,
+                          is_vision_available, pipeline)
+from transformers.testing_utils import (is_pipeline_test, require_torch,
+                                        require_vision, slow)
 
 if is_vision_available():
     from PIL import Image

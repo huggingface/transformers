@@ -89,7 +89,11 @@ class Mistral3Config(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "pixtral"
+            vision_config["model_type"] = (
+                vision_config["model_type"]
+                if "model_type" in vision_config
+                else "pixtral"
+            )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["pixtral"](
@@ -107,7 +111,9 @@ class Mistral3Config(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "mistral"
+            )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["mistral"](

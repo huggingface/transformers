@@ -14,14 +14,11 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    SummarizationPipeline,
-    TFPreTrainedModel,
-    pipeline,
-)
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers import (MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                          TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                          SummarizationPipeline, TFPreTrainedModel, pipeline)
+from transformers.testing_utils import (is_pipeline_test, require_tf,
+                                        require_torch, slow, torch_device)
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY
@@ -49,7 +46,10 @@ class SummarizationPipelineTests(unittest.TestCase):
             processor=processor,
             torch_dtype=torch_dtype,
         )
-        return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
+        return summarizer, [
+            "(CNN)The Palestinian Authority officially became",
+            "Some other text",
+        ]
 
     def run_pipeline_test(self, summarizer, _):
         model = summarizer.model
@@ -92,7 +92,9 @@ class SummarizationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt")
+        summarizer = pipeline(
+            task="summarization", model="sshleifer/tiny-mbart", framework="pt"
+        )
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,
@@ -105,7 +107,9 @@ class SummarizationPipelineTests(unittest.TestCase):
 
     @require_tf
     def test_small_model_tf(self):
-        summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="tf")
+        summarizer = pipeline(
+            task="summarization", model="sshleifer/tiny-mbart", framework="tf"
+        )
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,

@@ -21,8 +21,8 @@ from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -85,7 +85,9 @@ class LlavaNextVideoProcessingTester:
         return self.num_channels, self.crop_size["height"], self.crop_size["width"]
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -96,7 +98,9 @@ class LlavaNextVideoProcessingTester:
             torchify=torchify,
         )
 
-    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_video_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         images = prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -127,7 +131,9 @@ class LlavaNextVideoProcessingTester:
 @require_torch
 @require_vision
 class LlavaNextVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = LlavaNextVideoImageProcessor if is_vision_available() else None
+    image_processing_class = (
+        LlavaNextVideoImageProcessor if is_vision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -152,11 +158,15 @@ class LlavaNextVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=42, crop_size=84
+            )
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
@@ -164,17 +174,23 @@ class LlavaNextVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(
+            equal_resolution=True
+        )
         for video in video_inputs:
             self.assertIsInstance(video[0], Image.Image)
 
         # Test not batched input (pass as `videos` arg to test that ImageProcessor can handle videos in absence of images!)
-        encoded_videos = image_processing(images=video_inputs[0], return_tensors="pt").pixel_values_videos
+        encoded_videos = image_processing(
+            images=video_inputs[0], return_tensors="pt"
+        ).pixel_values_videos
         expected_output_video_shape = (1, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
-        encoded_videos = image_processing(images=video_inputs, return_tensors="pt").pixel_values_videos
+        encoded_videos = image_processing(
+            images=video_inputs, return_tensors="pt"
+        ).pixel_values_videos
         expected_output_video_shape = (5, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
@@ -182,17 +198,23 @@ class LlavaNextVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, numpify=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(
+            equal_resolution=True, numpify=True
+        )
         for video in video_inputs:
             self.assertIsInstance(video, np.ndarray)
 
         # Test not batched input (pass as `videos` arg to test that ImageProcessor can handle videos in absence of images!)
-        encoded_videos = image_processing(images=video_inputs[0], return_tensors="pt").pixel_values_videos
+        encoded_videos = image_processing(
+            images=video_inputs[0], return_tensors="pt"
+        ).pixel_values_videos
         expected_output_video_shape = (1, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
-        encoded_videos = image_processing(images=video_inputs, return_tensors="pt").pixel_values_videos
+        encoded_videos = image_processing(
+            images=video_inputs, return_tensors="pt"
+        ).pixel_values_videos
         expected_output_video_shape = (5, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
@@ -200,20 +222,28 @@ class LlavaNextVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(
+            equal_resolution=True, torchify=True
+        )
         for video in video_inputs:
             self.assertIsInstance(video, torch.Tensor)
 
         # Test not batched input
-        encoded_videos = image_processing(images=video_inputs[0], return_tensors="pt").pixel_values_videos
+        encoded_videos = image_processing(
+            images=video_inputs[0], return_tensors="pt"
+        ).pixel_values_videos
         expected_output_video_shape = (1, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
-        encoded_videos = image_processing(images=video_inputs, return_tensors="pt").pixel_values_videos
+        encoded_videos = image_processing(
+            images=video_inputs, return_tensors="pt"
+        ).pixel_values_videos
         expected_output_video_shape = (5, 8, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
-    @unittest.skip("LlavaNextVideoImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
+    @unittest.skip(
+        "LlavaNextVideoImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
+    )
     def test_call_numpy_4_channels(self):
         pass

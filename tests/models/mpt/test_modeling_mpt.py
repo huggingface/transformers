@@ -18,25 +18,22 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (require_bitsandbytes, require_torch,
+                                        require_torch_gpu, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoTokenizer,
-        MptForCausalLM,
-        MptForQuestionAnswering,
-        MptForSequenceClassification,
-        MptForTokenClassification,
-        MptModel,
-    )
+    from transformers import (AutoTokenizer, MptForCausalLM,
+                              MptForQuestionAnswering,
+                              MptForSequenceClassification,
+                              MptForTokenClassification, MptModel)
 
 
 @require_torch
@@ -105,7 +102,9 @@ class MptModelTester:
 
         sequence_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
 
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
@@ -139,7 +138,10 @@ class MptModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(len(result.past_key_values), config.n_layers)
 
     def create_and_check_mpt_model_past(self, config, input_ids, input_mask, *args):
@@ -149,9 +151,15 @@ class MptModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True)
-        outputs_use_cache_conf = model(input_ids, attention_mask=torch.ones_like(input_ids))
-        outputs_no_past = model(input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids))
+        outputs = model(
+            input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True
+        )
+        outputs_use_cache_conf = model(
+            input_ids, attention_mask=torch.ones_like(input_ids)
+        )
+        outputs_no_past = model(
+            input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids)
+        )
 
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
@@ -169,13 +177,19 @@ class MptModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_mpt_model_attention_mask_past(self, config, input_ids, input_mask, *args):
+    def create_and_check_mpt_model_attention_mask_past(
+        self, config, input_ids, input_mask, *args
+    ):
         model = MptModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -193,29 +207,46 @@ class MptModelTester:
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
+        output_from_past = model(
+            next_tokens, past_key_values=past, attention_mask=attn_mask
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_mpt_model_past_large_inputs(self, config, input_ids, input_mask, *args):
+    def create_and_check_mpt_model_past_large_inputs(
+        self, config, input_ids, input_mask, *args
+    ):
         model = MptModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -253,13 +284,19 @@ class MptModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), hidden_states_from_past.shape[-1]).item()
-        output_from_no_past_slice = hidden_states_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = hidden_states_from_past[:, :, random_slice_idx].detach()
+        output_from_no_past_slice = hidden_states_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
+        output_from_past_slice = hidden_states_from_past[
+            :, :, random_slice_idx
+        ].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = MptForCausalLM(config)
@@ -268,9 +305,13 @@ class MptModelTester:
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
-    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
+    def create_and_check_sequence_classification_model(
+        self, config, input_ids, input_mask, *args
+    ):
         config.num_labels = self.num_labels
         model = MptForSequenceClassification(config)
         model.to(torch_device)
@@ -279,21 +320,29 @@ class MptModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
+    def create_and_check_token_classification_model(
+        self, config, input_ids, input_mask, *args
+    ):
         model = MptForTokenClassification(config)
         model.to(torch_device)
         model.eval()
 
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
-    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
+    def create_and_check_question_answering_model(
+        self, config, input_ids, input_mask, *args
+    ):
         model = MptForQuestionAnswering(config)
         model.to(torch_device)
         model.eval()
 
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
@@ -305,16 +354,24 @@ class MptModelTester:
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         result.loss.backward()
 
     def create_and_check_mpt_weight_initialization(self, config, *args):
         model = MptModel(config)
-        model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layers)
+        model_std = model.config.initializer_range / math.sqrt(
+            2 * model.config.n_layers
+        )
         for key in model.state_dict().keys():
             if "c_proj" in key and "weight" in key:
-                self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
-                self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
+                self.parent.assertLessEqual(
+                    abs(torch.std(model.state_dict()[key]) - model_std), 0.001
+                )
+                self.parent.assertLessEqual(
+                    abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01
+                )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -327,11 +384,23 @@ class MptModelTester:
 
 
 class MptConfigTester(ConfigTester):
-    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
-        super().__init__(parent, config_class, has_text_modality, common_properties, **kwargs)
+    def __init__(
+        self,
+        parent,
+        config_class=None,
+        has_text_modality=True,
+        common_properties=None,
+        **kwargs
+    ):
+        super().__init__(
+            parent, config_class, has_text_modality, common_properties, **kwargs
+        )
 
     def test_attn_config_as_dict(self):
-        config = self.config_class(**self.inputs_dict, attn_config={"attn_impl": "flash", "softmax_scale": None})
+        config = self.config_class(
+            **self.inputs_dict,
+            attn_config={"attn_impl": "flash", "softmax_scale": None}
+        )
         self.parent.assertTrue(config.attn_config.attn_impl == "flash")
         self.parent.assertTrue(config.attn_config.softmax_scale is None)
 
@@ -341,7 +410,9 @@ class MptConfigTester(ConfigTester):
 
 
 @require_torch
-class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MptModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             MptModel,
@@ -395,11 +466,15 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_mpt_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_mpt_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     def test_mpt_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_mpt_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_mpt_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -407,21 +482,29 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_mpt_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_sequence_classification_model(*config_and_inputs)
+        self.model_tester.create_and_check_sequence_classification_model(
+            *config_and_inputs
+        )
 
     def test_mpt_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_token_classification_model(*config_and_inputs)
+        self.model_tester.create_and_check_token_classification_model(
+            *config_and_inputs
+        )
 
     def test_mpt_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+        self.model_tester.create_and_check_forward_and_backwards(
+            *config_and_inputs, gradient_checkpointing=True
+        )
 
     def test_mpt_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpt_weight_initialization(*config_and_inputs)
 
-    @unittest.skip(reason="For backward compatibility the lm_head is not in the model's state dict on the Hub.")
+    @unittest.skip(
+        reason="For backward compatibility the lm_head is not in the model's state dict on the Hub."
+    )
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
@@ -446,7 +529,9 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = "Hello, I'm a new user of the forum. I have a question about the \"Solaris"
+        expected_output = (
+            "Hello, I'm a new user of the forum. I have a question about the \"Solaris"
+        )
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -485,7 +570,9 @@ class MptIntegrationTests(unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
 
-        inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         expected_output = [
             "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
@@ -509,7 +596,11 @@ class MptIntegrationTests(unittest.TestCase):
 
         outputs = model(dummy_input, output_hidden_states=True)
 
-        expected_slice = torch.Tensor([-0.2520, -0.2178, -0.1953]).to(torch_device, torch.bfloat16)
+        expected_slice = torch.Tensor([-0.2520, -0.2178, -0.1953]).to(
+            torch_device, torch.bfloat16
+        )
         predicted_slice = outputs.hidden_states[-1][0, 0, :3]
 
-        torch.testing.assert_close(expected_slice, predicted_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            expected_slice, predicted_slice, rtol=1e-3, atol=1e-3
+        )

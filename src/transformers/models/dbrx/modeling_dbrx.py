@@ -25,20 +25,17 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (MoeCausalLMOutputWithPast,
+                                 MoeModelOutputWithPast)
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-    is_torch_flex_attn_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_flash_attn_2_available,
+                      is_flash_attn_greater_or_equal_2_10,
+                      is_torch_flex_attn_available, logging,
+                      replace_return_docstrings)
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_dbrx import DbrxConfig
-
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
@@ -62,21 +59,32 @@ class DbrxRotaryEmbedding(nn.Module):
         self.max_position_embeddings = max_position_embeddings
         self.base = base
 
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
+        inv_freq = 1.0 / (
+            self.base
+            ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim)
+        )
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         self.inv_freq.to(x.device)
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -128,7 +136,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -164,7 +174,9 @@ def load_balancing_loss_func(
 
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+        concatenated_gate_logits = torch.cat(
+            [layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0
+        )
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
@@ -180,20 +192,24 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (
+            batch_size * sequence_length
+        )
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .expand(
+                (num_hidden_layers, batch_size, sequence_length, top_k, num_experts)
+            )
             .reshape(-1, top_k, num_experts)
             .to(compute_device)
         )
 
         # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
+        tokens_per_expert = torch.sum(
+            expert_mask.float() * expert_attention_mask, dim=0
+        ) / torch.sum(expert_attention_mask, dim=0)
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
@@ -204,9 +220,9 @@ def load_balancing_loss_func(
         )
 
         # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+        router_prob_per_expert = torch.sum(
+            routing_weights * router_per_expert_attention_mask, dim=0
+        ) / torch.sum(router_per_expert_attention_mask, dim=0)
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -239,7 +255,9 @@ class DbrxAttention(nn.Module):
         self.is_causal = True
 
         self.Wqkv = nn.Linear(
-            self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
+            self.hidden_size,
+            self.hidden_size + 2 * self.num_key_value_heads * self.head_dim,
+            bias=False,
         )
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.rotary_emb = DbrxRotaryEmbedding(
@@ -275,30 +293,46 @@ class DbrxAttention(nn.Module):
             dim=2,
         )
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.block_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.block_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(
+            query_states, key_states.transpose(2, 3)
+        ) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attn_pdrop, training=self.training)
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.attn_pdrop, training=self.training
+        )
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -349,7 +383,9 @@ class DbrxFlashAttention2(DbrxAttention):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-        logger.info("Implicitly setting `output_attentions` to False as it is not supported in Flash Attention.")
+        logger.info(
+            "Implicitly setting `output_attentions` to False as it is not supported in Flash Attention."
+        )
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -370,17 +406,27 @@ class DbrxFlashAttention2(DbrxAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.block_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.block_idx, cache_kwargs
+            )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout
         # [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -485,17 +531,27 @@ class DbrxSdpaAttention(DbrxAttention):
             dim=2,
         )
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, None
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.block_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.block_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -576,7 +632,9 @@ class DbrxNormAttentionNorm(nn.Module):
             **kwargs,
         )
 
-        hidden_states = nn.functional.dropout(hidden_states, p=self.resid_pdrop, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.resid_pdrop, training=self.training
+        )
         hidden_states = hidden_states + residual_states
 
         residual_states = hidden_states
@@ -603,7 +661,9 @@ class DbrxRouter(nn.Module):
 
         self.layer = nn.Linear(self.hidden_size, self.moe_num_experts, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
+    def forward(
+        self, hidden_states: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         if self.training and self.moe_jitter_eps is not None:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
@@ -613,7 +673,9 @@ class DbrxRouter(nn.Module):
         top_weights, top_experts = torch.topk(weights, self.moe_top_k, dim=-1)
 
         top_weights_scale = (
-            torch.norm(top_weights, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True)
+            torch.norm(
+                top_weights, p=self.moe_normalize_expert_weights, dim=-1, keepdim=True
+            )
             if self.moe_normalize_expert_weights is not None
             else 1.0
         )
@@ -625,21 +687,37 @@ class DbrxRouter(nn.Module):
 
 
 class DbrxExpertGLU(nn.Module):
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, moe_num_experts: int, ffn_act_fn: dict):
+    def __init__(
+        self,
+        hidden_size: int,
+        ffn_hidden_size: int,
+        moe_num_experts: int,
+        ffn_act_fn: dict,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
         self.moe_num_experts = moe_num_experts
 
-        self.w1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
-        self.v1 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
-        self.w2 = nn.Parameter(torch.empty(moe_num_experts * ffn_hidden_size, hidden_size))
+        self.w1 = nn.Parameter(
+            torch.empty(moe_num_experts * ffn_hidden_size, hidden_size)
+        )
+        self.v1 = nn.Parameter(
+            torch.empty(moe_num_experts * ffn_hidden_size, hidden_size)
+        )
+        self.w2 = nn.Parameter(
+            torch.empty(moe_num_experts * ffn_hidden_size, hidden_size)
+        )
 
         act_fn_name = ffn_act_fn.get("name", "silu")
         self.activation_fn = ACT2FN[act_fn_name]
 
     def forward(
-        self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
+        self,
+        x: torch.Tensor,
+        expert_w1: torch.Tensor,
+        expert_v1: torch.Tensor,
+        expert_w2: torch.Tensor,
     ) -> torch.Tensor:
         gate_proj = x.matmul(expert_w1.t())
         up_proj = x.matmul(expert_v1.t())
@@ -650,7 +728,13 @@ class DbrxExpertGLU(nn.Module):
 
 
 class DbrxExperts(nn.Module):
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, moe_num_experts: int, ffn_act_fn: dict):
+    def __init__(
+        self,
+        hidden_size: int,
+        ffn_hidden_size: int,
+        moe_num_experts: int,
+        ffn_act_fn: dict,
+    ):
         super().__init__()
         self.moe_num_experts = moe_num_experts
         self.mlp = DbrxExpertGLU(
@@ -661,23 +745,29 @@ class DbrxExperts(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, weights: torch.Tensor, top_weights: torch.Tensor, top_experts: torch.LongTensor
+        self,
+        x: torch.Tensor,
+        weights: torch.Tensor,
+        top_weights: torch.Tensor,
+        top_experts: torch.LongTensor,
     ) -> torch.Tensor:
         bsz, q_len, hidden_size = x.shape
         x = x.view(-1, hidden_size)
         out = torch.zeros_like(x)
 
-        expert_mask = nn.functional.one_hot(top_experts, num_classes=self.moe_num_experts).permute(2, 1, 0)
+        expert_mask = nn.functional.one_hot(
+            top_experts, num_classes=self.moe_num_experts
+        ).permute(2, 1, 0)
         # Chunk experts at once to avoid storing full parameter multiple times in autograd
-        w1_chunked = self.mlp.w1.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(
-            self.moe_num_experts, dim=0
-        )
-        v1_chunked = self.mlp.v1.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(
-            self.moe_num_experts, dim=0
-        )
-        w2_chunked = self.mlp.w2.view(self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size).chunk(
-            self.moe_num_experts, dim=0
-        )
+        w1_chunked = self.mlp.w1.view(
+            self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size
+        ).chunk(self.moe_num_experts, dim=0)
+        v1_chunked = self.mlp.v1.view(
+            self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size
+        ).chunk(self.moe_num_experts, dim=0)
+        w2_chunked = self.mlp.w2.view(
+            self.mlp.moe_num_experts, self.mlp.ffn_hidden_size, self.mlp.hidden_size
+        ).chunk(self.moe_num_experts, dim=0)
         w1_chunked = [w1.squeeze(dim=0) for w1 in w1_chunked]
         v1_chunked = [v1.squeeze(dim=0) for v1 in v1_chunked]
         w2_chunked = [w2.squeeze(dim=0) for w2 in w2_chunked]
@@ -693,7 +783,12 @@ class DbrxExperts(nn.Module):
 
             expert_tokens = x[None, token_list].reshape(-1, hidden_size)
             expert_out = (
-                self.mlp(expert_tokens, w1_chunked[expert_idx], v1_chunked[expert_idx], w2_chunked[expert_idx])
+                self.mlp(
+                    expert_tokens,
+                    w1_chunked[expert_idx],
+                    v1_chunked[expert_idx],
+                    w2_chunked[expert_idx],
+                )
                 * top_weights[token_list, topk_list, None]
             )
 
@@ -759,7 +854,12 @@ class DbrxBlock(nn.Module):
         Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]],
         Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]],
         Tuple[torch.Tensor, Optional[Cache], Optional[torch.Tensor]],
-        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache], Optional[torch.Tensor]],
+        Tuple[
+            torch.Tensor,
+            Optional[torch.Tensor],
+            Optional[Cache],
+            Optional[torch.Tensor],
+        ],
     ]:
         """Forward function for DbrxBlock.
 
@@ -779,20 +879,24 @@ class DbrxBlock(nn.Module):
         """
 
         # Norm + Attention + Norm
-        resid_states, hidden_states, self_attn_weights, present_key_value = self.norm_attn_norm(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
+        resid_states, hidden_states, self_attn_weights, present_key_value = (
+            self.norm_attn_norm(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
         )
 
         # Fully Connected
         hidden_states, router_logits = self.ffn(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.resid_pdrop, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.resid_pdrop, training=self.training
+        )
         hidden_states = resid_states + hidden_states
 
         outputs = (hidden_states,)
@@ -960,7 +1064,9 @@ class DbrxModel(DbrxPreTrainedModel):
         self.emb_pdrop = config.emb_pdrop
 
         self.wte = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-        self.blocks = nn.ModuleList([DbrxBlock(config, block_idx) for block_idx in range(config.n_layers)])
+        self.blocks = nn.ModuleList(
+            [DbrxBlock(config, block_idx) for block_idx in range(config.n_layers)]
+        )
         self.norm_f = nn.LayerNorm(config.d_model, bias=False)
         self.gradient_checkpointing = False
 
@@ -989,18 +1095,30 @@ class DbrxModel(DbrxPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, MoeModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+            output_router_logits
+            if output_router_logits is not None
+            else self.config.output_router_logits
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1011,7 +1129,9 @@ class DbrxModel(DbrxPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
+        inputs_embeds = nn.functional.dropout(
+            inputs_embeds, p=self.emb_pdrop, training=self.training
+        )
 
         # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
@@ -1028,16 +1148,24 @@ class DbrxModel(DbrxPreTrainedModel):
                 )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # embed positions
@@ -1101,7 +1229,13 @@ class DbrxModel(DbrxPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                for v in [
+                    hidden_states,
+                    next_cache,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_router_logits,
+                ]
                 if v is not None
             )
         return MoeModelOutputWithPast(
@@ -1134,11 +1268,17 @@ class DbrxModel(DbrxPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1179,7 +1319,9 @@ class DbrxModel(DbrxPreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -1223,27 +1365,36 @@ class DbrxModel(DbrxPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
 
-@add_start_docstrings("The DBRX Model transformer for causal language modeling.", DBRX_START_DOCSTRING)
+@add_start_docstrings(
+    "The DBRX Model transformer for causal language modeling.", DBRX_START_DOCSTRING
+)
 class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     def __init__(self, config: DbrxConfig):
         super().__init__(config)
@@ -1277,7 +1428,9 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(DBRX_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1327,14 +1480,24 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+            output_router_logits
+            if output_router_logits is not None
+            else self.config.output_router_logits
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.transformer(
@@ -1353,7 +1516,11 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # No upscaling to float was ever done for Dbrx
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
@@ -1374,7 +1541,9 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
                 attention_mask,
             )
             if labels is not None and loss is not None:
-                loss += self.moe_loss_weight * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.moe_loss_weight * aux_loss.to(
+                    loss.device
+                )  # make sure to reside in the same device
 
         if not return_dict:
             output = (logits,) + outputs[1:]

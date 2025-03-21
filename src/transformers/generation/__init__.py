@@ -14,8 +14,8 @@
 
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
-
+from ..utils import (OptionalDependencyNotAvailable, _LazyModule,
+                     is_flax_available, is_tf_available, is_torch_available)
 
 _import_structure = {
     "configuration_utils": [
@@ -26,7 +26,12 @@ _import_structure = {
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
     ],
-    "streamers": ["AsyncTextIteratorStreamer", "BaseStreamer", "TextIteratorStreamer", "TextStreamer"],
+    "streamers": [
+        "AsyncTextIteratorStreamer",
+        "BaseStreamer",
+        "TextIteratorStreamer",
+        "TextStreamer",
+    ],
 }
 
 try:
@@ -189,15 +194,12 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import (
-        BaseWatermarkingConfig,
-        CompileConfig,
-        GenerationConfig,
-        GenerationMode,
-        SynthIDTextWatermarkingConfig,
-        WatermarkingConfig,
-    )
-    from .streamers import AsyncTextIteratorStreamer, BaseStreamer, TextIteratorStreamer, TextStreamer
+    from .configuration_utils import (BaseWatermarkingConfig, CompileConfig,
+                                      GenerationConfig, GenerationMode,
+                                      SynthIDTextWatermarkingConfig,
+                                      WatermarkingConfig)
+    from .streamers import (AsyncTextIteratorStreamer, BaseStreamer,
+                            TextIteratorStreamer, TextStreamer)
 
     try:
         if not is_torch_available():
@@ -205,82 +207,57 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
-        from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-        from .candidate_generator import (
-            AssistedCandidateGenerator,
-            CandidateGenerator,
-            EarlyExitCandidateGenerator,
-            PromptLookupCandidateGenerator,
-        )
+        from .beam_constraints import (Constraint, ConstraintListState,
+                                       DisjunctiveConstraint,
+                                       PhrasalConstraint)
+        from .beam_search import (BeamHypotheses, BeamScorer, BeamSearchScorer,
+                                  ConstrainedBeamSearchScorer)
+        from .candidate_generator import (AssistedCandidateGenerator,
+                                          CandidateGenerator,
+                                          EarlyExitCandidateGenerator,
+                                          PromptLookupCandidateGenerator)
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
             EncoderNoRepeatNGramLogitsProcessor,
-            EncoderRepetitionPenaltyLogitsProcessor,
-            EpsilonLogitsWarper,
-            EtaLogitsWarper,
-            ExponentialDecayLengthPenalty,
-            ForcedBOSTokenLogitsProcessor,
-            ForcedEOSTokenLogitsProcessor,
-            HammingDiversityLogitsProcessor,
-            InfNanRemoveLogitsProcessor,
-            LogitNormalization,
-            LogitsProcessor,
-            LogitsProcessorList,
-            MinLengthLogitsProcessor,
-            MinNewTokensLengthLogitsProcessor,
-            MinPLogitsWarper,
-            NoBadWordsLogitsProcessor,
-            NoRepeatNGramLogitsProcessor,
-            PrefixConstrainedLogitsProcessor,
-            RepetitionPenaltyLogitsProcessor,
-            SequenceBiasLogitsProcessor,
+            EncoderRepetitionPenaltyLogitsProcessor, EpsilonLogitsWarper,
+            EtaLogitsWarper, ExponentialDecayLengthPenalty,
+            ForcedBOSTokenLogitsProcessor, ForcedEOSTokenLogitsProcessor,
+            HammingDiversityLogitsProcessor, InfNanRemoveLogitsProcessor,
+            LogitNormalization, LogitsProcessor, LogitsProcessorList,
+            MinLengthLogitsProcessor, MinNewTokensLengthLogitsProcessor,
+            MinPLogitsWarper, NoBadWordsLogitsProcessor,
+            NoRepeatNGramLogitsProcessor, PrefixConstrainedLogitsProcessor,
+            RepetitionPenaltyLogitsProcessor, SequenceBiasLogitsProcessor,
             SuppressTokensAtBeginLogitsProcessor,
-            SuppressTokensLogitsProcessor,
-            SynthIDTextWatermarkLogitsProcessor,
-            TemperatureLogitsWarper,
-            TopKLogitsWarper,
-            TopPLogitsWarper,
+            SuppressTokensLogitsProcessor, SynthIDTextWatermarkLogitsProcessor,
+            TemperatureLogitsWarper, TopKLogitsWarper, TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
-            WatermarkLogitsProcessor,
-            WhisperTimeStampLogitsProcessor,
-        )
-        from .stopping_criteria import (
-            ConfidenceCriteria,
-            EosTokenCriteria,
-            MaxLengthCriteria,
-            MaxTimeCriteria,
-            StoppingCriteria,
-            StoppingCriteriaList,
-            StopStringCriteria,
-            validate_stopping_criteria,
-        )
-        from .utils import (
-            BeamSampleDecoderOnlyOutput,
-            BeamSampleEncoderDecoderOutput,
-            BeamSearchDecoderOnlyOutput,
-            BeamSearchEncoderDecoderOutput,
-            ContrastiveSearchDecoderOnlyOutput,
-            ContrastiveSearchEncoderDecoderOutput,
-            GenerateBeamDecoderOnlyOutput,
-            GenerateBeamEncoderDecoderOutput,
-            GenerateDecoderOnlyOutput,
-            GenerateEncoderDecoderOutput,
-            GenerationMixin,
-            GreedySearchDecoderOnlyOutput,
-            GreedySearchEncoderDecoderOutput,
-            SampleDecoderOnlyOutput,
-            SampleEncoderDecoderOutput,
-        )
-        from .watermarking import (
-            BayesianDetectorConfig,
-            BayesianDetectorModel,
-            SynthIDTextWatermarkDetector,
-            WatermarkDetector,
-            WatermarkDetectorOutput,
-        )
+            WatermarkLogitsProcessor, WhisperTimeStampLogitsProcessor)
+        from .stopping_criteria import (ConfidenceCriteria, EosTokenCriteria,
+                                        MaxLengthCriteria, MaxTimeCriteria,
+                                        StoppingCriteria, StoppingCriteriaList,
+                                        StopStringCriteria,
+                                        validate_stopping_criteria)
+        from .utils import (BeamSampleDecoderOnlyOutput,
+                            BeamSampleEncoderDecoderOutput,
+                            BeamSearchDecoderOnlyOutput,
+                            BeamSearchEncoderDecoderOutput,
+                            ContrastiveSearchDecoderOnlyOutput,
+                            ContrastiveSearchEncoderDecoderOutput,
+                            GenerateBeamDecoderOnlyOutput,
+                            GenerateBeamEncoderDecoderOutput,
+                            GenerateDecoderOnlyOutput,
+                            GenerateEncoderDecoderOutput, GenerationMixin,
+                            GreedySearchDecoderOnlyOutput,
+                            GreedySearchEncoderDecoderOutput,
+                            SampleDecoderOnlyOutput,
+                            SampleEncoderDecoderOutput)
+        from .watermarking import (BayesianDetectorConfig,
+                                   BayesianDetectorModel,
+                                   SynthIDTextWatermarkDetector,
+                                   WatermarkDetector, WatermarkDetectorOutput)
 
     try:
         if not is_tf_available():
@@ -288,36 +265,30 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tf_logits_process import (
-            TFForcedBOSTokenLogitsProcessor,
-            TFForcedEOSTokenLogitsProcessor,
-            TFForceTokensLogitsProcessor,
-            TFLogitsProcessor,
-            TFLogitsProcessorList,
-            TFLogitsWarper,
-            TFMinLengthLogitsProcessor,
-            TFNoBadWordsLogitsProcessor,
-            TFNoRepeatNGramLogitsProcessor,
-            TFRepetitionPenaltyLogitsProcessor,
-            TFSuppressTokensAtBeginLogitsProcessor,
-            TFSuppressTokensLogitsProcessor,
-            TFTemperatureLogitsWarper,
-            TFTopKLogitsWarper,
-            TFTopPLogitsWarper,
-        )
-        from .tf_utils import (
-            TFBeamSampleDecoderOnlyOutput,
-            TFBeamSampleEncoderDecoderOutput,
-            TFBeamSearchDecoderOnlyOutput,
-            TFBeamSearchEncoderDecoderOutput,
-            TFContrastiveSearchDecoderOnlyOutput,
-            TFContrastiveSearchEncoderDecoderOutput,
-            TFGenerationMixin,
-            TFGreedySearchDecoderOnlyOutput,
-            TFGreedySearchEncoderDecoderOutput,
-            TFSampleDecoderOnlyOutput,
-            TFSampleEncoderDecoderOutput,
-        )
+        from .tf_logits_process import (TFForcedBOSTokenLogitsProcessor,
+                                        TFForcedEOSTokenLogitsProcessor,
+                                        TFForceTokensLogitsProcessor,
+                                        TFLogitsProcessor,
+                                        TFLogitsProcessorList, TFLogitsWarper,
+                                        TFMinLengthLogitsProcessor,
+                                        TFNoBadWordsLogitsProcessor,
+                                        TFNoRepeatNGramLogitsProcessor,
+                                        TFRepetitionPenaltyLogitsProcessor,
+                                        TFSuppressTokensAtBeginLogitsProcessor,
+                                        TFSuppressTokensLogitsProcessor,
+                                        TFTemperatureLogitsWarper,
+                                        TFTopKLogitsWarper, TFTopPLogitsWarper)
+        from .tf_utils import (TFBeamSampleDecoderOnlyOutput,
+                               TFBeamSampleEncoderDecoderOutput,
+                               TFBeamSearchDecoderOnlyOutput,
+                               TFBeamSearchEncoderDecoderOutput,
+                               TFContrastiveSearchDecoderOnlyOutput,
+                               TFContrastiveSearchEncoderDecoderOutput,
+                               TFGenerationMixin,
+                               TFGreedySearchDecoderOnlyOutput,
+                               TFGreedySearchEncoderDecoderOutput,
+                               TFSampleDecoderOnlyOutput,
+                               TFSampleEncoderDecoderOutput)
 
     try:
         if not is_flax_available():
@@ -327,22 +298,18 @@ if TYPE_CHECKING:
     else:
         from .flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
-            FlaxForcedEOSTokenLogitsProcessor,
-            FlaxForceTokensLogitsProcessor,
-            FlaxLogitsProcessor,
-            FlaxLogitsProcessorList,
-            FlaxLogitsWarper,
-            FlaxMinLengthLogitsProcessor,
-            FlaxNoRepeatNGramLogitsProcessor,
+            FlaxForcedEOSTokenLogitsProcessor, FlaxForceTokensLogitsProcessor,
+            FlaxLogitsProcessor, FlaxLogitsProcessorList, FlaxLogitsWarper,
+            FlaxMinLengthLogitsProcessor, FlaxNoRepeatNGramLogitsProcessor,
             FlaxSuppressTokensAtBeginLogitsProcessor,
-            FlaxSuppressTokensLogitsProcessor,
-            FlaxTemperatureLogitsWarper,
-            FlaxTopKLogitsWarper,
-            FlaxTopPLogitsWarper,
-            FlaxWhisperTimeStampLogitsProcessor,
-        )
-        from .flax_utils import FlaxBeamSearchOutput, FlaxGenerationMixin, FlaxGreedySearchOutput, FlaxSampleOutput
+            FlaxSuppressTokensLogitsProcessor, FlaxTemperatureLogitsWarper,
+            FlaxTopKLogitsWarper, FlaxTopPLogitsWarper,
+            FlaxWhisperTimeStampLogitsProcessor)
+        from .flax_utils import (FlaxBeamSearchOutput, FlaxGenerationMixin,
+                                 FlaxGreedySearchOutput, FlaxSampleOutput)
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

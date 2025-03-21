@@ -17,17 +17,14 @@ import gc
 import tempfile
 import unittest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, HiggsConfig, OPTForCausalLM
-from transformers.testing_utils import (
-    require_accelerate,
-    require_flute_hadamard,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
+from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
+                          HiggsConfig, OPTForCausalLM)
+from transformers.testing_utils import (require_accelerate,
+                                        require_flute_hadamard,
+                                        require_torch_gpu,
+                                        require_torch_multi_gpu, slow,
+                                        torch_device)
 from transformers.utils import is_accelerate_available, is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -52,10 +49,15 @@ class HiggsConfigTest(unittest.TestCase):
         """
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
-        dict = {"modules_to_not_convert": ["embed_tokens", "lm_head"], "quant_method": "higgs"}
+        dict = {
+            "modules_to_not_convert": ["embed_tokens", "lm_head"],
+            "quant_method": "higgs",
+        }
         quantization_config = HiggsConfig.from_dict(dict)
 
-        self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
+        self.assertEqual(
+            dict["modules_to_not_convert"], quantization_config.modules_to_not_convert
+        )
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
 
@@ -83,7 +85,9 @@ class HiggsTest(unittest.TestCase):
         quantization_config = HiggsConfig()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
+            cls.model_name,
+            device_map=cls.device_map,
+            quantization_config=quantization_config,
         )
 
     def tearDown(self):
@@ -96,10 +100,13 @@ class HiggsTest(unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly
         """
 
-        from transformers.integrations import HiggsLinear, replace_with_higgs_linear
+        from transformers.integrations import (HiggsLinear,
+                                               replace_with_higgs_linear)
 
         model_id = "facebook/opt-350m"
-        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        config = AutoConfig.from_pretrained(
+            model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5"
+        )
         quantization_config = HiggsConfig()
 
         with init_empty_weights():
@@ -110,7 +117,9 @@ class HiggsTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
+        model, _ = replace_with_higgs_linear(
+            model, quantization_config=quantization_config
+        )
         nb_higgs_linear = 0
         for module in model.modules():
             if isinstance(module, HiggsLinear):
@@ -121,7 +130,9 @@ class HiggsTest(unittest.TestCase):
         with init_empty_weights():
             model = OPTForCausalLM(config)
         quantization_config = HiggsConfig(modules_to_not_convert=["fc1"])
-        model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
+        model, _ = replace_with_higgs_linear(
+            model, quantization_config=quantization_config
+        )
         nb_higgs_linear = 0
         for module in model.modules():
             if isinstance(module, HiggsLinear):
@@ -133,10 +144,17 @@ class HiggsTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model is working properly
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
-        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output = self.quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens
+        )
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     def test_save_pretrained(self):
         """
@@ -145,12 +163,19 @@ class HiggsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map=self.device_map
+            )
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+                torch_device
+            )
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertEqual(
+                self.tokenizer.decode(output[0], skip_special_tokens=True),
+                self.EXPECTED_OUTPUT,
+            )
 
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
@@ -158,15 +183,22 @@ class HiggsTest(unittest.TestCase):
         Simple test that checks if the quantized model is working properly with multiple GPUs
         set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
         """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
         quantization_config = HiggsConfig()
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", quantization_config=quantization_config
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output = quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens
+        )
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )
 
     @require_torch_multi_gpu
     def test_save_pretrained_multi_gpu(self):
@@ -179,19 +211,33 @@ class HiggsTest(unittest.TestCase):
             model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+                torch_device
+            )
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertEqual(
+                self.tokenizer.decode(output[0], skip_special_tokens=True),
+                self.EXPECTED_OUTPUT,
+            )
 
-    @unittest.skip("This will almost surely OOM. Enable when switched to a smaller model")
+    @unittest.skip(
+        "This will almost surely OOM. Enable when switched to a smaller model"
+    )
     def test_dequantize(self):
         """
         Test the ability to dequantize a model
         """
         self.quantized_model.dequantize()
 
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(
+            torch_device
+        )
 
-        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output = self.quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens
+        )
+        self.assertEqual(
+            self.tokenizer.decode(output[0], skip_special_tokens=True),
+            self.EXPECTED_OUTPUT,
+        )

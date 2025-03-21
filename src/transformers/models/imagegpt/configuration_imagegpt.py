@@ -21,7 +21,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
-
 if TYPE_CHECKING:
     from ... import FeatureExtractionMixin, TensorType
 
@@ -190,7 +189,9 @@ class ImageGPTOnnxConfig(OnnxConfig):
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
 
-        input_image = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+        input_image = self._generate_dummy_images(
+            batch_size, num_channels, image_height, image_width
+        )
         inputs = dict(preprocessor(images=input_image, return_tensors=framework))
 
         return inputs

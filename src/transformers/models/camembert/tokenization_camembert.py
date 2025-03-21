@@ -23,7 +23,6 @@ import sentencepiece as spm
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
@@ -121,7 +120,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = (
-            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False, special=True)
+            AddedToken(
+                mask_token, lstrip=True, rstrip=False, normalized=False, special=True
+            )
             if isinstance(mask_token, str)
             else mask_token
         )
@@ -137,13 +138,23 @@ class CamembertTokenizer(PreTrainedTokenizer):
         # In this case it is recommended to properly set the tokens by hand.
         self._added_tokens_decoder = {
             0: AddedToken("<s>NOTUSED", special=True),
-            1: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
+            1: (
+                AddedToken(pad_token, special=True)
+                if isinstance(pad_token, str)
+                else pad_token
+            ),
             2: AddedToken("</s>NOTUSED", special=True),
-            3: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
+            3: (
+                AddedToken(unk_token, special=True)
+                if isinstance(unk_token, str)
+                else unk_token
+            ),
             4: AddedToken("<unk>NOTUSED", special=True),
         }
 
-        self.fairseq_offset = 4  # 3 tokens are newly added, but the offset starts from 4
+        self.fairseq_offset = (
+            4  # 3 tokens are newly added, but the offset starts from 4
+        )
 
         # legacy: camemebert is a particular case were we have to make sure `"<unk>NOTUSED"` is here
         if "added_tokens_decoder" in kwargs:
@@ -170,7 +181,10 @@ class CamembertTokenizer(PreTrainedTokenizer):
         return len(self.sp_model)
 
     def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.fairseq_offset)}
+        vocab = {
+            self.convert_ids_to_tokens(i): i
+            for i in range(self.vocab_size + self.fairseq_offset)
+        }
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -224,15 +238,21 @@ class CamembertTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -268,7 +288,10 @@ class CamembertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -287,7 +310,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is None:

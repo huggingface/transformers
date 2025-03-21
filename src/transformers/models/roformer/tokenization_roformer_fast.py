@@ -25,7 +25,6 @@ from ...utils import logging
 from .tokenization_roformer import RoFormerTokenizer
 from .tokenization_utils import JiebaPreTokenizer
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
@@ -94,7 +93,9 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
 
         # Make sure we correctly set the custom PreTokenizer
         vocab = self.backend_tokenizer.get_vocab()
-        self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
+        self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(
+            JiebaPreTokenizer(vocab)
+        )
 
         self.do_lower_case = do_lower_case
 
@@ -106,7 +107,9 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     def __setstate__(self, d):
         self.__dict__ = d
         vocab = self.__dict__["_tokenizer"].get_vocab()
-        self.__dict__["_tokenizer"].pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
+        self.__dict__["_tokenizer"].pre_tokenizer = PreTokenizer.custom(
+            JiebaPreTokenizer(vocab)
+        )
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
@@ -161,7 +164,9 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
@@ -174,7 +179,9 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
-        return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+        return super().save_pretrained(
+            save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs
+        )
 
 
 __all__ = ["RoFormerTokenizerFast"]

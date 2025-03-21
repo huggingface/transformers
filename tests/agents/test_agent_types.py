@@ -19,9 +19,10 @@ import uuid
 from pathlib import Path
 
 from transformers.agents.agent_types import AgentAudio, AgentImage, AgentText
-from transformers.testing_utils import get_tests_dir, require_soundfile, require_torch, require_vision
-from transformers.utils import is_soundfile_available, is_torch_available, is_vision_available
-
+from transformers.testing_utils import (get_tests_dir, require_soundfile,
+                                        require_torch, require_vision)
+from transformers.utils import (is_soundfile_available, is_torch_available,
+                                is_vision_available)
 
 if is_torch_available():
     import torch
@@ -56,7 +57,9 @@ class AgentAudioTests(unittest.TestCase):
 
         # Ensure that the file contains the same value as the original tensor
         new_tensor, _ = sf.read(path)
-        torch.testing.assert_close(tensor, torch.tensor(new_tensor), rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            tensor, torch.tensor(new_tensor), rtol=1e-4, atol=1e-4
+        )
 
     def test_from_string(self):
         tensor = torch.rand(12, dtype=torch.float64) - 0.5

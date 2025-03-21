@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 
-
 if is_sentencepiece_available():
     from .tokenization_xglm import XGLMTokenizer
 else:
@@ -30,7 +29,10 @@ else:
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "sentencepiece.bpe.model",
+    "tokenizer_file": "tokenizer.json",
+}
 
 
 class XGLMTokenizerFast(PreTrainedTokenizerFast):
@@ -101,9 +103,13 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         self.num_madeup_words = 7
         madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
+        kwargs["additional_special_tokens"] = (
+            kwargs.get("additional_special_tokens", []) or []
+        )
         kwargs["additional_special_tokens"] += [
-            word for word in madeup_words if word not in kwargs["additional_special_tokens"]
+            word
+            for word in madeup_words
+            if word not in kwargs["additional_special_tokens"]
         ]
 
         super().__init__(
@@ -173,7 +179,9 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
             return len(sep + token_ids_0) * [0]
         return len(sep + token_ids_0 + sep + sep + token_ids_1) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -184,7 +192,9 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):

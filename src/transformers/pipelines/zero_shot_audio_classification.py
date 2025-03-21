@@ -18,18 +18,16 @@ from typing import Union
 import numpy as np
 import requests
 
-from ..utils import (
-    add_end_docstrings,
-    logging,
-)
+from ..utils import add_end_docstrings, logging
 from .audio_classification import ffmpeg_read
 from .base import Pipeline, build_pipeline_init_args
-
 
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(build_pipeline_init_args(has_feature_extractor=True, has_tokenizer=True))
+@add_end_docstrings(
+    build_pipeline_init_args(has_feature_extractor=True, has_tokenizer=True)
+)
 class ZeroShotAudioClassificationPipeline(Pipeline):
     """
     Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you
@@ -101,7 +99,9 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
 
         return preprocess_params, {}, {}
 
-    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a sound of {}."):
+    def preprocess(
+        self, audio, candidate_labels=None, hypothesis_template="This is a sound of {}."
+    ):
         if isinstance(audio, str):
             if audio.startswith("http://") or audio.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -117,16 +117,22 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         if not isinstance(audio, np.ndarray):
             raise TypeError("We expect a numpy ndarray as input")
         if len(audio.shape) != 1:
-            raise ValueError("We expect a single channel audio input for ZeroShotAudioClassificationPipeline")
+            raise ValueError(
+                "We expect a single channel audio input for ZeroShotAudioClassificationPipeline"
+            )
 
         inputs = self.feature_extractor(
-            [audio], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            [audio],
+            sampling_rate=self.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
         if self.framework == "pt":
             inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
+        text_inputs = self.tokenizer(
+            sequences, return_tensors=self.framework, padding=True
+        )
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -159,6 +165,8 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
 
         result = [
             {"score": score, "label": candidate_label}
-            for score, candidate_label in sorted(zip(scores, candidate_labels), key=lambda x: -x[0])
+            for score, candidate_label in sorted(
+                zip(scores, candidate_labels), key=lambda x: -x[0]
+            )
         ]
         return result

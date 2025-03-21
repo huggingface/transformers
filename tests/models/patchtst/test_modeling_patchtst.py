@@ -23,28 +23,23 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import (is_flaky, require_torch, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
-        PatchTSTConfig,
-        PatchTSTForClassification,
-        PatchTSTForPrediction,
-        PatchTSTForPretraining,
-        PatchTSTForRegression,
-        PatchTSTModel,
-    )
+    from transformers import (MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+                              MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
+                              PatchTSTConfig, PatchTSTForClassification,
+                              PatchTSTForPrediction, PatchTSTForPretraining,
+                              PatchTSTForRegression, PatchTSTModel)
 
 
 @require_torch
@@ -95,7 +90,9 @@ class PatchTSTModelTester:
         self.seed = seed
         self.num_targets = num_targets
         self.distil = distil
-        self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        self.num_patches = (
+            max(self.context_length, self.patch_length) - self.patch_length
+        ) // self.patch_stride + 1
         # define seq_length so that it can pass the test_attention_outputs
         self.seq_length = self.num_patches
 
@@ -124,9 +121,13 @@ class PatchTSTModelTester:
         # bs, num_input_channels, num_patch, patch_len
 
         # [bs x seq_len x num_input_channels]
-        past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
+        past_values = floats_tensor(
+            [self.batch_size, _past_length, self.num_input_channels]
+        )
 
-        future_values = floats_tensor([self.batch_size, config.prediction_length, self.num_input_channels])
+        future_values = floats_tensor(
+            [self.batch_size, config.prediction_length, self.num_input_channels]
+        )
 
         inputs_dict = {
             "past_values": past_values,
@@ -158,7 +159,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
 
-    pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
+    )
     is_encoder_decoder = False
     test_pruning = False
     test_head_masking = False
@@ -185,7 +188,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester.run_common_tests()
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         #  if PatchTSTForPretraining
         if model_class == PatchTSTForPretraining:
@@ -193,12 +198,16 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # else if classification model:
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
+            labels = ids_tensor(
+                [self.model_tester.batch_size], self.model_tester.num_targets, rng=rng
+            )
             inputs_dict["target_values"] = labels
             inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed)
-            target_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
+            target_values = floats_tensor(
+                [self.model_tester.batch_size, self.model_tester.num_targets], rng=rng
+            )
             inputs_dict["target_values"] = target_values
             inputs_dict.pop("future_values")
         return inputs_dict
@@ -210,7 +219,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_hidden_states_output(self):
@@ -225,7 +236,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -271,10 +284,14 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "past_values",
                     "past_observed_mask",
                 ]
-            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
-                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
-            ):
-                expected_arg_names = ["past_values", "target_values", "past_observed_mask"]
+            elif model_class in get_values(
+                MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING
+            ) or model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
+                expected_arg_names = [
+                    "past_values",
+                    "target_values",
+                    "past_observed_mask",
+                ]
             else:
                 expected_arg_names = [
                     "past_values",
@@ -290,7 +307,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 ]
             )
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
@@ -301,7 +320,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         pass
 
 
-def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"):
+def prepare_batch(
+    repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"
+):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
@@ -313,27 +334,46 @@ def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-
 class PatchTSTModelIntegrationTests(unittest.TestCase):
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_pretrain_head(self):
-        model = PatchTSTForPretraining.from_pretrained("namctin/patchtst_etth1_pretrain").to(torch_device)
+        model = PatchTSTForPretraining.from_pretrained(
+            "namctin/patchtst_etth1_pretrain"
+        ).to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
         with torch.no_grad():
-            output = model(past_values=batch["past_values"].to(torch_device)).prediction_output
+            output = model(
+                past_values=batch["past_values"].to(torch_device)
+            ).prediction_output
         num_patch = (
-            max(model.config.context_length, model.config.patch_length) - model.config.patch_length
+            max(model.config.context_length, model.config.patch_length)
+            - model.config.patch_length
         ) // model.config.patch_stride + 1
-        expected_shape = torch.Size([64, model.config.num_input_channels, num_patch, model.config.patch_length])
+        expected_shape = torch.Size(
+            [64, model.config.num_input_channels, num_patch, model.config.patch_length]
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.0173]], [[-1.0379]], [[-0.1030]], [[0.3642]], [[0.1601]], [[-1.3136]], [[0.8780]]],
+            [
+                [[-0.0173]],
+                [[-1.0379]],
+                [[-0.1030]],
+                [[0.3642]],
+                [[0.1601]],
+                [[-1.3136]],
+                [[0.8780]],
+            ],
             device=torch_device,
         )
-        torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_prediction_head(self):
-        model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
+        model = PatchTSTForPrediction.from_pretrained(
+            "namctin/patchtst_etth1_forecast"
+        ).to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
@@ -342,23 +382,31 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
                 past_values=batch["past_values"].to(torch_device),
                 future_values=batch["future_values"].to(torch_device),
             ).prediction_outputs
-        expected_shape = torch.Size([64, model.config.prediction_length, model.config.num_input_channels])
+        expected_shape = torch.Size(
+            [64, model.config.prediction_length, model.config.num_input_channels]
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [[0.5142, 0.6928, 0.6118, 0.5724, -0.3735, -0.1336, -0.7124]],
             device=torch_device,
         )
-        torch.testing.assert_close(output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_prediction_generation(self):
-        model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
+        model = PatchTSTForPrediction.from_pretrained(
+            "namctin/patchtst_etth1_forecast"
+        ).to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():
             outputs = model.generate(past_values=batch["past_values"].to(torch_device))
-        expected_shape = torch.Size((64, 1, model.config.prediction_length, model.config.num_input_channels))
+        expected_shape = torch.Size(
+            (64, 1, model.config.prediction_length, model.config.num_input_channels)
+        )
 
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
@@ -367,17 +415,26 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_regression_generation(self):
-        model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-regression-distribution").to(torch_device)
-        batch = prepare_batch(repo_id="ibm/patchtst-etth1-test-data", file="regression_distribution_batch.pt")
+        model = PatchTSTForRegression.from_pretrained(
+            "ibm/patchtst-etth1-regression-distribution"
+        ).to(torch_device)
+        batch = prepare_batch(
+            repo_id="ibm/patchtst-etth1-test-data",
+            file="regression_distribution_batch.pt",
+        )
 
         torch.manual_seed(0)
         model.eval()
         with torch.no_grad():
             outputs = model.generate(past_values=batch["past_values"].to(torch_device))
-        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_targets))
+        expected_shape = torch.Size(
+            (64, model.config.num_parallel_samples, model.config.num_targets)
+        )
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -385,4 +442,6 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[-5:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            mean_prediction[-5:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )

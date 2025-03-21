@@ -12,25 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .integrations import (
-    is_optuna_available,
-    is_ray_tune_available,
-    is_sigopt_available,
-    is_wandb_available,
-    run_hp_search_optuna,
-    run_hp_search_ray,
-    run_hp_search_sigopt,
-    run_hp_search_wandb,
-)
-from .trainer_utils import (
-    HPSearchBackend,
-    default_hp_space_optuna,
-    default_hp_space_ray,
-    default_hp_space_sigopt,
-    default_hp_space_wandb,
-)
+from .integrations import (is_optuna_available, is_ray_tune_available,
+                           is_sigopt_available, is_wandb_available,
+                           run_hp_search_optuna, run_hp_search_ray,
+                           run_hp_search_sigopt, run_hp_search_wandb)
+from .trainer_utils import (HPSearchBackend, default_hp_space_optuna,
+                            default_hp_space_ray, default_hp_space_sigopt,
+                            default_hp_space_wandb)
 from .utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -118,12 +107,17 @@ class WandbBackend(HyperParamSearchBackendBase):
 
 
 ALL_HYPERPARAMETER_SEARCH_BACKENDS = {
-    HPSearchBackend(backend.name): backend for backend in [OptunaBackend, RayTuneBackend, SigOptBackend, WandbBackend]
+    HPSearchBackend(backend.name): backend
+    for backend in [OptunaBackend, RayTuneBackend, SigOptBackend, WandbBackend]
 }
 
 
 def default_hp_search_backend() -> str:
-    available_backends = [backend for backend in ALL_HYPERPARAMETER_SEARCH_BACKENDS.values() if backend.is_available()]
+    available_backends = [
+        backend
+        for backend in ALL_HYPERPARAMETER_SEARCH_BACKENDS.values()
+        if backend.is_available()
+    ]
     if len(available_backends) > 0:
         name = available_backends[0].name
         if len(available_backends) > 1:

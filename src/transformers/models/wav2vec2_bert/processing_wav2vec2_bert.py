@@ -21,7 +21,8 @@ from typing import List, Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
+from ..seamless_m4t.feature_extraction_seamless_m4t import \
+    SeamlessM4TFeatureExtractor
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
@@ -64,8 +65,12 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
                 FutureWarning,
             )
 
-            feature_extractor = SeamlessM4TFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            feature_extractor = SeamlessM4TFeatureExtractor.from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -103,7 +108,9 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         """
 
         if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+            raise ValueError(
+                "You need to specify either an `audio` or `text` input to process."
+            )
         output_kwargs = self._merge_kwargs(
             Wav2Vec2BertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -130,7 +137,9 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         Please refer to the doctsring of the above two methods for more information.
         """
         if input_features is None and labels is None:
-            raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")
+            raise ValueError(
+                "You need to specify either an `input_features` or `labels` input to pad."
+            )
 
         if input_features is not None:
             input_features = self.feature_extractor.pad(input_features, **kwargs)

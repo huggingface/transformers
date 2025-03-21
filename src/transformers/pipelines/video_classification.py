@@ -17,15 +17,9 @@ from typing import List, Union
 
 import requests
 
-from ..utils import (
-    add_end_docstrings,
-    is_av_available,
-    is_torch_available,
-    logging,
-    requires_backends,
-)
+from ..utils import (add_end_docstrings, is_av_available, is_torch_available,
+                     logging, requires_backends)
 from .base import Pipeline, build_pipeline_init_args
-
 
 if is_av_available():
     import av
@@ -33,7 +27,8 @@ if is_av_available():
 
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -56,7 +51,13 @@ class VideoClassificationPipeline(Pipeline):
         requires_backends(self, "av")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None, function_to_apply=None):
+    def _sanitize_parameters(
+        self,
+        top_k=None,
+        num_frames=None,
+        frame_sampling_rate=None,
+        function_to_apply=None,
+    ):
         preprocess_params = {}
         if frame_sampling_rate is not None:
             preprocess_params["frame_sampling_rate"] = frame_sampling_rate
@@ -123,7 +124,9 @@ class VideoClassificationPipeline(Pipeline):
             )
             inputs = kwargs.pop("videos")
         if inputs is None:
-            raise ValueError("Cannot call the video-classification pipeline without an inputs argument!")
+            raise ValueError(
+                "Cannot call the video-classification pipeline without an inputs argument!"
+            )
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, video, num_frames=None, frame_sampling_rate=1):
@@ -168,7 +171,10 @@ class VideoClassificationPipeline(Pipeline):
 
         scores = scores.tolist()
         ids = ids.tolist()
-        return [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+        return [
+            {"score": score, "label": self.model.config.id2label[_id]}
+            for score, _id in zip(scores, ids)
+        ]
 
 
 def read_video_pyav(container, indices):

@@ -19,7 +19,6 @@ import warnings
 from ...utils import logging
 from .image_processing_beit import BeitImageProcessor
 
-
 logger = logging.get_logger(__name__)
 
 

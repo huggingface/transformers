@@ -52,7 +52,9 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
             )
             feature_extractor = kwargs.pop("feature_extractor")
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
+        image_processor = (
+            image_processor if image_processor is not None else feature_extractor
+        )
         if image_processor is None:
             raise ValueError("You have to specify an image_processor.")
         if tokenizer is None:
@@ -97,13 +99,17 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
         """
 
         if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
+            raise ValueError(
+                "You have to specify either text or images. Both cannot be none."
+            )
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(
+                images, return_tensors=return_tensors, **kwargs
+            )
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -111,7 +117,9 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**image_features), tensor_type=return_tensors
+            )
 
     def batch_decode(self, *args, **kwargs):
         """

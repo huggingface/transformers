@@ -20,7 +20,8 @@ import unittest
 
 from transformers import HerbertTokenizer, HerbertTokenizerFast
 from transformers.models.herbert.tokenization_herbert import VOCAB_FILES_NAMES
-from transformers.testing_utils import get_tests_dir, require_sacremoses, require_tokenizers, slow
+from transformers.testing_utils import (get_tests_dir, require_sacremoses,
+                                        require_tokenizers, slow)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -37,7 +38,9 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # Use a simpler test file without japanese/chinese characters
-        with open(f"{get_tests_dir()}/fixtures/sample_text_no_unicode.txt", encoding="utf-8") as f_data:
+        with open(
+            f"{get_tests_dir()}/fixtures/sample_text_no_unicode.txt", encoding="utf-8"
+        ) as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
         vocab = [
@@ -70,7 +73,9 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
         with open(self.merges_file, "w") as fp:
@@ -82,7 +87,9 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, merges_file=self.merges_file)
+        tokenizer = self.tokenizer_class(
+            vocab_file=self.vocab_file, merges_file=self.merges_file
+        )
 
         text = "lower"
         bpe_tokens = ["low", "er</w>"]
@@ -91,7 +98,9 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [16, 17, 23]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -120,7 +129,9 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class.from_pretrained("allegro/herbert-base-cased")
 
         text = tokenizer.encode("konstruowanie sekwencji", add_special_tokens=False)
-        text_2 = tokenizer.encode("konstruowanie wielu sekwencji", add_special_tokens=False)
+        text_2 = tokenizer.encode(
+            "konstruowanie wielu sekwencji", add_special_tokens=False
+        )
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)

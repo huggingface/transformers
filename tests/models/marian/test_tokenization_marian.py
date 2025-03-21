@@ -19,15 +19,18 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, slow
-from transformers.utils import is_sentencepiece_available, is_tf_available, is_torch_available
-
+from transformers.testing_utils import (get_tests_dir, require_sentencepiece,
+                                        slow)
+from transformers.utils import (is_sentencepiece_available, is_tf_available,
+                                is_torch_available)
 
 if is_sentencepiece_available():
-    from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
+    from transformers.models.marian.tokenization_marian import (
+        VOCAB_FILES_NAMES,
+        save_json,
+    )
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -56,7 +59,9 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab"])
-        save_json(mock_tokenizer_config, save_dir / VOCAB_FILES_NAMES["tokenizer_config_file"])
+        save_json(
+            mock_tokenizer_config, save_dir / VOCAB_FILES_NAMES["tokenizer_config_file"]
+        )
         if not (save_dir / VOCAB_FILES_NAMES["source_spm"]).exists():
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["source_spm"])
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["target_spm"])
@@ -109,14 +114,21 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tok = self.get_tokenizer()
 
         batch = tok(
-            ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
+            ["I am a small frog" * 1000, "I am a small frog"],
+            padding=True,
+            truncation=True,
+            return_tensors=FRAMEWORK,
         )
         self.assertIsInstance(batch, BatchEncoding)
         self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_outputs_can_be_shorter(self):
         tok = self.get_tokenizer()
-        batch_smaller = tok(["I am a tiny frog", "I am a small frog"], padding=True, return_tensors=FRAMEWORK)
+        batch_smaller = tok(
+            ["I am a tiny frog", "I am a small frog"],
+            padding=True,
+            return_tensors=FRAMEWORK,
+        )
         self.assertIsInstance(batch_smaller, BatchEncoding)
         self.assertEqual(batch_smaller.input_ids.shape, (2, 10))
 
@@ -131,7 +143,9 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_tokenizer_integration_seperate_vocabs(self):
-        tokenizer = MarianTokenizer.from_pretrained("hf-internal-testing/test-marian-two-vocabs")
+        tokenizer = MarianTokenizer.from_pretrained(
+            "hf-internal-testing/test-marian-two-vocabs"
+        )
 
         source_text = "Tämä on testi"
         target_text = "This is a test"

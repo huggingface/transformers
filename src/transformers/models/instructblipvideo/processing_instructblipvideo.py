@@ -22,17 +22,11 @@ from typing import List, Optional, Union
 from ...image_processing_utils import BatchFeature
 from ...image_utils import VideoInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import (
-    AddedToken,
-    BatchEncoding,
-    PaddingStrategy,
-    PreTokenizedInput,
-    TextInput,
-    TruncationStrategy,
-)
+from ...tokenization_utils_base import (AddedToken, BatchEncoding,
+                                        PaddingStrategy, PreTokenizedInput,
+                                        TextInput, TruncationStrategy)
 from ...utils import TensorType, logging
 from ..auto import AutoTokenizer
-
 
 logger = logging.get_logger(__name__)
 
@@ -62,7 +56,14 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        qformer_tokenizer,
+        num_query_tokens=None,
+        **kwargs,
+    ):
         if not hasattr(tokenizer, "video_token"):
             self.video_token = AddedToken("<video>", normalized=False, special=True)
             tokenizer.add_tokens([self.video_token], special_tokens=True)
@@ -74,7 +75,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: VideoInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -106,7 +109,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             if isinstance(text, str):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
 
             _text_encoding = self.tokenizer(
                 text=text,
@@ -135,12 +140,16 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                     self.video_token.content * self.num_query_tokens * 4
                 )  # InstrucBLIP works with 4 frames only
                 video_token_encoding = self.tokenizer(
-                    [video_tokens] * len(text), add_special_tokens=False, return_tensors=None
+                    [video_tokens] * len(text),
+                    add_special_tokens=False,
+                    return_tensors=None,
                 )
                 for k in _text_encoding:
                     text_encoding[k] = [
                         img_encoding + txt_encoding
-                        for img_encoding, txt_encoding in zip(video_token_encoding[k], _text_encoding[k])
+                        for img_encoding, txt_encoding in zip(
+                            video_token_encoding[k], _text_encoding[k]
+                        )
                     ]
             else:
                 text_encoding = _text_encoding
@@ -173,7 +182,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 **kwargs,
             )
             encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
-            encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
+            encoding["qformer_attention_mask"] = qformer_text_encoding.pop(
+                "attention_mask"
+            )
 
         if images is not None:
             image_encoding = self.image_processor(images, return_tensors=return_tensors)
@@ -207,7 +218,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     # overwrite to save the Q-Former tokenizer in a separate folder
     def save_pretrained(self, save_directory, **kwargs):
         if os.path.isfile(save_directory):
-            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
+            raise ValueError(
+                f"Provided path ({save_directory}) should be a directory, not a file"
+            )
         os.makedirs(save_directory, exist_ok=True)
         qformer_tokenizer_path = os.path.join(save_directory, "qformer_tokenizer")
         self.qformer_tokenizer.save_pretrained(qformer_tokenizer_path)
@@ -231,6 +244,8 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
         if isinstance(processor, tuple):
             processor = processor[0]
-        qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
+        qformer_tokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path, subfolder="qformer_tokenizer"
+        )
         processor.qformer_tokenizer = qformer_tokenizer
         return processor

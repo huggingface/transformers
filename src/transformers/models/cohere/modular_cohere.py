@@ -35,16 +35,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, logging
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaForCausalLM,
-    LlamaMLP,
-    LlamaModel,
-    LlamaRotaryEmbedding,
-    eager_attention_forward,
-)
+from ..llama.modeling_llama import (LlamaAttention, LlamaForCausalLM, LlamaMLP,
+                                    LlamaModel, LlamaRotaryEmbedding,
+                                    eager_attention_forward)
 from .configuration_cohere import CohereConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -63,7 +57,9 @@ class CohereLayerNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         mean = hidden_states.mean(-1, keepdim=True)
         variance = (hidden_states - mean).pow(2).mean(-1, keepdim=True)
-        hidden_states = (hidden_states - mean) * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = (hidden_states - mean) * torch.rsqrt(
+            variance + self.variance_epsilon
+        )
         hidden_states = self.weight.to(torch.float32) * hidden_states
         return hidden_states.to(input_dtype)
 
@@ -78,14 +74,24 @@ class CohereRotaryEmbedding(LlamaRotaryEmbedding):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
+            emb = torch.repeat_interleave(
+                freqs, 2, dim=-1
+            )  # diff from Llama: we interleave() instead of cat()
             cos = emb.cos()
             sin = emb.sin()
 
@@ -151,10 +157,12 @@ class CohereAttention(LlamaAttention):
         if self.use_qk_norm:
             # When sharding the model using Tensor Parallelism, need to be careful to use n_local_heads
             self.q_norm = CohereLayerNorm(
-                hidden_size=(config.num_attention_heads, self.head_dim), eps=config.layer_norm_eps
+                hidden_size=(config.num_attention_heads, self.head_dim),
+                eps=config.layer_norm_eps,
             )
             self.k_norm = CohereLayerNorm(
-                hidden_size=(config.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
+                hidden_size=(config.num_key_value_heads, self.head_dim),
+                eps=config.layer_norm_eps,
             )
 
     def forward(
@@ -182,22 +190,30 @@ class CohereAttention(LlamaAttention):
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -221,7 +237,9 @@ class CohereDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = CohereAttention(config=config, layer_idx=layer_idx)
         self.mlp = CohereMLP(config)
-        self.input_layernorm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
+        self.input_layernorm = CohereLayerNorm(
+            hidden_size=(config.hidden_size), eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -232,9 +250,13 @@ class CohereDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -288,10 +310,15 @@ class CohereModel(LlamaModel):
     def __init__(self, config: CohereConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [CohereDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                CohereDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.rotary_emb = CohereRotaryEmbedding(config=config)
-        self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
+        self.norm = CohereLayerNorm(
+            hidden_size=(config.hidden_size), eps=config.layer_norm_eps
+        )
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
@@ -351,11 +378,19 @@ class CohereForCausalLM(LlamaForCausalLM):
         >> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -374,13 +409,22 @@ class CohereForCausalLM(LlamaForCausalLM):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         logits = logits * self.logit_scale  # main diff from Llama
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

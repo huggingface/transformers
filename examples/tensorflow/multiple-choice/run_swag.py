@@ -32,22 +32,12 @@ import tensorflow as tf
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    CONFIG_NAME,
-    TF2_WEIGHTS_NAME,
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForMultipleChoice,
-    DefaultDataCollator,
-    HfArgumentParser,
-    PushToHubCallback,
-    TFAutoModelForMultipleChoice,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (CONFIG_NAME, TF2_WEIGHTS_NAME, AutoConfig,
+                          AutoTokenizer, DataCollatorForMultipleChoice,
+                          DefaultDataCollator, HfArgumentParser,
+                          PushToHubCallback, TFAutoModelForMultipleChoice,
+                          TFTrainingArguments, create_optimizer, set_seed)
 from transformers.utils import check_min_version, send_example_telemetry
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.51.0.dev0")
@@ -63,25 +53,39 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -110,13 +114,18 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a text file)."}
+    )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -163,10 +172,16 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.train_file is not None:
             extension = self.train_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            assert extension in [
+                "csv",
+                "json",
+            ], "`train_file` should be a csv or a json file."
         if self.validation_file is not None:
             extension = self.validation_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            assert extension in [
+                "csv",
+                "json",
+            ], "`validation_file` should be a csv or a json file."
 
 
 # endregion
@@ -178,11 +193,15 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -210,8 +229,13 @@ def main():
 
     # region Checkpoints
     checkpoint = None
-    if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        if (output_dir / CONFIG_NAME).is_file() and (output_dir / TF2_WEIGHTS_NAME).is_file():
+    if (
+        len(os.listdir(training_args.output_dir)) > 0
+        and not training_args.overwrite_output_dir
+    ):
+        if (output_dir / CONFIG_NAME).is_file() and (
+            output_dir / TF2_WEIGHTS_NAME
+        ).is_file():
             checkpoint = output_dir
             logger.info(
                 f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
@@ -287,7 +311,11 @@ def main():
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (
+            model_args.tokenizer_name
+            if model_args.tokenizer_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -317,7 +345,8 @@ def main():
         first_sentences = [[context] * 4 for context in examples[context_name]]
         question_headers = examples[question_header_name]
         second_sentences = [
-            [f"{header} {examples[end][i]}" for end in ending_names] for i, header in enumerate(question_headers)
+            [f"{header} {examples[end][i]}" for end in ending_names]
+            for i, header in enumerate(question_headers)
         ]
 
         # Flatten out
@@ -325,9 +354,17 @@ def main():
         second_sentences = list(chain(*second_sentences))
 
         # Tokenize
-        tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True, max_length=max_seq_length)
+        tokenized_examples = tokenizer(
+            first_sentences,
+            second_sentences,
+            truncation=True,
+            max_length=max_seq_length,
+        )
         # Un-flatten
-        data = {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
+        data = {
+            k: [v[i : i + 4] for i in range(0, len(v), 4)]
+            for k, v in tokenized_examples.items()
+        }
         return data
 
     if training_args.do_train:
@@ -380,11 +417,15 @@ def main():
         )
 
         num_replicas = training_args.strategy.num_replicas_in_sync
-        total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
+        total_train_batch_size = (
+            training_args.per_device_train_batch_size * num_replicas
+        )
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
 
         if training_args.do_train:
-            num_train_steps = (len(train_dataset) // total_train_batch_size) * int(training_args.num_train_epochs)
+            num_train_steps = (len(train_dataset) // total_train_batch_size) * int(
+                training_args.num_train_epochs
+            )
             if training_args.warmup_steps > 0:
                 num_warmup_steps = training_args.warmup_steps
             elif training_args.warmup_ratio > 0:
@@ -405,7 +446,9 @@ def main():
             optimizer = "sgd"  # Just write anything because we won't be using it
         # Transformers models compute the right loss for their task by default when labels are passed, and will
         # use this for training unless you specify your own loss function in compile().
-        model.compile(optimizer=optimizer, metrics=["accuracy"], jit_compile=training_args.xla)
+        model.compile(
+            optimizer=optimizer, metrics=["accuracy"], jit_compile=training_args.xla
+        )
         # endregion
 
         # region Preparing push_to_hub and model card
@@ -414,7 +457,10 @@ def main():
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-multiplechoice"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "multiple-choice"}
+        model_card_kwargs = {
+            "finetuned_from": model_args.model_name_or_path,
+            "tasks": "multiple-choice",
+        }
 
         if training_args.push_to_hub:
             callbacks = [
@@ -434,7 +480,9 @@ def main():
         eval_metrics = None
         if training_args.do_train:
             dataset_options = tf.data.Options()
-            dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+            dataset_options.experimental_distribute.auto_shard_policy = (
+                tf.data.experimental.AutoShardPolicy.OFF
+            )
 
             # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
             # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
@@ -474,7 +522,9 @@ def main():
         # region Evaluation
         if training_args.do_eval and not training_args.do_train:
             dataset_options = tf.data.Options()
-            dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+            dataset_options.experimental_distribute.auto_shard_policy = (
+                tf.data.experimental.AutoShardPolicy.OFF
+            )
             # Do a standalone evaluation pass
             tf_eval_dataset = model.prepare_tf_dataset(
                 eval_dataset,
@@ -484,11 +534,16 @@ def main():
                 drop_remainder=True,
             ).with_options(dataset_options)
             eval_results = model.evaluate(tf_eval_dataset)
-            eval_metrics = {"val_loss": eval_results[0], "val_accuracy": eval_results[1]}
+            eval_metrics = {
+                "val_loss": eval_results[0],
+                "val_accuracy": eval_results[1],
+            }
         # endregion
 
         if eval_metrics is not None and training_args.output_dir is not None:
-            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            output_eval_file = os.path.join(
+                training_args.output_dir, "all_results.json"
+            )
             with open(output_eval_file, "w") as writer:
                 writer.write(json.dumps(eval_metrics))
 

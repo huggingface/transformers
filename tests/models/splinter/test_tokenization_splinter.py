@@ -15,10 +15,10 @@
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
-from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
+from transformers import (SplinterTokenizerFast, is_tf_available,
+                          is_torch_available)
 from transformers.models.splinter import SplinterTokenizer
 from transformers.testing_utils import get_tests_dir, slow
-
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.txt")
 
@@ -46,7 +46,9 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.vocab["[UNK]"] = len(tokenizer.vocab)
         tokenizer.vocab["[QUESTION]"] = len(tokenizer.vocab)
         tokenizer.vocab["."] = len(tokenizer.vocab)
-        tokenizer.add_tokens("this is a test thou shall not determine rigor truly".split())
+        tokenizer.add_tokens(
+            "this is a test thou shall not determine rigor truly".split()
+        )
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> SplinterTokenizer:
@@ -72,7 +74,10 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_question_token_id(self):
         tokenizer = self.get_tokenizer()
-        self.assertEqual(tokenizer.question_token_id, tokenizer.convert_tokens_to_ids(tokenizer.question_token))
+        self.assertEqual(
+            tokenizer.question_token_id,
+            tokenizer.convert_tokens_to_ids(tokenizer.question_token),
+        )
 
     # Copied from transformers.models.siglip.SiglipTokenizationTest.test_full_tokenizer
     def test_full_tokenizer(self):
@@ -138,7 +143,9 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # fmt:skip
     @slow
     def test_tokenizer_integration(self):
-        tokenizer = SplinterTokenizer.from_pretrained("tau/splinter-base", max_length=10)
+        tokenizer = SplinterTokenizer.from_pretrained(
+            "tau/splinter-base", max_length=10
+        )
         texts = [
             "The cat sat on the windowsill, watching birds in the garden.",
             "She baked a delicious cake for her sister's birthday party.",
@@ -159,8 +166,12 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 sequence_0 = "Encode this."
                 sequence_1 = "This one too please."
-                encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
-                encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
+                encoded_sequence = tokenizer.encode(
+                    sequence_0, add_special_tokens=False
+                )
+                encoded_sequence += tokenizer.encode(
+                    sequence_1, add_special_tokens=False
+                )
                 encoded_sequence_dict = tokenizer.encode_plus(
                     sequence_0,
                     sequence_1,
@@ -171,4 +182,6 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
                 # splinter tokenizer always add cls, question_suffix, and 2 separators
                 # while in special_token_mask it does not seems to do that
-                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special) - 2)
+                self.assertEqual(
+                    len(special_tokens_mask), len(encoded_sequence_w_special) - 2
+                )

@@ -24,22 +24,16 @@ from huggingface_hub import HfFolder
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
-from transformers import (
-    AlbertTokenizer,
-    AutoTokenizer,
-    BertTokenizer,
-    BertTokenizerFast,
-    GPT2TokenizerFast,
-    is_tokenizers_available,
-)
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
+from transformers import (AlbertTokenizer, AutoTokenizer, BertTokenizer,
+                          BertTokenizerFast, GPT2TokenizerFast,
+                          is_tokenizers_available)
+from transformers.testing_utils import (TOKEN, TemporaryHubRepo,
+                                        is_staging_test, require_tokenizers)
 from transformers.tokenization_utils import ExtensionsTrie, Trie
-
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
-
 
 if is_tokenizers_available():
     from test_module.custom_tokenization_fast import CustomTokenizerFast
@@ -58,7 +52,9 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch(
+            "requests.Session.request", return_value=response_mock
+        ) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -76,7 +72,9 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch(
+            "requests.Session.request", return_value=response_mock
+        ) as mock_head:
             _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -86,7 +84,10 @@ class TokenizerUtilTester(unittest.TestCase):
         try:
             tmp_file = tempfile.NamedTemporaryFile(delete=False).name
             with open(tmp_file, "wb") as f:
-                http_get("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model", f)
+                http_get(
+                    "https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model",
+                    f,
+                )
 
             _ = AlbertTokenizer.from_pretrained(tmp_file)
         finally:
@@ -96,11 +97,18 @@ class TokenizerUtilTester(unittest.TestCase):
         # the current folder and have the right name.
         if os.path.isfile("tokenizer.json"):
             # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
-            self.skipTest(reason="Skipping test as there is a `tokenizer.json` file in the current folder.")
+            self.skipTest(
+                reason="Skipping test as there is a `tokenizer.json` file in the current folder."
+            )
         try:
             with open("tokenizer.json", "wb") as f:
-                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
-            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+                http_get(
+                    "https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json",
+                    f,
+                )
+            tokenizer = AutoTokenizer.from_pretrained(
+                "hf-internal-testing/tiny-random-gpt2"
+            )
             # The tiny random BERT has a vocab size of 1024, tiny openai-community/gpt2 as a vocab size of 1000
             self.assertEqual(tokenizer.vocab_size, 1000)
             # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
@@ -139,7 +147,12 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 tokenizer = BertTokenizer(vocab_file)
 
                 # Push to hub via save_pretrained
-                tokenizer.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                tokenizer.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
@@ -165,7 +178,12 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 tokenizer = BertTokenizer(vocab_file)
 
                 # Push to hub via save_pretrained
-                tokenizer.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+                tokenizer.save_pretrained(
+                    tmp_dir,
+                    repo_id=tmp_repo.repo_id,
+                    push_to_hub=True,
+                    token=self._token,
+                )
 
             new_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
@@ -183,7 +201,9 @@ class TokenizerPushToHubTester(unittest.TestCase):
             # No fast custom tokenizer
             tokenizer.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-            tokenizer = AutoTokenizer.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(
+                tmp_repo.repo_id, trust_remote_code=True
+            )
             # Can't make an isinstance check because the new_model.config is from the CustomTokenizer class of a dynamic module
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
 
@@ -206,10 +226,14 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             tokenizer.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-            tokenizer = AutoTokenizer.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(
+                tmp_repo.repo_id, trust_remote_code=True
+            )
             # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
-            tokenizer = AutoTokenizer.from_pretrained(tmp_repo.repo_id, use_fast=False, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(
+                tmp_repo.repo_id, use_fast=False, trust_remote_code=True
+            )
             # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
 
@@ -218,17 +242,27 @@ class TrieTest(unittest.TestCase):
     def test_trie(self):
         trie = Trie()
         trie.add("Hello 友達")
-        self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}})
+        self.assertEqual(
+            trie.data, {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+        )
         trie.add("Hello")
-        self.assertEqual(trie.data, {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}})
+        self.assertEqual(
+            trie.data,
+            {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}},
+        )
 
     def test_trie_split(self):
         trie = Trie()
-        self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS] This is a extra_id_100"])
+        self.assertEqual(
+            trie.split("[CLS] This is a extra_id_100"), ["[CLS] This is a extra_id_100"]
+        )
         trie.add("[CLS]")
         trie.add("extra_id_1")
         trie.add("extra_id_100")
-        self.assertEqual(trie.split("[CLS] This is a extra_id_100"), ["[CLS]", " This is a ", "extra_id_100"])
+        self.assertEqual(
+            trie.split("[CLS] This is a extra_id_100"),
+            ["[CLS]", " This is a ", "extra_id_100"],
+        )
 
     def test_trie_single(self):
         trie = Trie()
@@ -240,14 +274,20 @@ class TrieTest(unittest.TestCase):
         trie = Trie()
         trie.add("TOKEN]")
         trie.add("[SPECIAL_TOKEN]")
-        self.assertEqual(trie.split("This is something [SPECIAL_TOKEN]"), ["This is something ", "[SPECIAL_TOKEN]"])
+        self.assertEqual(
+            trie.split("This is something [SPECIAL_TOKEN]"),
+            ["This is something ", "[SPECIAL_TOKEN]"],
+        )
 
     def test_trie_subtokens(self):
         trie = Trie()
         trie.add("A")
         trie.add("P")
         trie.add("[SPECIAL_TOKEN]")
-        self.assertEqual(trie.split("This is something [SPECIAL_TOKEN]"), ["This is something ", "[SPECIAL_TOKEN]"])
+        self.assertEqual(
+            trie.split("This is something [SPECIAL_TOKEN]"),
+            ["This is something ", "[SPECIAL_TOKEN]"],
+        )
 
     def test_trie_suffix_tokens(self):
         trie = Trie()

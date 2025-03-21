@@ -19,10 +19,11 @@ import unittest
 import requests
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import (is_torch_available, is_torchvision_available,
+                                is_vision_available)
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -90,9 +91,14 @@ class Siglip2ImageProcessingTester:
         }
 
     def expected_output_image_shape(self, images):
-        return self.max_num_patches, self.patch_size * self.patch_size * self.num_channels
+        return (
+            self.max_num_patches,
+            self.patch_size * self.patch_size * self.num_channels,
+        )
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -109,7 +115,9 @@ class Siglip2ImageProcessingTester:
 # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Siglip2
 class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Siglip2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Siglip2ImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        Siglip2ImageProcessorFast if is_torchvision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -136,7 +144,9 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Ignore copy
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.max_num_patches, 256)
             self.assertEqual(image_processor.patch_size, 16)
 
@@ -157,20 +167,34 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
+            )
 
         dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+            requests.get(
+                "http://images.cocodataset.org/val2017/000000039769.jpg", stream=True
+            ).raw
         )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict
+        )
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-1)
+        torch.testing.assert_close(
+            encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-1
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
+            torch.mean(
+                torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)
+            ).item(),
+            2e-3,
         )
 
     # increase mean tolerance to 1e-3 -> 2e-3
@@ -179,22 +203,39 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if (
+            self.image_processing_class is None
+            or self.fast_image_processing_class is None
+        ):
+            self.skipTest(
+                reason="Skipping slow/fast equivalence test as one of the image processors is not defined"
+            )
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if (
+            hasattr(self.image_processor_tester, "do_center_crop")
+            and self.image_processor_tester.do_center_crop
+        ):
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(
+            **self.image_processor_dict
+        )
 
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-1)
+        torch.testing.assert_close(
+            encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-1
+        )
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
+            torch.mean(
+                torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)
+            ).item(),
+            2e-3,
         )

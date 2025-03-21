@@ -2,40 +2,20 @@ import pathlib
 from typing import Dict, List, Optional, Tuple, Union
 
 from transformers.models.detr.image_processing_detr_fast import (
-    DetrFastImageProcessorKwargs,
-    DetrImageProcessorFast,
-)
+    DetrFastImageProcessorKwargs, DetrImageProcessorFast)
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    SizeDict,
-    add_start_docstrings,
-    get_max_height_width,
-)
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, BaseImageProcessorFast,
+    SizeDict, add_start_docstrings, get_max_height_width)
 from ...image_transforms import center_to_corners_format
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    AnnotationFormat,
-    AnnotationType,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    validate_annotations,
-)
+from ...image_utils import (IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD,
+                            AnnotationFormat, AnnotationType, ChannelDimension,
+                            ImageInput, PILImageResampling, get_image_size,
+                            validate_annotations)
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-    requires_backends,
-)
-
+from ...utils import (TensorType, is_torch_available, is_torchvision_available,
+                      is_torchvision_v2_available, logging, requires_backends)
 
 if is_torch_available():
     import torch
@@ -84,7 +64,9 @@ def prepare_coco_detection_annotation(
     area = torch.as_tensor(area, dtype=torch.float32, device=image.device)
     iscrowd = torch.zeros_like(classes, dtype=torch.int64, device=image.device)
     # guard against no boxes via resizing
-    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
+    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(
+        -1, 4
+    )
     boxes[:, 2:] += boxes[:, :2]
     boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
     boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
@@ -97,7 +79,11 @@ def prepare_coco_detection_annotation(
         "boxes": boxes[keep],
         "area": area[keep],
         "iscrowd": iscrowd[keep],
-        "orig_size": torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64, device=image.device),
+        "orig_size": torch.as_tensor(
+            [int(image_height), int(image_width)],
+            dtype=torch.int64,
+            device=image.device,
+        ),
     }
 
     if keypoints:
@@ -134,8 +120,13 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
-        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+        if (
+            do_convert_annotations is None
+            and getattr(self, "do_convert_annotations", None) is None
+        ):
+            self.do_convert_annotations = (
+                do_normalize if do_normalize is not None else self.do_normalize
+            )
 
         BaseImageProcessorFast.__init__(**kwargs)
 
@@ -181,7 +172,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
+        return BaseImageProcessorFast().preprocess(
+            images, annotations=annotations, masks_path=masks_path, **kwargs
+        )
 
     def prepare_annotation(
         self,
@@ -195,9 +188,16 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                False
+                if return_segmentation_masks is None
+                else return_segmentation_masks
+            )
             target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
+                image,
+                target,
+                return_segmentation_masks,
+                input_data_format=input_data_format,
             )
         else:
             raise ValueError(f"Format {format} is not supported.")
@@ -245,7 +245,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         processed_images = []
         processed_annotations = []
         pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+        for image, annotation in zip(
+            images, annotations if annotations is not None else [None] * len(images)
+        ):
             # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
             if annotations is not None:
                 annotation = self.prepare_annotation(
@@ -258,7 +260,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
                 )
 
             if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                resized_image = self.resize(
+                    image, size=size, interpolation=interpolation
+                )
                 if annotations is not None:
                     annotation = self.resize_annotation(
                         annotation,
@@ -267,9 +271,13 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
                     )
                 image = resized_image
             # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(
+                image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
             if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
+                annotation = self.normalize_annotation(
+                    annotation, get_image_size(image, ChannelDimension.FIRST)
+                )
 
             processed_images.append(image)
             processed_annotations.append(annotation)
@@ -285,15 +293,22 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
             padded_images = []
             padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            for image, annotation in zip(
+                images, annotations if annotations is not None else [None] * len(images)
+            ):
                 # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
                 if padded_size == image.size()[-2:]:
                     padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    pixel_masks.append(
+                        torch.ones(padded_size, dtype=torch.int64, device=image.device)
+                    )
                     padded_annotations.append(annotation)
                     continue
                 image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+                    image,
+                    padded_size,
+                    annotation=annotation,
+                    update_bboxes=do_convert_annotations,
                 )
                 padded_images.append(image)
                 padded_annotations.append(annotation)
@@ -306,7 +321,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                BatchFeature(annotation, tensor_type=return_tensors)
+                for annotation in annotations
             ]
         return encoded_inputs
 
@@ -350,7 +366,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
                 img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
             else:
                 img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                boxes.device
+            )
             boxes = boxes * scale_fct[:, None, :]
 
         num_top_queries = out_logits.shape[1]
@@ -361,14 +379,18 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
             scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
             labels = index % num_classes
             index = index // num_classes
-            boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+            boxes = boxes.gather(
+                dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1])
+            )
         else:
             scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
             if scores.shape[1] > num_top_queries:
                 scores, index = torch.topk(scores, num_top_queries, dim=-1)
                 labels = torch.gather(labels, dim=1, index=index)
-                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
+                boxes = torch.gather(
+                    boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1])
+                )
 
         results = []
         for score, label, box in zip(scores, labels, boxes):
@@ -389,22 +411,34 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
 
     def post_process_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError(
+            "Segmentation post-processing is not implemented for RT-DETR yet."
+        )
 
     def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError(
+            "Instance post-processing is not implemented for RT-DETR yet."
+        )
 
     def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError(
+            "Panoptic post-processing is not implemented for RT-DETR yet."
+        )
 
     def post_process_instance_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError(
+            "Segmentation post-processing is not implemented for RT-DETR yet."
+        )
 
     def post_process_semantic_segmentation():
-        raise NotImplementedError("Semantic segmentation post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError(
+            "Semantic segmentation post-processing is not implemented for RT-DETR yet."
+        )
 
     def post_process_panoptic_segmentation():
-        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError(
+            "Panoptic segmentation post-processing is not implemented for RT-DETR yet."
+        )
 
 
 __all__ = ["RTDetrImageProcessorFast"]

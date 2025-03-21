@@ -14,14 +14,8 @@
 
 from typing import TYPE_CHECKING
 
-from ....utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-)
-
+from ....utils import (OptionalDependencyNotAvailable, _LazyModule,
+                       is_flax_available, is_tf_available, is_torch_available)
 
 _import_structure = {
     "configuration_gptsan_japanese": ["GPTSanJapaneseConfig"],
@@ -55,14 +49,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gptsan_japanese import (
-            GPTSanJapaneseForConditionalGeneration,
-            GPTSanJapaneseModel,
-            GPTSanJapanesePreTrainedModel,
-        )
+            GPTSanJapaneseForConditionalGeneration, GPTSanJapaneseModel,
+            GPTSanJapanesePreTrainedModel)
         from .tokenization_gptsan_japanese import GPTSanJapaneseTokenizer
 
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -19,26 +19,26 @@ import unittest
 import pytest
 
 from transformers import DistilBertConfig, is_torch_available
-from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (require_flash_attn, require_torch,
+                                        require_torch_accelerator, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoTokenizer,
-        DistilBertForMaskedLM,
-        DistilBertForMultipleChoice,
-        DistilBertForQuestionAnswering,
-        DistilBertForSequenceClassification,
-        DistilBertForTokenClassification,
-        DistilBertModel,
-    )
-    from transformers.models.distilbert.modeling_distilbert import _create_sinusoidal_embeddings
+    from transformers import (AutoTokenizer, DistilBertForMaskedLM,
+                              DistilBertForMultipleChoice,
+                              DistilBertForQuestionAnswering,
+                              DistilBertForSequenceClassification,
+                              DistilBertForTokenClassification,
+                              DistilBertModel)
+    from transformers.models.distilbert.modeling_distilbert import \
+        _create_sinusoidal_embeddings
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 
@@ -102,13 +102,24 @@ class DistilBertModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return DistilBertConfig(
@@ -125,38 +136,74 @@ class DistilBertModelTester:
         )
 
     def create_and_check_distilbert_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = DistilBertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_distilbert_for_masked_lm(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = DistilBertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_distilbert_for_question_answering(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = DistilBertForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
+            input_ids,
+            attention_mask=input_mask,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_distilbert_for_sequence_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = DistilBertForSequenceClassification(config)
@@ -166,7 +213,13 @@ class DistilBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_distilbert_for_token_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = DistilBertForTokenClassification(config=config)
@@ -174,27 +227,48 @@ class DistilBertModelTester:
         model.eval()
 
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_distilbert_for_multiple_choice(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = DistilBertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = (
+            input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_input_mask = (
+            input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             labels=choice_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, input_mask, sequence_labels, token_labels, choice_labels) = config_and_inputs
+        (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -244,10 +318,16 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_distilbert_model_with_sinusoidal_encodings(self):
         config = DistilBertConfig(sinusoidal_pos_embds=True)
         model = DistilBertModel(config=config)
-        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.dim), dtype=torch.float32)
-        _create_sinusoidal_embeddings(config.max_position_embeddings, config.dim, sinusoidal_pos_embds)
+        sinusoidal_pos_embds = torch.empty(
+            (config.max_position_embeddings, config.dim), dtype=torch.float32
+        )
+        _create_sinusoidal_embeddings(
+            config.max_position_embeddings, config.dim, sinusoidal_pos_embds
+        )
         self.model_tester.parent.assertTrue(
-            torch.equal(model.embeddings.position_embeddings.weight, sinusoidal_pos_embds)
+            torch.equal(
+                model.embeddings.position_embeddings.weight, sinusoidal_pos_embds
+            )
         )
 
     def test_for_masked_lm(self):
@@ -256,19 +336,27 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_distilbert_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_distilbert_for_question_answering(
+            *config_and_inputs
+        )
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_distilbert_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_distilbert_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_distilbert_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_distilbert_for_token_classification(
+            *config_and_inputs
+        )
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_distilbert_for_multiple_choice(*config_and_inputs)
+        self.model_tester.create_and_check_distilbert_for_multiple_choice(
+            *config_and_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -283,20 +371,31 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         for model_class in self.all_model_classes:
             # BertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == DistilBertForMultipleChoice:
-                self.skipTest(reason="DistilBertForMultipleChoice behaves incorrectly in JIT environments.")
+                self.skipTest(
+                    reason="DistilBertForMultipleChoice behaves incorrectly in JIT environments."
+                )
 
             config.torchscript = True
             model = model_class(config=config)
 
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             traced_model = torch.jit.trace(
-                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
+                model,
+                (
+                    inputs_dict["input_ids"].to("cpu"),
+                    inputs_dict["attention_mask"].to("cpu"),
+                ),
             )
 
             with tempfile.TemporaryDirectory() as tmp:
                 torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
-                loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
-                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+                loaded = torch.jit.load(
+                    os.path.join(tmp, "traced_model.pt"), map_location=torch_device
+                )
+                loaded(
+                    inputs_dict["input_ids"].to(torch_device),
+                    inputs_dict["attention_mask"].to(torch_device),
+                )
 
     # Because DistilBertForMultipleChoice requires inputs with different shapes we need to override this test.
     @require_flash_attn
@@ -324,31 +423,49 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 ]
             ).to(torch_device)
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16
+                )
                 model.to(torch_device)
 
                 logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
-                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+                logits_fa = model_fa(
+                    dummy_input, output_hidden_states=True
+                ).hidden_states[-1]
 
                 torch.testing.assert_close(logits_fa, logits, rtol=4e-2, atol=4e-2)
 
-                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                output_fa = model_fa(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    output_hidden_states=True,
+                )
                 logits_fa = output_fa.hidden_states[-1]
 
-                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                output = model(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    output_hidden_states=True,
+                )
                 logits = output.hidden_states[-1]
 
-                torch.testing.assert_close(logits_fa[1:], logits[1:], rtol=4e-2, atol=4e-2)
+                torch.testing.assert_close(
+                    logits_fa[1:], logits[1:], rtol=4e-2, atol=4e-2
+                )
 
     # Because DistilBertForMultipleChoice requires inputs with different shapes we need to override this test.
     @require_flash_attn
@@ -376,13 +493,17 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 ]
             ).to(torch_device)
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    attn_implementation="flash_attention_2",
                 )
                 model_fa.to(torch_device)
 
@@ -393,17 +514,29 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 model.to(torch_device)
 
                 logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
-                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+                logits_fa = model_fa(
+                    dummy_input, output_hidden_states=True
+                ).hidden_states[-1]
 
                 torch.testing.assert_close(logits_fa, logits, rtol=4e-2, atol=4e-2)
 
-                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                output_fa = model_fa(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    output_hidden_states=True,
+                )
                 logits_fa = output_fa.hidden_states[-1]
 
-                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                output = model(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    output_hidden_states=True,
+                )
                 logits = output.hidden_states[-1]
 
-                torch.testing.assert_close(logits_fa[:-1], logits[:-1], rtol=4e-2, atol=4e-2)
+                torch.testing.assert_close(
+                    logits_fa[:-1], logits[:-1], rtol=4e-2, atol=4e-2
+                )
 
 
 @require_torch
@@ -411,17 +544,27 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model = DistilBertModel.from_pretrained("distilbert-base-uncased")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        input_ids = torch.tensor(
+            [[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]]
+        )
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[-0.1639, 0.3299, 0.1648], [-0.1746, 0.3289, 0.1710], [-0.1884, 0.3357, 0.1810]]]
+            [
+                [
+                    [-0.1639, 0.3299, 0.1648],
+                    [-0.1746, 0.3289, 0.1710],
+                    [-0.1884, 0.3357, 0.1810],
+                ]
+            ]
         )
 
-        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_export(self):
@@ -461,6 +604,8 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
             strict=True,
         )
 
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        result = exported_program.module().forward(
+            inputs["input_ids"], inputs["attention_mask"]
+        )
         exported_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
         self.assertEqual(eager_predicted_mask, exported_predicted_mask)

@@ -20,7 +20,6 @@ from ...image_transforms import rgb_to_id as _rgb_to_id
 from ...utils import logging
 from .image_processing_deformable_detr import DeformableDetrImageProcessor
 
-
 logger = logging.get_logger(__name__)
 
 

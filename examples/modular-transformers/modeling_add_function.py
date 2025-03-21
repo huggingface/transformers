@@ -62,5 +62,7 @@ class TestAttention(nn.Module):
     def __init__(self):
         pass
 
-    def forward(self) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    def forward(
+        self,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         _ = apply_rotary_pos_emb(1, 1, 1, 1)

@@ -27,27 +27,21 @@ import jax.numpy as jnp
 import numpy as np
 from jax import lax
 
-from ..models.auto import (
-    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
-    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
-)
+from ..models.auto import (FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+                           FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                           FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING)
 from ..utils import ModelOutput, logging
 from .configuration_utils import GenerationConfig
-from .flax_logits_process import (
-    FlaxForcedBOSTokenLogitsProcessor,
-    FlaxForcedEOSTokenLogitsProcessor,
-    FlaxForceTokensLogitsProcessor,
-    FlaxLogitsProcessorList,
-    FlaxMinLengthLogitsProcessor,
-    FlaxNoRepeatNGramLogitsProcessor,
-    FlaxSuppressTokensAtBeginLogitsProcessor,
-    FlaxSuppressTokensLogitsProcessor,
-    FlaxTemperatureLogitsWarper,
-    FlaxTopKLogitsWarper,
-    FlaxTopPLogitsWarper,
-)
-
+from .flax_logits_process import (FlaxForcedBOSTokenLogitsProcessor,
+                                  FlaxForcedEOSTokenLogitsProcessor,
+                                  FlaxForceTokensLogitsProcessor,
+                                  FlaxLogitsProcessorList,
+                                  FlaxMinLengthLogitsProcessor,
+                                  FlaxNoRepeatNGramLogitsProcessor,
+                                  FlaxSuppressTokensAtBeginLogitsProcessor,
+                                  FlaxSuppressTokensLogitsProcessor,
+                                  FlaxTemperatureLogitsWarper,
+                                  FlaxTopKLogitsWarper, FlaxTopPLogitsWarper)
 
 logger = logging.get_logger(__name__)
 
@@ -159,13 +153,19 @@ class FlaxGenerationMixin:
             state = body_fn(state)
         return state
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids, params, model_kwargs):
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, input_ids, params, model_kwargs
+    ):
         encoder_kwargs = {
             argument: value
             for argument, value in model_kwargs.items()
-            if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
+            if not (
+                argument.startswith("decoder_") or argument.startswith("cross_attn")
+            )
         }
-        model_kwargs["encoder_outputs"] = self.encode(input_ids, params=params, return_dict=True, **encoder_kwargs)
+        model_kwargs["encoder_outputs"] = self.encode(
+            input_ids, params=params, return_dict=True, **encoder_kwargs
+        )
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
@@ -180,10 +180,18 @@ class FlaxGenerationMixin:
             decoder_input_ids = model_kwargs.pop("decoder_input_ids")
             if decoder_input_ids is not None:
                 return decoder_input_ids
-        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-        return jnp.array(decoder_start_token_id, dtype="i4").reshape(1, -1).repeat(batch_size, axis=0)
+        decoder_start_token_id = self._get_decoder_start_token_id(
+            decoder_start_token_id, bos_token_id
+        )
+        return (
+            jnp.array(decoder_start_token_id, dtype="i4")
+            .reshape(1, -1)
+            .repeat(batch_size, axis=0)
+        )
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: int = None, bos_token_id: int = None
+    ) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
         # fall back to bos_token_id if necessary
         decoder_start_token_id = (
@@ -191,7 +199,11 @@ class FlaxGenerationMixin:
             if decoder_start_token_id is not None
             else self.generation_config.decoder_start_token_id
         )
-        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
+        bos_token_id = (
+            bos_token_id
+            if bos_token_id is not None
+            else self.generation_config.bos_token_id
+        )
         if decoder_start_token_id is not None:
             return decoder_start_token_id
         elif (
@@ -214,7 +226,9 @@ class FlaxGenerationMixin:
 
     @staticmethod
     def _expand_to_num_beams(tensor, num_beams):
-        return jnp.broadcast_to(tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:])
+        return jnp.broadcast_to(
+            tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:]
+        )
 
     def _adapt_logits_for_beam_search(self, logits):
         """
@@ -250,7 +264,9 @@ class FlaxGenerationMixin:
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         unused_model_args = []
-        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        model_args = set(
+            inspect.signature(self.prepare_inputs_for_generation).parameters
+        )
         # `kwargs`/`model_kwargs` is often used to handle optional forward pass inputs like `attention_mask`. If
         # `prepare_inputs_for_generation` doesn't accept them, then a stricter check can be made ;)
         if "kwargs" in model_args or "model_kwargs" in model_args:
@@ -315,8 +331,10 @@ class FlaxGenerationMixin:
             # two conditions must be met
             # 1) the generation config must have been created from the model config (`_from_model_config` field);
             # 2) the generation config must have seen no modification since its creation (the hash is the same).
-            if self.generation_config._from_model_config and self.generation_config._original_object_hash == hash(
-                self.generation_config
+            if (
+                self.generation_config._from_model_config
+                and self.generation_config._original_object_hash
+                == hash(self.generation_config)
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:
@@ -330,15 +348,24 @@ class FlaxGenerationMixin:
             generation_config = self.generation_config
 
         generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        model_kwargs = generation_config.update(
+            **kwargs
+        )  # All unused kwargs must be model kwargs
         self._validate_model_kwargs(model_kwargs.copy())
 
-        logits_processor = logits_processor if logits_processor is not None else FlaxLogitsProcessorList()
+        logits_processor = (
+            logits_processor
+            if logits_processor is not None
+            else FlaxLogitsProcessorList()
+        )
 
         # set init values
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
-        if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
+        if (
+            generation_config.pad_token_id is None
+            and generation_config.eos_token_id is not None
+        ):
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
@@ -349,8 +376,13 @@ class FlaxGenerationMixin:
                 eos_token_id = eos_token_id[0]
             generation_config.pad_token_id = eos_token_id
 
-        if generation_config.decoder_start_token_id is None and self.config.is_encoder_decoder:
-            raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
+        if (
+            generation_config.decoder_start_token_id is None
+            and self.config.is_encoder_decoder
+        ):
+            raise ValueError(
+                "`decoder_start_token_id` has to be defined for encoder-decoder generation."
+            )
 
         # decoder-only models should use left-padding for generation (can't be checked with `trace=True`)
         if not self.config.is_encoder_decoder and not trace:
@@ -368,7 +400,9 @@ class FlaxGenerationMixin:
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             if model_kwargs.get("encoder_outputs") is None:
-                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
+                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+                    input_ids, params, model_kwargs
+                )
             # prepare decoder_input_ids for generation
             input_ids = self._prepare_decoder_input_ids_for_generation(
                 batch_size,
@@ -379,8 +413,15 @@ class FlaxGenerationMixin:
 
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+        has_default_max_length = (
+            kwargs.get("max_length") is None
+            and generation_config.max_length is not None
+        )
+        if (
+            has_default_max_length
+            and generation_config.max_new_tokens is None
+            and generation_config.max_length == 20
+        ):
             # 20 is the default max_length of the generation config
             warnings.warn(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
@@ -395,21 +436,34 @@ class FlaxGenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
+            generation_config.max_length = (
+                generation_config.max_new_tokens + input_ids_seq_length
+            )
         else:  # by default let's always generate 20 new tokens
             if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_seq_length
-                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+                generation_config.max_length = (
+                    generation_config.max_length + input_ids_seq_length
+                )
+                max_position_embeddings = getattr(
+                    self.config, "max_position_embeddings", None
+                )
                 if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+                    generation_config.max_length = min(
+                        generation_config.max_length, max_position_embeddings
+                    )
 
-        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
+        if (
+            generation_config.min_length is not None
+            and generation_config.min_length > generation_config.max_length
+        ):
             raise ValueError(
                 f"Unfeasable length constraints: the minimum length ({generation_config.min_length}) is larger than"
                 f" the maximum length ({generation_config.max_length})"
             )
         if input_ids_seq_length >= generation_config.max_length:
-            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            input_ids_string = (
+                "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            )
             logger.warning(
                 f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
@@ -449,11 +503,16 @@ class FlaxGenerationMixin:
             )
         elif not generation_config.do_sample and generation_config.num_beams > 1:
             # broadcast input_ids & encoder_outputs
-            input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
+            input_ids = self._expand_to_num_beams(
+                input_ids, num_beams=generation_config.num_beams
+            )
 
             if "encoder_outputs" in model_kwargs:
-                model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
-                    model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
+                model_kwargs["encoder_outputs"]["last_hidden_state"] = (
+                    self._expand_to_num_beams(
+                        model_kwargs["encoder_outputs"]["last_hidden_state"],
+                        num_beams=generation_config.num_beams,
+                    )
                 )
 
             for kwarg in ["attention_mask", "decoder_attention_mask"]:
@@ -478,19 +537,32 @@ class FlaxGenerationMixin:
         else:
             raise NotImplementedError("`Beam sampling is currently not implemented.")
 
-    def _get_logits_warper(self, generation_config: GenerationConfig) -> FlaxLogitsProcessorList:
+    def _get_logits_warper(
+        self, generation_config: GenerationConfig
+    ) -> FlaxLogitsProcessorList:
         """
         This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsWarper`]
         instances used for multinomial sampling.
         """
         warpers = FlaxLogitsProcessorList()
 
-        if generation_config.temperature is not None and generation_config.temperature != 1.0:
+        if (
+            generation_config.temperature is not None
+            and generation_config.temperature != 1.0
+        ):
             warpers.append(FlaxTemperatureLogitsWarper(generation_config.temperature))
         if generation_config.top_k is not None and generation_config.top_k != 0:
-            warpers.append(FlaxTopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=1))
+            warpers.append(
+                FlaxTopKLogitsWarper(
+                    top_k=generation_config.top_k, min_tokens_to_keep=1
+                )
+            )
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
-            warpers.append(FlaxTopPLogitsWarper(top_p=generation_config.top_p, min_tokens_to_keep=1))
+            warpers.append(
+                FlaxTopPLogitsWarper(
+                    top_p=generation_config.top_p, min_tokens_to_keep=1
+                )
+            )
 
         return warpers
 
@@ -512,36 +584,58 @@ class FlaxGenerationMixin:
             and generation_config.min_length > -1
         ):
             processors.append(
-                FlaxMinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id)
+                FlaxMinLengthLogitsProcessor(
+                    generation_config.min_length, generation_config.eos_token_id
+                )
             )
         if generation_config.forced_bos_token_id is not None:
-            processors.append(FlaxForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id))
+            processors.append(
+                FlaxForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id)
+            )
         if generation_config.forced_eos_token_id is not None:
             processors.append(
-                FlaxForcedEOSTokenLogitsProcessor(generation_config.max_length, generation_config.forced_eos_token_id)
+                FlaxForcedEOSTokenLogitsProcessor(
+                    generation_config.max_length, generation_config.forced_eos_token_id
+                )
             )
         if generation_config.suppress_tokens is not None:
-            processors.append(FlaxSuppressTokensLogitsProcessor(generation_config.suppress_tokens))
+            processors.append(
+                FlaxSuppressTokensLogitsProcessor(generation_config.suppress_tokens)
+            )
         if generation_config.begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = (
                 begin_index
-                if (input_ids_seq_length > 1 or generation_config.forced_bos_token_id is None)
+                if (
+                    input_ids_seq_length > 1
+                    or generation_config.forced_bos_token_id is None
+                )
                 else begin_index + 1
             )
-            if generation_config.forced_decoder_ids is not None and len(generation_config.forced_decoder_ids) > 0:
+            if (
+                generation_config.forced_decoder_ids is not None
+                and len(generation_config.forced_decoder_ids) > 0
+            ):
                 # generation starts after the last token that is forced
                 begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
-                FlaxSuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
+                FlaxSuppressTokensAtBeginLogitsProcessor(
+                    generation_config.begin_suppress_tokens, begin_index
+                )
             )
         if generation_config.forced_decoder_ids is not None:
             forced_decoder_ids = [
-                [input_ids_seq_length + i[0] - 1, i[1]] for i in generation_config.forced_decoder_ids
+                [input_ids_seq_length + i[0] - 1, i[1]]
+                for i in generation_config.forced_decoder_ids
             ]
             processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
-        if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
-            processors.append(FlaxNoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
+        if (
+            generation_config.no_repeat_ngram_size is not None
+            and generation_config.no_repeat_ngram_size > 0
+        ):
+            processors.append(
+                FlaxNoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size)
+            )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         return processors
@@ -579,13 +673,25 @@ class FlaxGenerationMixin:
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         # init values
-        max_length = max_length if max_length is not None else self.generation_config.max_length
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        max_length = (
+            max_length if max_length is not None else self.generation_config.max_length
+        )
+        pad_token_id = (
+            pad_token_id
+            if pad_token_id is not None
+            else self.generation_config.pad_token_id
+        )
+        eos_token_id = (
+            eos_token_id
+            if eos_token_id is not None
+            else self.generation_config.eos_token_id
+        )
 
         batch_size, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None)
+        eos_token_id = jnp.array(
+            eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None
+        )
         pad_token_id = jnp.array(pad_token_id, dtype=jnp.int32)
         cur_len = jnp.array(cur_len)
 
@@ -600,7 +706,9 @@ class FlaxGenerationMixin:
         # and pass it the `encoder_outputs`, which are part of the `model_kwargs`.
         model = self.decode if self.config.is_encoder_decoder else self
         # initialize model specific kwargs
-        model_kwargs = self.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
+        model_kwargs = self.prepare_inputs_for_generation(
+            input_ids, max_length, **model_kwargs
+        )
 
         # initialize state
         state = GreedyState(
@@ -615,12 +723,16 @@ class FlaxGenerationMixin:
             """state termination condition fn."""
             has_reached_max_length = state.cur_len == max_length
             all_sequence_finished = jnp.all(state.is_sent_finished)
-            finish_generation = jnp.logical_or(has_reached_max_length, all_sequence_finished)
+            finish_generation = jnp.logical_or(
+                has_reached_max_length, all_sequence_finished
+            )
             return ~finish_generation
 
         def greedy_search_body_fn(state):
             """state update fn."""
-            model_outputs = model(state.running_token, params=params, **state.model_kwargs)
+            model_outputs = model(
+                state.running_token, params=params, **state.model_kwargs
+            )
             logits = model_outputs.logits[:, -1]
 
             # apply min_length, ...
@@ -628,12 +740,21 @@ class FlaxGenerationMixin:
 
             next_token = jnp.argmax(logits, axis=-1)
 
-            next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
-            next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
+            next_token = (
+                next_token * ~state.is_sent_finished
+                + pad_token_id * state.is_sent_finished
+            )
+            next_is_sent_finished = state.is_sent_finished | (
+                next_token == eos_token_id
+            )
             next_token = next_token[:, None]
 
-            next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
+            next_sequences = lax.dynamic_update_slice(
+                state.sequences, next_token, (0, state.cur_len)
+            )
+            next_model_kwargs = self.update_inputs_for_generation(
+                model_outputs, state.model_kwargs
+            )
             return GreedyState(
                 cur_len=state.cur_len + 1,
                 sequences=next_sequences,
@@ -647,7 +768,9 @@ class FlaxGenerationMixin:
             state = greedy_search_body_fn(state)
 
         if not trace:
-            state = self._run_loop_in_debug(greedy_search_cond_fn, greedy_search_body_fn, state)
+            state = self._run_loop_in_debug(
+                greedy_search_cond_fn, greedy_search_body_fn, state
+            )
         else:
             state = lax.while_loop(greedy_search_cond_fn, greedy_search_body_fn, state)
 
@@ -667,14 +790,26 @@ class FlaxGenerationMixin:
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ):
         # init values
-        max_length = max_length if max_length is not None else self.generation_config.max_length
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        max_length = (
+            max_length if max_length is not None else self.generation_config.max_length
+        )
+        pad_token_id = (
+            pad_token_id
+            if pad_token_id is not None
+            else self.generation_config.pad_token_id
+        )
+        eos_token_id = (
+            eos_token_id
+            if eos_token_id is not None
+            else self.generation_config.eos_token_id
+        )
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
 
         batch_size, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None)
+        eos_token_id = jnp.array(
+            eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None
+        )
         pad_token_id = jnp.array(pad_token_id, dtype=jnp.int32)
         cur_len = jnp.array(cur_len)
 
@@ -690,7 +825,9 @@ class FlaxGenerationMixin:
         model = self.decode if self.config.is_encoder_decoder else self
 
         # initialize model specific kwargs
-        model_kwargs = self.prepare_inputs_for_generation(input_ids, max_length, **model_kwargs)
+        model_kwargs = self.prepare_inputs_for_generation(
+            input_ids, max_length, **model_kwargs
+        )
 
         # initialize state
         state = SampleState(
@@ -706,13 +843,17 @@ class FlaxGenerationMixin:
             """state termination condition fn."""
             has_reached_max_length = state.cur_len == max_length
             all_sequence_finished = jnp.all(state.is_sent_finished)
-            finish_generation = jnp.logical_or(has_reached_max_length, all_sequence_finished)
+            finish_generation = jnp.logical_or(
+                has_reached_max_length, all_sequence_finished
+            )
             return ~finish_generation
 
         def sample_search_body_fn(state):
             """state update fn."""
             prng_key, prng_key_next = jax.random.split(state.prng_key)
-            model_outputs = model(state.running_token, params=params, **state.model_kwargs)
+            model_outputs = model(
+                state.running_token, params=params, **state.model_kwargs
+            )
 
             logits = model_outputs.logits[:, -1]
 
@@ -723,12 +864,21 @@ class FlaxGenerationMixin:
 
             next_token = jax.random.categorical(prng_key, logits, axis=-1)
 
-            next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
-            next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
+            next_token = (
+                next_token * ~state.is_sent_finished
+                + pad_token_id * state.is_sent_finished
+            )
+            next_is_sent_finished = state.is_sent_finished | (
+                next_token == eos_token_id
+            )
             next_token = next_token[:, None]
 
-            next_sequences = lax.dynamic_update_slice(state.sequences, next_token, (0, state.cur_len))
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
+            next_sequences = lax.dynamic_update_slice(
+                state.sequences, next_token, (0, state.cur_len)
+            )
+            next_model_kwargs = self.update_inputs_for_generation(
+                model_outputs, state.model_kwargs
+            )
 
             return SampleState(
                 cur_len=state.cur_len + 1,
@@ -744,7 +894,9 @@ class FlaxGenerationMixin:
             state = sample_search_body_fn(state)
 
         if not trace:
-            state = self._run_loop_in_debug(sample_search_cond_fn, sample_search_body_fn, state)
+            state = self._run_loop_in_debug(
+                sample_search_cond_fn, sample_search_body_fn, state
+            )
         else:
             state = lax.while_loop(sample_search_cond_fn, sample_search_body_fn, state)
 
@@ -774,7 +926,9 @@ class FlaxGenerationMixin:
             # ignore scalars (e.g. cache index)
             if tensor.ndim == 0:
                 return tensor
-            return tensor.reshape((tensor.shape[0] * tensor.shape[1],) + tensor.shape[2:])
+            return tensor.reshape(
+                (tensor.shape[0] * tensor.shape[1],) + tensor.shape[2:]
+            )
 
         def unflatten_beam_dim(tensor, batch_size, num_beams):
             """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
@@ -788,7 +942,8 @@ class FlaxGenerationMixin:
             Gathers the beam slices indexed by beam_indices into new beam array.
             """
             batch_indices = jnp.reshape(
-                jnp.arange(batch_size * new_num_beams) // new_num_beams, (batch_size, new_num_beams)
+                jnp.arange(batch_size * new_num_beams) // new_num_beams,
+                (batch_size, new_num_beams),
             )
 
             def gather_fn(tensor):
@@ -801,18 +956,40 @@ class FlaxGenerationMixin:
             return jax.tree_util.tree_map(gather_fn, nested)
 
         # init values
-        max_length = max_length if max_length is not None else self.generation_config.max_length
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        length_penalty = length_penalty if length_penalty is not None else self.generation_config.length_penalty
-        early_stopping = early_stopping if early_stopping is not None else self.generation_config.early_stopping
+        max_length = (
+            max_length if max_length is not None else self.generation_config.max_length
+        )
+        pad_token_id = (
+            pad_token_id
+            if pad_token_id is not None
+            else self.generation_config.pad_token_id
+        )
+        eos_token_id = (
+            eos_token_id
+            if eos_token_id is not None
+            else self.generation_config.eos_token_id
+        )
+        length_penalty = (
+            length_penalty
+            if length_penalty is not None
+            else self.generation_config.length_penalty
+        )
+        early_stopping = (
+            early_stopping
+            if early_stopping is not None
+            else self.generation_config.early_stopping
+        )
         num_return_sequences = (
-            num_return_sequences if num_return_sequences is not None else self.generation_config.num_return_sequences
+            num_return_sequences
+            if num_return_sequences is not None
+            else self.generation_config.num_return_sequences
         )
 
         batch_size, num_beams, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None)
+        eos_token_id = jnp.array(
+            eos_token_id, dtype=jnp.int32 if eos_token_id is not None else None
+        )
         pad_token_id = jnp.array(pad_token_id, dtype=jnp.int32)
         cur_len = jnp.array(cur_len)
 
@@ -820,15 +997,21 @@ class FlaxGenerationMixin:
         decoder_prompt_len = input_ids.shape[-1]
 
         # per batch,beam-item holding current token in loop.
-        sequences = jnp.full((batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32)
-        running_sequences = jnp.full((batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32)
+        sequences = jnp.full(
+            (batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32
+        )
+        running_sequences = jnp.full(
+            (batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32
+        )
         running_sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0, 0))
 
         # per batch,beam-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size, num_beams), dtype=jnp.bool_)
 
         # per batch,beam-item score, logprobs
-        running_scores = jnp.tile(jnp.array([0.0] + [np.array(-1.0e7)] * (num_beams - 1)), [batch_size, 1])
+        running_scores = jnp.tile(
+            jnp.array([0.0] + [np.array(-1.0e7)] * (num_beams - 1)), [batch_size, 1]
+        )
         scores = jnp.ones((batch_size, num_beams)) * np.array(-1.0e7)
 
         # For Seq2Seq generation, we only need to use the decoder instead of the whole model in generation loop
@@ -845,7 +1028,9 @@ class FlaxGenerationMixin:
                 model_kwargs[kwarg] = flatten_beam_dim(model_kwargs[kwarg])
 
         # initialize model specific kwargs
-        model_kwargs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), max_length, **model_kwargs)
+        model_kwargs = self.prepare_inputs_for_generation(
+            flatten_beam_dim(input_ids), max_length, **model_kwargs
+        )
 
         # initialize state
         state = BeamSearchState(
@@ -879,12 +1064,18 @@ class FlaxGenerationMixin:
                     (state.cur_len - decoder_prompt_len) ** length_penalty
                 )
             worst_finished_score = jnp.where(
-                state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
+                state.is_sent_finished,
+                jnp.min(state.scores, axis=1, keepdims=True),
+                np.array(-1.0e7),
             )
-            improvement_still_possible = jnp.any(best_running_score > worst_finished_score)
+            improvement_still_possible = jnp.any(
+                best_running_score > worst_finished_score
+            )
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(jnp.all(state.is_sent_finished) & (early_stopping is True))
+            still_open_beam = ~(
+                jnp.all(state.is_sent_finished) & (early_stopping is True)
+            )
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
@@ -905,9 +1096,12 @@ class FlaxGenerationMixin:
             )
             model_outputs = model(input_token, params=params, **state.model_kwargs)
 
-            logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
+            logits = unflatten_beam_dim(
+                model_outputs.logits[:, -1], batch_size, num_beams
+            )
             cache = jax.tree_util.tree_map(
-                lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
+                lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams),
+                model_outputs.past_key_values,
             )
 
             # adapt logits for FlaxMarianMTModel
@@ -919,7 +1113,9 @@ class FlaxGenerationMixin:
             # add new logprobs to existing running logprobs scores.
             log_probs = jax.nn.log_softmax(logits)
             log_probs = logits_processor(
-                flatten_beam_dim(state.running_sequences), flatten_beam_dim(log_probs), state.cur_len
+                flatten_beam_dim(state.running_sequences),
+                flatten_beam_dim(log_probs),
+                state.cur_len,
             )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + jnp.expand_dims(state.running_scores, axis=2)
@@ -944,7 +1140,9 @@ class FlaxGenerationMixin:
                 state.running_sequences, topk_beam_indices, batch_size, beams_to_keep
             )
             topk_ids = jnp.expand_dims(topk_indices % vocab_size, axis=2)
-            topk_sequences = lax.dynamic_update_slice(topk_running_sequences, topk_ids, (0, 0, state.cur_len))
+            topk_sequences = lax.dynamic_update_slice(
+                topk_running_sequences, topk_ids, (0, 0, state.cur_len)
+            )
 
             # 4. Check which sequences have ended
             # Update current sequences:
@@ -953,13 +1151,18 @@ class FlaxGenerationMixin:
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
             did_topk_just_finished = topk_sequences[:, :, state.cur_len] == eos_token_id
-            running_topk_log_probs = topk_log_probs + did_topk_just_finished * np.array(-1.0e7)
+            running_topk_log_probs = topk_log_probs + did_topk_just_finished * np.array(
+                -1.0e7
+            )
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
             next_topk_indices = lax.top_k(running_topk_log_probs, k=num_beams)[1]
             next_running_sequences, next_running_scores = gather_beams(
-                [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
+                [topk_sequences, running_topk_log_probs],
+                next_topk_indices,
+                batch_size,
+                num_beams,
             )
 
             # 6. Process topk logits
@@ -967,9 +1170,12 @@ class FlaxGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / ((state.cur_len + 1 - decoder_prompt_len) ** length_penalty)
+            topk_log_probs = topk_log_probs / (
+                (state.cur_len + 1 - decoder_prompt_len) ** length_penalty
+            )
             beams_in_batch_are_full = jnp.broadcast_to(
-                state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape
+                state.is_sent_finished.all(axis=-1, keepdims=True),
+                did_topk_just_finished.shape,
             ) & (early_stopping is True)
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
             topk_log_probs += add_penalty * np.array(-1.0e7)
@@ -978,21 +1184,36 @@ class FlaxGenerationMixin:
             # Combine sequences, scores, and flags along the beam dimension and compare
             # new finished sequence scores to existing finished scores and select the
             # best from the new set of beams
-            merged_sequences = jnp.concatenate([state.sequences, topk_sequences], axis=1)
+            merged_sequences = jnp.concatenate(
+                [state.sequences, topk_sequences], axis=1
+            )
             merged_scores = jnp.concatenate([state.scores, topk_log_probs], axis=1)
-            merged_is_sent_finished = jnp.concatenate([state.is_sent_finished, did_topk_just_finished], axis=1)
+            merged_is_sent_finished = jnp.concatenate(
+                [state.is_sent_finished, did_topk_just_finished], axis=1
+            )
             topk_merged_indices = lax.top_k(merged_scores, k=num_beams)[1]
             next_sequences, next_scores, next_is_sent_finished = gather_beams(
-                [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices, batch_size, num_beams
+                [merged_sequences, merged_scores, merged_is_sent_finished],
+                topk_merged_indices,
+                batch_size,
+                num_beams,
             )
 
             # 8. Update model kwargs.
             # Determine the top k beam indices from the original set of all beams.
             # With these, gather the top k beam-associated caches.
-            next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
-            next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
-            model_outputs["past_key_values"] = jax.tree_util.tree_map(lambda x: flatten_beam_dim(x), next_cache)
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
+            next_running_indices = gather_beams(
+                topk_beam_indices, next_topk_indices, batch_size, num_beams
+            )
+            next_cache = gather_beams(
+                cache, next_running_indices, batch_size, num_beams
+            )
+            model_outputs["past_key_values"] = jax.tree_util.tree_map(
+                lambda x: flatten_beam_dim(x), next_cache
+            )
+            next_model_kwargs = self.update_inputs_for_generation(
+                model_outputs, state.model_kwargs
+            )
 
             return BeamSearchState(
                 cur_len=state.cur_len + 1,
@@ -1007,17 +1228,23 @@ class FlaxGenerationMixin:
         # Always run first iteration outside of `lax.while_loop` to avoid calling `beam_search_cond_fn`
         # when `state.cur_len` equals `decoder_prompt_len`. This also helps to comply with TPU when
         # the very first prompt has sequence length > 1.
-        state = partial(beam_search_body_fn, input_ids_length=input_ids.shape[-1])(state)
+        state = partial(beam_search_body_fn, input_ids_length=input_ids.shape[-1])(
+            state
+        )
 
         if not trace:
-            state = self._run_loop_in_debug(beam_search_cond_fn, beam_search_body_fn, state)
+            state = self._run_loop_in_debug(
+                beam_search_cond_fn, beam_search_body_fn, state
+            )
         else:
             state = lax.while_loop(beam_search_cond_fn, beam_search_body_fn, state)
 
         # Account for the edge-case where there are no finished sequences for a
         # particular batch item. If so, return running sequences for that batch item.
         none_finished = jnp.any(state.is_sent_finished, axis=1)
-        sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
+        sequences = jnp.where(
+            none_finished[:, None, None], state.sequences, state.running_sequences
+        )
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
         # Take best beams for each batch (the score is sorted in descending order)

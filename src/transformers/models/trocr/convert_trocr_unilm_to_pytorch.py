@@ -21,18 +21,10 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import (
-    RobertaTokenizer,
-    TrOCRConfig,
-    TrOCRForCausalLM,
-    TrOCRProcessor,
-    VisionEncoderDecoderModel,
-    ViTConfig,
-    ViTImageProcessor,
-    ViTModel,
-)
+from transformers import (RobertaTokenizer, TrOCRConfig, TrOCRForCausalLM,
+                          TrOCRProcessor, VisionEncoderDecoderModel, ViTConfig,
+                          ViTImageProcessor, ViTModel)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -44,37 +36,79 @@ def create_rename_keys(encoder_config, decoder_config):
     for i in range(encoder_config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.norm1.weight", f"encoder.encoder.layer.{i}.layernorm_before.weight")
-        )
-        rename_keys.append((f"encoder.deit.blocks.{i}.norm1.bias", f"encoder.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append(
-            (f"encoder.deit.blocks.{i}.attn.proj.weight", f"encoder.encoder.layer.{i}.attention.output.dense.weight")
-        )
-        rename_keys.append(
-            (f"encoder.deit.blocks.{i}.attn.proj.bias", f"encoder.encoder.layer.{i}.attention.output.dense.bias")
+            (
+                f"encoder.deit.blocks.{i}.norm1.weight",
+                f"encoder.encoder.layer.{i}.layernorm_before.weight",
+            )
         )
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.norm2.weight", f"encoder.encoder.layer.{i}.layernorm_after.weight")
-        )
-        rename_keys.append((f"encoder.deit.blocks.{i}.norm2.bias", f"encoder.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append(
-            (f"encoder.deit.blocks.{i}.mlp.fc1.weight", f"encoder.encoder.layer.{i}.intermediate.dense.weight")
-        )
-        rename_keys.append(
-            (f"encoder.deit.blocks.{i}.mlp.fc1.bias", f"encoder.encoder.layer.{i}.intermediate.dense.bias")
+            (
+                f"encoder.deit.blocks.{i}.norm1.bias",
+                f"encoder.encoder.layer.{i}.layernorm_before.bias",
+            )
         )
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.mlp.fc2.weight", f"encoder.encoder.layer.{i}.output.dense.weight")
+            (
+                f"encoder.deit.blocks.{i}.attn.proj.weight",
+                f"encoder.encoder.layer.{i}.attention.output.dense.weight",
+            )
         )
-        rename_keys.append((f"encoder.deit.blocks.{i}.mlp.fc2.bias", f"encoder.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.attn.proj.bias",
+                f"encoder.encoder.layer.{i}.attention.output.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.norm2.weight",
+                f"encoder.encoder.layer.{i}.layernorm_after.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.norm2.bias",
+                f"encoder.encoder.layer.{i}.layernorm_after.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc1.weight",
+                f"encoder.encoder.layer.{i}.intermediate.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc1.bias",
+                f"encoder.encoder.layer.{i}.intermediate.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc2.weight",
+                f"encoder.encoder.layer.{i}.output.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc2.bias",
+                f"encoder.encoder.layer.{i}.output.dense.bias",
+            )
+        )
 
     # cls token, position embeddings and patch embeddings of encoder
     rename_keys.extend(
         [
             ("encoder.deit.cls_token", "encoder.embeddings.cls_token"),
             ("encoder.deit.pos_embed", "encoder.embeddings.position_embeddings"),
-            ("encoder.deit.patch_embed.proj.weight", "encoder.embeddings.patch_embeddings.projection.weight"),
-            ("encoder.deit.patch_embed.proj.bias", "encoder.embeddings.patch_embeddings.projection.bias"),
+            (
+                "encoder.deit.patch_embed.proj.weight",
+                "encoder.embeddings.patch_embeddings.projection.weight",
+            ),
+            (
+                "encoder.deit.patch_embed.proj.bias",
+                "encoder.embeddings.patch_embeddings.projection.bias",
+            ),
             ("encoder.deit.norm.weight", "encoder.layernorm.weight"),
             ("encoder.deit.norm.bias", "encoder.layernorm.bias"),
         ]
@@ -89,15 +123,17 @@ def read_in_q_k_v(state_dict, encoder_config):
         # queries, keys and values (only weights, no biases)
         in_proj_weight = state_dict.pop(f"encoder.deit.blocks.{i}.attn.qkv.weight")
 
-        state_dict[f"encoder.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : encoder_config.hidden_size, :
-        ]
-        state_dict[f"encoder.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            encoder_config.hidden_size : encoder_config.hidden_size * 2, :
-        ]
-        state_dict[f"encoder.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -encoder_config.hidden_size :, :
-        ]
+        state_dict[f"encoder.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: encoder_config.hidden_size, :]
+        )
+        state_dict[f"encoder.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[
+                encoder_config.hidden_size : encoder_config.hidden_size * 2, :
+            ]
+        )
+        state_dict[f"encoder.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-encoder_config.hidden_size :, :]
+        )
 
 
 def rename_key(dct, old, new):
@@ -157,7 +193,9 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.eval()
 
     # load state_dict of original model, rename some keys
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
+    state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu", check_hash=True
+    )["model"]
 
     rename_keys = create_rename_keys(encoder_config, decoder_config)
     for src, dest in rename_keys:
@@ -185,7 +223,9 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     tokenizer = RobertaTokenizer.from_pretrained("FacebookAI/roberta-large")
     processor = TrOCRProcessor(image_processor, tokenizer)
 
-    pixel_values = processor(images=prepare_img(checkpoint_url), return_tensors="pt").pixel_values
+    pixel_values = processor(
+        images=prepare_img(checkpoint_url), return_tensors="pt"
+    ).pixel_values
 
     # verify logits
     decoder_input_ids = torch.tensor([[model.config.decoder.decoder_start_token_id]])
@@ -195,24 +235,70 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     expected_shape = torch.Size([1, 1, 50265])
     if "trocr-base-handwritten" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
+            [
+                -1.4502,
+                -4.6683,
+                -0.5347,
+                -2.9291,
+                9.1435,
+                -3.0571,
+                8.9764,
+                1.7560,
+                8.7358,
+                -1.5311,
+            ]
         )
     elif "trocr-large-handwritten" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-2.6437, -1.3129, -2.2596, -5.3455, 6.3539, 1.7604, 5.4991, 1.4702, 5.6113, 2.0170]
+            [
+                -2.6437,
+                -1.3129,
+                -2.2596,
+                -5.3455,
+                6.3539,
+                1.7604,
+                5.4991,
+                1.4702,
+                5.6113,
+                2.0170,
+            ]
         )
     elif "trocr-base-printed" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-5.6816, -5.8388, 1.1398, -6.9034, 6.8505, -2.4393, 1.2284, -1.0232, -1.9661, -3.9210]
+            [
+                -5.6816,
+                -5.8388,
+                1.1398,
+                -6.9034,
+                6.8505,
+                -2.4393,
+                1.2284,
+                -1.0232,
+                -1.9661,
+                -3.9210,
+            ]
         )
     elif "trocr-large-printed" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-6.0162, -7.0959, 4.4155, -5.1063, 7.0468, -3.1631, 2.6466, -0.3081, -0.8106, -1.7535]
+            [
+                -6.0162,
+                -7.0959,
+                4.4155,
+                -5.1063,
+                7.0468,
+                -3.1631,
+                2.6466,
+                -0.3081,
+                -0.8106,
+                -1.7535,
+            ]
         )
 
     if "stage1" not in checkpoint_url:
         assert logits.shape == expected_shape, "Shape of logits not as expected"
-        assert torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-3), "First elements of logits not as expected"
+        assert torch.allclose(
+            logits[0, 0, :10], expected_slice, atol=1e-3
+        ), "First elements of logits not as expected"
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
@@ -231,7 +317,10 @@ if __name__ == "__main__":
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the folder to output PyTorch model.",
     )
     args = parser.parse_args()
     convert_tr_ocr_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)

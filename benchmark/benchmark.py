@@ -31,12 +31,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from git import Repo
-
 from huggingface_hub import HfApi
-
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
-
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 
@@ -76,7 +73,9 @@ def summarize(run_dir, metrics, expand_metrics=False):
     }
     ```
     """
-    reports = glob.glob(os.path.join(run_dir, "**/benchmark_report.json"), recursive=True)
+    reports = glob.glob(
+        os.path.join(run_dir, "**/benchmark_report.json"), recursive=True
+    )
     report_dirs = [str(Path(report).parent) for report in reports]
 
     summaries = []
@@ -204,22 +203,45 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--config-dir", type=str, required=True, help="The path to the config directory.")
-    parser.add_argument("--config-name", type=str, required=True, help="The config name.")
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        required=True,
+        help="The path to the config directory.",
+    )
+    parser.add_argument(
+        "--config-name", type=str, required=True, help="The config name."
+    )
 
     # arguments specific to this wrapper for our own customization
-    parser.add_argument("--ensure_empty", type=bool, default=True, help="If to create a temporary directory.")
+    parser.add_argument(
+        "--ensure_empty",
+        type=bool,
+        default=True,
+        help="If to create a temporary directory.",
+    )
     parser.add_argument(
         "--commit",
         type=list_str,
         default="",
         help="Comma-separated list of branch names and/or commit sha values on which the benchmark will run. If `diff` is specified, it will run on both the current head and the `main` branch.",
     )
-    parser.add_argument("--metrics", type=str, help="The metrics to be included in the summary.")
+    parser.add_argument(
+        "--metrics", type=str, help="The metrics to be included in the summary."
+    )
 
-    parser.add_argument("--repo_id", type=str, default=None, help="The repository to which the file will be uploaded.")
-    parser.add_argument("--path_in_repo", type=str, default=None, help="Relative filepath in the repo.")
-    parser.add_argument("--token", type=str, default=None, help="A valid user access token (string).")
+    parser.add_argument(
+        "--repo_id",
+        type=str,
+        default=None,
+        help="The repository to which the file will be uploaded.",
+    )
+    parser.add_argument(
+        "--path_in_repo", type=str, default=None, help="Relative filepath in the repo."
+    )
+    parser.add_argument(
+        "--token", type=str, default=None, help="A valid user access token (string)."
+    )
 
     args, optimum_benchmark_args = parser.parse_known_args()
 
@@ -243,10 +265,14 @@ if __name__ == "__main__":
             models = arg[len("backend.model=") :]
             models = models.split(",")
             break
-    optimum_benchmark_args = [arg for arg in optimum_benchmark_args if not arg.startswith("backend.model=")]
+    optimum_benchmark_args = [
+        arg for arg in optimum_benchmark_args if not arg.startswith("backend.model=")
+    ]
 
     # Get the commit(s)
-    current_head = str(repo.head.commit) if repo.head.is_detached else str(repo.head.ref)
+    current_head = (
+        str(repo.head.commit) if repo.head.is_detached else str(repo.head.ref)
+    )
     commits = [x for x in args.commit if x != ""]
     if len(commits) == 0:
         commits = [current_head]
@@ -298,9 +324,14 @@ if __name__ == "__main__":
                     else:
                         dir_args = [
                             f"hydra.sweep.dir={commit_run_dir}",
-                            f"hydra.run.dir={commit_run_dir}/" + "${hydra.job.override_dirname}",
+                            f"hydra.run.dir={commit_run_dir}/"
+                            + "${hydra.job.override_dirname}",
                         ]
-                main(args.config_dir, args.config_name, model_arg + dir_args + optimum_benchmark_args)
+                main(
+                    args.config_dir,
+                    args.config_name,
+                    model_arg + dir_args + optimum_benchmark_args,
+                )
 
             if commit_run_dir is not None:
                 # Need to remove the `\` character

@@ -28,24 +28,17 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import add_start_docstrings_to_model_forward, logging
-from ..mistral.modeling_mistral import (
-    MistralAttention,
-    MistralDecoderLayer,
-    MistralForCausalLM,
-    MistralForSequenceClassification,
-    MistralForTokenClassification,
-    MistralModel,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
+from ..mistral.modeling_mistral import (MistralAttention, MistralDecoderLayer,
+                                        MistralForCausalLM,
+                                        MistralForSequenceClassification,
+                                        MistralForTokenClassification,
+                                        MistralModel, apply_rotary_pos_emb,
+                                        eager_attention_forward)
 from .configuration_starcoder2 import Starcoder2Config
-
 
 logger = logging.get_logger(__name__)
 
@@ -58,15 +51,21 @@ class Starcoder2MLP(nn.Module):
         super().__init__()
         embed_dim = config.hidden_size
         self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
-        self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
+        self.c_proj = nn.Linear(
+            config.intermediate_size, embed_dim, bias=config.use_bias
+        )
         self.act = ACT2FN[config.hidden_act]
         self.residual_dropout = config.residual_dropout
 
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(
+        self, hidden_states: Optional[Tuple[torch.FloatTensor]]
+    ) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.residual_dropout, training=self.training
+        )
         return hidden_states
 
 
@@ -74,10 +73,26 @@ class Starcoder2Attention(MistralAttention):
     def __init__(self, config: Starcoder2Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.residual_dropout = config.residual_dropout
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+        self.q_proj = nn.Linear(
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.use_bias,
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.use_bias,
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.use_bias,
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.use_bias,
+        )
 
     def forward(
         self,
@@ -96,22 +111,30 @@ class Starcoder2Attention(MistralAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -121,7 +144,9 @@ class Starcoder2Attention(MistralAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # diff with Llama
+            sliding_window=getattr(
+                self.config, "sliding_window", None
+            ),  # diff with Llama
             **kwargs,
         )
 
@@ -140,7 +165,9 @@ class Starcoder2DecoderLayer(MistralDecoderLayer):
         self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.norm_epsilon
+        )
 
 
 STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
@@ -150,7 +177,10 @@ class Starcoder2Model(MistralModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Starcoder2DecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.embedding_dropout = config.embedding_dropout
@@ -170,15 +200,25 @@ class Starcoder2Model(MistralModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -193,16 +233,24 @@ class Starcoder2Model(MistralModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         hidden_states = inputs_embeds

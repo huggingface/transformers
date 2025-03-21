@@ -31,18 +31,12 @@ from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
 
-from transformers import (
-    AddedToken,
-    AutoConfig,
-    AutoTokenizer,
-    LlavaOnevisionConfig,
-    LlavaOnevisionForConditionalGeneration,
-    LlavaOnevisionImageProcessor,
-    LlavaOnevisionProcessor,
-    LlavaOnevisionVideoProcessor,
-    SiglipVisionConfig,
-)
-
+from transformers import (AddedToken, AutoConfig, AutoTokenizer,
+                          LlavaOnevisionConfig,
+                          LlavaOnevisionForConditionalGeneration,
+                          LlavaOnevisionImageProcessor,
+                          LlavaOnevisionProcessor,
+                          LlavaOnevisionVideoProcessor, SiglipVisionConfig)
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.": "",
@@ -60,7 +54,9 @@ chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role']
 
 
 def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+    directory_path = snapshot_download(
+        repo_id=model_id, allow_patterns=["*.safetensors"]
+    )
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -71,7 +67,9 @@ def load_original_state_dict(model_id):
 
     # tied wieghts so lm.head is not saved. Let's clone to load state dict
     if "lm_head.weight" not in original_state_dict:
-        original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
+        original_state_dict["lm_head.weight"] = original_state_dict[
+            "model.embed_tokens.weight"
+        ].clone()
 
     return original_state_dict
 
@@ -97,13 +95,18 @@ def load_image():
 
 def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # load original config
-    filepath = hf_hub_download(repo_id=model_id, filename="config.json", repo_type="model")
+    filepath = hf_hub_download(
+        repo_id=model_id, filename="config.json", repo_type="model"
+    )
     # read json
     with open(filepath) as f:
         data = json.load(f)
         print(data)
 
-    if model_id in ["lmms-lab/llava-onevision-qwen2-0.5b-ov", "lmms-lab/llava-onevision-qwen2-0.5b-si"]:
+    if model_id in [
+        "lmms-lab/llava-onevision-qwen2-0.5b-ov",
+        "lmms-lab/llava-onevision-qwen2-0.5b-si",
+    ]:
         text_model_id = "Qwen/Qwen2-0.5B-Instruct"
     elif model_id in [
         "lmms-lab/llava-onevision-qwen2-7b-ov",
@@ -123,8 +126,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     text_config = AutoConfig.from_pretrained(text_model_id)
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=True)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_tokens(AddedToken("<video>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_tokens(
+        AddedToken("<image>", special=True, normalized=False), special_tokens=True
+    )
+    tokenizer.add_tokens(
+        AddedToken("<video>", special=True, normalized=False), special_tokens=True
+    )
 
     image_processor = LlavaOnevisionImageProcessor.from_pretrained(vision_model_id)
     video_processor = LlavaOnevisionVideoProcessor.from_pretrained(vision_model_id)
@@ -166,7 +173,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mu, covariance_matrix=1e-5 * sigma
+    )
 
     # We add an image token so we resize the model
     # Pad to 64 for performance reasons
@@ -177,12 +186,26 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
         tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.model.embed_tokens.weight.data[
+                        vocab_size:
+                    ].shape[0]
+                )
+            )
         ),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.lm_head.weight.data[vocab_size:].shape[0]
+                )
+            )
+        ),
         dim=0,
     )
 
@@ -210,7 +233,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # verify inputs
     filepath = hf_hub_download(
-        repo_id="RaushanTurganbay/test-image", filename="llava_onevision_pixel_values.pt", repo_type="dataset"
+        repo_id="RaushanTurganbay/test-image",
+        filename="llava_onevision_pixel_values.pt",
+        repo_type="dataset",
     )
     original_pixel_values = torch.load(filepath, map_location="cpu")
     assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
@@ -229,56 +254,88 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         if model_id == "lmms-lab/llava-onevision-qwen2-0.5b-si":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[-12.1953, -14.6797, -12.7891], [0.5840, -0.8467, 1.3799], [3.6055, 4.5430, 9.9062]],
+                [
+                    [-12.1953, -14.6797, -12.7891],
+                    [0.5840, -0.8467, 1.3799],
+                    [3.6055, 4.5430, 9.9062],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-0.5b-ov":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[-12.0234, -14.3828, -12.7500], [2.3594, 1.0000, 3.9336], [3.6582, 4.7148, 9.1172]],
+                [
+                    [-12.0234, -14.3828, -12.7500],
+                    [2.3594, 1.0000, 3.9336],
+                    [3.6582, 4.7148, 9.1172],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-7b-si":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[1.7656, 3.3418, 1.4033], [0.0757, 0.7427, 3.5098], [6.7109, 5.6797, 9.3828]],
+                [
+                    [1.7656, 3.3418, 1.4033],
+                    [0.0757, 0.7427, 3.5098],
+                    [6.7109, 5.6797, 9.3828],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-7b-ov":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[1.8496, 3.4219, 1.3135], [3.0996, 3.0117, 3.1484], [4.2422, 4.7109, 9.9688]],
+                [
+                    [1.8496, 3.4219, 1.3135],
+                    [3.0996, 3.0117, 3.1484],
+                    [4.2422, 4.7109, 9.9688],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-72b-si":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[4.1875, 4.4883, 2.7910], [1.2949, 5.1328, 3.1582], [0.9390, 6.4531, 8.4375]],
+                [
+                    [4.1875, 4.4883, 2.7910],
+                    [1.2949, 5.1328, 3.1582],
+                    [0.9390, 6.4531, 8.4375],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-72b-ov":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[4.2930, 4.7305, 2.7363], [1.7529, 5.0742, 3.9590], [1.3936, 6.3438, 9.3984]],
+                [
+                    [4.2930, 4.7305, 2.7363],
+                    [1.7529, 5.0742, 3.9590],
+                    [1.3936, 6.3438, 9.3984],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-7b-ov-chat":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[1.8662, 3.4316, 1.3174], [2.7109, 2.5488, 3.0117], [4.4648, 4.9648, 10.3359]],
+                [
+                    [1.8662, 3.4316, 1.3174],
+                    [2.7109, 2.5488, 3.0117],
+                    [4.4648, 4.9648, 10.3359],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
         elif model_id == "lmms-lab/llava-onevision-qwen2-72b-ov-chat":
             # Not yet checked against reference
             expected_slice = torch.tensor(
-                [[4.3086, 4.7344, 2.6953], [1.7090, 5.1719, 4.0234], [1.3057, 6.3438, 9.5469]],
+                [
+                    [4.3086, 4.7344, 2.6953],
+                    [1.7090, 5.1719, 4.0234],
+                    [1.3057, 6.3438, 9.5469],
+                ],
                 dtype=torch.float32,
                 device=device,
             )
@@ -295,7 +352,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         use_cache=True,
     )
 
-    generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+    generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[
+        0
+    ].strip()
 
     print("Generated text:", repr(generated_text))
 
@@ -378,10 +437,15 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     args = parser.parse_args()
 

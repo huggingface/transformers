@@ -16,16 +16,13 @@ import unittest
 
 import pytest
 
-from transformers import DetrConfig, MaskFormerConfig, ResNetBackbone, ResNetConfig, TimmBackbone
+from transformers import (DetrConfig, MaskFormerConfig, ResNetBackbone,
+                          ResNetConfig, TimmBackbone)
 from transformers.testing_utils import require_torch, slow
 from transformers.utils.backbone_utils import (
-    BackboneMixin,
-    get_aligned_output_features_output_indices,
-    load_backbone,
-    verify_out_features_out_indices,
-)
+    BackboneMixin, get_aligned_output_features_output_indices, load_backbone,
+    verify_out_features_out_indices)
 from transformers.utils.import_utils import is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -38,70 +35,96 @@ class BackboneUtilsTester(unittest.TestCase):
         stage_names = ["a", "b", "c"]
 
         # Defaults to last layer if both are None
-        out_features, out_indices = get_aligned_output_features_output_indices(None, None, stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            None, None, stage_names
+        )
         self.assertEqual(out_features, ["c"])
         self.assertEqual(out_indices, [2])
 
         # Out indices set to match out features
-        out_features, out_indices = get_aligned_output_features_output_indices(["a", "c"], None, stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            ["a", "c"], None, stage_names
+        )
         self.assertEqual(out_features, ["a", "c"])
         self.assertEqual(out_indices, [0, 2])
 
         # Out features set to match out indices
-        out_features, out_indices = get_aligned_output_features_output_indices(None, [0, 2], stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            None, [0, 2], stage_names
+        )
         self.assertEqual(out_features, ["a", "c"])
         self.assertEqual(out_indices, [0, 2])
 
         # Out features selected from negative indices
-        out_features, out_indices = get_aligned_output_features_output_indices(None, [-3, -1], stage_names)
+        out_features, out_indices = get_aligned_output_features_output_indices(
+            None, [-3, -1], stage_names
+        )
         self.assertEqual(out_features, ["a", "c"])
         self.assertEqual(out_indices, [-3, -1])
 
     def test_verify_out_features_out_indices(self):
         # Stage names must be set
-        with pytest.raises(ValueError, match="Stage_names must be set for transformers backbones"):
+        with pytest.raises(
+            ValueError, match="Stage_names must be set for transformers backbones"
+        ):
             verify_out_features_out_indices(["a", "b"], (0, 1), None)
 
         # Out features must be a list
-        with pytest.raises(ValueError, match="out_features must be a list got <class 'tuple'>"):
+        with pytest.raises(
+            ValueError, match="out_features must be a list got <class 'tuple'>"
+        ):
             verify_out_features_out_indices(("a", "b"), (0, 1), ["a", "b"])
 
         # Out features must be a subset of stage names
         with pytest.raises(
-            ValueError, match=r"out_features must be a subset of stage_names: \['a'\] got \['a', 'b'\]"
+            ValueError,
+            match=r"out_features must be a subset of stage_names: \['a'\] got \['a', 'b'\]",
         ):
             verify_out_features_out_indices(["a", "b"], [0, 1], ["a"])
 
         # Out features must contain no duplicates
-        with pytest.raises(ValueError, match=r"out_features must not contain any duplicates, got \['a', 'a'\]"):
+        with pytest.raises(
+            ValueError,
+            match=r"out_features must not contain any duplicates, got \['a', 'a'\]",
+        ):
             verify_out_features_out_indices(["a", "a"], None, ["a"])
 
         # Out indices must be a list
-        with pytest.raises(ValueError, match="out_indices must be a list, got <class 'int'>"):
+        with pytest.raises(
+            ValueError, match="out_indices must be a list, got <class 'int'>"
+        ):
             verify_out_features_out_indices(None, 0, ["a", "b"])
 
-        with pytest.raises(ValueError, match="out_indices must be a list, got <class 'tuple'>"):
+        with pytest.raises(
+            ValueError, match="out_indices must be a list, got <class 'tuple'>"
+        ):
             verify_out_features_out_indices(None, (0, 1), ["a", "b"])
 
         # Out indices must be a subset of stage names
         with pytest.raises(
-            ValueError, match=r"out_indices must be valid indices for stage_names \['a'\], got \[0, 1\]"
+            ValueError,
+            match=r"out_indices must be valid indices for stage_names \['a'\], got \[0, 1\]",
         ):
             verify_out_features_out_indices(None, [0, 1], ["a"])
 
         # Out indices must contain no duplicates
-        with pytest.raises(ValueError, match=r"out_indices must not contain any duplicates, got \[0, 0\]"):
+        with pytest.raises(
+            ValueError,
+            match=r"out_indices must not contain any duplicates, got \[0, 0\]",
+        ):
             verify_out_features_out_indices(None, [0, 0], ["a"])
 
         # Out features and out indices must be the same length
         with pytest.raises(
-            ValueError, match="out_features and out_indices should have the same length if both are set"
+            ValueError,
+            match="out_features and out_indices should have the same length if both are set",
         ):
             verify_out_features_out_indices(["a", "b"], [0], ["a", "b", "c"])
 
         # Out features should match out indices
         with pytest.raises(
-            ValueError, match="out_features and out_indices should correspond to the same stages if both are set"
+            ValueError,
+            match="out_features and out_indices should correspond to the same stages if both are set",
         ):
             verify_out_features_out_indices(["a", "b"], [0, 2], ["a", "b", "c"])
 
@@ -113,12 +136,15 @@ class BackboneUtilsTester(unittest.TestCase):
             verify_out_features_out_indices(["b", "a"], [0, 1], ["a", "b"])
 
         with pytest.raises(
-            ValueError, match=r"out_indices must be in the same order as stage_names, expected \[-2, 1\] got \[1, -2\]"
+            ValueError,
+            match=r"out_indices must be in the same order as stage_names, expected \[-2, 1\] got \[1, -2\]",
         ):
             verify_out_features_out_indices(["a", "b"], [1, -2], ["a", "b"])
 
         # Check passes with valid inputs
-        verify_out_features_out_indices(["a", "b", "d"], [0, 1, -1], ["a", "b", "c", "d"])
+        verify_out_features_out_indices(
+            ["a", "b", "d"], [0, 1, -1], ["a", "b", "c", "d"]
+        )
 
     def test_backbone_mixin(self):
         backbone = BackboneMixin()
@@ -181,12 +207,18 @@ class BackboneUtilsTester(unittest.TestCase):
         """
         Test that load_backbone correctly configures the loaded backbone with the provided kwargs.
         """
-        config = MaskFormerConfig(backbone="resnet18", use_timm_backbone=True, backbone_kwargs={"out_indices": (0, 1)})
+        config = MaskFormerConfig(
+            backbone="resnet18",
+            use_timm_backbone=True,
+            backbone_kwargs={"out_indices": (0, 1)},
+        )
         backbone = load_backbone(config)
         self.assertEqual(backbone.out_indices, (0, 1))
         self.assertIsInstance(backbone, TimmBackbone)
 
-        config = MaskFormerConfig(backbone="microsoft/resnet-18", backbone_kwargs={"out_indices": (0, 2)})
+        config = MaskFormerConfig(
+            backbone="microsoft/resnet-18", backbone_kwargs={"out_indices": (0, 2)}
+        )
         backbone = load_backbone(config)
         self.assertEqual(backbone.out_indices, (0, 2))
         self.assertIsInstance(backbone, ResNetBackbone)
@@ -217,7 +249,9 @@ class BackboneUtilsTester(unittest.TestCase):
         def get_equal_not_equal_weights(model_0, model_1):
             equal_weights = []
             not_equal_weights = []
-            for (k0, v0), (k1, v1) in zip(model_0.named_parameters(), model_1.named_parameters()):
+            for (k0, v0), (k1, v1) in zip(
+                model_0.named_parameters(), model_1.named_parameters()
+            ):
                 self.assertEqual(k0, k1)
                 weights_are_equal = torch.allclose(v0, v1)
                 if weights_are_equal:
@@ -226,7 +260,9 @@ class BackboneUtilsTester(unittest.TestCase):
                     not_equal_weights.append(k0)
             return equal_weights, not_equal_weights
 
-        config = MaskFormerConfig(use_pretrained_backbone=False, backbone="microsoft/resnet-18")
+        config = MaskFormerConfig(
+            use_pretrained_backbone=False, backbone="microsoft/resnet-18"
+        )
         model_0 = NewModel(config)
         model_1 = NewModel(config)
         equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
@@ -249,13 +285,17 @@ class BackboneUtilsTester(unittest.TestCase):
         self.assertEqual(len(not_equal_weights), 4)
 
         # Check loading in timm backbone
-        config = DetrConfig(use_pretrained_backbone=False, backbone="resnet18", use_timm_backbone=True)
+        config = DetrConfig(
+            use_pretrained_backbone=False, backbone="resnet18", use_timm_backbone=True
+        )
         model_0 = NewModel(config)
         model_1 = NewModel(config)
         equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
 
         # Norm layers are always initialized with the same weights
-        equal_weights = [w for w in equal_weights if "bn" not in w and "downsample.1" not in w]
+        equal_weights = [
+            w for w in equal_weights if "bn" not in w and "downsample.1" not in w
+        ]
         self.assertEqual(len(equal_weights), 0)
         self.assertEqual(len(not_equal_weights), 24)
 
@@ -266,7 +306,9 @@ class BackboneUtilsTester(unittest.TestCase):
         equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
 
         # Norm layers are always initialized with the same weights
-        equal_weights = [w for w in equal_weights if "bn" not in w and "downsample.1" not in w]
+        equal_weights = [
+            w for w in equal_weights if "bn" not in w and "downsample.1" not in w
+        ]
         self.assertEqual(len(equal_weights), 20)
         # Linear layers are still initialized randomly
         self.assertEqual(len(not_equal_weights), 4)

@@ -24,19 +24,16 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MarkupLMForQuestionAnswering,
-        MarkupLMForSequenceClassification,
-        MarkupLMForTokenClassification,
-        MarkupLMModel,
-    )
+    from transformers import (MarkupLMForQuestionAnswering,
+                              MarkupLMForSequenceClassification,
+                              MarkupLMForTokenClassification, MarkupLMModel)
 
 # TODO check dependencies
-from transformers import MarkupLMFeatureExtractor, MarkupLMProcessor, MarkupLMTokenizer
+from transformers import (MarkupLMFeatureExtractor, MarkupLMProcessor,
+                          MarkupLMTokenizer)
 
 
 class MarkupLMModelTester:
@@ -102,11 +99,13 @@ class MarkupLMModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         xpath_tags_seq = ids_tensor(
-            [self.batch_size, self.seq_length, self.max_depth], self.max_xpath_tag_unit_embeddings
+            [self.batch_size, self.seq_length, self.max_depth],
+            self.max_xpath_tag_unit_embeddings,
         )
 
         xpath_subs_seq = ids_tensor(
-            [self.batch_size, self.seq_length, self.max_depth], self.max_xpath_subs_unit_embeddings
+            [self.batch_size, self.seq_length, self.max_depth],
+            self.max_xpath_subs_unit_embeddings,
         )
 
         input_mask = None
@@ -115,13 +114,19 @@ class MarkupLMModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -171,11 +176,18 @@ class MarkupLMModelTester:
         model.to(torch_device)
         model.eval()
         print("Configs:", model.config.tag_pad_id, model.config.subs_pad_id)
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_sequence_classification(
         self,
@@ -225,7 +237,9 @@ class MarkupLMModelTester:
             token_type_ids=token_type_ids,
             labels=token_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_question_answering(
         self,
@@ -250,8 +264,12 @@ class MarkupLMModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -316,7 +334,9 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = MarkupLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MarkupLMConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=MarkupLMConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -327,7 +347,9 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -369,7 +391,9 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_forward_pass_no_head(self):
-        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base").to(torch_device)
+        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base").to(
+            torch_device
+        )
 
         processor = self.default_processor
 
@@ -385,7 +409,13 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.0675, -0.0052, 0.5001], [-0.2281, 0.0802, 0.2192], [-0.0583, -0.3311, 0.1185]]
+            [
+                [0.0675, -0.0052, 0.5001],
+                [-0.2281, 0.0802, 0.2192],
+                [-0.0583, -0.3311, 0.1185],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

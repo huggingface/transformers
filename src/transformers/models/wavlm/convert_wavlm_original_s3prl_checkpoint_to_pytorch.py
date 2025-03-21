@@ -18,22 +18,19 @@ import argparse
 
 import torch
 
-from transformers import (
-    Wav2Vec2FeatureExtractor,
-    WavLMConfig,
-    WavLMForAudioFrameClassification,
-    WavLMForSequenceClassification,
-    WavLMForXVector,
-    logging,
-)
-
+from transformers import (Wav2Vec2FeatureExtractor, WavLMConfig,
+                          WavLMForAudioFrameClassification,
+                          WavLMForSequenceClassification, WavLMForXVector,
+                          logging)
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
 def convert_classification(base_model_name, hf_config, downstream_dict):
-    model = WavLMForSequenceClassification.from_pretrained(base_model_name, config=hf_config)
+    model = WavLMForSequenceClassification.from_pretrained(
+        base_model_name, config=hf_config
+    )
     model.projector.weight.data = downstream_dict["projector.weight"]
     model.projector.bias.data = downstream_dict["projector.bias"]
     model.classifier.weight.data = downstream_dict["model.post_net.linear.weight"]
@@ -42,7 +39,9 @@ def convert_classification(base_model_name, hf_config, downstream_dict):
 
 
 def convert_diarization(base_model_name, hf_config, downstream_dict):
-    model = WavLMForAudioFrameClassification.from_pretrained(base_model_name, config=hf_config)
+    model = WavLMForAudioFrameClassification.from_pretrained(
+        base_model_name, config=hf_config
+    )
     model.classifier.weight.data = downstream_dict["model.linear.weight"]
     model.classifier.bias.data = downstream_dict["model.linear.bias"]
     return model
@@ -56,18 +55,30 @@ def convert_xvector(base_model_name, hf_config, downstream_dict):
         model.tdnn[i].kernel.weight.data = downstream_dict[
             f"model.framelevel_feature_extractor.module.{i}.kernel.weight"
         ]
-        model.tdnn[i].kernel.bias.data = downstream_dict[f"model.framelevel_feature_extractor.module.{i}.kernel.bias"]
+        model.tdnn[i].kernel.bias.data = downstream_dict[
+            f"model.framelevel_feature_extractor.module.{i}.kernel.bias"
+        ]
 
-    model.feature_extractor.weight.data = downstream_dict["model.utterancelevel_feature_extractor.linear1.weight"]
-    model.feature_extractor.bias.data = downstream_dict["model.utterancelevel_feature_extractor.linear1.bias"]
-    model.classifier.weight.data = downstream_dict["model.utterancelevel_feature_extractor.linear2.weight"]
-    model.classifier.bias.data = downstream_dict["model.utterancelevel_feature_extractor.linear2.bias"]
+    model.feature_extractor.weight.data = downstream_dict[
+        "model.utterancelevel_feature_extractor.linear1.weight"
+    ]
+    model.feature_extractor.bias.data = downstream_dict[
+        "model.utterancelevel_feature_extractor.linear1.bias"
+    ]
+    model.classifier.weight.data = downstream_dict[
+        "model.utterancelevel_feature_extractor.linear2.weight"
+    ]
+    model.classifier.bias.data = downstream_dict[
+        "model.utterancelevel_feature_extractor.linear2.bias"
+    ]
     model.objective.weight.data = downstream_dict["objective.W"]
     return model
 
 
 @torch.no_grad()
-def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, model_dump_path):
+def convert_s3prl_checkpoint(
+    base_model_name, config_path, checkpoint_path, model_dump_path
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -88,7 +99,9 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
     elif arch.endswith("ForXVector"):
         hf_model = convert_xvector(base_model_name, hf_config, downstream_dict)
     else:
-        raise NotImplementedError(f"S3PRL weights conversion is not supported for {arch}")
+        raise NotImplementedError(
+            f"S3PRL weights conversion is not supported for {arch}"
+        )
 
     if hf_config.use_weighted_layer_sum:
         hf_model.layer_weights.data = checkpoint["Featurizer"]["weights"]
@@ -100,10 +113,33 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--base_model_name", default=None, type=str, help="Name of the huggingface pretrained base model."
+        "--base_model_name",
+        default=None,
+        type=str,
+        help="Name of the huggingface pretrained base model.",
     )
-    parser.add_argument("--config_path", default=None, type=str, help="Path to the huggingface classifier config.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to the s3prl checkpoint.")
-    parser.add_argument("--model_dump_path", default=None, type=str, help="Path to the final converted model.")
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to the huggingface classifier config.",
+    )
+    parser.add_argument(
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help="Path to the s3prl checkpoint.",
+    )
+    parser.add_argument(
+        "--model_dump_path",
+        default=None,
+        type=str,
+        help="Path to the final converted model.",
+    )
     args = parser.parse_args()
-    convert_s3prl_checkpoint(args.base_model_name, args.config_path, args.checkpoint_path, args.model_dump_path)
+    convert_s3prl_checkpoint(
+        args.base_model_name,
+        args.config_path,
+        args.checkpoint_path,
+        args.model_dump_path,
+    )

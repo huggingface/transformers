@@ -14,14 +14,8 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-)
-
+from ...utils import (OptionalDependencyNotAvailable, _LazyModule,
+                      is_flax_available, is_tf_available, is_torch_available)
 
 _import_structure = {
     "auto_factory": ["get_values"],
@@ -216,9 +210,12 @@ else:
 
 if TYPE_CHECKING:
     from .auto_factory import get_values
-    from .configuration_auto import CONFIG_MAPPING, MODEL_NAMES_MAPPING, AutoConfig
-    from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
-    from .image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
+    from .configuration_auto import (CONFIG_MAPPING, MODEL_NAMES_MAPPING,
+                                     AutoConfig)
+    from .feature_extraction_auto import (FEATURE_EXTRACTOR_MAPPING,
+                                          AutoFeatureExtractor)
+    from .image_processing_auto import (IMAGE_PROCESSOR_MAPPING,
+                                        AutoImageProcessor)
     from .processing_auto import PROCESSOR_MAPPING, AutoProcessor
     from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 
@@ -231,15 +228,12 @@ if TYPE_CHECKING:
         from .modeling_auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING,
-            MODEL_FOR_AUDIO_XVECTOR_MAPPING,
-            MODEL_FOR_BACKBONE_MAPPING,
+            MODEL_FOR_AUDIO_XVECTOR_MAPPING, MODEL_FOR_BACKBONE_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-            MODEL_FOR_CAUSAL_LM_MAPPING,
-            MODEL_FOR_CTC_MAPPING,
+            MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_DEPTH_ESTIMATION_MAPPING,
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
-            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-            MODEL_FOR_IMAGE_MAPPING,
+            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING, MODEL_FOR_IMAGE_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
@@ -247,13 +241,10 @@ if TYPE_CHECKING:
             MODEL_FOR_KEYPOINT_DETECTION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-            MODEL_FOR_MASKED_LM_MAPPING,
-            MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+            MODEL_FOR_MASKED_LM_MAPPING, MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-            MODEL_FOR_OBJECT_DETECTION_MAPPING,
-            MODEL_FOR_PRETRAINING_MAPPING,
-            MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-            MODEL_FOR_RETRIEVAL_MAPPING,
+            MODEL_FOR_OBJECT_DETECTION_MAPPING, MODEL_FOR_PRETRAINING_MAPPING,
+            MODEL_FOR_QUESTION_ANSWERING_MAPPING, MODEL_FOR_RETRIEVAL_MAPPING,
             MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -270,49 +261,28 @@ if TYPE_CHECKING:
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
-            MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
-            MODEL_MAPPING,
-            MODEL_WITH_LM_HEAD_MAPPING,
-            AutoBackbone,
-            AutoModel,
+            MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING, MODEL_MAPPING,
+            MODEL_WITH_LM_HEAD_MAPPING, AutoBackbone, AutoModel,
             AutoModelForAudioClassification,
-            AutoModelForAudioFrameClassification,
-            AutoModelForAudioXVector,
-            AutoModelForCausalLM,
-            AutoModelForCTC,
-            AutoModelForDepthEstimation,
+            AutoModelForAudioFrameClassification, AutoModelForAudioXVector,
+            AutoModelForCausalLM, AutoModelForCTC, AutoModelForDepthEstimation,
             AutoModelForDocumentQuestionAnswering,
-            AutoModelForImageClassification,
-            AutoModelForImageSegmentation,
-            AutoModelForImageTextToText,
-            AutoModelForImageToImage,
-            AutoModelForInstanceSegmentation,
-            AutoModelForKeypointDetection,
-            AutoModelForMaskedImageModeling,
-            AutoModelForMaskedLM,
-            AutoModelForMaskGeneration,
-            AutoModelForMultipleChoice,
-            AutoModelForNextSentencePrediction,
-            AutoModelForObjectDetection,
-            AutoModelForPreTraining,
-            AutoModelForQuestionAnswering,
-            AutoModelForSemanticSegmentation,
-            AutoModelForSeq2SeqLM,
-            AutoModelForSequenceClassification,
-            AutoModelForSpeechSeq2Seq,
-            AutoModelForTableQuestionAnswering,
-            AutoModelForTextEncoding,
-            AutoModelForTextToSpectrogram,
-            AutoModelForTextToWaveform,
-            AutoModelForTokenClassification,
-            AutoModelForUniversalSegmentation,
-            AutoModelForVideoClassification,
-            AutoModelForVision2Seq,
+            AutoModelForImageClassification, AutoModelForImageSegmentation,
+            AutoModelForImageTextToText, AutoModelForImageToImage,
+            AutoModelForInstanceSegmentation, AutoModelForKeypointDetection,
+            AutoModelForMaskedImageModeling, AutoModelForMaskedLM,
+            AutoModelForMaskGeneration, AutoModelForMultipleChoice,
+            AutoModelForNextSentencePrediction, AutoModelForObjectDetection,
+            AutoModelForPreTraining, AutoModelForQuestionAnswering,
+            AutoModelForSemanticSegmentation, AutoModelForSeq2SeqLM,
+            AutoModelForSequenceClassification, AutoModelForSpeechSeq2Seq,
+            AutoModelForTableQuestionAnswering, AutoModelForTextEncoding,
+            AutoModelForTextToSpectrogram, AutoModelForTextToWaveform,
+            AutoModelForTokenClassification, AutoModelForUniversalSegmentation,
+            AutoModelForVideoClassification, AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
             AutoModelForZeroShotImageClassification,
-            AutoModelForZeroShotObjectDetection,
-            AutoModelWithLMHead,
-        )
+            AutoModelForZeroShotObjectDetection, AutoModelWithLMHead)
 
     try:
         if not is_tf_available():
@@ -341,31 +311,19 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
             TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
-            TF_MODEL_MAPPING,
-            TF_MODEL_WITH_LM_HEAD_MAPPING,
-            TFAutoModel,
-            TFAutoModelForAudioClassification,
-            TFAutoModelForCausalLM,
+            TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING, TFAutoModel,
+            TFAutoModelForAudioClassification, TFAutoModelForCausalLM,
             TFAutoModelForDocumentQuestionAnswering,
             TFAutoModelForImageClassification,
-            TFAutoModelForMaskedImageModeling,
-            TFAutoModelForMaskedLM,
-            TFAutoModelForMaskGeneration,
-            TFAutoModelForMultipleChoice,
-            TFAutoModelForNextSentencePrediction,
-            TFAutoModelForPreTraining,
+            TFAutoModelForMaskedImageModeling, TFAutoModelForMaskedLM,
+            TFAutoModelForMaskGeneration, TFAutoModelForMultipleChoice,
+            TFAutoModelForNextSentencePrediction, TFAutoModelForPreTraining,
             TFAutoModelForQuestionAnswering,
-            TFAutoModelForSemanticSegmentation,
-            TFAutoModelForSeq2SeqLM,
-            TFAutoModelForSequenceClassification,
-            TFAutoModelForSpeechSeq2Seq,
-            TFAutoModelForTableQuestionAnswering,
-            TFAutoModelForTextEncoding,
-            TFAutoModelForTokenClassification,
-            TFAutoModelForVision2Seq,
-            TFAutoModelForZeroShotImageClassification,
-            TFAutoModelWithLMHead,
-        )
+            TFAutoModelForSemanticSegmentation, TFAutoModelForSeq2SeqLM,
+            TFAutoModelForSequenceClassification, TFAutoModelForSpeechSeq2Seq,
+            TFAutoModelForTableQuestionAnswering, TFAutoModelForTextEncoding,
+            TFAutoModelForTokenClassification, TFAutoModelForVision2Seq,
+            TFAutoModelForZeroShotImageClassification, TFAutoModelWithLMHead)
 
     try:
         if not is_flax_available():
@@ -386,24 +344,19 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-            FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
-            FLAX_MODEL_MAPPING,
-            FlaxAutoModel,
-            FlaxAutoModelForCausalLM,
-            FlaxAutoModelForImageClassification,
-            FlaxAutoModelForMaskedLM,
+            FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING, FLAX_MODEL_MAPPING,
+            FlaxAutoModel, FlaxAutoModelForCausalLM,
+            FlaxAutoModelForImageClassification, FlaxAutoModelForMaskedLM,
             FlaxAutoModelForMultipleChoice,
             FlaxAutoModelForNextSentencePrediction,
-            FlaxAutoModelForPreTraining,
-            FlaxAutoModelForQuestionAnswering,
-            FlaxAutoModelForSeq2SeqLM,
-            FlaxAutoModelForSequenceClassification,
-            FlaxAutoModelForSpeechSeq2Seq,
-            FlaxAutoModelForTokenClassification,
-            FlaxAutoModelForVision2Seq,
-        )
+            FlaxAutoModelForPreTraining, FlaxAutoModelForQuestionAnswering,
+            FlaxAutoModelForSeq2SeqLM, FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForSpeechSeq2Seq, FlaxAutoModelForTokenClassification,
+            FlaxAutoModelForVision2Seq)
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

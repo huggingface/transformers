@@ -1,10 +1,11 @@
 import gc
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import require_compressed_tensors, require_torch
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          CompressedTensorsConfig)
+from transformers.testing_utils import (require_compressed_tensors,
+                                        require_torch)
 from transformers.utils import is_torch_available
-
 
 if is_torch_available():
     import torch
@@ -37,14 +38,19 @@ class CompressedTensorsTest(unittest.TestCase):
         )
 
     def test_config_to_from_dict(self):
-        config = CompressedTensorsConfig(config_groups={"FP8": ["Linear"]}, sparsity_config={"format": "dense"})
+        config = CompressedTensorsConfig(
+            config_groups={"FP8": ["Linear"]}, sparsity_config={"format": "dense"}
+        )
         config_dict = config.to_dict()
         config_from_dict = CompressedTensorsConfig.from_dict(config_dict)
 
-        from compressed_tensors import QuantizationConfig, SparsityCompressionConfig
+        from compressed_tensors import (QuantizationConfig,
+                                        SparsityCompressionConfig)
 
         self.assertIsInstance(config_from_dict.quantization_config, QuantizationConfig)
-        self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
+        self.assertIsInstance(
+            config_from_dict.sparsity_config, SparsityCompressionConfig
+        )
 
     def test_tinyllama_w8a8(self):
         expected_out = "<s> Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n"
@@ -64,7 +70,9 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def _test_quantized_model(self, model_name: str, expected_output: str):
         """Carry out generation"""
-        quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="auto"
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         device = quantized_model.device
         self.assertIsNotNone(
@@ -80,7 +88,9 @@ class CompressedTensorsTest(unittest.TestCase):
             "quantized model should load a non-trivial scale into the state dict",
         )
         inputs = tokenizer(self.prompt, return_tensors="pt").to(device)
-        generated_ids = quantized_model.generate(**inputs, max_length=50, do_sample=False)
+        generated_ids = quantized_model.generate(
+            **inputs, max_length=50, do_sample=False
+        )
         outputs = tokenizer.batch_decode(generated_ids)
 
         self.assertIsNotNone(outputs)

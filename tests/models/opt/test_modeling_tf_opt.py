@@ -26,7 +26,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_tf_available():
     import tensorflow as tf
 
@@ -35,7 +34,9 @@ if is_tf_available():
 
 def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):
     if attention_mask is None:
-        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+        attention_mask = tf.cast(
+            tf.math.not_equal(input_ids, config.pad_token_id), tf.int8
+        )
     return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
@@ -92,7 +93,9 @@ class TFOPTModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
+        eos_tensor = tf.expand_dims(
+            tf.constant([self.eos_token_id] * self.batch_size), 1
+        )
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
         config = self.config_cls(
@@ -137,8 +140,14 @@ class TFOPTModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
+            0
+        ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -148,7 +157,9 @@ class TFOPTModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        tf.debugging.assert_near(
+            output_from_past_slice, output_from_no_past_slice, rtol=1e-3
+        )
 
 
 @require_tf
@@ -156,7 +167,9 @@ class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": TFOPTModel, "text-generation": TFOPTForCausalLM} if is_tf_available() else {}
+        {"feature-extraction": TFOPTModel, "text-generation": TFOPTForCausalLM}
+        if is_tf_available()
+        else {}
     )
     is_encoder_decoder = False
     test_pruning = False
@@ -193,13 +206,21 @@ class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             for size in [config.vocab_size - 10, config.vocab_size + 10]:
                 # build the embeddings
                 model = model_class(config=config)
-                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                old_input_embeddings = _get_word_embedding_weight(
+                    model, model.get_input_embeddings()
+                )
+                old_output_embeddings = _get_word_embedding_weight(
+                    model, model.get_output_embeddings()
+                )
 
                 # reshape the embeddings
                 model.resize_token_embeddings(size)
-                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
-                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                new_input_embeddings = _get_word_embedding_weight(
+                    model, model.get_input_embeddings()
+                )
+                new_output_embeddings = _get_word_embedding_weight(
+                    model, model.get_output_embeddings()
+                )
 
                 # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
@@ -208,16 +229,23 @@ class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
                 # check that weights remain the same after resizing
                 models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
+                for p1, p2 in zip(
+                    old_input_embeddings.value(), new_input_embeddings.value()
+                ):
                     if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                         models_equal = False
                 self.assertTrue(models_equal)
 
-                if old_output_embeddings is not None and new_output_embeddings is not None:
+                if (
+                    old_output_embeddings is not None
+                    and new_output_embeddings is not None
+                ):
                     self.assertEqual(new_output_embeddings.shape[0], assert_size)
 
                     models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
+                    for p1, p2 in zip(
+                        old_output_embeddings.value(), new_output_embeddings.value()
+                    ):
                         if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
@@ -233,7 +261,9 @@ class TFOPTHeadTests(unittest.TestCase):
 
     def _get_config_and_data(self):
         eos_column_vector = tf.ones((4, 1), dtype=tf.int32) * 2
-        input_ids = tf.concat([ids_tensor((4, 6), self.vocab_size - 3) + 3, eos_column_vector], axis=1)
+        input_ids = tf.concat(
+            [ids_tensor((4, 6), self.vocab_size - 3) + 3, eos_column_vector], axis=1
+        )
         batch_size = input_ids.shape[0]
         config = OPTConfig(
             vocab_size=self.vocab_size,
@@ -255,14 +285,22 @@ class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = TFOPTModel.from_pretrained("facebook/opt-350m")
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = _long_tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
         attention_mask = tf.not_equal(input_ids, model.config.pad_token_id)
         with tf.GradientTape():
-            output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            output = model(
+                input_ids=input_ids, attention_mask=attention_mask
+            ).last_hidden_state
         expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
         expected_slice = tf.constant(
-            [[-0.2873, -1.9218, -0.3033], [-1.2710, -0.1338, -0.1902], [0.4095, 0.1214, -1.3121]]
+            [
+                [-0.2873, -1.9218, -0.3033],
+                [-1.2710, -0.1338, -0.1902],
+                [0.4095, 0.1214, -1.3121],
+            ]
         )
         self.assertTrue(np.allclose(output[:, :3, :3], expected_slice, atol=4e-3))
 
@@ -289,20 +327,67 @@ class TFOPTEmbeddingsTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
-        inputs = tokenizer(prompts, return_tensors="tf", padding=True, add_special_tokens=False)
-        logits = tf.math.reduce_mean(model(inputs.input_ids, attention_mask=inputs.attention_mask)[0], axis=-1)
+        inputs = tokenizer(
+            prompts, return_tensors="tf", padding=True, add_special_tokens=False
+        )
+        logits = tf.math.reduce_mean(
+            model(inputs.input_ids, attention_mask=inputs.attention_mask)[0], axis=-1
+        )
         logits_meta = tf.constant(
             [
-                [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
-                [-4.7073, -10.6276, -3.9415, -21.5242, -0.2822, -0.2822, -0.2822, -0.2822, -0.2822],
-                [0.6247, -3.4229, -8.9179, -1.4297, -14.1650, 1.4146, -9.0218, -0.2703, -0.2703],
-                [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
+                [
+                    1.3851,
+                    -13.8923,
+                    -10.5229,
+                    -10.7533,
+                    -0.2309,
+                    -10.2384,
+                    -0.5365,
+                    -9.0947,
+                    -5.1670,
+                ],
+                [
+                    -4.7073,
+                    -10.6276,
+                    -3.9415,
+                    -21.5242,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                ],
+                [
+                    0.6247,
+                    -3.4229,
+                    -8.9179,
+                    -1.4297,
+                    -14.1650,
+                    1.4146,
+                    -9.0218,
+                    -0.2703,
+                    -0.2703,
+                ],
+                [
+                    6.4783,
+                    -1.9913,
+                    -10.7926,
+                    -2.3336,
+                    1.5092,
+                    -0.9974,
+                    -6.8213,
+                    1.3477,
+                    1.3477,
+                ],
             ]
         )
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
         xla_generate = tf.function(model, jit_compile=True)
-        logits = tf.math.reduce_mean(xla_generate(inputs.input_ids, attention_mask=inputs.attention_mask)[0], axis=-1)
+        logits = tf.math.reduce_mean(
+            xla_generate(inputs.input_ids, attention_mask=inputs.attention_mask)[0],
+            axis=-1,
+        )
         self.assertTrue(np.allclose(logits, logits_meta, atol=1e-4))
 
 
@@ -337,7 +422,9 @@ class TFOPTGenerationTest(unittest.TestCase):
 
             generated_ids = model.generate(input_ids, max_length=10)
 
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
@@ -359,7 +446,9 @@ class TFOPTGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="tf", padding=True)
         input_ids = inputs["input_ids"]
 
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"])
+        outputs = model.generate(
+            input_ids=input_ids, attention_mask=inputs["attention_mask"]
+        )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="tf").input_ids
         output_non_padded = model.generate(input_ids=inputs_non_padded)
@@ -368,10 +457,14 @@ class TFOPTGenerationTest(unittest.TestCase):
             tf.cast(inputs["attention_mask"][-1], tf.int64)
         )
         inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(
+            input_ids=inputs_padded, max_length=model.config.max_length - num_paddings
+        )
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(
+            output_non_padded[0], skip_special_tokens=True
+        )
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
@@ -400,7 +493,9 @@ class TFOPTGenerationTest(unittest.TestCase):
 
             generated_ids = model.generate(input_ids, max_length=10)
 
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)

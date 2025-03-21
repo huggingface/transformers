@@ -20,15 +20,11 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...utils import logging
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaForCausalLM,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-)
+from ..llama.modeling_llama import (LlamaAttention, LlamaForCausalLM,
+                                    LlamaForSequenceClassification,
+                                    LlamaForTokenClassification)
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm import GlmConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -91,7 +87,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class GlmAttention(LlamaAttention):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False
+        )
 
 
 class GlmForCausalLM(LlamaForCausalLM):

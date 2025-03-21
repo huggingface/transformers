@@ -20,40 +20,27 @@ import tempfile
 import unittest
 
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
-from transformers.testing_utils import (
-    is_torch_available,
-    require_deterministic_for_xpu,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (is_torch_available,
+                                        require_deterministic_for_xpu,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        slow, torch_device)
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        SpeechT5ForSpeechToSpeech,
-        SpeechT5ForSpeechToText,
-        SpeechT5ForTextToSpeech,
-        SpeechT5HifiGan,
-        SpeechT5Model,
-        SpeechT5Processor,
-    )
+    from transformers import (SpeechT5ForSpeechToSpeech,
+                              SpeechT5ForSpeechToText, SpeechT5ForTextToSpeech,
+                              SpeechT5HifiGan, SpeechT5Model,
+                              SpeechT5Processor)
 
 
 def prepare_inputs_dict(
@@ -79,11 +66,17 @@ def prepare_inputs_dict(
         decoder_dict = {"decoder_input_values": decoder_input_values}
 
     if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+        head_mask = torch.ones(
+            config.encoder_layers, config.encoder_attention_heads, device=torch_device
+        )
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
 
     return {
         **encoder_dict,
@@ -121,11 +114,17 @@ class SpeechT5ModelTester:
         self.intermediate_size = intermediate_size
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length, self.hidden_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.seq_length, self.hidden_size], scale=1.0
+        )
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        decoder_input_values = floats_tensor([self.batch_size, self.seq_length, self.hidden_size], scale=1.0)
-        decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+        decoder_input_values = floats_tensor(
+            [self.batch_size, self.seq_length, self.hidden_size], scale=1.0
+        )
+        decoder_attention_mask = random_attention_mask(
+            [self.batch_size, self.seq_length]
+        )
 
         config = self.get_config()
         inputs_dict = prepare_inputs_dict(
@@ -160,15 +159,25 @@ class SpeechT5ModelTester:
         attention_mask = inputs_dict["attention_mask"]
         decoder_input_values = inputs_dict["decoder_input_values"]
 
-        result = model(input_values, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(
+            input_values,
+            attention_mask=attention_mask,
+            decoder_input_values=decoder_input_values,
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
 
 @require_torch
 class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
+        {
+            "automatic-speech-recognition": SpeechT5ForSpeechToText,
+            "feature-extraction": SpeechT5Model,
+        }
         if is_torch_available()
         else {}
     )
@@ -179,7 +188,9 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SpeechT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SpeechT5Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -204,11 +215,20 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                [
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                ]
+                if "head_mask"
+                and "decoder_head_mask"
+                and "cross_attn_head_mask" in arg_names
                 else ["encoder_outputs"]
             )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
@@ -277,11 +297,19 @@ class SpeechT5ForSpeechToTextTester:
         self.vocab_size = vocab_size
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
-        attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+        input_values = floats_tensor(
+            [self.batch_size, self.encoder_seq_length], scale=1.0
+        )
+        attention_mask = random_attention_mask(
+            [self.batch_size, self.encoder_seq_length]
+        )
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size).clamp(2)
-        decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        ).clamp(2)
+        decoder_attention_mask = random_attention_mask(
+            [self.batch_size, self.decoder_seq_length]
+        )
 
         config = self.get_config()
         inputs_dict = prepare_inputs_dict(
@@ -322,11 +350,20 @@ class SpeechT5ForSpeechToTextTester:
         attention_mask = inputs_dict["attention_mask"]
         decoder_input_ids = inputs_dict["decoder_input_ids"]
 
-        result = model(input_values, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.decoder_seq_length, self.vocab_size))
+        result = model(
+            input_values,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+        )
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.decoder_seq_length, self.vocab_size),
+        )
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = SpeechT5ForSpeechToText(config=config).get_decoder().to(torch_device).eval()
+        model = (
+            SpeechT5ForSpeechToText(config=config).get_decoder().to(torch_device).eval()
+        )
         input_ids = inputs_dict["decoder_input_ids"]
         attention_mask = inputs_dict["decoder_attention_mask"]
 
@@ -343,20 +380,28 @@ class SpeechT5ForSpeechToTextTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        )
 
 
 @require_torch
@@ -370,7 +415,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SpeechT5Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -382,7 +429,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_model_forward(self):
@@ -391,7 +440,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -400,8 +451,12 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", decoder_seq_length
+        )
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -411,16 +466,24 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
-                encoder_seq_length
+            subsampled_encoder_seq_length = (
+                model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                    encoder_seq_length
+                )
             )
-            subsampled_encoder_key_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
-                encoder_key_length
+            subsampled_encoder_key_length = (
+                model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                    encoder_key_length
+                )
             )
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -431,12 +494,20 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -453,10 +524,16 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    decoder_key_length,
+                ],
             )
 
             # cross attentions
@@ -484,12 +561,20 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
 
     def test_forward_signature(self):
@@ -508,11 +593,20 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                [
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                ]
+                if "head_mask"
+                and "decoder_head_mask"
+                and "cross_attn_head_mask" in arg_names
                 else ["encoder_outputs"]
             )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -523,10 +617,16 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -535,7 +635,11 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             else:
                 seq_length = self.model_tester.seq_length
 
-            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(seq_length)
+            subsampled_seq_length = (
+                model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                    seq_length
+                )
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -548,7 +652,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+                decoder_seq_length = getattr(
+                    self.model_tester, "decoder_seq_length", seq_len
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -584,7 +690,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -600,7 +708,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_resize_embeddings_untied(self):
-        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to False")
 
@@ -646,7 +756,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_resize_tokens_embeddings(self):
-        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = (
+            self.model_tester.prepare_config_and_inputs_for_common()
+        )
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to False")
 
@@ -667,7 +779,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
             self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10
+            )
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -675,7 +789,9 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
             self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+            self.assertEqual(
+                model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15
+            )
 
             # make sure that decoder_input_ids are resized
             if "decoder_input_ids" in inputs_dict:
@@ -725,7 +841,10 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
-        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+        if (
+            hasattr(module, "masked_spec_embed")
+            and module.masked_spec_embed is not None
+        ):
             module.masked_spec_embed.data.fill_(3)
 
 
@@ -741,7 +860,9 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -754,10 +875,14 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(audio=input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(
+            audio=input_speech, return_tensors="pt"
+        ).input_values.to(torch_device)
 
         generated_ids = model.generate(input_values)
-        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_transcript = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -777,7 +902,9 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         generated_ids = model.generate(input_values, attention_mask=attention_mask)
-        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_transcripts = processor.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
@@ -827,11 +954,19 @@ class SpeechT5ForTextToSpeechTester:
         self.speech_decoder_prenet_units = speech_decoder_prenet_units
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
-        attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+        input_ids = ids_tensor(
+            [self.batch_size, self.encoder_seq_length], self.vocab_size
+        ).clamp(2)
+        attention_mask = random_attention_mask(
+            [self.batch_size, self.encoder_seq_length]
+        )
 
-        decoder_input_values = floats_tensor([self.batch_size, self.decoder_seq_length, self.num_mel_bins], scale=1.0)
-        decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
+        decoder_input_values = floats_tensor(
+            [self.batch_size, self.decoder_seq_length, self.num_mel_bins], scale=1.0
+        )
+        decoder_attention_mask = random_attention_mask(
+            [self.batch_size, self.decoder_seq_length]
+        )
 
         config = self.get_config()
         inputs_dict = prepare_inputs_dict(
@@ -871,10 +1006,18 @@ class SpeechT5ForTextToSpeechTester:
         attention_mask = inputs_dict["attention_mask"]
         decoder_input_values = inputs_dict["decoder_input_values"]
 
-        result = model(input_ids, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
+        result = model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_values=decoder_input_values,
+        )
         self.parent.assertEqual(
             result.spectrogram.shape,
-            (self.batch_size, self.decoder_seq_length * self.reduction_factor, self.num_mel_bins),
+            (
+                self.batch_size,
+                self.decoder_seq_length * self.reduction_factor,
+                self.num_mel_bins,
+            ),
         )
 
 
@@ -888,7 +1031,9 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SpeechT5Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -906,7 +1051,9 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_model_forward(self):
@@ -923,11 +1070,18 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         labels = inputs_dict["decoder_input_values"]
 
         result = model(
-            input_ids, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
+            input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+            decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(
             result.spectrogram.shape,
-            (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
+            (
+                self.model_tester.batch_size,
+                self.model_tester.decoder_seq_length,
+                self.model_tester.num_mel_bins,
+            ),
         )
 
     @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
@@ -938,7 +1092,9 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @unittest.skip(reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
+    @unittest.skip(
+        reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet"
+    )
     def test_batching_equivalence(self):
         pass
 
@@ -958,11 +1114,20 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                [
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                ]
+                if "head_mask"
+                and "decoder_head_mask"
+                and "cross_attn_head_mask" in arg_names
                 else ["encoder_outputs"]
             )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -977,7 +1142,9 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -1057,7 +1224,9 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
-        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(torch_device)
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(
+            torch_device
+        )
 
     @cached_property
     def default_processor(self):
@@ -1065,22 +1234,30 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(
+            torch_device
+        )
 
     def test_generation(self):
         model = self.default_model
         processor = self.default_processor
 
         input_text = "Mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
-        input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(
+            torch_device
+        )
         speaker_embeddings = torch.zeros((1, 512), device=torch_device)
 
         # Generate speech and validate output dimensions
         set_seed(555)  # Ensure deterministic behavior
-        generated_speech = model.generate_speech(input_ids, speaker_embeddings=speaker_embeddings)
+        generated_speech = model.generate_speech(
+            input_ids, speaker_embeddings=speaker_embeddings
+        )
         num_mel_bins = model.config.num_mel_bins
         self.assertEqual(
-            generated_speech.shape[1], num_mel_bins, "Generated speech output has an unexpected number of mel bins."
+            generated_speech.shape[1],
+            num_mel_bins,
+            "Generated speech output has an unexpected number of mel bins.",
         )
 
         # Validate generation with additional kwargs using model.generate;
@@ -1106,7 +1283,9 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "nor is mister quilter's manner less interesting than his matter",
             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
-        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text=input_text, padding="max_length", max_length=128, return_tensors="pt"
+        ).to(torch_device)
         speaker_embeddings = torch.zeros((1, 512), device=torch_device)
 
         # Generate spectrograms
@@ -1122,14 +1301,23 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         expected_batch_size = len(input_text)
         num_mel_bins = model.config.num_mel_bins
         actual_batch_size, _, actual_num_mel_bins = spectrograms.shape
-        self.assertEqual(actual_batch_size, expected_batch_size, "Batch size of generated spectrograms is incorrect.")
         self.assertEqual(
-            actual_num_mel_bins, num_mel_bins, "Number of mel bins in batch generated spectrograms is incorrect."
+            actual_batch_size,
+            expected_batch_size,
+            "Batch size of generated spectrograms is incorrect.",
+        )
+        self.assertEqual(
+            actual_num_mel_bins,
+            num_mel_bins,
+            "Number of mel bins in batch generated spectrograms is incorrect.",
         )
 
         # Generate waveforms using the vocoder
         waveforms = vocoder(spectrograms)
-        waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
+        waveform_lengths = [
+            int(waveforms.size(1) / max(spectrogram_lengths)) * i
+            for i in spectrogram_lengths
+        ]
 
         # Validate generation with integrated vocoder
         set_seed(555)  # Reset seed for consistent results
@@ -1164,13 +1352,17 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
         # Validate waveform consistency without length information
         self.assertTrue(
-            torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8),
+            torch.allclose(
+                waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8
+            ),
             "Waveforms differ when generated with and without length information.",
         )
 
         # Validate batch vs. single instance generation consistency
         for i, text in enumerate(input_text):
-            inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+            inputs = processor(
+                text=text, padding="max_length", max_length=128, return_tensors="pt"
+            ).to(torch_device)
             set_seed(555)  # Reset seed for consistent results
             spectrogram = model.generate_speech(
                 input_ids=inputs["input_ids"],
@@ -1214,7 +1406,9 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "nor is mister quilter's manner less interesting than his matter",
             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
-        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+        inputs = processor(
+            text=input_text, padding="max_length", max_length=128, return_tensors="pt"
+        ).to(torch_device)
         set_seed(555)  # Ensure deterministic behavior
         speaker_embeddings = torch.randn((len(input_text), 512), device=torch_device)
 
@@ -1244,7 +1438,10 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
         # Generate waveforms using the vocoder
         waveforms = vocoder(spectrograms)
-        waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
+        waveform_lengths = [
+            int(waveforms.size(1) / max(spectrogram_lengths)) * i
+            for i in spectrogram_lengths
+        ]
 
         # Validate generation with integrated vocoder
         set_seed(555)  # Reset seed for consistent results
@@ -1279,13 +1476,17 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
         # Validate waveform consistency without length information
         self.assertTrue(
-            torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8),
+            torch.allclose(
+                waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8
+            ),
             "Waveforms differ when generated with and without length information.",
         )
 
         # Validate batch vs. single instance generation consistency
         for i, text in enumerate(input_text):
-            inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+            inputs = processor(
+                text=text, padding="max_length", max_length=128, return_tensors="pt"
+            ).to(torch_device)
             current_speaker_embedding = speaker_embeddings[i].unsqueeze(0)
             set_seed(555)  # Reset seed for consistent results
             spectrogram = model.generate_speech(
@@ -1370,11 +1571,19 @@ class SpeechT5ForSpeechToSpeechTester:
         self.speech_decoder_prenet_units = speech_decoder_prenet_units
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
-        attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+        input_values = floats_tensor(
+            [self.batch_size, self.encoder_seq_length], scale=1.0
+        )
+        attention_mask = random_attention_mask(
+            [self.batch_size, self.encoder_seq_length]
+        )
 
-        decoder_input_values = floats_tensor([self.batch_size, self.decoder_seq_length, self.num_mel_bins], scale=1.0)
-        decoder_attention_mask = random_attention_mask([self.batch_size, self.decoder_seq_length])
+        decoder_input_values = floats_tensor(
+            [self.batch_size, self.decoder_seq_length, self.num_mel_bins], scale=1.0
+        )
+        decoder_attention_mask = random_attention_mask(
+            [self.batch_size, self.decoder_seq_length]
+        )
 
         config = self.get_config()
         inputs_dict = prepare_inputs_dict(
@@ -1420,10 +1629,18 @@ class SpeechT5ForSpeechToSpeechTester:
         attention_mask = inputs_dict["attention_mask"]
         decoder_input_values = inputs_dict["decoder_input_values"]
 
-        result = model(input_values, attention_mask=attention_mask, decoder_input_values=decoder_input_values)
+        result = model(
+            input_values,
+            attention_mask=attention_mask,
+            decoder_input_values=decoder_input_values,
+        )
         self.parent.assertEqual(
             result.spectrogram.shape,
-            (self.batch_size, self.decoder_seq_length * self.reduction_factor, self.num_mel_bins),
+            (
+                self.batch_size,
+                self.decoder_seq_length * self.reduction_factor,
+                self.num_mel_bins,
+            ),
         )
 
 
@@ -1437,7 +1654,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SpeechT5Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1449,7 +1668,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_model_forward(self):
@@ -1466,11 +1687,18 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         labels = inputs_dict["decoder_input_values"]
 
         result = model(
-            input_values, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
+            input_values,
+            attention_mask=attention_mask,
+            labels=labels,
+            decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(
             result.spectrogram.shape,
-            (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
+            (
+                self.model_tester.batch_size,
+                self.model_tester.decoder_seq_length,
+                self.model_tester.num_mel_bins,
+            ),
         )
 
     @unittest.skip(reason="There is always dropout in SpeechT5SpeechDecoderPrenet")
@@ -1481,7 +1709,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @unittest.skip(reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
+    @unittest.skip(
+        reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet"
+    )
     def test_batching_equivalence(self):
         pass
 
@@ -1492,8 +1722,12 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_key_length = getattr(
+            self.model_tester, "decoder_key_length", decoder_seq_length
+        )
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -1503,16 +1737,24 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            subsampled_encoder_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
-                encoder_seq_length
+            subsampled_encoder_seq_length = (
+                model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                    encoder_seq_length
+                )
             )
-            subsampled_encoder_key_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
-                encoder_key_length
+            subsampled_encoder_key_length = (
+                model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                    encoder_key_length
+                )
             )
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -1523,12 +1765,20 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -1545,10 +1795,16 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    decoder_key_length,
+                ],
             )
 
             # cross attentions
@@ -1576,12 +1832,20 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    subsampled_encoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
 
     def test_forward_signature(self):
@@ -1600,11 +1864,20 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                [
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                ]
+                if "head_mask"
+                and "decoder_head_mask"
+                and "cross_attn_head_mask" in arg_names
                 else ["encoder_outputs"]
             )
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -1615,10 +1888,16 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -1627,7 +1906,11 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             else:
                 seq_length = self.model_tester.seq_length
 
-            subsampled_seq_length = model.speecht5.encoder.prenet._get_feat_extract_output_lengths(seq_length)
+            subsampled_seq_length = (
+                model.speecht5.encoder.prenet._get_feat_extract_output_lengths(
+                    seq_length
+                )
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -1640,7 +1923,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+                decoder_seq_length = getattr(
+                    self.model_tester, "decoder_seq_length", seq_len
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -1676,7 +1961,9 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -1751,7 +2038,10 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
-        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+        if (
+            hasattr(module, "masked_spec_embed")
+            and module.masked_spec_embed is not None
+        ):
             module.masked_spec_embed.data.fill_(3)
 
 
@@ -1767,7 +2057,9 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -1779,10 +2071,14 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
         processor = self.default_processor
 
         input_speech = self._load_datasamples(1)
-        input_values = processor(audio=input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(
+            audio=input_speech, return_tensors="pt"
+        ).input_values.to(torch_device)
 
         speaker_embeddings = torch.zeros((1, 512), device=torch_device)
-        generated_speech = model.generate_speech(input_values, speaker_embeddings=speaker_embeddings)
+        generated_speech = model.generate_speech(
+            input_values, speaker_embeddings=speaker_embeddings
+        )
 
         self.assertEqual(generated_speech.shape[1], model.config.num_mel_bins)
         self.assertGreaterEqual(generated_speech.shape[0], 300)
@@ -1869,7 +2165,9 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = [
                 "spectrogram",
             ]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @unittest.skip(reason="Model does not output hidden states")
     def test_hidden_states_output(self):
@@ -1916,7 +2214,9 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
                 batched_outputs = model(batched_inputs.to(torch_device))
 
             self.assertEqual(
-                batched_inputs.shape[0], batched_outputs.shape[0], msg="Got different batch dims for input and output"
+                batched_inputs.shape[0],
+                batched_outputs.shape[0],
+                msg="Got different batch dims for input and output",
             )
 
     def test_unbatched_inputs_outputs(self):
@@ -1929,4 +2229,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 outputs = model(inputs["spectrogram"].to(torch_device))
-            self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
+            self.assertTrue(
+                outputs.dim() == 1, msg="Got un-batched inputs but batched output"
+            )

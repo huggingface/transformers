@@ -19,25 +19,15 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import (
-    AddedToken,
-    GemmaTokenizer,
-    GemmaTokenizerFast,
-)
+from transformers import AddedToken, GemmaTokenizer, GemmaTokenizerFast
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
-from transformers.testing_utils import (
-    get_tests_dir,
-    nested_simplify,
-    require_jinja,
-    require_read_token,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    slow,
-)
+from transformers.testing_utils import (get_tests_dir, nested_simplify,
+                                        require_jinja, require_read_token,
+                                        require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        slow)
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -83,18 +73,24 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="pt",
                     )
                 except NotImplementedError:
-                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
+                    self.skipTest(
+                        reason="Encountered NotImplementedError when calling tokenizer"
+                    )
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
 
-                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
+                batch_encoder_only = tokenizer(
+                    text=text, max_length=3, max_target_length=10, return_tensors="pt"
+                )
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(
+        reason="Unfortunately way too slow to build a BPE with SentencePiece."
+    )
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -108,7 +104,9 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
 
-                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
+                special_token_id = tokenizer_r.encode(
+                    "<special>", add_special_tokens=False
+                )[0]
 
                 self.assertTrue(special_token_id in r_output)
 
@@ -119,7 +117,9 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                        pretrained_name,
+                        additional_special_tokens=added_tokens,
+                        **kwargs,
                     )
 
                     p_output = tokenizer_p.encode("Hey this is a <special> token")
@@ -172,7 +172,10 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_torch
     def integration_tests(self):
         inputs = self.tokenizer(
-            ["The following string should be properly encoded: Hello.", "But ird and ปี   ird   ด"],
+            [
+                "The following string should be properly encoded: Hello.",
+                "But ird and ปี   ird   ด",
+            ],
             return_tensors="pt",
         )
 
@@ -181,9 +184,25 @@ class GemmaIntegrationTest(unittest.TestCase):
             {
                 "input_ids": [
                     [2, 450, 1494, 1347, 881, 367, 6284, 18511, 29901, 15043, 29889],
-                    [2, 1205, 29871, 1823, 322, 29871, 31010, 30691, 1678, 1823, 1678, 30718],
+                    [
+                        2,
+                        1205,
+                        29871,
+                        1823,
+                        322,
+                        29871,
+                        31010,
+                        30691,
+                        1678,
+                        1823,
+                        1678,
+                        30718,
+                    ],
                 ],
-                "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+                "attention_mask": [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
             },
         )
 
@@ -194,8 +213,12 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         user_added_token = "<mask>"
 
-        slow_tokens = slow_tokenizer.convert_ids_to_tokens(slow_tokenizer.encode(user_added_token))
-        fast_tokens = slow_tokenizer.convert_ids_to_tokens(fast_tokenizer.encode(user_added_token))
+        slow_tokens = slow_tokenizer.convert_ids_to_tokens(
+            slow_tokenizer.encode(user_added_token)
+        )
+        fast_tokens = slow_tokenizer.convert_ids_to_tokens(
+            fast_tokenizer.encode(user_added_token)
+        )
 
         self.assertTrue(user_added_token in fast_tokens)
         self.assertEqual(slow_tokens, fast_tokens)
@@ -261,33 +284,59 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
-        self.assertEqual(pyth_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121])
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121])
-        self.assertEqual(pyth_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True), "This is a test")
-        self.assertEqual(rust_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True), "This is a test")
+        self.assertEqual(
+            pyth_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121]
+        )
+        self.assertEqual(
+            rust_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121]
+        )
+        self.assertEqual(
+            pyth_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True),
+            "This is a test",
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True),
+            "This is a test",
+        )
 
         # bytefallback showcase
         self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [2, 122182, 235710, 245467, 235427] )  # fmt: skip
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [2, 122182, 235710, 245467, 235427] )  # fmt: skip
         self.assertEqual(
-            pyth_tokenizer.decode([2, 122182, 235710, 245467, 235427], skip_special_tokens=True),
+            pyth_tokenizer.decode(
+                [2, 122182, 235710, 245467, 235427], skip_special_tokens=True
+            ),
             "生活的真谛是",
         )
         self.assertEqual(
-            rust_tokenizer.decode([2, 122182, 235710, 245467, 235427], skip_special_tokens=True),
+            rust_tokenizer.decode(
+                [2, 122182, 235710, 245467, 235427], skip_special_tokens=True
+            ),
             "生活的真谛是",
         )
 
         # Inner spaces showcase
         self.assertEqual(pyth_tokenizer.encode("Hi  Hello"), [2, 2151, 139, 4521])
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [2, 2151, 139, 4521])
-        self.assertEqual(pyth_tokenizer.decode([2, 2151, 139, 4521], skip_special_tokens=True), "Hi  Hello")
-        self.assertEqual(rust_tokenizer.decode([2, 2151, 139, 4521], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(
+            pyth_tokenizer.decode([2, 2151, 139, 4521], skip_special_tokens=True),
+            "Hi  Hello",
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([2, 2151, 139, 4521], skip_special_tokens=True),
+            "Hi  Hello",
+        )
 
         self.assertEqual(pyth_tokenizer.encode("Hi   Hello"), [2, 2151, 140, 4521])
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [2, 2151, 140, 4521])
-        self.assertEqual(pyth_tokenizer.decode([2, 2151, 140, 4521], skip_special_tokens=True), "Hi   Hello")
-        self.assertEqual(rust_tokenizer.decode([2, 2151, 140, 4521], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(
+            pyth_tokenizer.decode([2, 2151, 140, 4521], skip_special_tokens=True),
+            "Hi   Hello",
+        )
+        self.assertEqual(
+            rust_tokenizer.decode([2, 2151, 140, 4521], skip_special_tokens=True),
+            "Hi   Hello",
+        )
 
         self.assertEqual(pyth_tokenizer.encode(""), [2])
         self.assertEqual(rust_tokenizer.encode(""), [2])
@@ -368,13 +417,17 @@ class GemmaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
-        tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
+        tokenizer.add_tokens(
+            [AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False
+        )
         out1 = tokenizer.decode(
-            tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
+            tokenizer.encode("<REPR_END>inform", add_special_tokens=False),
+            spaces_between_special_tokens=False,
         )
         self.assertEqual(out1, "<REPR_END>inform")
         out2 = tokenizer.decode(
-            tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
+            tokenizer.encode("<REPR_END>inform", add_special_tokens=False),
+            spaces_between_special_tokens=True,
         )
         # decoding strips the added prefix space.
         self.assertEqual(out2, "<REPR_END> inform")
@@ -382,7 +435,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(input_ids, [256000, 43910])
 
         out2 = tokenizer.decode(
-            tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
+            tokenizer.encode(" <REPR_END> inform", add_special_tokens=False),
+            spaces_between_special_tokens=False,
         )
         # TODO @ArthurZ currently we strip left and right, so this will not keep the spaces
         self.assertEqual(out2, "<REPR_END>inform")
@@ -447,7 +501,9 @@ class GemmaIntegrationTest(unittest.TestCase):
         ]
         # Matt: The third test case tests the default system message, but if this is ever changed in the
         #       class/repo code then that test will fail, and the case will need to be updated.
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        tokenized_chats = [
+            tokenizer.apply_chat_template(test_chat) for test_chat in test_chats
+        ]
         expected_tokens = [[235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108, 235322, 235371, 571, 235298, 2997, 73786, 105776, 108, 7731, 577, 4664, 692, 35606, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108]]  # fmt: skip
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
@@ -473,7 +529,9 @@ class GemmaIntegrationTest(unittest.TestCase):
         slow_from_fast = slow_tokenizer_from_fast.encode(text, add_special_tokens=True)
         assert slow_from_fast == target_encoded
 
-        slow_from_fast_decoded = slow_tokenizer_from_fast.decode(slow, skip_special_tokens=True)
+        slow_from_fast_decoded = slow_tokenizer_from_fast.decode(
+            slow, skip_special_tokens=True
+        )
         assert slow_from_fast_decoded == text
 
 
@@ -485,8 +543,12 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     """
 
     def test_edge_case_tabulation(self):
-        fast_tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/dummy-gemma")
-        slow_tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
+        fast_tokenizer = GemmaTokenizerFast.from_pretrained(
+            "hf-internal-testing/dummy-gemma"
+        )
+        slow_tokenizer = GemmaTokenizer.from_pretrained(
+            "hf-internal-testing/dummy-gemma"
+        )
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
         EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
         EXPECTED_TOKENS = [ "Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁▁▁▁▁", ",", "▁", "1", "2", "3", "4", "▁", "1", "5", "▁", "5", ",", "6", "1"]  # fmt: skip
@@ -509,11 +571,15 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         text = fast_tokenizer.decode(EXPECTED_IDS)
         with self.subTest("test fast edge case fast"):
-            self.assertEqual(text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61")
+            self.assertEqual(
+                text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
+            )
 
         text = slow_tokenizer.decode(EXPECTED_IDS)
         with self.subTest("test fast edge case fast"):
-            self.assertEqual(text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61")
+            self.assertEqual(
+                text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
+            )
 
         input_text = "\t\t\t\t \n\n61"
         EXPECTED_IDS = [2, 255971, 235248, 109, 235318, 235274]

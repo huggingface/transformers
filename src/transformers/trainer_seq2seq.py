@@ -30,7 +30,6 @@ from .trainer import Trainer
 from .utils import is_datasets_available, logging
 from .utils.deprecation import deprecate_kwarg
 
-
 if is_datasets_available():
     import datasets
 
@@ -52,23 +51,40 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
-    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
+    @deprecate_kwarg(
+        "tokenizer",
+        new_name="processing_class",
+        version="5.0.0",
+        raise_if_both_names=True,
+    )
     def __init__(
         self,
         model: Union["PreTrainedModel", nn.Module] = None,
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
-        train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
+        train_dataset: Optional[
+            Union[Dataset, "IterableDataset", "datasets.Dataset"]
+        ] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         processing_class: Optional[
-            Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
+            Union[
+                "PreTrainedTokenizerBase",
+                "BaseImageProcessor",
+                "FeatureExtractionMixin",
+                "ProcessorMixin",
+            ]
         ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
         compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[["EvalPrediction"], dict]] = None,
         callbacks: Optional[list["TrainerCallback"]] = None,
-        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (
+            None,
+            None,
+        ),
+        preprocess_logits_for_metrics: Optional[
+            Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        ] = None,
     ):
         super().__init__(
             model=model,
@@ -92,7 +108,9 @@ class Seq2SeqTrainer(Trainer):
             self.model.generation_config = gen_config
 
     @staticmethod
-    def load_generation_config(gen_config_arg: Union[str, GenerationConfig]) -> GenerationConfig:
+    def load_generation_config(
+        gen_config_arg: Union[str, GenerationConfig],
+    ) -> GenerationConfig:
         """
         Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
@@ -109,7 +127,11 @@ class Seq2SeqTrainer(Trainer):
             gen_config = deepcopy(gen_config_arg)
         else:
             # str or Path
-            pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
+            pretrained_model_name = (
+                Path(gen_config_arg)
+                if isinstance(gen_config_arg, str)
+                else gen_config_arg
+            )
             config_file_name = None
 
             # Figuring if it is path pointing to a file, pointing to a directory or else a model id or URL
@@ -124,7 +146,9 @@ class Seq2SeqTrainer(Trainer):
             else:
                 pretrained_model_name = gen_config_arg
 
-            gen_config = GenerationConfig.from_pretrained(pretrained_model_name, config_file_name)
+            gen_config = GenerationConfig.from_pretrained(
+                pretrained_model_name, config_file_name
+            )
 
         # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
         # an exception if there are warnings at validation time.
@@ -136,7 +160,8 @@ class Seq2SeqTrainer(Trainer):
         except ValueError as exc:
             raise ValueError(
                 "The loaded generation config instance is invalid -- `GenerationConfig.validate()` throws warnings "
-                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n" + str(exc)
+                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n"
+                + str(exc)
             )
         return gen_config
 
@@ -189,12 +214,17 @@ class Seq2SeqTrainer(Trainer):
             and self.args.generation_max_length is not None
         ):
             gen_kwargs["max_length"] = self.args.generation_max_length
-        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
+        if (
+            gen_kwargs.get("num_beams") is None
+            and self.args.generation_num_beams is not None
+        ):
             gen_kwargs["num_beams"] = self.args.generation_num_beams
         # We don't want to drop samples in general
         self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
-        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
+        return super().evaluate(
+            eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
+        )
 
     def predict(
         self,
@@ -253,12 +283,17 @@ class Seq2SeqTrainer(Trainer):
             and self.args.generation_max_length is not None
         ):
             gen_kwargs["max_length"] = self.args.generation_max_length
-        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
+        if (
+            gen_kwargs.get("num_beams") is None
+            and self.args.generation_num_beams is not None
+        ):
             gen_kwargs["num_beams"] = self.args.generation_num_beams
         self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
 
-        return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
+        return super().predict(
+            test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
+        )
 
     def prediction_step(
         self,
@@ -293,7 +328,10 @@ class Seq2SeqTrainer(Trainer):
 
         if not self.args.predict_with_generate or prediction_loss_only:
             return super().prediction_step(
-                model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys
+                model,
+                inputs,
+                prediction_loss_only=prediction_loss_only,
+                ignore_keys=ignore_keys,
             )
 
         has_labels = "labels" in inputs
@@ -308,7 +346,9 @@ class Seq2SeqTrainer(Trainer):
         if "max_length" in gen_kwargs and gen_kwargs["max_length"] is None:
             gen_kwargs.pop("max_length")
 
-        default_synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self.model)
+        default_synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(
+            self.model
+        )
         gen_kwargs["synced_gpus"] = gen_kwargs.get("synced_gpus", default_synced_gpus)
 
         generation_inputs = inputs.copy()
@@ -317,10 +357,13 @@ class Seq2SeqTrainer(Trainer):
         if (
             "labels" in generation_inputs
             and "decoder_input_ids" in generation_inputs
-            and generation_inputs["labels"].shape == generation_inputs["decoder_input_ids"].shape
+            and generation_inputs["labels"].shape
+            == generation_inputs["decoder_input_ids"].shape
         ):
             generation_inputs = {
-                k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
+                k: v
+                for k, v in inputs.items()
+                if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
 
         summon_full_params_context = (
@@ -342,18 +385,31 @@ class Seq2SeqTrainer(Trainer):
         gen_config = self.model.generation_config
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_config.max_length:
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)
-        elif gen_config.max_new_tokens is not None and generated_tokens.shape[-1] < gen_config.max_new_tokens + 1:
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_new_tokens + 1)
+            generated_tokens = self._pad_tensors_to_max_len(
+                generated_tokens, gen_config.max_length
+            )
+        elif (
+            gen_config.max_new_tokens is not None
+            and generated_tokens.shape[-1] < gen_config.max_new_tokens + 1
+        ):
+            generated_tokens = self._pad_tensors_to_max_len(
+                generated_tokens, gen_config.max_new_tokens + 1
+            )
 
         with torch.no_grad():
             if has_labels:
                 with self.compute_loss_context_manager():
                     outputs = model(**inputs)
                 if self.label_smoother is not None:
-                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                    loss = (
+                        self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                    )
                 else:
-                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
+                    loss = (
+                        (outputs["loss"] if isinstance(outputs, dict) else outputs[0])
+                        .mean()
+                        .detach()
+                    )
             else:
                 loss = None
 
@@ -364,15 +420,22 @@ class Seq2SeqTrainer(Trainer):
             labels = inputs["labels"]
             if labels.shape[-1] < gen_config.max_length:
                 labels = self._pad_tensors_to_max_len(labels, gen_config.max_length)
-            elif gen_config.max_new_tokens is not None and labels.shape[-1] < gen_config.max_new_tokens + 1:
-                labels = self._pad_tensors_to_max_len(labels, gen_config.max_new_tokens + 1)
+            elif (
+                gen_config.max_new_tokens is not None
+                and labels.shape[-1] < gen_config.max_new_tokens + 1
+            ):
+                labels = self._pad_tensors_to_max_len(
+                    labels, gen_config.max_new_tokens + 1
+                )
         else:
             labels = None
 
         return loss, generated_tokens, labels
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.processing_class is not None and hasattr(self.processing_class, "pad_token_id"):
+        if self.processing_class is not None and hasattr(
+            self.processing_class, "pad_token_id"
+        ):
             # If PAD token is not defined at least EOS token has to be defined
             pad_token_id = (
                 self.processing_class.pad_token_id
@@ -383,7 +446,9 @@ class Seq2SeqTrainer(Trainer):
             if self.model.config.pad_token_id is not None:
                 pad_token_id = self.model.config.pad_token_id
             else:
-                raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")
+                raise ValueError(
+                    "Pad_token_id must be set in the configuration of the model, in order to pad tensors"
+                )
 
         padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device

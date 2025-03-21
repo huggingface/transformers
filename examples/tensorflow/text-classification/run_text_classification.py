@@ -28,23 +28,15 @@ import numpy as np
 from datasets import load_dataset
 from packaging.version import parse
 
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    HfArgumentParser,
-    PretrainedConfig,
-    PushToHubCallback,
-    TFAutoModelForSequenceClassification,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
-from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, send_example_telemetry
-
+from transformers import (AutoConfig, AutoTokenizer, HfArgumentParser,
+                          PretrainedConfig, PushToHubCallback,
+                          TFAutoModelForSequenceClassification,
+                          TFTrainingArguments, create_optimizer, set_seed)
+from transformers.utils import (CONFIG_NAME, TF2_WEIGHTS_NAME,
+                                send_example_telemetry)
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
 import tensorflow as tf  # noqa: E402
-
 
 try:
     import tf_keras as keras
@@ -90,12 +82,17 @@ class DataTrainingArguments:
     """
 
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "A csv or a json file containing the training data."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the training data."},
     )
     validation_file: Optional[str] = field(
-        default=None, metadata={"help": "A csv or a json file containing the validation data."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the validation data."},
     )
-    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "A csv or a json file containing the test data."},
+    )
 
     max_seq_length: int = field(
         default=128,
@@ -107,7 +104,8 @@ class DataTrainingArguments:
         },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+        default=False,
+        metadata={"help": "Overwrite the cached preprocessed datasets or not."},
     )
     pad_to_max_length: bool = field(
         default=False,
@@ -148,16 +146,32 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        train_extension = self.train_file.split(".")[-1].lower() if self.train_file is not None else None
-        validation_extension = (
-            self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
+        train_extension = (
+            self.train_file.split(".")[-1].lower()
+            if self.train_file is not None
+            else None
         )
-        test_extension = self.test_file.split(".")[-1].lower() if self.test_file is not None else None
+        validation_extension = (
+            self.validation_file.split(".")[-1].lower()
+            if self.validation_file is not None
+            else None
+        )
+        test_extension = (
+            self.test_file.split(".")[-1].lower()
+            if self.test_file is not None
+            else None
+        )
         extensions = {train_extension, validation_extension, test_extension}
         extensions.discard(None)
-        assert len(extensions) != 0, "Need to supply at least one of --train_file, --validation_file or --test_file!"
-        assert len(extensions) == 1, "All input files should have the same file extension, either csv or json!"
-        assert "csv" in extensions or "json" in extensions, "Input files should have either .csv or .json extensions!"
+        assert (
+            len(extensions) != 0
+        ), "Need to supply at least one of --train_file, --validation_file or --test_file!"
+        assert (
+            len(extensions) == 1
+        ), "All input files should have the same file extension, either csv or json!"
+        assert (
+            "csv" in extensions or "json" in extensions
+        ), "Input files should have either .csv or .json extensions!"
         self.input_file_extension = extensions.pop()
 
 
@@ -168,21 +182,33 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -214,17 +240,23 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_text_classification", model_args, data_args, framework="tensorflow")
+    send_example_telemetry(
+        "run_text_classification", model_args, data_args, framework="tensorflow"
+    )
 
     output_dir = Path(training_args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -233,8 +265,13 @@ def main():
     # region Checkpoints
     # Detecting last checkpoint.
     checkpoint = None
-    if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        if (output_dir / CONFIG_NAME).is_file() and (output_dir / TF2_WEIGHTS_NAME).is_file():
+    if (
+        len(os.listdir(training_args.output_dir)) > 0
+        and not training_args.overwrite_output_dir
+    ):
+        if (output_dir / CONFIG_NAME).is_file() and (
+            output_dir / TF2_WEIGHTS_NAME
+        ).is_file():
             checkpoint = output_dir
             logger.info(
                 f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
@@ -270,7 +307,11 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    data_files = {"train": data_args.train_file, "validation": data_args.validation_file, "test": data_args.test_file}
+    data_files = {
+        "train": data_args.train_file,
+        "validation": data_args.validation_file,
+        "test": data_args.test_file,
+    }
     data_files = {key: file for key, file in data_files.items() if file is not None}
 
     for key in data_files.keys():
@@ -286,7 +327,9 @@ def main():
         )
     else:
         # Loading a dataset from local json files
-        datasets = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            "json", data_files=data_files, cache_dir=model_args.cache_dir
+        )
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.
     # endregion
@@ -296,7 +339,10 @@ def main():
     if "train" in datasets:
         # By default we assume that if your label column looks like a float then you're doing regression,
         # and if not then you're doing classification. This is something you may want to change!
-        is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
+        is_regression = datasets["train"].features["label"].dtype in [
+            "float32",
+            "float64",
+        ]
         if is_regression:
             num_labels = 1
         else:
@@ -337,7 +383,11 @@ def main():
             trust_remote_code=model_args.trust_remote_code,
         )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (
+            model_args.tokenizer_name
+            if model_args.tokenizer_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
@@ -368,7 +418,10 @@ def main():
 
     # Ensure that our labels match the model's, if it has some pre-specified
     if "train" in datasets:
-        if not is_regression and config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
+        if (
+            not is_regression
+            and config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+        ):
             label_name_to_id = config.label2id
             if sorted(label_name_to_id.keys()) == sorted(label_list):
                 label_to_id = label_name_to_id  # Use the model's labels
@@ -395,21 +448,31 @@ def main():
     if "validation" in datasets and config.label2id is not None:
         validation_label_list = datasets["validation"].unique("label")
         for val_label in validation_label_list:
-            assert val_label in label_to_id, f"Label {val_label} is in the validation set but not the training set!"
+            assert (
+                val_label in label_to_id
+            ), f"Label {val_label} is in the validation set but not the training set!"
 
     def preprocess_function(examples):
         # Tokenize the texts
         args = (
-            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+            (examples[sentence1_key],)
+            if sentence2_key is None
+            else (examples[sentence1_key], examples[sentence2_key])
         )
         result = tokenizer(*args, max_length=max_seq_length, truncation=True)
 
         # Map labels to IDs
         if config.label2id is not None and "label" in examples:
-            result["label"] = [(config.label2id[l] if l != -1 else -1) for l in examples["label"]]
+            result["label"] = [
+                (config.label2id[l] if l != -1 else -1) for l in examples["label"]
+            ]
         return result
 
-    datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+    datasets = datasets.map(
+        preprocess_function,
+        batched=True,
+        load_from_cache_file=not data_args.overwrite_cache,
+    )
 
     # endregion
 
@@ -436,7 +499,9 @@ def main():
 
         # region Convert data to a tf.data.Dataset
         dataset_options = tf.data.Options()
-        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        dataset_options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.OFF
+        )
         num_replicas = training_args.strategy.num_replicas_in_sync
 
         tf_data = {}
@@ -457,7 +522,9 @@ def main():
                 tf_data[key] = None
                 continue
             if key in ("train", "validation"):
-                assert "label" in datasets[key].features, f"Missing labels from {key} data!"
+                assert (
+                    "label" in datasets[key].features
+                ), f"Missing labels from {key} data!"
             if key == "train":
                 shuffle = True
                 batch_size = training_args.per_device_train_batch_size * num_replicas
@@ -526,7 +593,10 @@ def main():
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-text-classification"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
+        model_card_kwargs = {
+            "finetuned_from": model_args.model_name_or_path,
+            "tasks": "text-classification",
+        }
 
         if training_args.push_to_hub:
             callbacks = [
@@ -557,9 +627,13 @@ def main():
                 logger.info(f"Eval loss: {loss:.5f}")
             else:
                 loss, accuracy = model.evaluate(tf_data["validation"])
-                logger.info(f"Eval loss: {loss:.5f}, Eval accuracy: {accuracy * 100:.4f}%")
+                logger.info(
+                    f"Eval loss: {loss:.5f}, Eval accuracy: {accuracy * 100:.4f}%"
+                )
             if training_args.output_dir is not None:
-                output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                output_eval_file = os.path.join(
+                    training_args.output_dir, "all_results.json"
+                )
                 eval_dict = {"eval_loss": loss}
                 if not is_regression:
                     eval_dict["eval_accuracy"] = accuracy
@@ -571,8 +645,14 @@ def main():
         if tf_data["test"] is not None:
             logger.info("Doing predictions on test dataset...")
             predictions = model.predict(tf_data["test"])["logits"]
-            predicted_class = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
-            output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
+            predicted_class = (
+                np.squeeze(predictions)
+                if is_regression
+                else np.argmax(predictions, axis=1)
+            )
+            output_test_file = os.path.join(
+                training_args.output_dir, "test_results.txt"
+            )
             with open(output_test_file, "w") as writer:
                 writer.write("index\tprediction\n")
                 for index, item in enumerate(predicted_class):

@@ -18,7 +18,8 @@ from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import (ImagesKwargs, ProcessingKwargs,
+                                 ProcessorMixin, TextKwargs, Unpack)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -74,10 +75,16 @@ class Emu3Processor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = tokenizer.image_token  # image_token as placeholder to be replaced by vq-vae tokens
-        self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
+        self.image_token = (
+            tokenizer.image_token
+        )  # image_token as placeholder to be replaced by vq-vae tokens
+        self.image_start_token = (
+            tokenizer.boi_token
+        )  # "<|image start|>" fixed tokens for start and end of image
         self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
-        self.fake_token_around_image = tokenizer.image_wrapper_token  # "<|image token|>"  every image starts with it
+        self.fake_token_around_image = (
+            tokenizer.image_wrapper_token
+        )  # "<|image token|>"  every image starts with it
         self.eof_token = tokenizer.eof_token  # "<|extra_201|>"
         self.bos_token = tokenizer.bos_token
         self.downsample_ratio = 8
@@ -86,7 +93,11 @@ class Emu3Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
@@ -128,22 +139,30 @@ class Emu3Processor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         output_kwargs = self._merge_kwargs(
             Emu3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        return_for_image_generation = output_kwargs["text_kwargs"].pop("return_for_image_generation", False)
+        return_for_image_generation = output_kwargs["text_kwargs"].pop(
+            "return_for_image_generation", False
+        )
         ratio = output_kwargs["images_kwargs"].pop("ratio", None)
         image_area = output_kwargs["images_kwargs"].pop("image_area", None)
 
         if return_for_image_generation and images is not None:
-            raise ValueError("You should not provide `images` when `return_for_image_generation=True`")
+            raise ValueError(
+                "You should not provide `images` when `return_for_image_generation=True`"
+            )
 
         if not return_for_image_generation and text is None and images is None:
-            raise ValueError("You must provide either text or images when `return_for_image_generation=False`")
+            raise ValueError(
+                "You must provide either text or images when `return_for_image_generation=False`"
+            )
 
         image_features = {}
         image_start_tokens = f"{self.image_start_token}"
@@ -151,7 +170,9 @@ class Emu3Processor(ProcessorMixin):
 
         # generate text from image + text input, so we add placeholders for image tokens
         if not return_for_image_generation and images is not None:
-            image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_features = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
             image_sizes = iter(image_features.image_sizes)
 
             prompt_strings = []
@@ -161,18 +182,27 @@ class Emu3Processor(ProcessorMixin):
                     height, width = image_size
                     height = height // self.downsample_ratio
                     width = width // self.downsample_ratio
-                    image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+                    image_seq_length = height * (
+                        width + 1
+                    )  # +1 for extra row when converting to BPE in modeling code
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
                     sample = f"{self.bos_token}{sample}"  # add BOS because PT tokenizer doesn't add it
                 prompt_strings.append(sample)
-            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            text = [
+                sample.replace("<placeholder>", self.image_token)
+                for sample in prompt_strings
+            ]
 
         # generate image from text input, so we add begin-of-image tokens from where image generation starts
         elif return_for_image_generation:
-            height, width = self.calculate_generate_size(ratio, image_area, self.downsample_ratio)
-            image_prompt = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
+            height, width = self.calculate_generate_size(
+                ratio, image_area, self.downsample_ratio
+            )
+            image_prompt = (
+                f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}"
+            )
             text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
             image_features["image_sizes"] = [[height, width]] * len(text)
 
@@ -180,7 +210,10 @@ class Emu3Processor(ProcessorMixin):
         data = self.tokenizer(text, **output_kwargs["text_kwargs"])
         data.update(**image_features)
 
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].pop("return_tensors", None))
+        return BatchFeature(
+            data=data,
+            tensor_type=output_kwargs["common_kwargs"].pop("return_tensors", None),
+        )
 
     def calculate_generate_size(self, ratio, image_area, spatial_factor):
         width, height = map(int, ratio.split(":"))

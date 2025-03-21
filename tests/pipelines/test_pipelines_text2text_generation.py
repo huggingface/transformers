@@ -14,17 +14,14 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    Text2TextGenerationPipeline,
-    pipeline,
-)
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers import (MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                          TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                          Text2TextGenerationPipeline, pipeline)
+from transformers.testing_utils import (is_pipeline_test, require_tf,
+                                        require_torch)
 from transformers.utils import is_torch_available
 
 from .test_pipelines_common import ANY
-
 
 if is_torch_available():
     import torch
@@ -60,7 +57,11 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         # These are encoder decoder, they don't just append to incoming string
         self.assertFalse(outputs[0]["generated_text"].startswith("Something there"))
 
-        outputs = generator(["This is great !", "Something else"], num_return_sequences=2, do_sample=True)
+        outputs = generator(
+            ["This is great !", "Something else"],
+            num_return_sequences=2,
+            do_sample=True,
+        )
         self.assertEqual(
             outputs,
             [
@@ -70,7 +71,10 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         )
 
         outputs = generator(
-            ["This is great !", "Something else"], num_return_sequences=2, batch_size=2, do_sample=True
+            ["This is great !", "Something else"],
+            num_return_sequences=2,
+            batch_size=2,
+            do_sample=True,
         )
         self.assertEqual(
             outputs,
@@ -85,7 +89,11 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="pt")
+        generator = pipeline(
+            "text2text-generation",
+            model="patrickvonplaten/t5-tiny-random",
+            framework="pt",
+        )
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])
@@ -103,7 +111,12 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         ]
         self.assertEqual(outputs, target_outputs)
 
-        outputs = generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
+        outputs = generator(
+            "This is a test",
+            do_sample=True,
+            num_return_sequences=2,
+            return_tensors=True,
+        )
         self.assertEqual(
             outputs,
             [
@@ -136,7 +149,11 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
 
     @require_tf
     def test_small_model_tf(self):
-        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        generator = pipeline(
+            "text2text-generation",
+            model="patrickvonplaten/t5-tiny-random",
+            framework="tf",
+        )
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])

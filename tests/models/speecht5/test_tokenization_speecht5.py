@@ -18,11 +18,11 @@ import unittest
 
 from transformers import SPIECE_UNDERLINE
 from transformers.models.speecht5 import SpeechT5Tokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import (get_tests_dir, require_sentencepiece,
+                                        require_tokenizers, slow)
 from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 
@@ -58,7 +58,9 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "I have one hundred and twenty three point four five dollars and owe fifty nine point seven eight euros. My balance is minus eight hundred and seventy six point nine zero ukrainian hryvnia and have seventy three percent stocks in my company which equals to seventy two million six hundred and forty nine thousand two hundred and one nigerian naira"
         return input_text, output_text
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
+    def get_clean_sequence(
+        self, tokenizer, with_prefix_space=False, max_length=20, min_length=5
+    ):
         input_text, output_text = self.get_input_output_texts(tokenizer)
         ids = tokenizer.encode(output_text, add_special_tokens=False)
         text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
@@ -115,13 +117,18 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
-                tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
+                tokens = tokenizer.encode(
+                    "aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False
+                )
 
                 self.assertGreaterEqual(len(tokens), 4)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-3], tokenizer.vocab_size - 1)
 
-                new_toks_2 = {"eos_token": ">>>>|||<||<<|<<", "pad_token": "<<<<<|||>|>>>>|>"}
+                new_toks_2 = {
+                    "eos_token": ">>>>|||<||<<|<<",
+                    "pad_token": "<<<<<|||>|>>>>|>",
+                }
                 added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
                 vocab_size_3 = tokenizer.vocab_size
                 all_size_3 = len(tokenizer)
@@ -132,7 +139,8 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
                 tokens = tokenizer.encode(
-                    ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l", add_special_tokens=False
+                    ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l",
+                    add_special_tokens=False,
                 )
 
                 self.assertGreaterEqual(len(tokens), 6)

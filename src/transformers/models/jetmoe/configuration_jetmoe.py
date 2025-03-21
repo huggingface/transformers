@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -120,7 +119,9 @@ class JetMoeConfig(PretrainedConfig):
         **kwargs,
     ):
         if num_experts_per_tok > num_local_experts:
-            raise ValueError("`num_experts_per_tok` must be less than or equal to `num_local_experts`")
+            raise ValueError(
+                "`num_experts_per_tok` must be less than or equal to `num_local_experts`"
+            )
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -145,7 +146,10 @@ class JetMoeConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
         super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
         )
 
 

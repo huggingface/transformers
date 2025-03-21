@@ -23,7 +23,6 @@ import regex
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging, requires_backends
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
@@ -143,7 +142,9 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         )
         return tokens
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -158,7 +159,9 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:

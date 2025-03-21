@@ -21,32 +21,21 @@ from transformers import IBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        IBertForMaskedLM,
-        IBertForMultipleChoice,
-        IBertForQuestionAnswering,
-        IBertForSequenceClassification,
-        IBertForTokenClassification,
-        IBertModel,
-    )
+    from transformers import (IBertForMaskedLM, IBertForMultipleChoice,
+                              IBertForQuestionAnswering,
+                              IBertForSequenceClassification,
+                              IBertForTokenClassification, IBertModel)
     from transformers.models.ibert.modeling_ibert import (
-        IBertEmbeddings,
-        IntGELU,
-        IntLayerNorm,
-        IntSoftmax,
-        QuantAct,
-        QuantEmbedding,
-        QuantLinear,
-        create_position_ids_from_input_ids,
-    )
+        IBertEmbeddings, IntGELU, IntLayerNorm, IntSoftmax, QuantAct,
+        QuantEmbedding, QuantLinear, create_position_ids_from_input_ids)
 
 
 class IBertModelTester:
@@ -107,19 +96,33 @@ class IBertModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return IBertConfig(
@@ -143,57 +146,121 @@ class IBertModelTester:
         return config
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = IBertModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = IBertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = IBertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = IBertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = (
+            input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_token_type_ids = (
+            token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_input_mask = (
+            input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = IBertForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -205,8 +272,12 @@ class IBertModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -219,7 +290,11 @@ class IBertModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -257,7 +332,9 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = IBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=IBertConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -306,7 +383,14 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
         expected_positions = torch.as_tensor(
-            [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
+            [
+                [
+                    0 + model.padding_idx + 1,
+                    1 + model.padding_idx + 1,
+                    2 + model.padding_idx + 1,
+                    model.padding_idx,
+                ]
+            ]
         )
 
         position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
@@ -328,7 +412,9 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             2 + embeddings.padding_idx + 1,
             3 + embeddings.padding_idx + 1,
         ]
-        expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
+        expected_positions = torch.as_tensor(
+            [expected_single_positions, expected_single_positions]
+        )
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
@@ -389,21 +475,35 @@ class IBertModelIntegrationTest(unittest.TestCase):
     def test_quant_embedding(self):
         weight_bit = 8
         embedding = QuantEmbedding(2, 4, quant_mode=True, weight_bit=weight_bit)
-        embedding_weight = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]])
+        embedding_weight = torch.tensor(
+            [[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]]
+        )
         embedding.weight = nn.Parameter(embedding_weight)
 
-        expected_scaling_factor = embedding_weight.abs().max() / (2 ** (weight_bit - 1) - 1)
+        expected_scaling_factor = embedding_weight.abs().max() / (
+            2 ** (weight_bit - 1) - 1
+        )
         x, x_scaling_factor = embedding(torch.tensor(0))
         y, y_scaling_factor = embedding(torch.tensor(1))
 
         # scaling factor should follow the symmetric quantization rule
-        self.assertTrue(torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4))
-        self.assertTrue(torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4))
-        self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4)
+        )
 
         # quantization error should not exceed the scaling factor
-        self.assertTrue(torch.allclose(x, embedding_weight[0], atol=expected_scaling_factor))
-        self.assertTrue(torch.allclose(y, embedding_weight[1], atol=expected_scaling_factor))
+        self.assertTrue(
+            torch.allclose(x, embedding_weight[0], atol=expected_scaling_factor)
+        )
+        self.assertTrue(
+            torch.allclose(y, embedding_weight[1], atol=expected_scaling_factor)
+        )
 
     def test_quant_act(self):
         def _test_range():
@@ -423,7 +523,9 @@ class IBertModelIntegrationTest(unittest.TestCase):
             # scaling factor should follow the symmetric quantization rule
             expected_range = torch.max(expected_x_min.abs(), expected_x_max.abs())
             expected_scaling_factor = expected_range / (2 ** (activation_bit - 1) - 1)
-            self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+            self.assertTrue(
+                torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4)
+            )
 
             # quantization error should not exceed the scaling factor
             self.assertTrue(torch.allclose(x, y, atol=expected_scaling_factor))
@@ -438,15 +540,21 @@ class IBertModelIntegrationTest(unittest.TestCase):
             y_int = y / y_scaling_factor
 
             # From the second pass, x_min and x_max should be updated with moving average
-            expected_x_min = expected_x_min * act_range_momentum + x.min() * (1 - act_range_momentum)
-            expected_x_max = expected_x_max * act_range_momentum + x.max() * (1 - act_range_momentum)
+            expected_x_min = expected_x_min * act_range_momentum + x.min() * (
+                1 - act_range_momentum
+            )
+            expected_x_max = expected_x_max * act_range_momentum + x.max() * (
+                1 - act_range_momentum
+            )
             self.assertTrue(torch.allclose(act.x_min, expected_x_min, atol=1e-4))
             self.assertTrue(torch.allclose(act.x_max, expected_x_max, atol=1e-4))
 
             # scaling factor should follow the symmetric quantization rule
             expected_range = torch.max(expected_x_min.abs(), expected_x_max.abs())
             expected_scaling_factor = expected_range / (2 ** (activation_bit - 1) - 1)
-            self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+            self.assertTrue(
+                torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4)
+            )
 
             # quantization error should not exceed the scaling factor
             x = x.clamp(min=-expected_range, max=expected_range)
@@ -462,7 +570,9 @@ class IBertModelIntegrationTest(unittest.TestCase):
             # In eval mode, min/max and scaling factor must be fixed
             self.assertTrue(torch.allclose(act.x_min, expected_x_min, atol=1e-4))
             self.assertTrue(torch.allclose(act.x_max, expected_x_max, atol=1e-4))
-            self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+            self.assertTrue(
+                torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4)
+            )
 
         def _test_identity():
             # test if identity and identity_scaling_factor are given
@@ -484,9 +594,15 @@ class IBertModelIntegrationTest(unittest.TestCase):
 
     def test_quant_linear(self):
         def _test(per_channel):
-            linear_q = QuantLinear(2, 4, quant_mode=True, per_channel=per_channel, weight_bit=weight_bit)
-            linear_dq = QuantLinear(2, 4, quant_mode=False, per_channel=per_channel, weight_bit=weight_bit)
-            linear_weight = torch.tensor([[-1.0, 2.0, 3.0, -4.0], [5.0, -6.0, -7.0, 8.0]]).T
+            linear_q = QuantLinear(
+                2, 4, quant_mode=True, per_channel=per_channel, weight_bit=weight_bit
+            )
+            linear_dq = QuantLinear(
+                2, 4, quant_mode=False, per_channel=per_channel, weight_bit=weight_bit
+            )
+            linear_weight = torch.tensor(
+                [[-1.0, 2.0, 3.0, -4.0], [5.0, -6.0, -7.0, 8.0]]
+            ).T
             linear_q.weight = nn.Parameter(linear_weight)
             linear_dq.weight = nn.Parameter(linear_weight)
 
@@ -501,7 +617,11 @@ class IBertModelIntegrationTest(unittest.TestCase):
             expected_scaling_factor = q_max / (2 ** (weight_bit - 1) - 1)
 
             # scaling factor should follow the symmetric quantization rule
-            self.assertTrue(torch.allclose(linear_q.fc_scaling_factor, expected_scaling_factor, atol=1e-4))
+            self.assertTrue(
+                torch.allclose(
+                    linear_q.fc_scaling_factor, expected_scaling_factor, atol=1e-4
+                )
+            )
 
             # output of the normal linear layer and the quantized linear layer should be similar
             self.assertTrue(torch.allclose(q, dq, atol=0.5))
@@ -656,13 +776,43 @@ class IBertModelIntegrationTest(unittest.TestCase):
         ln_dq = IntLayerNorm(x.shape[1:], 1e-5, quant_mode=False, output_bit=output_bit)
         ln_fdqs_dict = {
             True: [
-                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="nonlinear"),
-                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="layernorm"),
+                IntLayerNorm(
+                    x.shape[1:],
+                    1e-5,
+                    quant_mode=True,
+                    output_bit=output_bit,
+                    force_dequant="nonlinear",
+                ),
+                IntLayerNorm(
+                    x.shape[1:],
+                    1e-5,
+                    quant_mode=True,
+                    output_bit=output_bit,
+                    force_dequant="layernorm",
+                ),
             ],
             False: [
-                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="none"),
-                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="gelu"),
-                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="softmax"),
+                IntLayerNorm(
+                    x.shape[1:],
+                    1e-5,
+                    quant_mode=True,
+                    output_bit=output_bit,
+                    force_dequant="none",
+                ),
+                IntLayerNorm(
+                    x.shape[1:],
+                    1e-5,
+                    quant_mode=True,
+                    output_bit=output_bit,
+                    force_dequant="gelu",
+                ),
+                IntLayerNorm(
+                    x.shape[1:],
+                    1e-5,
+                    quant_mode=True,
+                    output_bit=output_bit,
+                    force_dequant="softmax",
+                ),
             ],
         }
 
@@ -701,12 +851,20 @@ class IBertModelIntegrationTest(unittest.TestCase):
         # I-BERT should be "equivalent" to RoBERTa if not quantized
         # Test coped from `test_modeling_roberta.py`
         model = IBertForMaskedLM.from_pretrained("kssteven/ibert-roberta-base")
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = torch.tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 50265))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+            [
+                [
+                    [33.8802, -4.3103, 22.7761],
+                    [4.6539, -2.8098, 13.6253],
+                    [1.8228, -3.6898, 8.8600],
+                ]
+            ]
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
@@ -720,8 +878,12 @@ class IBertModelIntegrationTest(unittest.TestCase):
     def test_inference_classification_head(self):
         # I-BERT should be "equivalent" to RoBERTa if not quantized
         # Test coped from `test_modeling_roberta.py`
-        model = IBertForSequenceClassification.from_pretrained("kssteven/ibert-roberta-large-mnli")
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        model = IBertForSequenceClassification.from_pretrained(
+            "kssteven/ibert-roberta-large-mnli"
+        )
+        input_ids = torch.tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))
         self.assertEqual(output.shape, expected_shape)

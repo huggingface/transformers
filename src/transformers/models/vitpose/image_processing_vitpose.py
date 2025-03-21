@@ -22,19 +22,12 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_channel_dimension_format
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    ChannelDimension,
-    ImageInput,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-)
-from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
-
+from ...image_utils import (IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD,
+                            ChannelDimension, ImageInput,
+                            infer_channel_dimension_format, is_scaled_image,
+                            make_list_of_images, to_numpy_array, valid_images)
+from ...utils import (TensorType, is_scipy_available, is_torch_available,
+                      is_vision_available, logging)
 
 if is_torch_available():
     import torch
@@ -84,14 +77,18 @@ def box_to_center_and_scale(
 
     top_left_x, top_left_y, width, height = box[:4]
     aspect_ratio = image_width / image_height
-    center = np.array([top_left_x + width * 0.5, top_left_y + height * 0.5], dtype=np.float32)
+    center = np.array(
+        [top_left_x + width * 0.5, top_left_y + height * 0.5], dtype=np.float32
+    )
 
     if width > aspect_ratio * height:
         height = width * 1.0 / aspect_ratio
     elif width < aspect_ratio * height:
         width = height * aspect_ratio
 
-    scale = np.array([width / normalize_factor, height / normalize_factor], dtype=np.float32)
+    scale = np.array(
+        [width / normalize_factor, height / normalize_factor], dtype=np.float32
+    )
     scale = scale * padding_factor
 
     return center, scale
@@ -150,7 +147,9 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarr
     return preds, scores
 
 
-def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
+def post_dark_unbiased_data_processing(
+    coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3
+) -> np.ndarray:
     """DARK post-pocessing. Implemented by unbiased_data_processing.
 
     Paper references:
@@ -174,22 +173,35 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
     batch_size, num_keypoints, height, width = batch_heatmaps.shape
     num_coords = coords.shape[0]
     if not (batch_size == 1 or batch_size == num_coords):
-        raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
+        raise ValueError(
+            "The batch size of heatmaps should be 1 or equal to the batch size of coordinates."
+        )
     radius = int((kernel - 1) // 2)
     batch_heatmaps = np.array(
         [
-            [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
+            [
+                gaussian_filter(
+                    heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)
+                )
+                for heatmap in heatmaps
+            ]
             for heatmaps in batch_heatmaps
         ]
     )
     batch_heatmaps = np.clip(batch_heatmaps, 0.001, 50)
     batch_heatmaps = np.log(batch_heatmaps)
 
-    batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
+    batch_heatmaps_pad = np.pad(
+        batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge"
+    ).flatten()
 
     # calculate indices for coordinates
     index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (width + 2)
-    index += (width + 2) * (height + 2) * np.arange(0, batch_size * num_keypoints).reshape(-1, num_keypoints)
+    index += (
+        (width + 2)
+        * (height + 2)
+        * np.arange(0, batch_size * num_keypoints).reshape(-1, num_keypoints)
+    )
     index = index.astype(int).reshape(-1, 1)
     i_ = batch_heatmaps_pad[index]
     ix1 = batch_heatmaps_pad[index + 1]
@@ -214,7 +226,9 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
     return coords
 
 
-def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray) -> np.ndarray:
+def transform_preds(
+    coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray
+) -> np.ndarray:
     """Get final keypoint predictions from heatmaps and apply scaling and
     translation to map them back to the image.
 
@@ -262,7 +276,9 @@ def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, o
     return target_coords
 
 
-def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
+def get_warp_matrix(
+    theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray
+):
     """
     Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
     Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
@@ -289,12 +305,16 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     matrix[0, 0] = math.cos(theta) * scale_x
     matrix[0, 1] = -math.sin(theta) * scale_x
     matrix[0, 2] = scale_x * (
-        -0.5 * size_input[0] * math.cos(theta) + 0.5 * size_input[1] * math.sin(theta) + 0.5 * size_target[0]
+        -0.5 * size_input[0] * math.cos(theta)
+        + 0.5 * size_input[1] * math.sin(theta)
+        + 0.5 * size_target[0]
     )
     matrix[1, 0] = math.sin(theta) * scale_y
     matrix[1, 1] = math.cos(theta) * scale_y
     matrix[1, 2] = scale_y * (
-        -0.5 * size_input[0] * math.sin(theta) - 0.5 * size_input[1] * math.cos(theta) + 0.5 * size_target[1]
+        -0.5 * size_input[0] * math.sin(theta)
+        - 0.5 * size_input[1] * math.cos(theta)
+        + 0.5 * size_target[1]
     )
     return matrix
 
@@ -320,7 +340,10 @@ def scipy_warp_affine(src, M, size):
         M_inv[0, 2],
     )
 
-    new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
+    new_src = [
+        affine_transform(channel, M_inv, output_shape=size, order=1)
+        for channel in channels
+    ]
     new_src = np.stack(new_src, axis=-1)
     return new_src
 
@@ -367,7 +390,9 @@ class VitPoseImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.normalize_factor = 200.0
 
@@ -406,13 +431,17 @@ class VitPoseImageProcessor(BaseImageProcessor):
         size = (size["width"], size["height"])
 
         # one uses a pixel standard deviation of 200 pixels
-        transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
+        transformation = get_warp_matrix(
+            rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0
+        )
 
         # input image requires channels last format
         image = (
             image
             if input_data_format == ChannelDimension.LAST
-            else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
+            else to_channel_dimension_format(
+                image, ChannelDimension.LAST, input_data_format
+            )
         )
         image = scipy_warp_affine(src=image, M=transformation, size=(size[1], size[0]))
 
@@ -476,10 +505,16 @@ class VitPoseImageProcessor(BaseImageProcessor):
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
         """
-        do_affine_transform = do_affine_transform if do_affine_transform is not None else self.do_affine_transform
+        do_affine_transform = (
+            do_affine_transform
+            if do_affine_transform is not None
+            else self.do_affine_transform
+        )
         size = size if size is not None else self.size
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -493,9 +528,13 @@ class VitPoseImageProcessor(BaseImageProcessor):
             )
 
         if isinstance(boxes, list) and len(images) != len(boxes):
-            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
+            raise ValueError(
+                f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}"
+            )
         elif isinstance(boxes, np.ndarray) and len(images) != boxes.shape[0]:
-            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
+            raise ValueError(
+                f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}"
+            )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -522,7 +561,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
                         normalize_factor=self.normalize_factor,
                     )
                     transformed_image = self.affine_transform(
-                        image, center, scale, rotation=0, size=size, input_data_format=input_data_format
+                        image,
+                        center,
+                        scale,
+                        rotation=0,
+                        size=size,
+                        input_data_format=input_data_format,
                     )
                     new_images.append(transformed_image)
             images = new_images
@@ -534,16 +578,25 @@ class VitPoseImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
             all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             for image in all_images
         ]
 
@@ -590,7 +643,9 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
         # Transform back to the image
         for i in range(batch_size):
-            preds[i] = transform_preds(preds[i], center=center[i], scale=scale[i], output_size=[height, width])
+            preds[i] = transform_preds(
+                preds[i], center=center[i], scale=scale[i], output_size=[height, width]
+            )
 
         return preds, scores
 
@@ -638,10 +693,14 @@ class VitPoseImageProcessor(BaseImageProcessor):
         for i in range(batch_size):
             if target_sizes is not None:
                 image_width, image_height = target_sizes[i][0], target_sizes[i][1]
-                scale_factor = np.array([image_width, image_height, image_width, image_height])
+                scale_factor = np.array(
+                    [image_width, image_height, image_width, image_height]
+                )
                 flattened_boxes[i] = flattened_boxes[i] * scale_factor
             width, height = self.size["width"], self.size["height"]
-            center, scale = box_to_center_and_scale(flattened_boxes[i], image_width=width, image_height=height)
+            center, scale = box_to_center_and_scale(
+                flattened_boxes[i], image_width=width, image_height=height
+            )
             centers[i, :] = center
             scales[i, :] = scale
 
@@ -674,7 +733,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
                     pose = pose[keep]
                     score = score[keep]
                     keypoints_labels = keypoints_labels[keep]
-                pose_result = {"keypoints": pose, "scores": score, "labels": keypoints_labels, "bbox": bbox_xyxy}
+                pose_result = {
+                    "keypoints": pose,
+                    "scores": score,
+                    "labels": keypoints_labels,
+                    "bbox": bbox_xyxy,
+                }
                 image_results.append(pose_result)
             results.append(image_results)
 

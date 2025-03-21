@@ -25,9 +25,9 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, ResNetConfig
+from transformers import (MaskFormerConfig, MaskFormerForInstanceSegmentation,
+                          MaskFormerImageProcessor, ResNetConfig)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -39,7 +39,8 @@ def get_maskformer_config(model_name: str):
         raise NotImplementedError("To do")
     elif "resnet101" in model_name:
         backbone_config = ResNetConfig.from_pretrained(
-            "microsoft/resnet-101", out_features=["stage1", "stage2", "stage3", "stage4"]
+            "microsoft/resnet-101",
+            out_features=["stage1", "stage2", "stage3", "stage4"],
         )
     else:
         backbone_config = ResNetConfig.from_pretrained(
@@ -68,7 +69,9 @@ def get_maskformer_config(model_name: str):
         config.num_labels = 65
         filename = "mapillary-vistas-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -259,7 +262,10 @@ def prepare_img() -> torch.Tensor:
 
 @torch.no_grad()
 def convert_maskformer_checkpoint(
-    model_name: str, checkpoint_path: str, pytorch_dump_folder_path: str, push_to_hub: bool = False
+    model_name: str,
+    checkpoint_path: str,
+    pytorch_dump_folder_path: str,
+    push_to_hub: bool = False,
 ):
     """
     Copy/paste/tweak model's weights to our MaskFormer structure.
@@ -296,7 +302,9 @@ def convert_maskformer_checkpoint(
     else:
         ignore_index = 255
     do_reduce_labels = True if "ade" in model_name else False
-    image_processor = MaskFormerImageProcessor(ignore_index=ignore_index, do_reduce_labels=do_reduce_labels)
+    image_processor = MaskFormerImageProcessor(
+        ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
+    )
 
     inputs = image_processor(image, return_tensors="pt")
 
@@ -304,42 +312,78 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-resnet50-ade":
         expected_logits = torch.tensor(
-            [[6.7710, -0.1452, -3.5687], [1.9165, -1.0010, -1.8614], [3.6209, -0.2950, -1.3813]]
+            [
+                [6.7710, -0.1452, -3.5687],
+                [1.9165, -1.0010, -1.8614],
+                [3.6209, -0.2950, -1.3813],
+            ]
         )
     elif model_name == "maskformer-resnet101-ade":
         expected_logits = torch.tensor(
-            [[4.0381, -1.1483, -1.9688], [2.7083, -1.9147, -2.2555], [3.4367, -1.3711, -2.1609]]
+            [
+                [4.0381, -1.1483, -1.9688],
+                [2.7083, -1.9147, -2.2555],
+                [3.4367, -1.3711, -2.1609],
+            ]
         )
     elif model_name == "maskformer-resnet50-coco-stuff":
         expected_logits = torch.tensor(
-            [[3.2309, -3.0481, -2.8695], [5.4986, -5.4242, -2.4211], [6.2100, -5.2279, -2.7786]]
+            [
+                [3.2309, -3.0481, -2.8695],
+                [5.4986, -5.4242, -2.4211],
+                [6.2100, -5.2279, -2.7786],
+            ]
         )
     elif model_name == "maskformer-resnet101-coco-stuff":
         expected_logits = torch.tensor(
-            [[4.7188, -3.2585, -2.8857], [6.6871, -2.9181, -1.2487], [7.2449, -2.2764, -2.1874]]
+            [
+                [4.7188, -3.2585, -2.8857],
+                [6.6871, -2.9181, -1.2487],
+                [7.2449, -2.2764, -2.1874],
+            ]
         )
     elif model_name == "maskformer-resnet101-cityscapes":
         expected_logits = torch.tensor(
-            [[-1.8861, -1.5465, 0.6749], [-2.3677, -1.6707, -0.0867], [-2.2314, -1.9530, -0.9132]]
+            [
+                [-1.8861, -1.5465, 0.6749],
+                [-2.3677, -1.6707, -0.0867],
+                [-2.2314, -1.9530, -0.9132],
+            ]
         )
     elif model_name == "maskformer-resnet50-vistas":
         expected_logits = torch.tensor(
-            [[-6.3917, -1.5216, -1.1392], [-5.5335, -4.5318, -1.8339], [-4.3576, -4.0301, 0.2162]]
+            [
+                [-6.3917, -1.5216, -1.1392],
+                [-5.5335, -4.5318, -1.8339],
+                [-4.3576, -4.0301, 0.2162],
+            ]
         )
     elif model_name == "maskformer-resnet50-ade20k-full":
         expected_logits = torch.tensor(
-            [[3.6146, -1.9367, -3.2534], [4.0099, 0.2027, -2.7576], [3.3913, -2.3644, -3.9519]]
+            [
+                [3.6146, -1.9367, -3.2534],
+                [4.0099, 0.2027, -2.7576],
+                [3.3913, -2.3644, -3.9519],
+            ]
         )
     elif model_name == "maskformer-resnet101-ade20k-full":
         expected_logits = torch.tensor(
-            [[3.2211, -1.6550, -2.7605], [2.8559, -2.4512, -2.9574], [2.6331, -2.6775, -2.1844]]
+            [
+                [3.2211, -1.6550, -2.7605],
+                [2.8559, -2.4512, -2.9574],
+                [2.6331, -2.6775, -2.1844],
+            ]
         )
 
-    assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
+    assert torch.allclose(
+        outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4
+    )
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and image processor of {model_name} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and image processor of {model_name} to {pytorch_dump_folder_path}"
+        )
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         image_processor.save_pretrained(pytorch_dump_folder_path)
@@ -378,13 +422,21 @@ if __name__ == "__main__":
         "Given the files are in the pickle format, please be wary of passing it files you trust.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
     convert_maskformer_checkpoint(
-        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )

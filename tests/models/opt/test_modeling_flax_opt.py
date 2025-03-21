@@ -17,10 +17,10 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, slow
+from transformers.testing_utils import (require_flax, require_sentencepiece,
+                                        slow)
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
-
 
 if is_flax_available():
     import os
@@ -95,8 +95,14 @@ class FlaxOPTModelTester:
         self.attn_implementation = attn_implemetation
 
     def prepare_config_and_inputs(self):
-        input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
-        input_ids = np.concatenate((input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1)
+        input_ids = np.clip(
+            ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size),
+            3,
+            self.vocab_size,
+        )
+        input_ids = np.concatenate(
+            (input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1
+        )
 
         config = OPTConfig(
             vocab_size=self.vocab_size,
@@ -145,7 +151,9 @@ class FlaxOPTModelTester:
             position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
@@ -155,10 +163,14 @@ class FlaxOPTModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, inputs_dict
+    ):
         max_length = 20
         model = model_class_name(config)
 
@@ -170,7 +182,9 @@ class FlaxOPTModelTester:
         attention_mask_cache = jnp.concatenate(
             [
                 attention_mask,
-                jnp.zeros((attention_mask.shape[0], max_length - attention_mask.shape[1])),
+                jnp.zeros(
+                    (attention_mask.shape[0], max_length - attention_mask.shape[1])
+                ),
             ],
             axis=-1,
         )
@@ -187,7 +201,9 @@ class FlaxOPTModelTester:
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
@@ -197,13 +213,17 @@ class FlaxOPTModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
 class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxOPTModelTester(self)
@@ -216,7 +236,9 @@ class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_use_cache_forward_with_attn_mask(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
+            self.model_tester.check_use_cache_forward_with_attn_mask(
+                model_class, config, inputs_dict
+            )
 
     @slow
     def test_model_from_pretrained(self):
@@ -233,12 +255,18 @@ class FlaxOPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = FlaxOPTModel.from_pretrained("facebook/opt-350m")
-        input_ids = jnp.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = jnp.array(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
         output = model(input_ids=input_ids).last_hidden_state
         expected_shape = (1, 11, 512)
         self.assertEqual(output.shape, expected_shape)
         expected_slice = jnp.array(
-            [[-0.2867, -1.9256, -0.3062], [-1.2711, -0.1337, -0.1897], [0.4109, 0.1187, -1.3142]]
+            [
+                [-0.2867, -1.9256, -0.3062],
+                [-1.2711, -0.1337, -0.1897],
+                [0.4109, 0.1187, -1.3142],
+            ]
         )
         self.assertTrue(jnp.allclose(output[:, :3, :3], expected_slice, atol=4e-2))
 
@@ -261,20 +289,66 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
-        inputs = tokenizer(prompts, return_tensors="jax", padding=True, add_special_tokens=False)
-        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
+        inputs = tokenizer(
+            prompts, return_tensors="jax", padding=True, add_special_tokens=False
+        )
+        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(
+            axis=-1
+        )
         logits_meta = jnp.array(
             [
-                [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
-                [-4.7073, -10.6276, -3.9415, -21.5242, -0.2822, -0.2822, -0.2822, -0.2822, -0.2822],
-                [0.6247, -3.4229, -8.9179, -1.4297, -14.1650, 1.4146, -9.0218, -0.2703, -0.2703],
-                [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
+                [
+                    1.3851,
+                    -13.8923,
+                    -10.5229,
+                    -10.7533,
+                    -0.2309,
+                    -10.2384,
+                    -0.5365,
+                    -9.0947,
+                    -5.1670,
+                ],
+                [
+                    -4.7073,
+                    -10.6276,
+                    -3.9415,
+                    -21.5242,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                ],
+                [
+                    0.6247,
+                    -3.4229,
+                    -8.9179,
+                    -1.4297,
+                    -14.1650,
+                    1.4146,
+                    -9.0218,
+                    -0.2703,
+                    -0.2703,
+                ],
+                [
+                    6.4783,
+                    -1.9913,
+                    -10.7926,
+                    -2.3336,
+                    1.5092,
+                    -0.9974,
+                    -6.8213,
+                    1.3477,
+                    1.3477,
+                ],
             ]
         )
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=4e-2))
 
         model = jax.jit(model)
-        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
+        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(
+            axis=-1
+        )
         self.assertTrue(jnp.allclose(logits, logits_meta, atol=4e-2))
 
 
@@ -311,7 +385,9 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             generated_ids = model.generate(input_ids, max_length=10)
             generated_ids = generated_ids[0]
 
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
@@ -336,7 +412,9 @@ class FlaxOPTGenerationTest(unittest.TestCase):
             generated_ids = model.generate(input_ids, max_length=10)
             generated_ids = generated_ids[0]
 
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
@@ -360,9 +438,13 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         jit_generate = jax.jit(model.generate)
 
-        output_sequences = jit_generate(inputs["input_ids"], attention_mask=inputs["attention_mask"]).sequences
+        output_sequences = jit_generate(
+            inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        ).sequences
 
-        output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        output_string = tokenizer.batch_decode(
+            output_sequences, skip_special_tokens=True
+        )
 
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
@@ -383,18 +465,28 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="jax", padding=True)
         input_ids = inputs["input_ids"]
 
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"], trace=False)
+        outputs = model.generate(
+            input_ids=input_ids, attention_mask=inputs["attention_mask"], trace=False
+        )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="jax").input_ids
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].sum()
         inputs_padded = tokenizer(sentences[1], return_tensors="jax").input_ids
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(
+            input_ids=inputs_padded, max_length=model.config.max_length - num_paddings
+        )
 
-        batch_out_sentence = tokenizer.batch_decode(outputs[0], skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0][0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(output_padded[0][0], skip_special_tokens=True)
+        batch_out_sentence = tokenizer.batch_decode(
+            outputs[0], skip_special_tokens=True
+        )
+        non_padded_sentence = tokenizer.decode(
+            output_non_padded[0][0], skip_special_tokens=True
+        )
+        padded_sentence = tokenizer.decode(
+            output_padded[0][0], skip_special_tokens=True
+        )
 
         expected_output_sentence = [
             "Hello, my dog is a little bit of a dork.\nI'm a little bit",

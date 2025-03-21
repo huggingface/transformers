@@ -19,7 +19,6 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -93,7 +92,10 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
     @classmethod
     def from_encoder_decoder_configs(
-        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
+        cls,
+        encoder_config: PretrainedConfig,
+        decoder_config: PretrainedConfig,
+        **kwargs,
     ) -> PretrainedConfig:
         r"""
         Instantiate a [`SpeechEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
@@ -102,11 +104,15 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
         Returns:
             [`SpeechEncoderDecoderConfig`]: An instance of a configuration object
         """
-        logger.info("Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config")
+        logger.info(
+            "Setting `config.is_decoder=True` and `config.add_cross_attention=True` for decoder_config"
+        )
         decoder_config.is_decoder = True
         decoder_config.add_cross_attention = True
 
-        return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
+        return cls(
+            encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs
+        )
 
 
 __all__ = ["SpeechEncoderDecoderConfig"]

@@ -24,8 +24,8 @@ import numpy as np
 from ...audio_utils import chroma_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_torch_available, is_torchaudio_available, logging
-
+from ...utils import (TensorType, is_torch_available, is_torchaudio_available,
+                      logging)
 
 if is_torch_available():
     import torch
@@ -105,10 +105,21 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.sampling_rate = sampling_rate
         self.chroma_filters = torch.from_numpy(
-            chroma_filter_bank(sampling_rate=sampling_rate, num_frequency_bins=n_fft, tuning=0, num_chroma=num_chroma)
+            chroma_filter_bank(
+                sampling_rate=sampling_rate,
+                num_frequency_bins=n_fft,
+                tuning=0,
+                num_chroma=num_chroma,
+            )
         ).float()
         self.spectrogram = torchaudio.transforms.Spectrogram(
-            n_fft=n_fft, win_length=n_fft, hop_length=hop_length, power=2, center=True, pad=0, normalized=True
+            n_fft=n_fft,
+            win_length=n_fft,
+            hop_length=hop_length,
+            power=2,
+            center=True,
+            pad=0,
+            normalized=True,
         )
         self.stem_indices = stem_indices
 
@@ -122,7 +133,9 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         if wav_length < self.n_fft:
             pad = self.n_fft - wav_length
             rest = 0 if pad % 2 == 0 else 1
-            waveform = torch.nn.functional.pad(waveform, (pad // 2, pad // 2 + rest), "constant", 0)
+            waveform = torch.nn.functional.pad(
+                waveform, (pad // 2, pad // 2 + rest), "constant", 0
+            )
 
         # squeeze alongside channel dimension
         spec = self.spectrogram(waveform).squeeze(1)
@@ -131,7 +144,9 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         raw_chroma = torch.einsum("cf, ...ft->...ct", self.chroma_filters, spec)
 
         # normalise with max value
-        norm_chroma = torch.nn.functional.normalize(raw_chroma, p=float("inf"), dim=-2, eps=1e-6)
+        norm_chroma = torch.nn.functional.normalize(
+            raw_chroma, p=float("inf"), dim=-2, eps=1e-6
+        )
 
         # transpose time and chroma dimension -> (batch, time, chroma)
         norm_chroma = norm_chroma.transpose(1, 2)
@@ -170,7 +185,11 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         # not equivalent to julius.resample
         if sampling_rate != self.sampling_rate:
             wav = torchaudio.functional.resample(
-                wav, sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
+                wav,
+                sampling_rate,
+                self.sampling_rate,
+                rolloff=0.945,
+                lowpass_filter_width=24,
             )
 
         # [batch_size, 1, audio_length] -> [batch_size, audio_length]
@@ -256,16 +275,26 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             audio = self._extract_stem_indices(audio, sampling_rate=sampling_rate)
         elif sampling_rate is not None and sampling_rate != self.sampling_rate:
             audio = torchaudio.functional.resample(
-                audio, sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
+                audio,
+                sampling_rate,
+                self.sampling_rate,
+                rolloff=0.945,
+                lowpass_filter_width=24,
             )
 
-        is_batched = isinstance(audio, (np.ndarray, torch.Tensor)) and len(audio.shape) > 1
+        is_batched = (
+            isinstance(audio, (np.ndarray, torch.Tensor)) and len(audio.shape) > 1
+        )
         is_batched = is_batched or (
-            isinstance(audio, (list, tuple)) and (isinstance(audio[0], (torch.Tensor, np.ndarray, tuple, list)))
+            isinstance(audio, (list, tuple))
+            and (isinstance(audio[0], (torch.Tensor, np.ndarray, tuple, list)))
         )
 
         if is_batched and not isinstance(audio[0], torch.Tensor):
-            audio = [torch.tensor(speech, dtype=torch.float32).unsqueeze(-1) for speech in audio]
+            audio = [
+                torch.tensor(speech, dtype=torch.float32).unsqueeze(-1)
+                for speech in audio
+            ]
         elif is_batched:
             audio = [speech.unsqueeze(-1) for speech in audio]
         elif not is_batched and not isinstance(audio, torch.Tensor):
@@ -300,13 +329,17 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             return_tensors="pt",
         )
 
-        input_features = self._torch_extract_fbank_features(padded_inputs["input_features"].squeeze(-1))
+        input_features = self._torch_extract_fbank_features(
+            padded_inputs["input_features"].squeeze(-1)
+        )
 
         padded_inputs["input_features"] = input_features
 
         if return_attention_mask:
             # rescale from raw audio length to spectrogram length
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][
+                :, :: self.hop_length
+            ]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

@@ -24,7 +24,6 @@ from transformers.utils.import_utils import export
 
 from .utils import is_torch_available
 
-
 if is_torch_available():
     import torch
     import torch.distributed.tensor
@@ -33,7 +32,6 @@ if is_torch_available():
     from .modeling_utils import PreTrainedModel
 
 from .utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -96,7 +94,11 @@ def _serialize_io(value):
     if isinstance(value, torch.Tensor):
         # standard PyTorch Tensor
         # return also the shape of such
-        return {"shape": repr(value.shape), "dtype": repr(value.dtype), "value": _sanitize_repr_for_diff(repr(value))}
+        return {
+            "shape": repr(value.shape),
+            "dtype": repr(value.dtype),
+            "value": _sanitize_repr_for_diff(repr(value)),
+        }
 
     # fallback for everything else (bool, int, float, None, or custom class)
     return _sanitize_repr_for_diff(repr(value))
@@ -115,7 +117,9 @@ def log_model_debug_trace(debug_path, model):
     if debug_path:
         try:
             os.makedirs(debug_path, exist_ok=False)
-            output_path = os.path.join(debug_path, model._debugger_module_dump_name + "_debug_tree.json")
+            output_path = os.path.join(
+                debug_path, model._debugger_module_dump_name + "_debug_tree.json"
+            )
         except Exception as e:
             raise ValueError(f"Unexpected or existing debug_path={debug_path}. {e}")
     else:
@@ -128,7 +132,12 @@ def log_model_debug_trace(debug_path, model):
 
 def _attach_debugger_logic(model, class_name, debug_path: str):
     # Prepare data structures on the model object
-    model._call_tree = {"module_path": class_name, "inputs": None, "outputs": None, "children": []}
+    model._call_tree = {
+        "module_path": class_name,
+        "inputs": None,
+        "outputs": None,
+        "children": [],
+    }
     model._debugger_model_call_stack = []
     model._debugger_module_dump_name = class_name  # used for final JSON filename
 
@@ -139,7 +148,9 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
         def wrapped_forward(*inps, **kws):
             if _is_rank_zero():
                 dict_inputs = {"args": inps, "kwargs": kws}
-                dict_inputs = {k: dict_inputs[k] for k in dict_inputs if len(dict_inputs[k]) > 0}
+                dict_inputs = {
+                    k: dict_inputs[k] for k in dict_inputs if len(dict_inputs[k]) > 0
+                }
                 node = {
                     "module_path": full_path,
                     "inputs": _serialize_io(dict_inputs),
@@ -196,7 +207,11 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
             model._call_tree["outputs"] = finished["outputs"]
             model._call_tree["children"] = finished["children"]
             # prune empty stuff for visibility
-            [model._call_tree.pop(k, None) for k in list(model._call_tree.keys()) if not model._call_tree[k]]
+            [
+                model._call_tree.pop(k, None)
+                for k in list(model._call_tree.keys())
+                if not model._call_tree[k]
+            ]
 
         return out
 
@@ -220,7 +235,9 @@ def _attach_debugger_logic(model, class_name, debug_path: str):
     possible_model_calls = ["language_model", "model"]
     for model_call in possible_model_calls:
         this_model_call = getattr(model, model_call, None)
-        if this_model_call and isinstance(this_model_call, (nn.Module, PreTrainedModel)):
+        if this_model_call and isinstance(
+            this_model_call, (nn.Module, PreTrainedModel)
+        ):
             this_model_call.register_forward_hook(final_hook)
             break  # exit the loop after finding one (unsure, but should be just one call.)
 

@@ -25,7 +25,6 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -150,7 +149,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             del output["mel_filters_slaney"]
         return output
 
-    def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
+    def _np_extract_fbank_features(
+        self, waveform: np.array, mel_filters: Optional[np.array] = None
+    ) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
         banks are used depending on the truncation pattern:
@@ -194,10 +195,14 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False
         )
         mel_shrink = mel_shrink[0][0].numpy()
-        mel_fusion = np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
+        mel_fusion = np.stack(
+            [mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0
+        )
         return mel_fusion
 
-    def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
+    def _get_input_mel(
+        self, waveform: np.array, max_length, truncation, padding
+    ) -> np.array:
         """
         Extracts the mel spectrogram and prepares it for the mode based on the `truncation` and `padding` arguments.
         Four different path are possible:
@@ -219,10 +224,14 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 overflow = len(waveform) - max_length
                 idx = np.random.randint(0, overflow + 1)
                 waveform = waveform[idx : idx + max_length]
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
+                input_mel = self._np_extract_fbank_features(
+                    waveform, self.mel_filters_slaney
+                )[None, :]
             elif truncation == "fusion":
                 mel = self._np_extract_fbank_features(waveform, self.mel_filters)
-                chunk_frames = max_length // self.hop_length + 1  # the +1 related to how the spectrogram is computed
+                chunk_frames = (
+                    max_length // self.hop_length + 1
+                )  # the +1 related to how the spectrogram is computed
                 total_frames = mel.shape[0]
                 if chunk_frames == total_frames:
                     # there is a corner case where the audio length is larger than max_length but smaller than max_length+hop_length.
@@ -233,7 +242,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                     input_mel = self._random_mel_fusion(mel, total_frames, chunk_frames)
                     longer = True
             else:
-                raise NotImplementedError(f"data_truncating {truncation} not implemented")
+                raise NotImplementedError(
+                    f"data_truncating {truncation} not implemented"
+                )
 
         else:
             longer = False
@@ -245,13 +256,22 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 if padding == "repeatpad":
                     n_repeat = int(max_length / len(waveform))
                     waveform = np.tile(waveform, n_repeat)
-                waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
+                waveform = np.pad(
+                    waveform,
+                    (0, max_length - waveform.shape[0]),
+                    mode="constant",
+                    constant_values=0,
+                )
 
             if truncation == "fusion":
                 input_mel = self._np_extract_fbank_features(waveform, self.mel_filters)
-                input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)
+                input_mel = np.stack(
+                    [input_mel, input_mel, input_mel, input_mel], axis=0
+                )
             else:
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
+                input_mel = self._np_extract_fbank_features(
+                    waveform, self.mel_filters_slaney
+                )[None, :]
 
         return input_mel, longer
 
@@ -312,18 +332,25 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        is_batched_numpy = (
+            isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        )
         if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+            raise ValueError(
+                f"Only mono-channel audio is supported for input to {self}"
+            )
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
             raw_speech = [np.asarray(speech, dtype=np.float64) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float64)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(
+            np.float64
+        ):
             raw_speech = raw_speech.astype(np.float64)
 
         # always return batch
@@ -332,7 +359,12 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
         # convert to mel spectrogram, truncate and pad if needed.
         padded_inputs = [
-            self._get_input_mel(waveform, max_length if max_length else self.nb_max_samples, truncation, padding)
+            self._get_input_mel(
+                waveform,
+                max_length if max_length else self.nb_max_samples,
+                truncation,
+                padding,
+            )
             for waveform in raw_speech
         ]
 

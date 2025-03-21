@@ -20,9 +20,9 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ....audio_utils import mel_filter_bank, spectrogram, window_function
-from ....feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
+from ....feature_extraction_sequence_utils import (BatchFeature,
+                                                   SequenceFeatureExtractor)
 from ....utils import TensorType, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -177,17 +177,26 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        is_batched_numpy = (
+            isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        )
         if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+            raise ValueError(
+                f"Only mono-channel audio is supported for input to {self}"
+            )
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
         if is_batched:
-            raw_speech = [np.asarray([speech], dtype=np.float32).T for speech in raw_speech]
+            raw_speech = [
+                np.asarray([speech], dtype=np.float32).T for speech in raw_speech
+            ]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(
+            np.float64
+        ):
             raw_speech = raw_speech.astype(np.float32)
         # always return batch
         if not is_batched:
@@ -195,26 +204,42 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         # Convert audio signals to log mel spectrograms, truncate by time axis
         audio_features = [
-            self._np_extract_fbank_features(waveform.squeeze()).T[: self.spectrogram_length] for waveform in raw_speech
+            self._np_extract_fbank_features(waveform.squeeze()).T[
+                : self.spectrogram_length
+            ]
+            for waveform in raw_speech
         ]
         if isinstance(audio_features[0], List):
-            audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
+            audio_features = [
+                np.asarray(feature, dtype=np.float32) for feature in audio_features
+            ]
 
         # Create audio attention mask
         max_patch_len = max(
-            [ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len for feature in audio_features]
+            [
+                ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len
+                for feature in audio_features
+            ]
         )  # The maximum number of audio patches in a batch
         if return_attention_mask:
             audio_mask = [
                 (ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [1]
-                + (max_patch_len - ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [0]
+                + (
+                    max_patch_len
+                    - ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len
+                )
+                * [0]
                 for feature in audio_features
             ]
             audio_mask = np.array(audio_mask).astype(np.float32)
 
         # convert into correct format for padding
-        max_time_len = max_patch_len // self.freq_len * self.patch_size[0]  # The maximum audio size in a batch
-        padded_audio_features = np.ones([len(audio_features), 1, max_time_len, self.feature_size]).astype(np.float32)
+        max_time_len = (
+            max_patch_len // self.freq_len * self.patch_size[0]
+        )  # The maximum audio size in a batch
+        padded_audio_features = np.ones(
+            [len(audio_features), 1, max_time_len, self.feature_size]
+        ).astype(np.float32)
         padded_audio_features = padded_audio_features * self.padding_value
         for i in range(len(audio_features)):
             feature = audio_features[i]

@@ -21,31 +21,23 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
+from transformers import (AutoModelForCausalLM, AutoTokenizer, Gemma2Config,
+                          is_torch_available, pipeline)
 from transformers.generation.configuration_utils import GenerationConfig
-from transformers.testing_utils import (
-    require_flash_attn,
-    require_read_token,
-    require_torch,
-    require_torch_gpu,
-    slow,
-    tooslow,
-    torch_device,
-)
+from transformers.testing_utils import (require_flash_attn, require_read_token,
+                                        require_torch, require_torch_gpu, slow,
+                                        tooslow, torch_device)
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...models.gemma.test_modeling_gemma import (GemmaModelTest,
+                                                 GemmaModelTester)
 from ...test_configuration_common import ConfigTester
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Gemma2ForCausalLM,
-        Gemma2ForSequenceClassification,
-        Gemma2ForTokenClassification,
-        Gemma2Model,
-    )
+    from transformers import (Gemma2ForCausalLM,
+                              Gemma2ForSequenceClassification,
+                              Gemma2ForTokenClassification, Gemma2Model)
 
 
 class Gemma2ModelTester(GemmaModelTester):
@@ -60,7 +52,12 @@ class Gemma2ModelTester(GemmaModelTester):
 @require_torch
 class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     all_model_classes = (
-        (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
+        (
+            Gemma2Model,
+            Gemma2ForCausalLM,
+            Gemma2ForSequenceClassification,
+            Gemma2ForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -82,7 +79,9 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Gemma2Config, hidden_size=37
+        )
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
@@ -98,16 +97,22 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma2 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma2 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "Gemma2 has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
@@ -131,15 +136,21 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -167,7 +178,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     @tooslow
     @require_read_token
@@ -179,11 +192,16 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+            model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
@@ -200,11 +218,16 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
+            model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.float16,
+            attn_implementation="eager",
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
@@ -223,7 +246,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flex_attention",
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -244,7 +270,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flex_attention",
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -272,7 +301,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             model_id, attn_implementation="flash_attention_2", torch_dtype="float16"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
@@ -287,16 +318,17 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
+            convert_and_export_with_cache)
 
-        tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "google/gemma-2-2b", pad_token="</s>", padding_side="right"
+        )
         EXPECTED_TEXT_COMPLETION = [
             "Hello I am doing a project for my school and I need to know how to make a program that will take a number",
         ]
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-            "input_ids"
-        ].shape[-1]
+        max_generation_length = tokenizer(
+            EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True
+        )["input_ids"].shape[-1]
 
         # Load model
         device = "cpu"
@@ -321,16 +353,22 @@ class Gemma2IntegrationTest(unittest.TestCase):
         )
 
         prompts = ["Hello I am doing"]
-        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(
+            model.device
+        )
         prompt_token_ids = prompt_tokens["input_ids"]
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
         exported_program = convert_and_export_with_cache(model)
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+            exported_program=exported_program,
+            prompt_token_ids=prompt_token_ids,
+            max_new_tokens=max_new_tokens,
         )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+        ep_generated_text = tokenizer.batch_decode(
+            ep_generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @require_read_token
@@ -343,18 +381,25 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flex_attention",
         ).to(torch_device)
         assert model.config._attn_implementation == "flex_attention"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @parameterized.expand(
+        [("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)]
+    )
     @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
@@ -368,11 +413,14 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "This is a nice place. " * 800
+            + "I really enjoy the scenery,",  # This is larger than 4096 tokens
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(
+            torch_device
+        )
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16

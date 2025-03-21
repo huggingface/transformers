@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
-
+from ..utils import (is_accelerate_available, is_fbgemm_gpu_available,
+                     is_torch_available, logging)
 
 if is_torch_available():
     import torch
@@ -34,12 +34,21 @@ class FbgemmFp8Linear(torch.nn.Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.register_buffer("weight", torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn))
-        self.register_buffer("weight_scale", torch.zeros((out_features, 1), dtype=weight_dtype))
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.register_buffer(
+            "weight",
+            torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn),
+        )
+        self.register_buffer(
+            "weight_scale", torch.zeros((out_features, 1), dtype=weight_dtype)
+        )
+        self.register_buffer(
+            "input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False
+        )
 
         if bias:
-            self.register_buffer("bias", torch.zeros((self.out_features), dtype=weight_dtype))
+            self.register_buffer(
+                "bias", torch.zeros((self.out_features), dtype=weight_dtype)
+            )
         else:
             self.bias = None
 
@@ -90,7 +99,8 @@ def _replace_with_fbgemm_fp8_linear(
             # Check if the current key is not in the `modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
             if not any(
-                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
+                (key + "." in current_key_name_str) or (key == current_key_name_str)
+                for key in modules_to_not_convert
             ):
                 with init_empty_weights(include_buffers=True):
                     in_features = module.in_features
@@ -123,7 +133,11 @@ def _replace_with_fbgemm_fp8_linear(
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    pre_quantized=False,
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -145,13 +159,19 @@ def replace_with_fbgemm_fp8_linear(
             `disk`).
     """
 
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    modules_to_not_convert = (
+        ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    )
 
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
     model, has_been_replaced = _replace_with_fbgemm_fp8_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
+        model,
+        modules_to_not_convert,
+        current_key_name,
+        quantization_config,
+        pre_quantized=pre_quantized,
     )
 
     if not has_been_replaced:

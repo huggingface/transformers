@@ -25,13 +25,16 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from transformers.models.mbart.modeling_mbart import shift_tokens_right
 from transformers.testing_utils import TestCasePlus, slow
-from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
-
+from utils import (FAIRSEQ_AVAILABLE, DistributedSortishSampler,
+                   LegacySeq2SeqDataset, Seq2SeqDataset)
 
 BERT_BASE_CASED = "google-bert/bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
-SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+SUMMARIES = [
+    "A very interesting story about what I ate for lunch.",
+    "Avocado, celery, turkey, coffee",
+]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 BART_TINY = "sshleifer/bart-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
@@ -70,7 +73,10 @@ class TestAll(TestCasePlus):
         max_tgt_len = 8
         assert max_len_target > max_src_len  # Will be truncated
         assert max_len_source > max_src_len  # Will be truncated
-        src_lang, tgt_lang = "ro_RO", "de_DE"  # ignored for all but mbart, but never causes error.
+        src_lang, tgt_lang = (
+            "ro_RO",
+            "de_DE",
+        )  # ignored for all but mbart, but never causes error.
         train_dataset = Seq2SeqDataset(
             tokenizer,
             data_dir=tmp_dir,
@@ -80,7 +86,9 @@ class TestAll(TestCasePlus):
             src_lang=src_lang,
             tgt_lang=tgt_lang,
         )
-        dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
+        dataloader = DataLoader(
+            train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn
+        )
         for batch in dataloader:
             assert isinstance(batch, dict)
             assert batch["attention_mask"].shape == batch["input_ids"].shape
@@ -91,11 +99,18 @@ class TestAll(TestCasePlus):
             if tok_name != MBART_TINY:
                 continue
             # check language codes in correct place
-            batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], tokenizer.pad_token_id)
-            assert batch["decoder_input_ids"][0, 0].item() == tokenizer.lang_code_to_id[tgt_lang]
+            batch["decoder_input_ids"] = shift_tokens_right(
+                batch["labels"], tokenizer.pad_token_id
+            )
+            assert (
+                batch["decoder_input_ids"][0, 0].item()
+                == tokenizer.lang_code_to_id[tgt_lang]
+            )
             assert batch["decoder_input_ids"][0, -1].item() == tokenizer.eos_token_id
             assert batch["input_ids"][0, -2].item() == tokenizer.eos_token_id
-            assert batch["input_ids"][0, -1].item() == tokenizer.lang_code_to_id[src_lang]
+            assert (
+                batch["input_ids"][0, -1].item() == tokenizer.lang_code_to_id[src_lang]
+            )
 
             break  # No need to test every batch
 
@@ -113,7 +128,9 @@ class TestAll(TestCasePlus):
             max_source_length=20,
             max_target_length=trunc_target,
         )
-        dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
+        dataloader = DataLoader(
+            train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn
+        )
         for batch in dataloader:
             assert batch["attention_mask"].shape == batch["input_ids"].shape
             # show that articles were trimmed.
@@ -147,17 +164,26 @@ class TestAll(TestCasePlus):
             return
         ds, max_tokens, tokenizer = self._get_dataset(max_len=64)
         required_batch_size_multiple = 64
-        batch_sampler = ds.make_dynamic_sampler(max_tokens, required_batch_size_multiple=required_batch_size_multiple)
+        batch_sampler = ds.make_dynamic_sampler(
+            max_tokens, required_batch_size_multiple=required_batch_size_multiple
+        )
         batch_sizes = [len(x) for x in batch_sampler]
-        assert len(set(batch_sizes)) > 1  # it's not dynamic batch size if every batch is the same length
+        assert (
+            len(set(batch_sizes)) > 1
+        )  # it's not dynamic batch size if every batch is the same length
         assert sum(batch_sizes) == len(ds)  # no dropped or added examples
-        data_loader = DataLoader(ds, batch_sampler=batch_sampler, collate_fn=ds.collate_fn, num_workers=2)
+        data_loader = DataLoader(
+            ds, batch_sampler=batch_sampler, collate_fn=ds.collate_fn, num_workers=2
+        )
         failures = []
         num_src_per_batch = []
         for batch in data_loader:
             src_shape = batch["input_ids"].shape
             bs = src_shape[0]
-            assert bs % required_batch_size_multiple == 0 or bs < required_batch_size_multiple
+            assert (
+                bs % required_batch_size_multiple == 0
+                or bs < required_batch_size_multiple
+            )
             num_src_tokens = np.product(batch["input_ids"].shape)
             num_src_per_batch.append(num_src_tokens)
             if num_src_tokens > (max_tokens * 1.1):
@@ -171,15 +197,25 @@ class TestAll(TestCasePlus):
         bs = 2
         sortish_sampler = ds.make_sortish_sampler(bs, shuffle=False)
 
-        naive_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2)
-        sortish_dl = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2, sampler=sortish_sampler)
+        naive_dl = DataLoader(
+            ds, batch_size=bs, collate_fn=ds.collate_fn, num_workers=2
+        )
+        sortish_dl = DataLoader(
+            ds,
+            batch_size=bs,
+            collate_fn=ds.collate_fn,
+            num_workers=2,
+            sampler=sortish_sampler,
+        )
 
         pad = tokenizer.pad_token_id
 
         def count_pad_tokens(data_loader, k="input_ids"):
             return [batch[k].eq(pad).sum().item() for batch in data_loader]
 
-        assert sum(count_pad_tokens(sortish_dl, k="labels")) < sum(count_pad_tokens(naive_dl, k="labels"))
+        assert sum(count_pad_tokens(sortish_dl, k="labels")) < sum(
+            count_pad_tokens(naive_dl, k="labels")
+        )
         assert sum(count_pad_tokens(sortish_dl)) < sum(count_pad_tokens(naive_dl))
         assert len(sortish_dl) == len(naive_dl)
 
@@ -207,8 +243,16 @@ class TestAll(TestCasePlus):
 
     def test_distributed_sortish_sampler_splits_indices_between_procs(self):
         ds, max_tokens, tokenizer = self._get_dataset()
-        ids1 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=0, add_extra_examples=False))
-        ids2 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=1, add_extra_examples=False))
+        ids1 = set(
+            DistributedSortishSampler(
+                ds, 256, num_replicas=2, rank=0, add_extra_examples=False
+            )
+        )
+        ids2 = set(
+            DistributedSortishSampler(
+                ds, 256, num_replicas=2, rank=1, add_extra_examples=False
+            )
+        )
         assert ids1.intersection(ids2) == set()
 
     @parameterized.expand(
@@ -243,5 +287,9 @@ class TestAll(TestCasePlus):
                 max_target_length=8,
             )
             kwargs = train_dataset.dataset_kwargs
-            assert "add_prefix_space" not in kwargs if tok_name != BART_TINY else "add_prefix_space" in kwargs
+            assert (
+                "add_prefix_space" not in kwargs
+                if tok_name != BART_TINY
+                else "add_prefix_space" in kwargs
+            )
             assert len(kwargs) == 1 if tok_name == BART_TINY else len(kwargs) == 0

@@ -11,17 +11,14 @@ This adds noise to the modular, but is unfortunately unavoidable.
 
 from torch import nn
 
-from transformers.models.clip.modeling_clip import (
-    CLIPMLP,
-    CLIPAttention,
-    CLIPEncoder,
-    CLIPEncoderLayer,
-    CLIPFlashAttention2,
-    CLIPPreTrainedModel,
-    CLIPSdpaAttention,
-    CLIPVisionModel,
-    CLIPVisionTransformer,
-)
+from transformers.models.clip.modeling_clip import (CLIPMLP, CLIPAttention,
+                                                    CLIPEncoder,
+                                                    CLIPEncoderLayer,
+                                                    CLIPFlashAttention2,
+                                                    CLIPPreTrainedModel,
+                                                    CLIPSdpaAttention,
+                                                    CLIPVisionModel,
+                                                    CLIPVisionTransformer)
 from transformers.utils import add_start_docstrings
 
 
@@ -53,14 +50,21 @@ class Multimodal2VisionMLP(CLIPMLP):
 class Multimodal2VisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config):
         super().__init__()
-        self.self_attn = MULTIMODAL2_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = MULTIMODAL2_VISION_ATTENTION_CLASSES[
+            config._attn_implementation
+        ](config)
         self.mlp = Multimodal2VisionMLP(config)
 
 
 class Multimodal2VisionEncoder(CLIPEncoder):
     def __init__(self, config):
         super().__init__(config)
-        self.layers = nn.ModuleList([Multimodal2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                Multimodal2VisionEncoderLayer(config)
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
 
 
 # Finally here the `Vision` part was correct in CLIP, but we still need to tell it that the encoder arg should use it as well

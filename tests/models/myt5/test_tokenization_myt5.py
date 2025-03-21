@@ -20,7 +20,6 @@ from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
-
 if is_torch_available():
     FRAMEWORK = "pt"
 elif is_tf_available():
@@ -63,7 +62,10 @@ class TestByteRewriter(unittest.TestCase):
         out_hex = str_to_hex(out_str).split(" ")
 
         self.assertEqual(
-            decompose_rewriter.rewrite_bytes(decompose_rewriter.rewrite_bytes(in_hex), reverse=True), out_hex
+            decompose_rewriter.rewrite_bytes(
+                decompose_rewriter.rewrite_bytes(in_hex), reverse=True
+            ),
+            out_hex,
         )
 
     def test_simple_decompose_non_latin(self):
@@ -96,14 +98,28 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs) -> MyT5Tokenizer:
         return self.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
 
-    @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")
+    @unittest.skip(
+        reason="inputs cannot be pretokenized as ids depend on whole input string"
+    )
     def test_pretokenized_inputs(self):
         pass
 
     def test_convert_tokens_to_string_format(self):
         tokenizer = self.get_tokenizer()
         with self.subTest(f"{tokenizer.__class__.__name__}"):
-            tokens = ["52", "85", "91", "9f", "6f", "20", "52", "85", "9f", "90", "</s>"]
+            tokens = [
+                "52",
+                "85",
+                "91",
+                "9f",
+                "6f",
+                "20",
+                "52",
+                "85",
+                "9f",
+                "90",
+                "</s>",
+            ]
             string = tokenizer.convert_tokens_to_string(tokens)
 
             self.assertIsInstance(string, str)
@@ -117,7 +133,21 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer.tokenize(in_str), out_tokens)
 
         in_pl_str = "Witaj świecie"
-        out_tokens = ["77", "41", "69", "74", "61", "6a", "20", "4b", "a5", "97", "63", "69", "65"]
+        out_tokens = [
+            "77",
+            "41",
+            "69",
+            "74",
+            "61",
+            "6a",
+            "20",
+            "4b",
+            "a5",
+            "97",
+            "63",
+            "69",
+            "65",
+        ]
 
         self.assertEqual(tokenizer.tokenize(in_pl_str), out_tokens)
 
@@ -133,12 +163,31 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         out_tokens = [
             ["52", "85", "91", "9f", "6f", "20", "52", "85", "9f", "90", "</s>"],
-            ["77", "41", "69", "74", "61", "6a", "20", "4b", "a5", "97", "63", "69", "65", "</s>"],
+            [
+                "77",
+                "41",
+                "69",
+                "74",
+                "61",
+                "6a",
+                "20",
+                "4b",
+                "a5",
+                "97",
+                "63",
+                "69",
+                "65",
+                "</s>",
+            ],
             ["58", "80", "91", "a1", "e4", "b8", "96", "e7", "95", "8c", "</s>"],
         ]
 
         self.assertListEqual(
-            [tokenizer.convert_ids_to_tokens(ids) for ids in tokenizer(in_batch)["input_ids"]], out_tokens
+            [
+                tokenizer.convert_ids_to_tokens(ids)
+                for ids in tokenizer(in_batch)["input_ids"]
+            ],
+            out_tokens,
         )
 
     def test_special_bytes(self):
@@ -150,7 +199,21 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer.tokenize(in_str_special), out_tokens)
 
         in_str_mixed = "\x00Hello\x01 World\x02"
-        out_tokens = ["00", "52", "85", "91", "9f", "6f", "01", "20", "52", "85", "9f", "90", "02"]
+        out_tokens = [
+            "00",
+            "52",
+            "85",
+            "91",
+            "9f",
+            "6f",
+            "01",
+            "20",
+            "52",
+            "85",
+            "9f",
+            "90",
+            "02",
+        ]
 
         self.assertEqual(tokenizer.tokenize(in_str_mixed), out_tokens)
 
@@ -168,7 +231,22 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer.tokenize(in_str_not_special), out_tokens)
 
         in_str_mixed = "<s>Hello World</s>"
-        out_tokens = ["3c", "73", "3e", "52", "85", "91", "9f", "6f", "20", "52", "85", "9f", "90", "</s>"]
+        out_tokens = [
+            "3c",
+            "73",
+            "3e",
+            "52",
+            "85",
+            "91",
+            "9f",
+            "6f",
+            "20",
+            "52",
+            "85",
+            "9f",
+            "90",
+            "</s>",
+        ]
 
         self.assertEqual(tokenizer.tokenize(in_str_mixed), out_tokens)
 
@@ -178,11 +256,19 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens_range = [f"{x:02x}" for x in range(256)]
         indices_range = list(range(3, 256 + 3))
 
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens_range), indices_range)
-        self.assertListEqual(tokenizer.convert_ids_to_tokens(indices_range), tokens_range)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens_range), indices_range
+        )
+        self.assertListEqual(
+            tokenizer.convert_ids_to_tokens(indices_range), tokens_range
+        )
 
         special_tokens = ["<pad>", "</s>", "<unk>"]
         special_indices = [0, 1, 2]
 
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(special_tokens), special_indices)
-        self.assertListEqual(tokenizer.convert_ids_to_tokens(special_indices), special_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(special_tokens), special_indices
+        )
+        self.assertListEqual(
+            tokenizer.convert_ids_to_tokens(special_indices), special_tokens
+        )

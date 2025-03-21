@@ -17,7 +17,6 @@ from typing import List, Optional, Tuple
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 
-
 if is_torch_available():
     import torch
     import torch.nn as nn
@@ -45,7 +44,9 @@ def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
     tl.store(s_ptr + pid, s)
 
 
-def act_quant(x: torch.Tensor, block_size: int = 128) -> Tuple[torch.Tensor, torch.Tensor]:
+def act_quant(
+    x: torch.Tensor, block_size: int = 128
+) -> Tuple[torch.Tensor, torch.Tensor]:
     assert x.is_contiguous()
     assert x.shape[-1] % block_size == 0
     y = torch.empty_like(x, dtype=torch.float8_e4m3fn)
@@ -192,7 +193,9 @@ def w8a8_block_fp8_matmul_triton(
     BLOCK_SIZE_N = block_n
 
     def grid(META):
-        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+        return (
+            triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
+        )
 
     _w8a8_block_fp8_matmul[grid](
         A,
@@ -231,7 +234,9 @@ def w8a8_block_fp8_matmul_compile(
     weight_q: torch.Tensor,  # [out_features, hidden_dim]
     input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
     weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: Optional[Tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    block_size: Optional[
+        Tuple[int, int]
+    ] = None,  # (M=128, N=128) for weights for example
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
@@ -245,17 +250,23 @@ def w8a8_block_fp8_matmul_compile(
         block_size: Tuple of (M, N) for weight block dimensions
         output_dtype: Desired output dtype
     """
-    batch_size, seq_len, hidden_dim = input_q.shape if input_q.ndim == 3 else (1, input_q.shape[0], input_q.shape[1])
+    batch_size, seq_len, hidden_dim = (
+        input_q.shape if input_q.ndim == 3 else (1, input_q.shape[0], input_q.shape[1])
+    )
     out_features = weight_q.shape[0]
 
     # Reshape input for batched matmul
     input_reshaped = input_q.view(-1, hidden_dim)  # [batch*seq_len, hidden_dim]
-    input_scale_reshaped = input_scale.view(input_scale.shape[0], -1)  # [batch*seq_len, 1]
+    input_scale_reshaped = input_scale.view(
+        input_scale.shape[0], -1
+    )  # [batch*seq_len, 1]
     # Calculate number of blocks
     num_weight_blocks_m = out_features // block_size[0]
     num_weight_blocks_n = hidden_dim // block_size[1]
 
-    output = torch.zeros((batch_size * seq_len, out_features), dtype=torch.float32, device=input_q.device)
+    output = torch.zeros(
+        (batch_size * seq_len, out_features), dtype=torch.float32, device=input_q.device
+    )
 
     for i in range(num_weight_blocks_m):
         m_start = i * block_size[0]
@@ -308,12 +319,23 @@ class FP8Linear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.register_buffer("weight", torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
+        self.register_buffer(
+            "weight",
+            torch.empty(
+                out_features, in_features, dtype=FP8Linear.dtype, device=device
+            ),
+        )
 
         scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
         scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
         self.register_buffer(
-            "weight_scale_inv", torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+            "weight_scale_inv",
+            torch.empty(
+                scale_out_features,
+                scale_in_features,
+                dtype=torch.float32,
+                device=device,
+            ),
         )
 
         self.block_size = block_size
@@ -366,7 +388,9 @@ def _replace_with_fp8_linear(
 
         if isinstance(module, nn.Linear) and name not in (modules_to_not_convert or []):
             current_key_name_str = ".".join(current_key_name)
-            if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
+            if not any(
+                key in current_key_name_str for key in (modules_to_not_convert or [])
+            ):
                 with init_empty_weights():
                     model._modules[name] = FP8Linear(
                         in_features=module.in_features,
@@ -399,7 +423,9 @@ def replace_with_fp8_linear(
     quantization_config=None,
 ):
     """Helper function to replace model layers with FP8 versions."""
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    modules_to_not_convert = (
+        ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    )
 
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)

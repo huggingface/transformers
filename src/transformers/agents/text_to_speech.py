@@ -17,10 +17,10 @@
 
 import torch
 
-from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
+from ..models.speecht5 import (SpeechT5ForTextToSpeech, SpeechT5HifiGan,
+                               SpeechT5Processor)
 from ..utils import is_datasets_available
 from .tools import PipelineTool
-
 
 if is_datasets_available():
     from datasets import load_dataset
@@ -28,15 +28,18 @@ if is_datasets_available():
 
 class TextToSpeechTool(PipelineTool):
     default_checkpoint = "microsoft/speecht5_tts"
-    description = (
-        "This is a tool that reads an English text out loud. It returns a waveform object containing the sound."
-    )
+    description = "This is a tool that reads an English text out loud. It returns a waveform object containing the sound."
     name = "text_to_speech"
     pre_processor_class = SpeechT5Processor
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
 
-    inputs = {"text": {"type": "string", "description": "The text to read out loud (in English)"}}
+    inputs = {
+        "text": {
+            "type": "string",
+            "description": "The text to read out loud (in English)",
+        }
+    }
     output_type = "audio"
 
     def setup(self):
@@ -49,14 +52,23 @@ class TextToSpeechTool(PipelineTool):
 
         if speaker_embeddings is None:
             if not is_datasets_available():
-                raise ImportError("Datasets needs to be installed if not passing speaker embeddings.")
+                raise ImportError(
+                    "Datasets needs to be installed if not passing speaker embeddings."
+                )
 
             embeddings_dataset = load_dataset(
-                "Matthijs/cmu-arctic-xvectors", split="validation", trust_remote_code=True
+                "Matthijs/cmu-arctic-xvectors",
+                split="validation",
+                trust_remote_code=True,
             )
-            speaker_embeddings = torch.tensor(embeddings_dataset[7305]["xvector"]).unsqueeze(0)
+            speaker_embeddings = torch.tensor(
+                embeddings_dataset[7305]["xvector"]
+            ).unsqueeze(0)
 
-        return {"input_ids": inputs["input_ids"], "speaker_embeddings": speaker_embeddings}
+        return {
+            "input_ids": inputs["input_ids"],
+            "speaker_embeddings": speaker_embeddings,
+        }
 
     def forward(self, inputs):
         with torch.no_grad():

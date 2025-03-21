@@ -26,25 +26,19 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import (BaseModelOutput, ModelOutput,
+                                 MultipleChoiceModelOutput,
+                                 QuestionAnsweringModelOutput,
+                                 SequenceClassifierOutput,
+                                 TokenClassifierOutput)
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...pytorch_utils import (apply_chunking_to_forward,
+                              find_pruneable_heads_and_indices,
+                              prune_linear_layer)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_canine import CanineConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -181,7 +175,9 @@ def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
             array = np.transpose(array)
 
         if pointer.shape != array.shape:
-            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+            raise ValueError(
+                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            )
 
         logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
@@ -200,9 +196,15 @@ class CanineEmbeddings(nn.Module):
         shard_embedding_size = config.hidden_size // config.num_hash_functions
         for i in range(config.num_hash_functions):
             name = f"HashBucketCodepointEmbedder_{i}"
-            setattr(self, name, nn.Embedding(config.num_hash_buckets, shard_embedding_size))
-        self.char_position_embeddings = nn.Embedding(config.num_hash_buckets, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+            setattr(
+                self, name, nn.Embedding(config.num_hash_buckets, shard_embedding_size)
+            )
+        self.char_position_embeddings = nn.Embedding(
+            config.num_hash_buckets, config.hidden_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -211,9 +213,13 @@ class CanineEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)),
+            persistent=False,
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
 
     def _hash_bucket_tensors(self, input_ids, num_hashes: int, num_buckets: int):
         """
@@ -238,12 +244,18 @@ class CanineEmbeddings(nn.Module):
             result_tensors.append(hashed)
         return result_tensors
 
-    def _embed_hash_buckets(self, input_ids, embedding_size: int, num_hashes: int, num_buckets: int):
+    def _embed_hash_buckets(
+        self, input_ids, embedding_size: int, num_hashes: int, num_buckets: int
+    ):
         """Converts IDs (e.g. codepoints) into embeddings via multiple hashing."""
         if embedding_size % num_hashes != 0:
-            raise ValueError(f"Expected `embedding_size` ({embedding_size}) % `num_hashes` ({num_hashes}) == 0")
+            raise ValueError(
+                f"Expected `embedding_size` ({embedding_size}) % `num_hashes` ({num_hashes}) == 0"
+            )
 
-        hash_bucket_tensors = self._hash_bucket_tensors(input_ids, num_hashes=num_hashes, num_buckets=num_buckets)
+        hash_bucket_tensors = self._hash_bucket_tensors(
+            input_ids, num_hashes=num_hashes, num_buckets=num_buckets
+        )
         embedding_shards = []
         for i, hash_bucket_ids in enumerate(hash_bucket_tensors):
             name = f"HashBucketCodepointEmbedder_{i}"
@@ -270,11 +282,16 @@ class CanineEmbeddings(nn.Module):
             position_ids = self.position_ids[:, :seq_length]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(
+                input_shape, dtype=torch.long, device=self.position_ids.device
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self._embed_hash_buckets(
-                input_ids, self.config.hidden_size, self.config.num_hash_functions, self.config.num_hash_buckets
+                input_ids,
+                self.config.hidden_size,
+                self.config.num_hash_functions,
+                self.config.num_hash_buckets,
             )
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -396,7 +413,9 @@ class ConvProjection(nn.Module):
 class CanineSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -411,13 +430,23 @@ class CanineSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = nn.Embedding(
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -443,21 +472,42 @@ class CanineSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             seq_length = from_tensor.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(1, -1)
+            position_ids_l = torch.arange(
+                seq_length, dtype=torch.long, device=from_tensor.device
+            ).view(-1, 1)
+            position_ids_r = torch.arange(
+                seq_length, dtype=torch.long, device=from_tensor.device
+            ).view(1, -1)
             distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            positional_embedding = self.distance_embedding(
+                distance + self.max_position_embeddings - 1
+            )
+            positional_embedding = positional_embedding.to(
+                dtype=query_layer.dtype
+            )  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+                relative_position_scores_query = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
+                relative_position_scores_key = torch.einsum(
+                    "bhrd,lrd->bhlr", key_layer, positional_embedding
+                )
+                attention_scores = (
+                    attention_scores
+                    + relative_position_scores_query
+                    + relative_position_scores_key
+                )
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
@@ -467,7 +517,9 @@ class CanineSelfAttention(nn.Module):
                 # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
                 # masked positions, this operation will create a tensor which is 0.0 for
                 # positions we want to attend and the dtype's smallest value for masked positions.
-                attention_mask = (1.0 - attention_mask.float()) * torch.finfo(attention_scores.dtype).min
+                attention_mask = (1.0 - attention_mask.float()) * torch.finfo(
+                    attention_scores.dtype
+                ).min
             # Apply the attention mask (precomputed for all layers in CanineModel forward() function)
             attention_scores = attention_scores + attention_mask
 
@@ -488,7 +540,9 @@ class CanineSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -563,7 +617,10 @@ class CanineAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -574,7 +631,9 @@ class CanineAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -585,7 +644,13 @@ class CanineAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         if not self.local:
-            self_outputs = self.self(hidden_states, hidden_states, attention_mask, head_mask, output_attentions)
+            self_outputs = self.self(
+                hidden_states,
+                hidden_states,
+                attention_mask,
+                head_mask,
+                output_attentions,
+            )
             attention_output = self_outputs[0]
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
@@ -600,8 +665,12 @@ class CanineAttention(nn.Module):
                 from_start = 1
             else:
                 from_start = 0
-            for chunk_start in range(from_start, from_seq_length, self.attend_from_chunk_stride):
-                chunk_end = min(from_seq_length, chunk_start + self.attend_from_chunk_width)
+            for chunk_start in range(
+                from_start, from_seq_length, self.attend_from_chunk_stride
+            ):
+                chunk_end = min(
+                    from_seq_length, chunk_start + self.attend_from_chunk_width
+                )
                 from_chunks.append((chunk_start, chunk_end))
 
             # Determine the chunks (windows) that will attend *to*.
@@ -621,21 +690,31 @@ class CanineAttention(nn.Module):
             # next, compute attention scores for each pair of windows and concatenate
             attention_output_chunks = []
             attention_probs_chunks = []
-            for (from_start, from_end), (to_start, to_end) in zip(from_chunks, to_chunks):
+            for (from_start, from_end), (to_start, to_end) in zip(
+                from_chunks, to_chunks
+            ):
                 from_tensor_chunk = from_tensor[:, from_start:from_end, :]
                 to_tensor_chunk = to_tensor[:, to_start:to_end, :]
                 # `attention_mask`: <float>[batch_size, from_seq, to_seq]
                 # `attention_mask_chunk`: <float>[batch_size, from_seq_chunk, to_seq_chunk]
-                attention_mask_chunk = attention_mask[:, from_start:from_end, to_start:to_end]
+                attention_mask_chunk = attention_mask[
+                    :, from_start:from_end, to_start:to_end
+                ]
                 if self.always_attend_to_first_position:
                     cls_attention_mask = attention_mask[:, from_start:from_end, 0:1]
-                    attention_mask_chunk = torch.cat([cls_attention_mask, attention_mask_chunk], dim=2)
+                    attention_mask_chunk = torch.cat(
+                        [cls_attention_mask, attention_mask_chunk], dim=2
+                    )
 
                     cls_position = to_tensor[:, 0:1, :]
                     to_tensor_chunk = torch.cat([cls_position, to_tensor_chunk], dim=1)
 
                 attention_outputs_chunk = self.self(
-                    from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, head_mask, output_attentions
+                    from_tensor_chunk,
+                    to_tensor_chunk,
+                    attention_mask_chunk,
+                    head_mask,
+                    output_attentions,
                 )
                 attention_output_chunks.append(attention_outputs_chunk[0])
                 if output_attentions:
@@ -648,7 +727,9 @@ class CanineAttention(nn.Module):
         if not self.local:
             outputs = outputs + self_outputs[1:]  # add attentions if we output them
         else:
-            outputs = outputs + tuple(attention_probs_chunks)  # add attentions if we output them
+            outputs = outputs + tuple(
+                attention_probs_chunks
+            )  # add attentions if we output them
         return outputs
 
 
@@ -674,7 +755,9 @@ class CanineOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(
+        self, hidden_states: Tuple[torch.FloatTensor], input_tensor: torch.FloatTensor
+    ) -> torch.FloatTensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -724,10 +807,15 @@ class CanineLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -797,7 +885,9 @@ class CanineEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, layer_head_mask, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -807,7 +897,11 @@ class CanineEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1032,45 +1126,59 @@ class CanineModel(CaninePreTrainedModel):
         # We don't assume that `from_tensor` is a mask (although it could be). We
         # don't actually care if we attend *from* padding tokens (only *to* padding)
         # tokens so we create a tensor of all ones.
-        broadcast_ones = torch.ones(size=(batch_size, from_seq_length, 1), dtype=torch.float32, device=to_mask.device)
+        broadcast_ones = torch.ones(
+            size=(batch_size, from_seq_length, 1),
+            dtype=torch.float32,
+            device=to_mask.device,
+        )
 
         # Here we broadcast along two dimensions to create the mask.
         mask = broadcast_ones * to_mask
 
         return mask
 
-    def _downsample_attention_mask(self, char_attention_mask: torch.Tensor, downsampling_rate: int):
+    def _downsample_attention_mask(
+        self, char_attention_mask: torch.Tensor, downsampling_rate: int
+    ):
         """Downsample 2D character attention mask to 2D molecule attention mask using MaxPool1d layer."""
 
         # first, make char_attention_mask 3D by adding a channel dim
         batch_size, char_seq_len = char_attention_mask.shape
-        poolable_char_mask = torch.reshape(char_attention_mask, (batch_size, 1, char_seq_len))
+        poolable_char_mask = torch.reshape(
+            char_attention_mask, (batch_size, 1, char_seq_len)
+        )
 
         # next, apply MaxPool1d to get pooled_molecule_mask of shape (batch_size, 1, mol_seq_len)
-        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(
-            poolable_char_mask.float()
-        )
+        pooled_molecule_mask = torch.nn.MaxPool1d(
+            kernel_size=downsampling_rate, stride=downsampling_rate
+        )(poolable_char_mask.float())
 
         # finally, squeeze to get tensor of shape (batch_size, mol_seq_len)
         molecule_attention_mask = torch.squeeze(pooled_molecule_mask, dim=-1)
 
         return molecule_attention_mask
 
-    def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: torch.Tensor) -> torch.Tensor:
+    def _repeat_molecules(
+        self, molecules: torch.Tensor, char_seq_length: torch.Tensor
+    ) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
 
         rate = self.config.downsampling_rate
 
         molecules_without_extra_cls = molecules[:, 1:, :]
         # `repeated`: [batch_size, almost_char_seq_len, molecule_hidden_size]
-        repeated = torch.repeat_interleave(molecules_without_extra_cls, repeats=rate, dim=-2)
+        repeated = torch.repeat_interleave(
+            molecules_without_extra_cls, repeats=rate, dim=-2
+        )
 
         # So far, we've repeated the elements sufficient for any `char_seq_length`
         # that's a multiple of `downsampling_rate`. Now we account for the last
         # n elements (n < `downsampling_rate`), i.e. the remainder of floor
         # division. We do this by repeating the last molecule a few extra times.
         last_molecule = molecules[:, -1:, :]
-        remainder_length = torch.fmod(torch.tensor(char_seq_length), torch.tensor(rate)).item()
+        remainder_length = torch.fmod(
+            torch.tensor(char_seq_length), torch.tensor(rate)
+        ).item()
         remainder_repeated = torch.repeat_interleave(
             last_molecule,
             # +1 molecule to compensate for truncation.
@@ -1081,7 +1189,9 @@ class CanineModel(CaninePreTrainedModel):
         # `repeated`: [batch_size, char_seq_len, molecule_hidden_size]
         return torch.cat([repeated, remainder_repeated], dim=-2)
 
-    @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CanineModelOutputWithPooling,
@@ -1099,16 +1209,26 @@ class CanineModel(CaninePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CanineModelOutputWithPooling]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -1127,12 +1247,16 @@ class CanineModel(CaninePreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape
+        )
         molecule_attention_mask = self._downsample_attention_mask(
             attention_mask, downsampling_rate=self.config.downsampling_rate
         )
-        extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1])
+        extended_molecule_attention_mask: torch.Tensor = (
+            self.get_extended_attention_mask(
+                molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1])
+            )
         )
 
         # Prepare head mask if needed
@@ -1191,11 +1315,15 @@ class CanineModel(CaninePreTrainedModel):
             return_dict=return_dict,
         )
         molecule_sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(molecule_sequence_output) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(molecule_sequence_output) if self.pooler is not None else None
+        )
 
         # Upsample molecules back to characters.
         # `repeated_molecules`: shape (batch_size, char_seq_len, mol_hidden_size)
-        repeated_molecules = self._repeat_molecules(molecule_sequence_output, char_seq_length=input_shape[-1])
+        repeated_molecules = self._repeat_molecules(
+            molecule_sequence_output, char_seq_length=input_shape[-1]
+        )
 
         # Concatenate representations (contextualized char embeddings and repeated molecules):
         # `concat`: shape [batch_size, char_seq_len, molecule_hidden_size+char_hidden_final]
@@ -1216,7 +1344,9 @@ class CanineModel(CaninePreTrainedModel):
         sequence_output = final_chars_encoder_outputs.last_hidden_state
 
         if output_hidden_states:
-            deep_encoder_hidden_states = encoder_outputs.hidden_states if return_dict else encoder_outputs[1]
+            deep_encoder_hidden_states = (
+                encoder_outputs.hidden_states if return_dict else encoder_outputs[1]
+            )
             all_hidden_states = (
                 all_hidden_states
                 + init_chars_encoder_outputs.hidden_states
@@ -1225,7 +1355,9 @@ class CanineModel(CaninePreTrainedModel):
             )
 
         if output_attentions:
-            deep_encoder_self_attentions = encoder_outputs.attentions if return_dict else encoder_outputs[-1]
+            deep_encoder_self_attentions = (
+                encoder_outputs.attentions if return_dict else encoder_outputs[-1]
+            )
             all_self_attentions = (
                 all_self_attentions
                 + init_chars_encoder_outputs.attentions
@@ -1235,7 +1367,9 @@ class CanineModel(CaninePreTrainedModel):
 
         if not return_dict:
             output = (sequence_output, pooled_output)
-            output += tuple(v for v in [all_hidden_states, all_self_attentions] if v is not None)
+            output += tuple(
+                v for v in [all_hidden_states, all_self_attentions] if v is not None
+            )
             return output
 
         return CanineModelOutputWithPooling(
@@ -1265,7 +1399,9 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -1290,7 +1426,9 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.canine(
             input_ids,
@@ -1314,7 +1452,9 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1361,7 +1501,9 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CANINE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
@@ -1386,13 +1528,31 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.view(-1, position_ids.size(-1))
+            if position_ids is not None
+            else None
+        )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
@@ -1453,8 +1613,12 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1504,7 +1668,9 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)  # doctest: +SKIP
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.canine(
             input_ids,
@@ -1558,7 +1724,9 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="Splend1dchan/canine-c-squad",
         output_type=QuestionAnsweringModelOutput,
@@ -1590,7 +1758,9 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.canine(
             input_ids,

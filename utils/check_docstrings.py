@@ -47,7 +47,6 @@ from git import Repo
 
 from transformers.utils import direct_transformers_import
 
-
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
 
@@ -670,7 +669,9 @@ def eval_node(node):
     if isinstance(node, ast.Num):  # <number>
         return node.n
     elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
-        return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
+        return MATH_OPERATORS[type(node.op)](
+            eval_node(node.left), eval_node(node.right)
+        )
     elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
         return MATH_OPERATORS[type(node.op)](eval_node(node.operand))
     else:
@@ -712,9 +713,14 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
         str_default = None
         # For numbers we may have a default that is given by a math operation (1/255 is really popular). We don't
         # want to replace those by their actual values.
-        if isinstance(default, (int, float)) and re.search("defaults to `?(.*?)(?:`|$)", description) is not None:
+        if (
+            isinstance(default, (int, float))
+            and re.search("defaults to `?(.*?)(?:`|$)", description) is not None
+        ):
             # Grab the default and evaluate it.
-            current_default = re.search("defaults to `?(.*?)(?:`|$)", description).groups()[0]
+            current_default = re.search(
+                "defaults to `?(.*?)(?:`|$)", description
+            ).groups()[0]
             if default == eval_math_expression(current_default):
                 try:
                     # If it can be directly converted to the type of the default, it's a simple value
@@ -722,7 +728,10 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
                 except Exception:
                     # Otherwise there is a math operator so we add a code block.
                     str_default = f"`{current_default}`"
-            elif isinstance(default, enum.Enum) and default.name == current_default.split(".")[-1]:
+            elif (
+                isinstance(default, enum.Enum)
+                and default.name == current_default.split(".")[-1]
+            ):
                 # When the default is an Enum (this is often the case for PIL.Image.Resampling), and the docstring
                 # matches the enum name, keep the existing docstring rather than clobbering it with the enum value.
                 str_default = f"`{current_default}`"
@@ -731,13 +740,19 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
             str_default = stringify_default(default)
         # Make sure default match
         if OPTIONAL_KEYWORD not in description:
-            description = f"{description}, {OPTIONAL_KEYWORD}, defaults to {str_default}"
+            description = (
+                f"{description}, {OPTIONAL_KEYWORD}, defaults to {str_default}"
+            )
         elif _re_parse_description.search(description) is None:
             idx = description.find(OPTIONAL_KEYWORD)
             len_optional = len(OPTIONAL_KEYWORD)
-            description = f"{description[:idx + len_optional]}, defaults to {str_default}"
+            description = (
+                f"{description[:idx + len_optional]}, defaults to {str_default}"
+            )
         else:
-            description = _re_parse_description.sub(rf"*optional*, defaults to {str_default}", description)
+            description = _re_parse_description.sub(
+                rf"*optional*, defaults to {str_default}", description
+            )
 
     return description
 
@@ -856,10 +871,14 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
                     default = signature[name].default
                     if signature[name].kind is inspect._ParameterKind.VAR_KEYWORD:
                         default = None
-                    new_description = replace_default_in_arg_description(description, default)
+                    new_description = replace_default_in_arg_description(
+                        description, default
+                    )
                 else:
                     new_description = description
-                init_doc = _re_parse_arg.sub(rf"\1\2 ({new_description}):", obj_doc_lines[idx])
+                init_doc = _re_parse_arg.sub(
+                    rf"\1\2 ({new_description}):", obj_doc_lines[idx]
+                )
                 arguments[current_arg] = [init_doc]
         elif current_arg is not None:
             arguments[current_arg].append(obj_doc_lines[idx])
@@ -890,15 +909,23 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
             arguments[name] = ""
         else:
             arg_desc = get_default_description(arg)
-            arguments[name] = " " * (indent + 4) + f"{name} ({arg_desc}): <fill_docstring>"
+            arguments[name] = (
+                " " * (indent + 4) + f"{name} ({arg_desc}): <fill_docstring>"
+            )
 
     # Arguments are sorted by the order in the signature unless a special comment is put.
     if ignore_order:
-        new_param_docs = [arguments[name] for name in old_arguments if name in signature]
+        new_param_docs = [
+            arguments[name] for name in old_arguments if name in signature
+        ]
         missing = set(signature.keys()) - set(old_arguments)
-        new_param_docs.extend([arguments[name] for name in missing if len(arguments[name]) > 0])
+        new_param_docs.extend(
+            [arguments[name] for name in missing if len(arguments[name]) > 0]
+        )
     else:
-        new_param_docs = [arguments[name] for name in signature.keys() if len(arguments[name]) > 0]
+        new_param_docs = [
+            arguments[name] for name in signature.keys() if len(arguments[name]) > 0
+        ]
     new_doc_arg = "\n".join(new_param_docs)
 
     return old_doc_arg, new_doc_arg
@@ -934,7 +961,9 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
     indent = find_indent(source[idx])
     idx += 1
     start_idx = idx
-    while idx < len(source) and (len(source[idx].strip()) == 0 or find_indent(source[idx]) > indent):
+    while idx < len(source) and (
+        len(source[idx].strip()) == 0 or find_indent(source[idx]) > indent
+    ):
         idx += 1
 
     idx -= 1
@@ -952,7 +981,11 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     # Replace content
     lines = content.split("\n")
-    lines = lines[: line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1 :]
+    lines = (
+        lines[: line_number + start_idx - 1]
+        + [new_doc_args]
+        + lines[line_number + idx - 1 :]
+    )
 
     print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
     with open(obj_file, "w", encoding="utf-8") as f:
@@ -984,18 +1017,30 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
-        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
+        print(
+            "    Checking docstrings in the following files:"
+            + "\n    - "
+            + "\n    - ".join(module_diff_files)
+        )
 
     failures = []
     hard_failures = []
     to_clean = []
     for name in dir(transformers):
         # Skip objects that are private or not documented.
-        if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
+        if (
+            name.startswith("_")
+            or ignore_undocumented(name)
+            or name in OBJECTS_TO_IGNORE
+        ):
             continue
 
         obj = getattr(transformers, name)
-        if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
+        if (
+            not callable(obj)
+            or not isinstance(obj, type)
+            or getattr(obj, "__doc__", None) is None
+        ):
             continue
 
         # If we are checking against the diff, we skip objects that are not part of the diff.
@@ -1021,7 +1066,11 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
                 fix_docstring(obj, old_doc, new_doc)
             else:
                 failures.append(name)
-        elif not overwrite and new_doc is not None and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
+        elif (
+            not overwrite
+            and new_doc is not None
+            and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc)
+        ):
             to_clean.append(name)
 
     # Deal with errors
@@ -1048,15 +1097,24 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in to_clean])
 
     if len(error_message) > 0:
-        error_message = "There was at least one problem when checking docstrings of public objects.\n" + error_message
+        error_message = (
+            "There was at least one problem when checking docstrings of public objects.\n"
+            + error_message
+        )
         raise ValueError(error_message)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     parser.add_argument(
-        "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Whether to fix inconsistencies.",
+    )
+    parser.add_argument(
+        "--check_all",
+        action="store_true",
+        help="Whether to check all files. By default, only checks the diff",
     )
     args = parser.parse_args()
 

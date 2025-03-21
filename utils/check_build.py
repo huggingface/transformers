@@ -16,7 +16,6 @@ import argparse
 import importlib
 from pathlib import Path
 
-
 # Test all the extensions added in the setup
 FILES_TO_FIND = [
     "kernels/rwkv/wkv_cuda.cu",
@@ -38,7 +37,11 @@ def test_custom_files_are_present(transformers_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check_lib", action="store_true", help="Whether to check the build or the actual package.")
+    parser.add_argument(
+        "--check_lib",
+        action="store_true",
+        help="Whether to check the build or the actual package.",
+    )
     args = parser.parse_args()
     if args.check_lib:
         transformers_module = importlib.import_module("transformers")
@@ -46,4 +49,6 @@ if __name__ == "__main__":
     else:
         transformers_path = Path.cwd() / "build/lib/transformers"
     if not test_custom_files_are_present(transformers_path):
-        raise ValueError("The built release does not contain the custom files. Fix this before going further!")
+        raise ValueError(
+            "The built release does not contain the custom files. Fix this before going further!"
+        )

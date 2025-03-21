@@ -23,39 +23,26 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import (
-    FlavaConfig,
-    FlavaImageCodebookConfig,
-    FlavaImageConfig,
-    FlavaMultimodalConfig,
-    FlavaTextConfig,
-)
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers import (FlavaConfig, FlavaImageCodebookConfig,
+                          FlavaImageConfig, FlavaMultimodalConfig,
+                          FlavaTextConfig)
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        FlavaForPreTraining,
-        FlavaImageCodebook,
-        FlavaImageModel,
-        FlavaModel,
-        FlavaMultimodalModel,
-        FlavaTextModel,
-    )
+    from transformers import (FlavaForPreTraining, FlavaImageCodebook,
+                              FlavaImageModel, FlavaModel,
+                              FlavaMultimodalModel, FlavaTextModel)
 else:
     FlavaModel = None
     FlavaForPreTraining = None
@@ -108,10 +95,15 @@ class FlavaImageModelTester:
         self.vocab_size = vocab_size
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         num_patches = self.image_size // self.patch_size
         bool_masked_pos = (
-            torch.rand((self.batch_size, num_patches, num_patches), device=pixel_values.device) < 0.9
+            torch.rand(
+                (self.batch_size, num_patches, num_patches), device=pixel_values.device
+            )
+            < 0.9
         ).long()
         config = self.get_config()
         return config, pixel_values, bool_masked_pos
@@ -144,9 +136,16 @@ class FlavaImageModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -171,7 +170,9 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaImageModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -212,7 +213,9 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
         # in FLAVA, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.model_tester.image_size, self.model_tester.image_size)
         patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         seq_len = num_patches + 1
 
         for model_class in self.all_model_classes:
@@ -270,17 +273,25 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # FLAVA has a different seq_length
             image_size = (self.model_tester.image_size, self.model_tester.image_size)
             patch_size = (self.model_tester.patch_size, self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            num_patches = (image_size[1] // patch_size[1]) * (
+                image_size[0] // patch_size[0]
+            )
             seq_length = num_patches + 1
 
             self.assertListEqual(
@@ -320,13 +331,17 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
     # skip this test as FlavaImageModel has no base class and is
     # not available in MODEL_MAPPING
-    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -401,7 +416,9 @@ class FlavaTextModelTester:
         token_type_ids = None
 
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         config = self.get_config()
 
@@ -431,15 +448,26 @@ class FlavaTextModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_ids, token_type_ids=token_type_ids, attention_mask=input_mask)
+            result = model(
+                input_ids, token_type_ids=token_type_ids, attention_mask=input_mask
+            )
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, token_type_ids, input_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -452,7 +480,9 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -486,11 +516,15 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         # FLAVA does not use inputs_embeds
         pass
 
-    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -539,7 +573,9 @@ class FlavaMultimodalModelTester:
         self.use_cls_token = use_cls_token
 
     def prepare_config_and_inputs(self):
-        hidden_states = floats_tensor([self.batch_size, self.seq_length - 1, self.hidden_size])
+        hidden_states = floats_tensor(
+            [self.batch_size, self.seq_length - 1, self.hidden_size]
+        )
 
         input_mask = None
         if self.use_input_mask:
@@ -579,8 +615,13 @@ class FlavaMultimodalModelTester:
         with torch.no_grad():
             result = model(hidden_states, attention_mask=input_mask)
             result = model(hidden_states)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -600,7 +641,10 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=FlavaMultimodalConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -650,11 +694,15 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -685,14 +733,18 @@ class FlavaImageCodebookTester:
         self.vocab_size = vocab_size
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
 
     def get_config(self):
         return FlavaImageCodebookConfig(
-            hidden_size=self.hidden_size, num_groups=self.num_groups, vocab_size=self.vocab_size
+            hidden_size=self.hidden_size,
+            num_groups=self.num_groups,
+            vocab_size=self.vocab_size,
         )
 
     def create_and_check_model(self, config, pixel_values):
@@ -702,7 +754,13 @@ class FlavaImageCodebookTester:
         with torch.no_grad():
             result = model(pixel_values)
         self.parent.assertEqual(
-            result.shape, (self.batch_size, config.vocab_size, self.image_size // 8, self.image_size // 8)
+            result.shape,
+            (
+                self.batch_size,
+                config.vocab_size,
+                self.image_size // 8,
+                self.image_size // 8,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -723,7 +781,9 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaImageCodebookTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaImageCodebookConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaImageCodebookConfig, has_text_modality=False
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -785,11 +845,15 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -828,22 +892,34 @@ class FlavaModelTester:
         self.parent = parent
         self.image_model_tester = FlavaImageModelTester(parent, **image_kwargs)
         self.text_model_tester = FlavaTextModelTester(parent, **text_kwargs)
-        self.multimodal_model_tester = FlavaMultimodalModelTester(parent, **multimodal_kwargs)
-        self.image_codebook_tester = FlavaImageCodebookTester(parent, **image_codebook_kwargs)
+        self.multimodal_model_tester = FlavaMultimodalModelTester(
+            parent, **multimodal_kwargs
+        )
+        self.image_codebook_tester = FlavaImageCodebookTester(
+            parent, **image_codebook_kwargs
+        )
         self.is_training = is_training
-        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaConfig, hidden_size=37
+        )
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def prepare_config_and_inputs_for_common(self):
-        _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
-        _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        _, pixel_values, bool_masked_pos = (
+            self.image_model_tester.prepare_config_and_inputs()
+        )
+        _, input_ids, token_type_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -882,14 +958,26 @@ class FlavaModelTester:
                 pixel_values=inputs["pixel_values"] if test_image else None,
                 bool_masked_pos=inputs["bool_masked_pos"] if test_image else None,
             )
-        image_size = (self.image_model_tester.image_size, self.image_model_tester.image_size)
-        patch_size = (self.image_model_tester.patch_size, self.image_model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            self.image_model_tester.image_size,
+            self.image_model_tester.image_size,
+        )
+        patch_size = (
+            self.image_model_tester.patch_size,
+            self.image_model_tester.patch_size,
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
 
         if test_image:
             self.parent.assertEqual(
                 result.image_embeddings.shape,
-                (self.image_model_tester.batch_size, num_patches + 1, self.image_model_tester.hidden_size),
+                (
+                    self.image_model_tester.batch_size,
+                    num_patches + 1,
+                    self.image_model_tester.hidden_size,
+                ),
             )
         else:
             self.parent.assertIsNone(result.image_embeddings)
@@ -922,7 +1010,9 @@ class FlavaModelTester:
 @require_torch
 class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": FlavaModel} if is_torch_available() else {}
+    )
     class_for_tester = FlavaModelTester
     test_head_masking = False
     test_pruning = False
@@ -931,9 +1021,16 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
-        common_properties = ["projection_dim", "logit_scale_init_value", "init_codebook"]
+        common_properties = [
+            "projection_dim",
+            "logit_scale_init_value",
+            "init_codebook",
+        ]
         self.config_tester = ConfigTester(
-            self, config_class=FlavaConfig, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=FlavaConfig,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_model(self):
@@ -1040,10 +1137,14 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -1083,7 +1184,9 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             multimodal_config = FlavaMultimodalConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.multimodal_config.to_dict(), multimodal_config.to_dict())
+            self.assertDictEqual(
+                config.multimodal_config.to_dict(), multimodal_config.to_dict()
+            )
 
     # overwrite from common since FlavaModel/TFFlavaModel return FLAVAOutput/TFFLAVAOutput
     @slow
@@ -1097,8 +1200,12 @@ class FlavaForPreTrainingTester(FlavaModelTester):
     model_class = FlavaForPreTraining
 
     def prepare_config_and_inputs_for_common(self):
-        _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
-        _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        _, pixel_values, bool_masked_pos = (
+            self.image_model_tester.prepare_config_and_inputs()
+        )
+        _, input_ids, token_type_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
         config = self.get_config()
 
         input_ids_masked = input_ids.detach().clone()
@@ -1107,10 +1214,15 @@ class FlavaForPreTrainingTester(FlavaModelTester):
         mlm_labels[:, :] = config.ce_ignore_index
         mlm_labels[:, 1:3] = input_ids[:, 1:3]
         mim_labels = torch.randint(
-            0, self.image_model_tester.vocab_size, bool_masked_pos.size(), device=bool_masked_pos.device
+            0,
+            self.image_model_tester.vocab_size,
+            bool_masked_pos.size(),
+            device=bool_masked_pos.device,
         ).long()
         mim_labels[bool_masked_pos.ne(True)] = config.ce_ignore_index
-        itm_labels = torch.ones(mlm_labels.size(0), device=bool_masked_pos.device).long()
+        itm_labels = torch.ones(
+            mlm_labels.size(0), device=bool_masked_pos.device
+        ).long()
 
         return config, {
             "input_ids": input_ids,
@@ -1140,14 +1252,26 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 itm_labels=inputs["itm_labels"],
                 return_loss=inputs["return_loss"],
             )
-        image_size = (self.image_model_tester.image_size, self.image_model_tester.image_size)
-        patch_size = (self.image_model_tester.patch_size, self.image_model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            self.image_model_tester.image_size,
+            self.image_model_tester.image_size,
+        )
+        patch_size = (
+            self.image_model_tester.patch_size,
+            self.image_model_tester.patch_size,
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
 
         if test_image:
             self.parent.assertEqual(
                 result.image_embeddings.shape,
-                (self.image_model_tester.batch_size, num_patches + 1, self.image_model_tester.hidden_size),
+                (
+                    self.image_model_tester.batch_size,
+                    num_patches + 1,
+                    self.image_model_tester.hidden_size,
+                ),
             )
             if not test_text:
                 self.parent.assertEqual(
@@ -1156,7 +1280,10 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 )
                 self.parent.assertEqual(
                     result.mim_logits.shape,
-                    (inputs["bool_masked_pos"].sum().item(), self.image_model_tester.vocab_size),
+                    (
+                        inputs["bool_masked_pos"].sum().item(),
+                        self.image_model_tester.vocab_size,
+                    ),
                 )
 
         else:
@@ -1176,7 +1303,12 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 self.parent.assertEqual(
                     result.mlm_logits.shape,
                     (
-                        (inputs["mlm_labels"] != self.multimodal_model_tester.ce_ignore_index).sum().item(),
+                        (
+                            inputs["mlm_labels"]
+                            != self.multimodal_model_tester.ce_ignore_index
+                        )
+                        .sum()
+                        .item(),
                         self.text_model_tester.vocab_size,
                     ),
                 )
@@ -1199,13 +1331,21 @@ class FlavaForPreTrainingTester(FlavaModelTester):
             self.parent.assertEqual(
                 result.mmm_text_logits.shape,
                 (
-                    (inputs["mlm_labels"] != self.multimodal_model_tester.ce_ignore_index).sum().item(),
+                    (
+                        inputs["mlm_labels"]
+                        != self.multimodal_model_tester.ce_ignore_index
+                    )
+                    .sum()
+                    .item(),
                     self.text_model_tester.vocab_size,
                 ),
             )
             self.parent.assertEqual(
                 result.mmm_image_logits.shape,
-                (inputs["bool_masked_pos"].sum().item(), self.image_model_tester.vocab_size),
+                (
+                    inputs["bool_masked_pos"].sum().item(),
+                    self.image_model_tester.vocab_size,
+                ),
             )
             self.parent.assertEqual(
                 result.contrastive_logits_per_image.shape,
@@ -1295,9 +1435,15 @@ class FlavaModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, return_dict=True)
 
         # verify the embeddings
-        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
-        self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
+        self.assertAlmostEqual(
+            outputs.image_embeddings.sum().item(), -1352.53540, places=4
+        )
+        self.assertAlmostEqual(
+            outputs.text_embeddings.sum().item(), -198.98225, places=4
+        )
+        self.assertAlmostEqual(
+            outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4
+        )
 
 
 @require_vision
@@ -1345,8 +1491,12 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
-        torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
+        expected_logits = torch.tensor(
+            [[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device
+        )
+        torch.testing.assert_close(
+            outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
+        )
         self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
@@ -1389,15 +1539,29 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
         # verify the logits
         self.assertEqual(
             outputs.contrastive_logits_per_image.shape,
-            torch.Size((torch.count_nonzero(inputs["itm_labels"]).item(), inputs.input_ids.shape[0])),
+            torch.Size(
+                (
+                    torch.count_nonzero(inputs["itm_labels"]).item(),
+                    inputs.input_ids.shape[0],
+                )
+            ),
         )
         self.assertEqual(
             outputs.contrastive_logits_per_text.shape,
-            torch.Size((torch.count_nonzero(inputs["itm_labels"]).item(), inputs.pixel_values.shape[0])),
+            torch.Size(
+                (
+                    torch.count_nonzero(inputs["itm_labels"]).item(),
+                    inputs.pixel_values.shape[0],
+                )
+            ),
         )
 
-        expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
-        torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
+        expected_logits = torch.tensor(
+            [[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device
+        )
+        torch.testing.assert_close(
+            outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3
+        )
         self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)

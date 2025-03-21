@@ -17,20 +17,15 @@ import math
 import unittest
 
 from transformers import XGLMConfig, is_torch_available
-from transformers.testing_utils import (
-    cleanup,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (cleanup, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -84,9 +79,14 @@ class XGLMModelTester:
         return XGLMConfig.from_pretrained("facebook/xglm-564M")
 
     def prepare_config_and_inputs(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3)
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(3)
 
         input_mask = None
         if self.use_input_mask:
@@ -104,7 +104,10 @@ class XGLMModelTester:
         )
 
     def get_config(
-        self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
+        self,
+        gradient_checkpointing=False,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
     ):
         return XGLMConfig(
             vocab_size=self.vocab_size,
@@ -124,7 +127,9 @@ class XGLMModelTester:
             gradient_checkpointing=gradient_checkpointing,
         )
 
-    def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model(
+        self, config, input_ids, input_mask, head_mask, *args
+    ):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -132,10 +137,15 @@ class XGLMModelTester:
         result = model(input_ids, head_mask=head_mask)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         self.parent.assertEqual(len(result.past_key_values), config.num_hidden_layers)
 
-    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past(
+        self, config, input_ids, input_mask, head_mask, *args
+    ):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -159,13 +169,19 @@ class XGLMModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_attention_mask_past(
+        self, config, input_ids, input_mask, head_mask, *args
+    ):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -184,23 +200,38 @@ class XGLMModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.zeros((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.zeros(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
+        output_from_past = model(
+            next_tokens, past_key_values=past, attention_mask=attn_mask
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past_large_inputs(
+        self, config, input_ids, input_mask, head_mask, *args
+    ):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -218,31 +249,47 @@ class XGLMModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, attention_mask=next_attention_mask, past_key_values=past
+        )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_lm_head_model(
+        self, config, input_ids, input_mask, head_mask, *args
+    ):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, *args, gradient_checkpointing=False
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        *args,
+        gradient_checkpointing=False
     ):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
@@ -251,16 +298,24 @@ class XGLMModelTester:
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         result.loss.backward()
 
     def create_and_check_xglm_weight_initialization(self, config, *args):
         model = XGLMModel(config)
-        model_std = model.config.initializer_range / math.sqrt(2 * model.config.num_hidden_layers)
+        model_std = model.config.initializer_range / math.sqrt(
+            2 * model.config.num_hidden_layers
+        )
         for key in model.state_dict().keys():
             if "c_proj" in key and "weight" in key:
-                self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
-                self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
+                self.parent.assertLessEqual(
+                    abs(torch.std(model.state_dict()[key]) - model_std), 0.001
+                )
+                self.parent.assertLessEqual(
+                    abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01
+                )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -281,10 +336,14 @@ class XGLMModelTester:
 
 
 @require_torch
-class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class XGLMModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
     test_missing_keys = False
@@ -307,11 +366,15 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_xglm_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_xglm_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     def test_xglm_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_xglm_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_xglm_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -319,11 +382,15 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_xglm_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+        self.model_tester.create_and_check_forward_and_backwards(
+            *config_and_inputs, gradient_checkpointing=True
+        )
 
     def test_xglm_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xglm_weight_initialization(*config_and_inputs)
+        self.model_tester.create_and_check_xglm_weight_initialization(
+            *config_and_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -331,7 +398,9 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model = XGLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(
+        reason="Does not work on the tiny model as we keep hitting edge cases."
+    )
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
@@ -354,7 +423,9 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         else:
             model.gradient_checkpointing_disable()
         model.to(torch_device)
-        input_ids = torch.tensor([[2, 268, 9865]], dtype=torch.long, device=torch_device)  # The dog
+        input_ids = torch.tensor(
+            [[2, 268, 9865]], dtype=torch.long, device=torch_device
+        )  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
         expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581, 72616, 5, 984]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
@@ -381,17 +452,27 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         input_ids = inputs["input_ids"].to(torch_device)
 
         outputs = model.generate(
-            input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device), max_new_tokens=12
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+            max_new_tokens=12,
         )
 
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded, max_new_tokens=12)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(
+            torch_device
+        )
+        output_non_padded = model.generate(
+            input_ids=inputs_non_padded, max_new_tokens=12
+        )
 
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(
+            torch_device
+        )
         output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=12)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(
+            output_non_padded[0], skip_special_tokens=True
+        )
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
@@ -402,7 +483,9 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
             "Hello, my dog is a little bit of a shy one, but he is very friendly",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+        self.assertListEqual(
+            expected_output_sentence, [non_padded_sentence, padded_sentence]
+        )
 
     @slow
     def test_lm_generate_xglm(self):
@@ -433,12 +516,20 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
     @require_torch_fp16
     def test_batched_nan_fp16(self):
         model_name = "facebook/xglm-564M"
-        tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+        tokenizer = XGLMTokenizer.from_pretrained(
+            model_name, use_fast=False, padding_side="left"
+        )
 
-        model = XGLMForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = XGLMForCausalLM.from_pretrained(
+            model_name, torch_dtype=torch.float16, use_cache=True
+        ).to(torch_device)
         model = model.eval()
 
-        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+        batch = tokenizer(
+            ["Who are you?", "Joe Biden is the president of"],
+            padding=True,
+            return_tensors="pt",
+        )
 
         input_ids = batch["input_ids"].to(torch_device)
         attention_mask = batch["attention_mask"].to(torch_device)
@@ -464,7 +555,9 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         labels_non_padded = tokenized_non_padded.input_ids.clone()
         loss_non_padded = model(**tokenized_non_padded, labels=labels_non_padded).loss
 
-        tokenized_padded = tokenizer(sequence, padding="max_length", max_length=16, return_tensors="pt")
+        tokenized_padded = tokenizer(
+            sequence, padding="max_length", max_length=16, return_tensors="pt"
+        )
         tokenized_padded.to(torch_device)
         labels_padded = tokenized_padded.input_ids.clone()
         labels_padded[labels_padded == tokenizer.pad_token_id] = -100

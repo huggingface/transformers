@@ -16,13 +16,11 @@
 
 from typing import TYPE_CHECKING, Dict
 
-
 if TYPE_CHECKING:
     pass
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -109,7 +107,12 @@ class Owlv2TextConfig(PretrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -256,11 +259,15 @@ class Owlv2Config(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the Owlv2TextConfig with default values.")
+            logger.info(
+                "text_config is None. Initializing the Owlv2TextConfig with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the Owlv2VisionConfig with default values.")
+            logger.info(
+                "vision_config is None. initializing the Owlv2VisionConfig with default values."
+            )
 
         self.text_config = Owlv2TextConfig(**text_config)
         self.vision_config = Owlv2VisionConfig(**vision_config)

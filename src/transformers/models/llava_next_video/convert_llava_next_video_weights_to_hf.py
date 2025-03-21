@@ -27,17 +27,11 @@ from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download, snapshot_download
 from safetensors import safe_open
 
-from transformers import (
-    AddedToken,
-    AutoConfig,
-    AutoTokenizer,
-    LlavaNextImageProcessor,
-    LlavaNextVideoConfig,
-    LlavaNextVideoForConditionalGeneration,
-    LlavaNextVideoImageProcessor,
-    LlavaNextVideoProcessor,
-)
-
+from transformers import (AddedToken, AutoConfig, AutoTokenizer,
+                          LlavaNextImageProcessor, LlavaNextVideoConfig,
+                          LlavaNextVideoForConditionalGeneration,
+                          LlavaNextVideoImageProcessor,
+                          LlavaNextVideoProcessor)
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.": "",
@@ -125,7 +119,9 @@ model2template = {
 
 
 def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+    directory_path = snapshot_download(
+        repo_id=model_id, allow_patterns=["*.safetensors"]
+    )
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -152,7 +148,9 @@ def convert_state_dict_to_hf(state_dict):
 
 def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # load original config
-    filepath = hf_hub_download(repo_id=model_id, filename="config.json", repo_type="model")
+    filepath = hf_hub_download(
+        repo_id=model_id, filename="config.json", repo_type="model"
+    )
     with open(filepath) as f:
         data = json.load(f)
         print(data)
@@ -162,18 +160,26 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         video_token_index = 32000
         image_token_index = 32001
         overwrite_text_config = {}
-    elif model_id in ["lmms-lab/LLaVA-NeXT-Video-7B", "lmms-lab/LLaVA-NeXT-Video-7B-DPO"]:
+    elif model_id in [
+        "lmms-lab/LLaVA-NeXT-Video-7B",
+        "lmms-lab/LLaVA-NeXT-Video-7B-DPO",
+    ]:
         text_model_id = "lmsys/vicuna-7b-v1.5"
         video_token_index = 32000
         image_token_index = 32001
         overwrite_text_config = {"factor": 2.0, "type": "linear"}
-    elif model_id in ["lmms-lab/LLaVA-NeXT-Video-34B", "lmms-lab/LLaVA-NeXT-Video-34B-DPO"]:
+    elif model_id in [
+        "lmms-lab/LLaVA-NeXT-Video-34B",
+        "lmms-lab/LLaVA-NeXT-Video-34B-DPO",
+    ]:
         text_model_id = "NousResearch/Nous-Hermes-2-Yi-34B"
         video_token_index = 64000
         image_token_index = 64001
         overwrite_text_config = {}
     else:
-        raise ValueError("Incorrect checkpoint referenced. Text model-id not identified!")
+        raise ValueError(
+            "Incorrect checkpoint referenced. Text model-id not identified!"
+        )
 
     vision_model_id = data["mm_vision_tower"]
 
@@ -182,9 +188,15 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     text_config = text_config.to_dict()
     text_config.update(overwrite_text_config)
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=True, padding_side="left")
-    tokenizer.add_tokens(AddedToken("<video>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        text_model_id, use_fast=True, padding_side="left"
+    )
+    tokenizer.add_tokens(
+        AddedToken("<video>", special=True, normalized=False), special_tokens=True
+    )
+    tokenizer.add_tokens(
+        AddedToken("<image>", special=True, normalized=False), special_tokens=True
+    )
 
     image_processor = LlavaNextImageProcessor.from_pretrained(vision_model_id)
     video_processor = LlavaNextVideoImageProcessor.from_pretrained(vision_model_id)
@@ -216,7 +228,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mu, covariance_matrix=1e-5 * sigma
+    )
 
     # We add an image token so we resize the model
     # Pad to 64 for performance reasons
@@ -228,17 +242,33 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
         tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.model.embed_tokens.weight.data[
+                        vocab_size:
+                    ].shape[0]
+                )
+            )
         ),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.lm_head.weight.data[vocab_size:].shape[0]
+                )
+            )
+        ),
         dim=0,
     )
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}"
+        )
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
@@ -266,10 +296,15 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     args = parser.parse_args()
 

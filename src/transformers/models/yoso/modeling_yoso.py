@@ -24,26 +24,19 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import (BaseModelOutputWithCrossAttentions,
+                                 MaskedLMOutput, MultipleChoiceModelOutput,
+                                 QuestionAnsweringModelOutput,
+                                 SequenceClassifierOutput,
+                                 TokenClassifierOutput)
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_ninja_available,
-    is_torch_cuda_available,
-    logging,
-)
+from ...pytorch_utils import (apply_chunking_to_forward,
+                              find_pruneable_heads_and_indices,
+                              prune_linear_layer)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_ninja_available, is_torch_cuda_available, logging)
 from .configuration_yoso import YosoConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -62,7 +55,13 @@ def load_cuda_kernels():
         src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
         return [src_folder / file for file in files]
 
-    src_files = append_root(["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"])
+    src_files = append_root(
+        [
+            "fast_lsh_cumulation_torch.cpp",
+            "fast_lsh_cumulation.cu",
+            "fast_lsh_cumulation_cuda.cu",
+        ]
+    )
 
     load("fast_lsh_cumulation", src_files, verbose=True)
 
@@ -99,11 +98,17 @@ def hashing(query, key, num_hash, hash_len):
     if len(key.size()) != 3:
         raise ValueError("Key has incorrect size.")
 
-    rmat = torch.randn(query.size(0), query.size(2), num_hash * hash_len, device=query.device)
+    rmat = torch.randn(
+        query.size(0), query.size(2), num_hash * hash_len, device=query.device
+    )
     raise_pow = 2 ** torch.arange(hash_len, device=query.device)
 
-    query_projection = torch.matmul(query, rmat).reshape(query.size(0), query.size(1), num_hash, hash_len)
-    key_projection = torch.matmul(key, rmat).reshape(key.size(0), key.size(1), num_hash, hash_len)
+    query_projection = torch.matmul(query, rmat).reshape(
+        query.size(0), query.size(1), num_hash, hash_len
+    )
+    key_projection = torch.matmul(key, rmat).reshape(
+        key.size(0), key.size(1), num_hash, hash_len
+    )
     query_binary = (query_projection > 0).int()
     key_binary = (key_projection > 0).int()
     query_hash = torch.sum(query_binary * raise_pow, dim=-1)
@@ -117,7 +122,9 @@ class YosoCumulation(torch.autograd.Function):
     def forward(ctx, query_mask, key_mask, query, key, value, config):
         hash_code_len = config["hash_code_len"]
 
-        expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
+        expectation = (
+            1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi
+        ) ** hash_code_len
         expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
         cumulation_value = torch.matmul(expectation, value)
 
@@ -137,7 +144,9 @@ class YosoCumulation(torch.autograd.Function):
 
         weighted_exp = torch.matmul(grad, value.transpose(-1, -2)) * expectation
         grad_query = torch.matmul(weighted_exp, (hash_code_len / 2) * key)
-        grad_key = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * query)
+        grad_key = torch.matmul(
+            weighted_exp.transpose(-1, -2), (hash_code_len / 2) * query
+        )
         grad_value = torch.matmul(expectation.transpose(-1, -2), grad)
 
         return None, None, grad_query, grad_key, grad_value, None
@@ -159,7 +168,9 @@ class YosoLSHCumulation(torch.autograd.Function):
         if query.size(2) != key.size(2):
             raise ValueError("Query and Key differ in sizes in dimension 2")
 
-        query_mask, key_mask, query, key, value = to_contiguous([query_mask, key_mask, query, key, value])
+        query_mask, key_mask, query, key, value = to_contiguous(
+            [query_mask, key_mask, query, key, value]
+        )
 
         use_cuda = query_mask.is_cuda
         num_hash = config["num_hash"]
@@ -171,13 +182,24 @@ class YosoLSHCumulation(torch.autograd.Function):
                 query_mask, query, key_mask, key, num_hash, hash_code_len, use_cuda, 1
             )
         else:
-            query_hash_code, key_hash_code = hashing(query, key, num_hash, hash_code_len)
+            query_hash_code, key_hash_code = hashing(
+                query, key, num_hash, hash_code_len
+            )
 
         cumulation_value = lsh_cumulation.lsh_cumulation(
-            query_mask, query_hash_code, key_mask, key_hash_code, value, hashtable_capacity, use_cuda, 1
+            query_mask,
+            query_hash_code,
+            key_mask,
+            key_hash_code,
+            value,
+            hashtable_capacity,
+            use_cuda,
+            1,
         )
 
-        ctx.save_for_backward(query_mask, key_mask, query_hash_code, key_hash_code, query, key, value)
+        ctx.save_for_backward(
+            query_mask, key_mask, query_hash_code, key_hash_code, query, key, value
+        )
         ctx.config = config
 
         return cumulation_value
@@ -186,7 +208,9 @@ class YosoLSHCumulation(torch.autograd.Function):
     def backward(ctx, grad):
         grad = to_contiguous(grad)
 
-        query_mask, key_mask, query_hash_code, key_hash_code, query, key, value = ctx.saved_tensors
+        query_mask, key_mask, query_hash_code, key_hash_code, query, key, value = (
+            ctx.saved_tensors
+        )
         config = ctx.config
 
         use_cuda = grad.is_cuda
@@ -195,7 +219,14 @@ class YosoLSHCumulation(torch.autograd.Function):
 
         if config["lsh_backward"]:
             grad_value = lsh_cumulation.lsh_cumulation(
-                key_mask, key_hash_code, query_mask, query_hash_code, grad, hashtable_capacity, use_cuda, 1
+                key_mask,
+                key_hash_code,
+                query_mask,
+                query_hash_code,
+                grad,
+                hashtable_capacity,
+                use_cuda,
+                1,
             )
             grad_query = lsh_cumulation.lsh_weighted_cumulation(
                 query_mask,
@@ -222,11 +253,15 @@ class YosoLSHCumulation(torch.autograd.Function):
                 4,
             )
         else:
-            expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
+            expectation = (
+                1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi
+            ) ** hash_code_len
             expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
             weighted_exp = torch.matmul(grad, value.transpose(-1, -2)) * expectation
             grad_query = torch.matmul(weighted_exp, (hash_code_len / 2) * key)
-            grad_key = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * query)
+            grad_key = torch.matmul(
+                weighted_exp.transpose(-1, -2), (hash_code_len / 2) * query
+            )
             grad_value = torch.matmul(expectation.transpose(-1, -2), grad)
 
         return None, None, grad_query, grad_key, grad_value, None
@@ -238,9 +273,15 @@ class YosoEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings + 2, config.hidden_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -249,16 +290,26 @@ class YosoEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2, persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)) + 2,
+            persistent=False,
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
         self.register_buffer(
             "token_type_ids",
-            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+            torch.zeros(
+                self.position_ids.size(),
+                dtype=torch.long,
+                device=self.position_ids.device,
+            ),
             persistent=False,
         )
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -275,10 +326,14 @@ class YosoEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
+                    input_shape[0], seq_length
+                )
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+                token_type_ids = torch.zeros(
+                    input_shape, dtype=torch.long, device=self.position_ids.device
+                )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -296,7 +351,9 @@ class YosoEmbeddings(nn.Module):
 class YosoSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -306,7 +363,9 @@ class YosoSelfAttention(nn.Module):
             try:
                 load_cuda_kernels()
             except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+                logger.warning(
+                    f"Could not load the custom kernel for multi-scale deformable attention: {e}"
+                )
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -318,7 +377,9 @@ class YosoSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = (
-            position_embedding_type if position_embedding_type is not None else config.position_embedding_type
+            position_embedding_type
+            if position_embedding_type is not None
+            else config.position_embedding_type
         )
 
         self.use_expectation = config.use_expectation
@@ -346,7 +407,10 @@ class YosoSelfAttention(nn.Module):
             )
 
     def transpose_for_scores(self, layer):
-        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_layer_shape = layer.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         layer = layer.view(*new_layer_shape)
         return layer.permute(0, 2, 1, 3)
 
@@ -408,11 +472,21 @@ class YosoSelfAttention(nn.Module):
 
         if self.use_expectation:
             context_layer = YosoCumulation.apply(
-                attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config
+                attention_mask,
+                attention_mask,
+                query_layer,
+                key_layer,
+                value_layer,
+                self.lsh_config,
             )
         else:
             context_layer = YosoLSHCumulation.apply(
-                attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config
+                attention_mask,
+                attention_mask,
+                query_layer,
+                key_layer,
+                value_layer,
+                self.lsh_config,
             )
 
         if (not self.use_expectation) and head_dim < gpu_warp_size:
@@ -429,7 +503,9 @@ class YosoSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, context_layer) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, context_layer) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -442,7 +518,9 @@ class YosoSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -452,7 +530,9 @@ class YosoSelfOutput(nn.Module):
 class YosoAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = YosoSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = YosoSelfAttention(
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = YosoSelfOutput(config)
         self.pruned_heads = set()
 
@@ -460,7 +540,10 @@ class YosoAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -471,13 +554,17 @@ class YosoAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -505,7 +592,9 @@ class YosoOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -523,13 +612,20 @@ class YosoLayer(nn.Module):
         self.output = YosoOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
+        self_attention_outputs = self.attention(
+            hidden_states, attention_mask, output_attentions=output_attentions
+        )
         attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -545,7 +641,9 @@ class YosoEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([YosoLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [YosoLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -572,7 +670,9 @@ class YosoEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -582,7 +682,11 @@ class YosoEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutputWithCrossAttentions(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -760,7 +864,9 @@ class YosoModel(YosoPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
@@ -778,14 +884,24 @@ class YosoModel(YosoPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -803,10 +919,14 @@ class YosoModel(YosoPreTrainedModel):
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
+                    batch_size, seq_length
+                )
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+                token_type_ids = torch.zeros(
+                    input_shape, dtype=torch.long, device=device
+                )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -842,9 +962,14 @@ class YosoModel(YosoPreTrainedModel):
         )
 
 
-@add_start_docstrings("""YOSO Model with a `language modeling` head on top.""", YOSO_START_DOCSTRING)
+@add_start_docstrings(
+    """YOSO Model with a `language modeling` head on top.""", YOSO_START_DOCSTRING
+)
 class YosoForMaskedLM(YosoPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = [
+        "cls.predictions.decoder.weight",
+        "cls.predictions.decoder.bias",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -862,7 +987,9 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -887,7 +1014,9 @@ class YosoForMaskedLM(YosoPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.yoso(
             input_ids,
@@ -907,11 +1036,15 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return (
+                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            )
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -957,7 +1090,9 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -982,7 +1117,9 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.yoso(
             input_ids,
@@ -1004,7 +1141,9 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1049,7 +1188,9 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        YOSO_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
@@ -1074,13 +1215,31 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.view(-1, position_ids.size(-1))
+            if position_ids is not None
+            else None
+        )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
@@ -1141,7 +1300,9 @@ class YosoForTokenClassification(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
@@ -1164,7 +1325,9 @@ class YosoForTokenClassification(YosoPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.yoso(
             input_ids,
@@ -1191,7 +1354,9 @@ class YosoForTokenClassification(YosoPreTrainedModel):
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.num_labels)
                 active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                    active_loss,
+                    labels.view(-1),
+                    torch.tensor(loss_fct.ignore_index).type_as(labels),
                 )
                 loss = loss_fct(active_logits, active_labels)
             else:
@@ -1227,7 +1392,9 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
@@ -1257,7 +1424,9 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.yoso(
             input_ids,

@@ -19,7 +19,6 @@ import warnings
 from ...utils import logging
 from .image_processing_mobilenet_v1 import MobileNetV1ImageProcessor
 
-
 logger = logging.get_logger(__name__)
 
 

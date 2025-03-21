@@ -20,7 +20,8 @@ from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors
+from ...test_tokenization_common import (TokenizerTesterMixin,
+                                         filter_roberta_detectors)
 
 
 @require_tokenizers
@@ -61,7 +62,9 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
@@ -88,11 +91,19 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_prepare_batch(self):
-        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        src_text = [
+            "A long paragraph for summarization.",
+            "Another paragraph for summarization.",
+        ]
         expected_src_tokens = [0, 250, 251, 17818, 13, 39186, 1938, 4, 2]
 
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer(src_text, max_length=len(expected_src_tokens), padding=True, return_tensors="pt")
+            batch = tokenizer(
+                src_text,
+                max_length=len(expected_src_tokens),
+                padding=True,
+                return_tensors="pt",
+            )
             self.assertIsInstance(batch, BatchEncoding)
 
             self.assertEqual((2, 9), batch.input_ids.shape)
@@ -103,7 +114,10 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_prepare_batch_empty_target_text(self):
-        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        src_text = [
+            "A long paragraph for summarization.",
+            "Another paragraph for summarization.",
+        ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             batch = tokenizer(src_text, padding=True, return_tensors="pt")
             # check if input_ids are returned and no labels
@@ -119,14 +133,22 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            targets = tokenizer(text_target=tgt_text, max_length=32, padding="max_length", return_tensors="pt")
+            targets = tokenizer(
+                text_target=tgt_text,
+                max_length=32,
+                padding="max_length",
+                return_tensors="pt",
+            )
             self.assertEqual(32, targets["input_ids"].shape[1])
 
     @require_torch
     def test_prepare_batch_not_longer_than_maxlen(self):
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             batch = tokenizer(
-                ["I am a small frog" * 1024, "I am a small frog"], padding=True, truncation=True, return_tensors="pt"
+                ["I am a small frog" * 1024, "I am a small frog"],
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
             )
             self.assertIsInstance(batch, BatchEncoding)
             self.assertEqual(batch.input_ids.shape, (2, 1024))
@@ -153,14 +175,24 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
                 sentence = "A, <mask> AllenNLP sentence."
-                tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
-                tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
+                tokens_r = tokenizer_r.encode_plus(
+                    sentence, add_special_tokens=True, return_token_type_ids=True
+                )
+                tokens_p = tokenizer_p.encode_plus(
+                    sentence, add_special_tokens=True, return_token_type_ids=True
+                )
 
                 # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
+                self.assertEqual(
+                    sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"])
+                )
 
                 # attention_mask should put 1 everywhere, so sum over length should be 1
                 self.assertEqual(
@@ -172,12 +204,42 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
                 # Rust correctly handles the space before the mask while python doesnt
-                self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-                self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-
                 self.assertSequenceEqual(
-                    tokens_p_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_p["input_ids"],
+                    [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2],
                 )
                 self.assertSequenceEqual(
-                    tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+                    tokens_r["input_ids"],
+                    [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2],
+                )
+
+                self.assertSequenceEqual(
+                    tokens_p_str,
+                    [
+                        "<s>",
+                        "A",
+                        ",",
+                        "<mask>",
+                        "ĠAllen",
+                        "N",
+                        "LP",
+                        "Ġsentence",
+                        ".",
+                        "</s>",
+                    ],
+                )
+                self.assertSequenceEqual(
+                    tokens_r_str,
+                    [
+                        "<s>",
+                        "A",
+                        ",",
+                        "<mask>",
+                        "ĠAllen",
+                        "N",
+                        "LP",
+                        "Ġsentence",
+                        ".",
+                        "</s>",
+                    ],
                 )

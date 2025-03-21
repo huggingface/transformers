@@ -24,27 +24,18 @@ from parameterized import parameterized
 import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    execute_subprocess_async,
-    mockenv_context,
-    require_accelerate,
-    require_fsdp,
-    require_torch_accelerator,
-    require_torch_multi_accelerator,
-    run_first,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (TestCasePlus, backend_device_count,
+                                        execute_subprocess_async,
+                                        mockenv_context, require_accelerate,
+                                        require_fsdp,
+                                        require_torch_accelerator,
+                                        require_torch_multi_accelerator,
+                                        run_first, slow, torch_device)
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
-from transformers.utils import (
-    is_accelerate_available,
-    is_torch_bf16_available_on_device,
-    is_torch_fp16_available_on_device,
-)
-
+from transformers.utils import (is_accelerate_available,
+                                is_torch_bf16_available_on_device,
+                                is_torch_fp16_available_on_device)
 
 if is_torch_available():
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
@@ -91,20 +82,18 @@ def get_master_port(real_launcher=False):
 
 
 if is_torch_available():
-    from tests.trainer.test_trainer import (  # noqa
-        RegressionModelConfig,
-        RegressionPreTrainedModel,
-    )
+    from tests.trainer.test_trainer import RegressionModelConfig  # noqa
+    from tests.trainer.test_trainer import RegressionPreTrainedModel
 
     # hack to restore original logging level pre #21700
-    get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
+    get_regression_trainer = partial(
+        tests.trainer.test_trainer.get_regression_trainer, log_level="info"
+    )
 
 require_fsdp_version = require_fsdp
 if is_accelerate_available():
-    from accelerate.utils.constants import (
-        FSDP_PYTORCH_VERSION,
-        FSDP_SHARDING_STRATEGY,
-    )
+    from accelerate.utils.constants import (FSDP_PYTORCH_VERSION,
+                                            FSDP_SHARDING_STRATEGY)
 
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
 
@@ -205,19 +194,37 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
             self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            fsdp_sharding_strategy = str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
-            self.assertEqual(os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy)
-            self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
-            self.assertEqual(os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP")
-            self.assertEqual(
-                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
+            fsdp_sharding_strategy = str(
+                FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
             )
-            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"])
-            self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
-            self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
-            self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
             self.assertEqual(
-                os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"], fsdp_config["cpu_ram_efficient_loading"]
+                os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy
+            )
+            self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
+            self.assertEqual(
+                os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP"
+            )
+            self.assertEqual(
+                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"],
+                ",".join(fsdp_config["transformer_layer_cls_to_wrap"]),
+            )
+            self.assertEqual(
+                os.environ[f"{prefix}BACKWARD_PREFETCH"],
+                fsdp_config["backward_prefetch"],
+            )
+            self.assertEqual(
+                os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"]
+            )
+            self.assertEqual(
+                os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"]
+            )
+            self.assertEqual(
+                os.environ[f"{prefix}SYNC_MODULE_STATES"],
+                fsdp_config["sync_module_states"],
+            )
+            self.assertEqual(
+                os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"],
+                fsdp_config["cpu_ram_efficient_loading"],
             )
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
@@ -229,7 +236,12 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
         args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}"]
-        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        fsdp_args = [
+            "--fsdp",
+            f"{sharding_strategy} auto_wrap",
+            "--fsdp_transformer_layer_cls_to_wrap",
+            "BertLayer",
+        ]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -241,8 +253,17 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run_with_gradient_accumulation(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}", "--gradient_accumulation_steps", "2"]
-        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        args = self.get_base_args(output_dir, 1, 50).split() + [
+            f"--{dtype}",
+            "--gradient_accumulation_steps",
+            "2",
+        ]
+        fsdp_args = [
+            "--fsdp",
+            f"{sharding_strategy} auto_wrap",
+            "--fsdp_transformer_layer_cls_to_wrap",
+            "BertLayer",
+        ]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -251,12 +272,24 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_multi_accelerator
     @run_first
     @slow
-    @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_2_1,
+        reason="This test on pytorch 2.0 takes 4 hours.",
+    )
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}", "--max_steps", "10"]
-        fsdp_args = ["--fsdp", "full_shard auto_wrap offload", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        args = self.get_base_args(output_dir, 1, 50).split() + [
+            f"--{dtype}",
+            "--max_steps",
+            "10",
+        ]
+        fsdp_args = [
+            "--fsdp",
+            "full_shard auto_wrap offload",
+            "--fsdp_transformer_layer_cls_to_wrap",
+            "BertLayer",
+        ]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -273,7 +306,9 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         launcher = get_launcher(True, use_accelerate=use_accelerate)
         args = self.get_base_args(output_dir, 2, 25).split()
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
-        logs = self.run_cmd_and_get_logs(use_accelerate, sharding_strategy, launcher, script, args, output_dir)
+        logs = self.run_cmd_and_get_logs(
+            use_accelerate, sharding_strategy, launcher, script, args, output_dir
+        )
 
         # resume from ckpt
         checkpoint = os.path.join(output_dir, "checkpoint-115")
@@ -297,7 +332,9 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         for log, log1 in zip(logs, logs_resume):
             if "learning_rate" in log:
-                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
+                self.assertAlmostEqual(
+                    log["learning_rate"], log1["learning_rate"], delta=1e-5
+                )
 
     @require_torch_multi_accelerator
     @run_first
@@ -316,7 +353,9 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         except:  # noqa
             raise AssertionError("CPU offloading failed with FSDP!")
 
-    def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
+    def run_cmd_and_get_logs(
+        self, use_accelerate, sharding_strategy, launcher, script, args, output_dir
+    ):
         if not use_accelerate:
             fsdp_args = [
                 "--fsdp",
@@ -334,7 +373,9 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
-        logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
+        logs = TrainerState.load_from_json(
+            os.path.join(output_dir, "trainer_state.json")
+        ).log_history
         return logs
 
     def get_base_args(self, output_dir, num_epochs, logging_steps):

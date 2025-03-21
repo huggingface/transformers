@@ -16,8 +16,8 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-
+from ...utils.backbone_utils import (
+    BackboneConfigMixin, get_aligned_output_features_output_indices)
 
 logger = logging.get_logger(__name__)
 
@@ -147,9 +147,15 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
         self.use_relative_position_embeddings = use_relative_position_embeddings
         self.window_size = window_size
 
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        self.stage_names = ["stem"] + [
+            f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)
+        ]
+        self._out_features, self._out_indices = (
+            get_aligned_output_features_output_indices(
+                out_features=out_features,
+                out_indices=out_indices,
+                stage_names=self.stage_names,
+            )
         )
 
 

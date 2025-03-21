@@ -21,14 +21,9 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import MvpConfig, is_torch_available
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        require_torch_fp16, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -36,19 +31,15 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MvpForCausalLM,
-        MvpForConditionalGeneration,
-        MvpForQuestionAnswering,
-        MvpForSequenceClassification,
-        MvpModel,
-        MvpTokenizer,
-    )
-    from transformers.models.mvp.modeling_mvp import MvpDecoder, MvpEncoder, shift_tokens_right
+    from transformers import (MvpForCausalLM, MvpForConditionalGeneration,
+                              MvpForQuestionAnswering,
+                              MvpForSequenceClassification, MvpModel,
+                              MvpTokenizer)
+    from transformers.models.mvp.modeling_mvp import (MvpDecoder, MvpEncoder,
+                                                      shift_tokens_right)
 
 
 def prepare_mvp_inputs_dict(
@@ -66,11 +57,17 @@ def prepare_mvp_inputs_dict(
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+        head_mask = torch.ones(
+            config.encoder_layers, config.encoder_attention_heads, device=torch_device
+        )
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -123,12 +120,16 @@ class MvpModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.get_config()
         inputs_dict = prepare_mvp_inputs_dict(config, input_ids, decoder_input_ids)
@@ -169,7 +170,12 @@ class MvpModelTester:
         head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -181,20 +187,28 @@ class MvpModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = MvpModel(config=config).to(torch_device).eval()
@@ -208,11 +222,14 @@ class MvpModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = MvpEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -226,7 +243,9 @@ class MvpModelTester:
             encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
@@ -300,7 +319,9 @@ class MvpHeadTests(unittest.TestCase):
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
-        lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
+        lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(
+            torch_device
+        )
         lm_model = MvpForConditionalGeneration(config)
         lm_model.to(torch_device)
         outputs = lm_model(input_ids=input_ids, labels=lm_labels)
@@ -322,15 +343,23 @@ class MvpHeadTests(unittest.TestCase):
         )
         lm_model = MvpForConditionalGeneration(config).to(torch_device)
         context = torch.tensor(
-            [[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]], device=torch_device, dtype=torch.long
+            [[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]],
+            device=torch_device,
+            dtype=torch.long,
         )
-        summary = torch.tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]], device=torch_device, dtype=torch.long)
+        summary = torch.tensor(
+            [[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]],
+            device=torch_device,
+            dtype=torch.long,
+        )
         outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
-        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long)
+        input_ids = torch.tensor(
+            [[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long
+        )
         config = MvpConfig(
             vocab_size=self.vocab_size,
             d_model=24,
@@ -360,7 +389,9 @@ class MvpHeadTests(unittest.TestCase):
         self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
 
     def test_shift_tokens_right(self):
-        input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
+        input_ids = torch.tensor(
+            [[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long
+        )
         shifted = shift_tokens_right(input_ids, 1, 2)
         n_pad_before = input_ids.eq(1).float().sum()
         n_pad_after = shifted.eq(1).float().sum()
@@ -387,7 +418,9 @@ class MvpHeadTests(unittest.TestCase):
         model = MvpForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
     def test_dummy_inputs(self):
         config, *_ = self._get_config_and_data()
@@ -398,7 +431,10 @@ class MvpHeadTests(unittest.TestCase):
         config, input_ids, _ = self._get_config_and_data()
 
         def _get_embs(m):
-            return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
+            return (
+                m.get_input_embeddings().weight.data.clone(),
+                m.get_output_embeddings().weight.data.clone(),
+            )
 
         model = MvpForConditionalGeneration(config).eval().to(torch_device)
         input, output = _get_embs(model)
@@ -412,9 +448,16 @@ class MvpHeadTests(unittest.TestCase):
 
 
 @require_torch
-class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MvpModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (MvpModel, MvpForConditionalGeneration, MvpForSequenceClassification, MvpForQuestionAnswering)
+        (
+            MvpModel,
+            MvpForConditionalGeneration,
+            MvpForSequenceClassification,
+            MvpForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -475,12 +518,16 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -490,7 +537,11 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (MvpModel, MvpForConditionalGeneration, MvpForQuestionAnswering):
+        for model_class in (
+            MvpModel,
+            MvpForConditionalGeneration,
+            MvpForQuestionAnswering,
+        ):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -524,7 +575,9 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model = MvpForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -561,20 +614,33 @@ class MvpModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = MvpModel.from_pretrained("RUCAIBox/mvp").to(torch_device)
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = _long_tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
-            output = model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+            output = model(
+                input_ids=input_ids, attention_mask=attention_mask
+            ).last_hidden_state
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.3461, 0.3624, 0.2689], [0.3461, 0.3624, 0.2689], [-0.1562, 1.1637, -0.3784]], device=torch_device
+            [
+                [0.3461, 0.3624, 0.2689],
+                [0.3461, 0.3624, 0.2689],
+                [-0.1562, 1.1637, -0.3784],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3
+        )
 
     @slow
     def test_summarization_inference(self):
-        model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp").to(torch_device)
+        model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp").to(
+            torch_device
+        )
         tok = self.default_tokenizer
         PGE_ARTICLE = """ Listen to local radio broadcasts for advertisements that reference casinos in your area.\nIf none are in your area, listen to national radio broadcasts for advertisements of casinos in other areas.\nNote the location that is mentioned in each advertisement that involves a casino.\nIf no locations are mentioned, note any additional contact information, such as a website or phone number. Use that information to find out where the casinos are.;\n,\n\nIf you learn about more than 1 casino on the radio, use the Internet to search the distance between your location and each casino. Sites such as maps.google.com or mapquest.com will help you in this search.'"""  # fmt: skip
         EXPECTED_SUMMARY = "Listen to the radio.\nUse the Internet."
@@ -646,15 +712,21 @@ class MvpStandaloneDecoderModelTester:
         self.decoder_attention_idx = 1
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         lm_labels = None
         if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            lm_labels = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], self.vocab_size
+            )
 
         config = MvpConfig(
             vocab_size=self.vocab_size,
@@ -688,8 +760,12 @@ class MvpStandaloneDecoderModelTester:
             lm_labels,
         ) = self.prepare_config_and_inputs()
 
-        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+        encoder_hidden_states = floats_tensor(
+            [self.batch_size, self.decoder_seq_length, self.hidden_size]
+        )
+        encoder_attention_mask = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], vocab_size=2
+        )
 
         return (
             config,
@@ -726,15 +802,21 @@ class MvpStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -752,36 +834,51 @@ class MvpStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)[
+            "past_key_values"
+        ]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -800,7 +897,9 @@ class MvpStandaloneDecoderModelTester:
 
 
 @require_torch
-class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MvpStandaloneDecoderModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     all_model_classes = (MvpDecoder, MvpForCausalLM) if is_torch_available() else ()
     fx_comptatible = True
     test_pruning = False
@@ -821,7 +920,9 @@ class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
 
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):

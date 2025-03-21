@@ -3,9 +3,9 @@ import itertools
 import types
 from typing import Dict
 
-from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import (ModelOutput, add_end_docstrings, is_tf_available,
+                     is_torch_available)
 from .base import Pipeline, build_pipeline_init_args
-
 
 if is_torch_available():
     import torch
@@ -16,7 +16,8 @@ if is_torch_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_tf_auto import \
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 class ReturnType(enum.Enum):
@@ -33,7 +34,9 @@ class Chat:
     def __init__(self, messages: Dict):
         for message in messages:
             if not ("role" in message and "content" in message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+                raise ValueError(
+                    "When passing chat dicts as input, each dict must have a 'role' and 'content' key."
+                )
         self.messages = messages
 
 
@@ -98,7 +101,9 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+            if self.framework == "tf"
+            else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         )
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
@@ -118,8 +123,13 @@ class TextGenerationPipeline(Pipeline):
                 prefix = self.XL_PREFIX
             if prefix is not None:
                 # Recalculate some generate_kwargs linked to prefix.
-                preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
-                self._preprocess_params = {**self._preprocess_params, **preprocess_params}
+                preprocess_params, forward_params, _ = self._sanitize_parameters(
+                    prefix=prefix, **self._forward_params
+                )
+                self._preprocess_params = {
+                    **self._preprocess_params,
+                    **preprocess_params,
+                }
                 self._forward_params = {**self._forward_params, **forward_params}
 
     def _sanitize_parameters(
@@ -141,7 +151,9 @@ class TextGenerationPipeline(Pipeline):
 
         add_special_tokens = False
         if "add_special_tokens" in generate_kwargs:
-            add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
+            add_special_tokens = preprocess_params["add_special_tokens"] = (
+                generate_kwargs.pop("add_special_tokens")
+            )
 
         if "padding" in generate_kwargs:
             preprocess_params["padding"] = generate_kwargs.pop("padding")
@@ -157,7 +169,10 @@ class TextGenerationPipeline(Pipeline):
             preprocess_params["prefix"] = prefix
         if prefix:
             prefix_inputs = self.tokenizer(
-                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
+                prefix,
+                padding=False,
+                add_special_tokens=add_special_tokens,
+                return_tensors=self.framework,
             )
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
@@ -178,23 +193,35 @@ class TextGenerationPipeline(Pipeline):
         postprocess_params = {}
         if return_full_text is not None and return_type is None:
             if return_text is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
+                raise ValueError(
+                    "`return_text` is mutually exclusive with `return_full_text`"
+                )
             if return_tensors is not None:
-                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
-            return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
+                raise ValueError(
+                    "`return_full_text` is mutually exclusive with `return_tensors`"
+                )
+            return_type = (
+                ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
+            )
         if return_tensors is not None and return_type is None:
             if return_text is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
+                raise ValueError(
+                    "`return_text` is mutually exclusive with `return_tensors`"
+                )
             return_type = ReturnType.TENSORS
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
-            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+            postprocess_params["clean_up_tokenization_spaces"] = (
+                clean_up_tokenization_spaces
+            )
         if continue_final_message is not None:
             postprocess_params["continue_final_message"] = continue_final_message
 
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            stop_sequence_ids = self.tokenizer.encode(
+                stop_sequence, add_special_tokens=False
+            )
             generate_kwargs["eos_token_id"] = stop_sequence_ids
 
         if self.assistant_model is not None:
@@ -265,9 +292,11 @@ class TextGenerationPipeline(Pipeline):
         """
         if isinstance(
             text_inputs,
-            (list, tuple, types.GeneratorType, KeyDataset)
-            if is_torch_available()
-            else (list, tuple, types.GeneratorType),
+            (
+                (list, tuple, types.GeneratorType, KeyDataset)
+                if is_torch_available()
+                else (list, tuple, types.GeneratorType)
+            ),
         ):
             if isinstance(text_inputs, types.GeneratorType):
                 text_inputs, _ = itertools.tee(text_inputs)
@@ -305,10 +334,14 @@ class TextGenerationPipeline(Pipeline):
             "padding": padding,
             "max_length": max_length,
         }
-        tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
+        tokenizer_kwargs = {
+            key: value for key, value in tokenizer_kwargs.items() if value is not None
+        }
 
         if isinstance(prompt_text, Chat):
-            tokenizer_kwargs.pop("add_special_tokens", None)  # ignore add_special_tokens on chats
+            tokenizer_kwargs.pop(
+                "add_special_tokens", None
+            )  # ignore add_special_tokens on chats
             # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
             # because very few models support multiple separate, consecutive assistant messages
             if continue_final_message is None:
@@ -322,7 +355,9 @@ class TextGenerationPipeline(Pipeline):
                 **tokenizer_kwargs,
             )
         else:
-            inputs = self.tokenizer(prefix + prompt_text, return_tensors=self.framework, **tokenizer_kwargs)
+            inputs = self.tokenizer(
+                prefix + prompt_text, return_tensors=self.framework, **tokenizer_kwargs
+            )
 
         inputs["prompt_text"] = prompt_text
 
@@ -331,7 +366,10 @@ class TextGenerationPipeline(Pipeline):
             if "max_new_tokens" in generate_kwargs:
                 new_tokens = generate_kwargs["max_new_tokens"]
             else:
-                new_tokens = generate_kwargs.get("max_length", self.generation_config.max_length) - cur_len
+                new_tokens = (
+                    generate_kwargs.get("max_length", self.generation_config.max_length)
+                    - cur_len
+                )
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -344,7 +382,9 @@ class TextGenerationPipeline(Pipeline):
 
                 inputs["input_ids"] = inputs["input_ids"][:, -keep_length:]
                 if "attention_mask" in inputs:
-                    inputs["attention_mask"] = inputs["attention_mask"][:, -keep_length:]
+                    inputs["attention_mask"] = inputs["attention_mask"][
+                        :, -keep_length:
+                    ]
 
         return inputs
 
@@ -369,7 +409,10 @@ class TextGenerationPipeline(Pipeline):
                 and generate_kwargs["generation_config"].max_new_tokens is not None
             )
             if not has_max_new_tokens:
-                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.generation_config.max_length
+                generate_kwargs["max_length"] = (
+                    generate_kwargs.get("max_length")
+                    or self.generation_config.max_length
+                )
                 generate_kwargs["max_length"] += prefix_length
             has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
                 "generation_config" in generate_kwargs
@@ -382,7 +425,9 @@ class TextGenerationPipeline(Pipeline):
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
-        output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+        output = self.model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs
+        )
 
         if isinstance(output, ModelOutput):
             generated_sequence = output.sequences
@@ -392,14 +437,18 @@ class TextGenerationPipeline(Pipeline):
             if self.framework == "pt":
                 for key, value in other_outputs.items():
                     if isinstance(value, torch.Tensor) and value.shape[0] == out_b:
-                        other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
+                        other_outputs[key] = value.reshape(
+                            in_b, out_b // in_b, *value.shape[1:]
+                        )
                     if isinstance(value, tuple) and len(value[0]) == out_b:
                         value = torch.stack(value).swapaxes(0, 1)
                         other_outputs[key] = value
             elif self.framework == "tf":
                 for key, value in other_outputs.items():
                     if isinstance(value, tf.Tensor) and value.shape[0] == out_b:
-                        other_outputs[key] = tf.reshape(value, (in_b, out_b // in_b, *value.shape[1:]))
+                        other_outputs[key] = tf.reshape(
+                            value, (in_b, out_b // in_b, *value.shape[1:])
+                        )
                     if isinstance(value, tuple) and len(value[0]) == out_b:
                         value = tf.stack(value).swapaxes(0, 1)
                         other_outputs[key] = value
@@ -409,9 +458,13 @@ class TextGenerationPipeline(Pipeline):
 
         out_b = generated_sequence.shape[0]
         if self.framework == "pt":
-            generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
+            generated_sequence = generated_sequence.reshape(
+                in_b, out_b // in_b, *generated_sequence.shape[1:]
+            )
         elif self.framework == "tf":
-            generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
+            generated_sequence = tf.reshape(
+                generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:])
+            )
 
         model_outputs = {
             "generated_sequence": generated_sequence,
@@ -438,11 +491,15 @@ class TextGenerationPipeline(Pipeline):
         if other_outputs:
             if self.framework == "pt":
                 for k, v in other_outputs.items():
-                    if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
+                    if isinstance(v, torch.Tensor) and v.shape[0] == len(
+                        generated_sequence
+                    ):
                         splitted_keys[k] = v.numpy().tolist()
             elif self.framework == "tf":
                 for k, v in other_outputs.items():
-                    if isinstance(v, tf.Tensor) and v.shape[0] == len(generated_sequence):
+                    if isinstance(v, tf.Tensor) and v.shape[0] == len(
+                        generated_sequence
+                    ):
                         splitted_keys[k] = v.numpy().tolist()
 
         for idx, sequence in enumerate(generated_sequence):
@@ -476,18 +533,23 @@ class TextGenerationPipeline(Pipeline):
                         if continue_final_message is None:
                             # If the user passes a chat ending in an assistant message, we treat it as a prefill by
                             # default because very few models support multiple separate, consecutive assistant messages
-                            continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
+                            continue_final_message = (
+                                prompt_text.messages[-1]["role"] == "assistant"
+                            )
                         if continue_final_message:
                             # With assistant prefill, concat onto the end of the last message
                             all_text = list(prompt_text.messages)[:-1] + [
                                 {
                                     "role": prompt_text.messages[-1]["role"],
-                                    "content": prompt_text.messages[-1]["content"] + all_text,
+                                    "content": prompt_text.messages[-1]["content"]
+                                    + all_text,
                                 }
                             ]
                         else:
                             # When we're not starting from a prefill, the output is a new assistant message
-                            all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
+                            all_text = list(prompt_text.messages) + [
+                                {"role": "assistant", "content": all_text}
+                            ]
                 record = {"generated_text": all_text}
                 for key, values in splitted_keys.items():
                     record[key] = values[idx]

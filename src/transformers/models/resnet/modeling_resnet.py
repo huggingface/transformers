@@ -23,23 +23,16 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BackboneOutput,
-    BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPoolingAndNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
+from ...modeling_outputs import (BackboneOutput,
+                                 BaseModelOutputWithNoAttention,
+                                 BaseModelOutputWithPoolingAndNoAttention,
+                                 ImageClassifierOutputWithNoAttention)
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -57,14 +50,26 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 class ResNetConvLayer(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        activation: str = "relu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=kernel_size // 2,
+            bias=False,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.activation = (
+            ACT2FN[activation] if activation is not None else nn.Identity()
+        )
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = self.convolution(input)
@@ -81,7 +86,11 @@ class ResNetEmbeddings(nn.Module):
     def __init__(self, config: ResNetConfig):
         super().__init__()
         self.embedder = ResNetConvLayer(
-            config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act
+            config.num_channels,
+            config.embedding_size,
+            kernel_size=7,
+            stride=2,
+            activation=config.hidden_act,
         )
         self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.num_channels = config.num_channels
@@ -105,7 +114,9 @@ class ResNetShortCut(nn.Module):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+        self.convolution = nn.Conv2d(
+            in_channels, out_channels, kernel_size=1, stride=stride, bias=False
+        )
         self.normalization = nn.BatchNorm2d(out_channels)
 
     def forward(self, input: Tensor) -> Tensor:
@@ -119,11 +130,19 @@ class ResNetBasicLayer(nn.Module):
     A classic ResNet's residual layer composed by two `3x3` convolutions.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        activation: str = "relu",
+    ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         self.shortcut = (
-            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            ResNetShortCut(in_channels, out_channels, stride=stride)
+            if should_apply_shortcut
+            else nn.Identity()
         )
         self.layer = nn.Sequential(
             ResNetConvLayer(in_channels, out_channels, stride=stride),
@@ -162,14 +181,25 @@ class ResNetBottleNeckLayer(nn.Module):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
         self.shortcut = (
-            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            ResNetShortCut(in_channels, out_channels, stride=stride)
+            if should_apply_shortcut
+            else nn.Identity()
         )
         self.layer = nn.Sequential(
             ResNetConvLayer(
-                in_channels, reduces_channels, kernel_size=1, stride=stride if downsample_in_bottleneck else 1
+                in_channels,
+                reduces_channels,
+                kernel_size=1,
+                stride=stride if downsample_in_bottleneck else 1,
             ),
-            ResNetConvLayer(reduces_channels, reduces_channels, stride=stride if not downsample_in_bottleneck else 1),
-            ResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
+            ResNetConvLayer(
+                reduces_channels,
+                reduces_channels,
+                stride=stride if not downsample_in_bottleneck else 1,
+            ),
+            ResNetConvLayer(
+                reduces_channels, out_channels, kernel_size=1, activation=None
+            ),
         )
         self.activation = ACT2FN[activation]
 
@@ -197,7 +227,11 @@ class ResNetStage(nn.Module):
     ):
         super().__init__()
 
-        layer = ResNetBottleNeckLayer if config.layer_type == "bottleneck" else ResNetBasicLayer
+        layer = (
+            ResNetBottleNeckLayer
+            if config.layer_type == "bottleneck"
+            else ResNetBasicLayer
+        )
 
         if config.layer_type == "bottleneck":
             first_layer = layer(
@@ -208,9 +242,15 @@ class ResNetStage(nn.Module):
                 downsample_in_bottleneck=config.downsample_in_bottleneck,
             )
         else:
-            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act)
+            first_layer = layer(
+                in_channels, out_channels, stride=stride, activation=config.hidden_act
+            )
         self.layers = nn.Sequential(
-            first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
+            first_layer,
+            *[
+                layer(out_channels, out_channels, activation=config.hidden_act)
+                for _ in range(depth - 1)
+            ]
         )
 
     def forward(self, input: Tensor) -> Tensor:
@@ -235,11 +275,18 @@ class ResNetEncoder(nn.Module):
             )
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
-        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(ResNetStage(config, in_channels, out_channels, depth=depth))
+        for (in_channels, out_channels), depth in zip(
+            in_out_channels, config.depths[1:]
+        ):
+            self.stages.append(
+                ResNetStage(config, in_channels, out_channels, depth=depth)
+            )
 
     def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
+        self,
+        hidden_state: Tensor,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> BaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
@@ -335,17 +382,26 @@ class ResNetModel(ResNetPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         embedding_output = self.embedder(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -377,7 +433,11 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
+            (
+                nn.Linear(config.hidden_sizes[-1], config.num_labels)
+                if config.num_labels > 0
+                else nn.Identity()
+            ),
         )
         # initialize weights and apply final processing
         self.post_init()
@@ -401,9 +461,15 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.resnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.resnet(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -415,7 +481,9 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -436,7 +504,9 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
 
 @add_start_docstrings(
@@ -460,7 +530,10 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
         Returns:
@@ -488,14 +561,20 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         embedding_output = self.embedder(pixel_values)
 
-        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
+        outputs = self.encoder(
+            embedding_output, output_hidden_states=True, return_dict=True
+        )
 
         hidden_states = outputs.hidden_states
 
@@ -517,4 +596,9 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
         )
 
 
-__all__ = ["ResNetForImageClassification", "ResNetModel", "ResNetPreTrainedModel", "ResNetBackbone"]
+__all__ = [
+    "ResNetForImageClassification",
+    "ResNetModel",
+    "ResNetPreTrainedModel",
+    "ResNetBackbone",
+]

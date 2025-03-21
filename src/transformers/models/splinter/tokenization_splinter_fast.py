@@ -23,7 +23,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_splinter import SplinterTokenizer
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
@@ -180,12 +179,18 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
 
         if self.padding_side == "right":
             # Input is question-then-context
-            return len(cls + token_ids_0 + question_suffix + sep) * [0] + len(token_ids_1 + sep) * [1]
+            return len(cls + token_ids_0 + question_suffix + sep) * [0] + len(
+                token_ids_1 + sep
+            ) * [1]
         else:
             # Input is context-then-question
-            return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + question_suffix + sep) * [1]
+            return len(cls + token_ids_0 + sep) * [0] + len(
+                token_ids_1 + question_suffix + sep
+            ) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

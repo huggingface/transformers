@@ -19,36 +19,25 @@ import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
-from transformers.testing_utils import (
-    require_tokenizers,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_bf16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_tokenizers, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_bf16, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers import (
-        AutoTokenizer,
-        SwitchTransformersEncoderModel,
-        SwitchTransformersForConditionalGeneration,
-        SwitchTransformersModel,
-        SwitchTransformersTop1Router,
-    )
+    from transformers import (AutoTokenizer, SwitchTransformersEncoderModel,
+                              SwitchTransformersForConditionalGeneration,
+                              SwitchTransformersModel,
+                              SwitchTransformersTop1Router)
     from transformers.models.switch_transformers.modeling_switch_transformers import (
-        load_balancing_loss_func,
-        router_z_loss_func,
-    )
+        load_balancing_loss_func, router_z_loss_func)
 
 
 class SwitchTransformersModelTester:
@@ -112,18 +101,28 @@ class SwitchTransformersModelTester:
         return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.encoder_seq_length], self.vocab_size
+        )
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.encoder_seq_length], vocab_size=2
+            )
+            decoder_attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         lm_labels = None
         if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            lm_labels = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], self.vocab_size
+            )
 
         config = self.get_config()
 
@@ -191,30 +190,40 @@ class SwitchTransformersModelTester:
         model.eval()
 
         # make sure that lm_labels are correctly padded from the right
-        lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
+        lm_labels.masked_fill_(
+            (lm_labels == self.decoder_start_token_id), self.eos_token_id
+        )
 
         # add casaul pad token mask
         triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
         lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
         decoder_input_ids = model._shift_right(lm_labels)
 
-        for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(zip(decoder_input_ids, lm_labels)):
+        for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(
+            zip(decoder_input_ids, lm_labels)
+        ):
             # first item
-            self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
+            self.parent.assertEqual(
+                decoder_input_ids_slice[0].item(), self.decoder_start_token_id
+            )
             if i < decoder_input_ids_slice.shape[-1]:
                 if i < decoder_input_ids.shape[-1] - 1:
                     # items before diagonal
                     self.parent.assertListEqual(
-                        decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()
+                        decoder_input_ids_slice[1 : i + 1].tolist(),
+                        lm_labels_slice[:i].tolist(),
                     )
                 # pad items after diagonal
                 if i < decoder_input_ids.shape[-1] - 2:
                     self.parent.assertListEqual(
-                        decoder_input_ids_slice[i + 2 :].tolist(), lm_labels_slice[i + 1 : -1].tolist()
+                        decoder_input_ids_slice[i + 2 :].tolist(),
+                        lm_labels_slice[i + 1 : -1].tolist(),
                     )
             else:
                 # all items after square
-                self.parent.assertListEqual(decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist())
+                self.parent.assertListEqual(
+                    decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist()
+                )
 
     def create_and_check_model(
         self,
@@ -239,8 +248,14 @@ class SwitchTransformersModelTester:
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
 
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
-        self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            encoder_output.size(),
+            (self.batch_size, self.encoder_seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            decoder_output.size(),
+            (self.batch_size, self.decoder_seq_length, self.hidden_size),
+        )
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
@@ -255,7 +270,11 @@ class SwitchTransformersModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = SwitchTransformersForConditionalGeneration(config=config).to(torch_device).eval()
+        model = (
+            SwitchTransformersForConditionalGeneration(config=config)
+            .to(torch_device)
+            .eval()
+        )
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -263,7 +282,10 @@ class SwitchTransformersModelTester:
             labels=lm_labels,
         )
         self.parent.assertEqual(len(outputs), 10)
-        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            outputs["logits"].size(),
+            (self.batch_size, self.decoder_seq_length, self.vocab_size),
+        )
         self.parent.assertEqual(outputs["loss"].size(), ())
 
     def create_and_check_decoder_model_past(
@@ -275,7 +297,9 @@ class SwitchTransformersModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = SwitchTransformersModel(config=config).get_decoder().to(torch_device).eval()
+        model = (
+            SwitchTransformersModel(config=config).get_decoder().to(torch_device).eval()
+        )
         # first forward pass
         outputs = model(input_ids, use_cache=True, output_router_logits=False)
         outputs_use_cache_conf = model(input_ids, output_router_logits=False)
@@ -292,18 +316,24 @@ class SwitchTransformersModelTester:
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
-        output_from_no_past = model(next_input_ids, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, output_router_logits=False)[
+        output_from_no_past = model(next_input_ids, output_router_logits=False)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, output_router_logits=False
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -326,7 +356,10 @@ class SwitchTransformersModelTester:
 
         # first forward pass
         output, past_key_values = model(
-            input_ids, attention_mask=attn_mask, use_cache=True, output_router_logits=False
+            input_ids,
+            attention_mask=attn_mask,
+            use_cache=True,
+            output_router_logits=False,
         ).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
@@ -334,31 +367,45 @@ class SwitchTransformersModelTester:
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)[
-            "last_hidden_state"
-        ]
+        output_from_no_past = model(
+            next_input_ids, attention_mask=attn_mask, output_router_logits=False
+        )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_router_logits=False
+            next_tokens,
+            past_key_values=past_key_values,
+            attention_mask=attn_mask,
+            output_router_logits=False,
         )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -369,9 +416,16 @@ class SwitchTransformersModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = SwitchTransformersModel(config=config).get_decoder().to(torch_device).eval()
+        model = (
+            SwitchTransformersModel(config=config).get_decoder().to(torch_device).eval()
+        )
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True, output_router_logits=False)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            use_cache=True,
+            output_router_logits=False,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -383,9 +437,11 @@ class SwitchTransformersModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_router_logits=False)[
-            "last_hidden_state"
-        ]
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_router_logits=False,
+        )["last_hidden_state"]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
@@ -395,13 +451,17 @@ class SwitchTransformersModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     @slow
     def create_and_check_generate_with_past_key_values(
@@ -417,15 +477,23 @@ class SwitchTransformersModelTester:
         This test does not pass for small models due to precision errors. It is therefore only run for slightly larger models.
         """
         model = (
-            SwitchTransformersForConditionalGeneration.from_pretrained("google/switch-base-8").to(torch_device).eval()
+            SwitchTransformersForConditionalGeneration.from_pretrained(
+                "google/switch-base-8"
+            )
+            .to(torch_device)
+            .eval()
         )
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
             input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
         )
         torch.manual_seed(0)
-        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
-        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+        output_with_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=5, do_sample=True
+        )
+        self.parent.assertTrue(
+            torch.all(output_with_past_cache == output_without_past_cache)
+        )
 
     def create_and_check_model_fp16_forward(
         self,
@@ -437,7 +505,9 @@ class SwitchTransformersModelTester:
         lm_labels,
     ):
         model = SwitchTransformersModel(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        output = model(
+            input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask
+        )["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_encoder_decoder_shared_weights(
@@ -449,7 +519,10 @@ class SwitchTransformersModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        for model_class in [SwitchTransformersModel, SwitchTransformersForConditionalGeneration]:
+        for model_class in [
+            SwitchTransformersModel,
+            SwitchTransformersForConditionalGeneration,
+        ]:
             torch.manual_seed(0)
             model = model_class(config=config).to(torch_device).eval()
             # load state dict copies weights but does not tie them
@@ -476,14 +549,17 @@ class SwitchTransformersModelTester:
 
             # check that models has less parameters
             self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                sum(p.numel() for p in tied_model.parameters()),
+                sum(p.numel() for p in model.parameters()),
             )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
             self.parent.assertTrue(
                 torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                    model_result[0][0, :, random_slice_idx],
+                    tied_model_result[0][0, :, random_slice_idx],
+                    atol=1e-4,
                 )
             )
 
@@ -496,7 +572,8 @@ class SwitchTransformersModelTester:
 
                 # check that models has less parameters
                 self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                    sum(p.numel() for p in tied_model.parameters()),
+                    sum(p.numel() for p in model.parameters()),
                 )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
@@ -523,11 +600,19 @@ class SwitchTransformersModelTester:
         prev_vocab_size = config.vocab_size
 
         config.tie_word_embeddings = False
-        model = SwitchTransformersForConditionalGeneration(config=config).to(torch_device).eval()
+        model = (
+            SwitchTransformersForConditionalGeneration(config=config)
+            .to(torch_device)
+            .eval()
+        )
         model.resize_token_embeddings(prev_vocab_size - 10)
 
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
+        self.parent.assertEqual(
+            model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10
+        )
+        self.parent.assertEqual(
+            model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10
+        )
         self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
 
     def prepare_config_and_inputs_for_common(self):
@@ -553,9 +638,13 @@ class SwitchTransformersModelTester:
 
 
 @require_torch
-class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class SwitchTransformersModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
+        (SwitchTransformersModel, SwitchTransformersForConditionalGeneration)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
@@ -580,7 +669,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SwitchTransformersConfig, d_model=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -617,7 +708,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def test_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     def test_decoder_model_past_with_3d_attn_mask(self):
         (
@@ -630,11 +723,19 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         ) = self.model_tester.prepare_config_and_inputs()
 
         attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
+            [
+                self.model_tester.batch_size,
+                self.model_tester.encoder_seq_length,
+                self.model_tester.encoder_seq_length,
+            ],
             vocab_size=2,
         )
         decoder_attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.decoder_seq_length],
+            [
+                self.model_tester.batch_size,
+                self.model_tester.decoder_seq_length,
+                self.model_tester.decoder_seq_length,
+            ],
             vocab_size=2,
         )
 
@@ -650,7 +751,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     # overwrite because T5 doesn't accept position ids as input and expects `decoder_input_ids`
     def test_custom_4d_attention_mask(self):
         for model_class in self.all_generative_model_classes:
-            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, input_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
             (
@@ -675,7 +778,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             # logits_shared_prefix.shape == torch.Size([1, 6, ...])
 
             out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
-            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+            out_shared_prefix_last_tokens = logits_shared_prefix[
+                0, -3:, :
+            ]  # last three tokens
 
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens)
@@ -684,15 +789,21 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_generate_with_past_key_values(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_past_key_values(
+            *config_and_inputs
+        )
 
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
+        self.model_tester.create_and_check_encoder_decoder_shared_weights(
+            *config_and_inputs
+        )
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -710,7 +821,11 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         self.assertIsNotNone(model)
 
     def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+        attention_names = [
+            "encoder_attentions",
+            "decoder_attentions",
+            "cross_attentions",
+        ]
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
         max_length = config_and_inputs[1].shape[-1] + 3
@@ -718,9 +833,15 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         model.to(torch_device)
 
         head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
+            "head_mask": torch.zeros(
+                config.num_layers, config.num_heads, device=torch_device
+            ),
+            "decoder_head_mask": torch.zeros(
+                config.num_decoder_layers, config.num_heads, device=torch_device
+            ),
+            "cross_attn_head_mask": torch.zeros(
+                config.num_decoder_layers, config.num_heads, device=torch_device
+            ),
         }
 
         for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
@@ -740,7 +861,11 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                 **head_masks,
             )
             # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+            attn_weights = (
+                out[attn_name]
+                if attn_name == attention_names[0]
+                else out[attn_name][-1]
+            )
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     @unittest.skip(
@@ -796,11 +921,15 @@ class SwitchTransformersEncoderOnlyModelTester:
         return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.encoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.encoder_seq_length], vocab_size=2
+            )
 
         config = SwitchTransformersConfig(
             vocab_size=self.vocab_size,
@@ -831,10 +960,15 @@ class SwitchTransformersEncoderOnlyModelTester:
         result = model(input_ids=input_ids)
         encoder_output = result.last_hidden_state
 
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            encoder_output.size(),
+            (self.batch_size, self.encoder_seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_fp16_forward(self, config, input_ids, attention_mask):
-        model = SwitchTransformersEncoderModel(config=config).to(torch_device).half().eval()
+        model = (
+            SwitchTransformersEncoderModel(config=config).to(torch_device).half().eval()
+        )
         output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
@@ -850,7 +984,9 @@ class SwitchTransformersEncoderOnlyModelTester:
 
 
 class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
+    all_model_classes = (
+        (SwitchTransformersEncoderModel,) if is_torch_available() else ()
+    )
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = False
@@ -858,7 +994,9 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
+        self.config_tester = ConfigTester(
+            self, config_class=SwitchTransformersConfig, d_model=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -895,7 +1033,11 @@ class TestAsymmetricSwitchTransformers(unittest.TestCase):
             decoder_attention_mask,
             lm_labels,
         ) = inputs
-        model = SwitchTransformersForConditionalGeneration(config=config).to(torch_device).eval()
+        model = (
+            SwitchTransformersForConditionalGeneration(config=config)
+            .to(torch_device)
+            .eval()
+        )
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -905,13 +1047,19 @@ class TestAsymmetricSwitchTransformers(unittest.TestCase):
         )
         # outputs = model(*inputs)
         assert len(outputs) == 4
-        assert outputs["logits"].size() == (tester.batch_size, tester.decoder_seq_length, tester.vocab_size)
+        assert outputs["logits"].size() == (
+            tester.batch_size,
+            tester.decoder_seq_length,
+            tester.vocab_size,
+        )
         assert outputs["loss"].size() == ()
         return model
 
     def test_small_decoder(self):
         # num_hidden_layers is passed to SwitchTransformersConfig as num_layers
-        model = self.build_model_and_check_forward_pass(decoder_layers=1, num_hidden_layers=2)
+        model = self.build_model_and_check_forward_pass(
+            decoder_layers=1, num_hidden_layers=2
+        )
         assert len(model.encoder.block) == 2
         assert len(model.decoder.block) == 1
 
@@ -1026,7 +1174,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router_probs = torch.softmax(router_logits, dim=-1)
 
         router_z_loss = router_z_loss_func(router_logits)
-        auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
+        auxiliary_loss = load_balancing_loss_func(
+            router_probs, torch.argmax(expert_index, dim=-1)
+        )
 
         self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
         self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
@@ -1037,17 +1187,24 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         model = SwitchTransformersTop1Router(self.config)
         seq_len = 128
         batch_size = 4
-        hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
+        hidden_states = torch.stack(
+            batch_size * [torch.rand((seq_len, self.config.hidden_size))]
+        )
 
         router_probs, router_logits = model._compute_router_probabilities(hidden_states)
         expert_index = torch.argmax(router_probs, dim=-1)
-        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
+        expert_index = torch.nn.functional.one_hot(
+            expert_index, num_classes=self.config.num_experts
+        )
 
         token_priority = torch.cumsum(expert_index, dim=-2)
         expert_capacity_mask = token_priority <= self.config.expert_capacity
         expert_index = expert_index * expert_capacity_mask
 
-        assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
+        assert (
+            torch.sum(expert_index)
+            <= batch_size * self.config.num_experts * self.config.expert_capacity
+        )
 
 
 @slow
@@ -1062,9 +1219,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = SwitchTransformersModel.from_pretrained(
+            "google/switch-base-8", torch_dtype=torch.bfloat16
+        ).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
@@ -1080,10 +1237,14 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
             ]
         ).to(torch.bfloat16)
         # fmt: on
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
+        hf_logits = model(
+            input_ids, decoder_input_ids=decoder_input_ids
+        ).last_hidden_state.cpu()
         hf_logits = hf_logits[0, 0, :30]
 
-        torch.testing.assert_close(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(
+            hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3
+        )
 
     @unittest.skip(
         "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
@@ -1094,7 +1255,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "google-t5/t5-small", use_fast=False, legacy=False
+        )
         model = model.to(torch_device)
 
         input_ids = tokenizer(
@@ -1122,7 +1285,9 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "google-t5/t5-small", use_fast=False, legacy=False
+        )
 
         inputs = [
             "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."

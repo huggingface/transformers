@@ -24,25 +24,15 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BackboneOutput,
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-    ImageClassifierOutput,
-    ModelOutput,
-)
+from ...modeling_outputs import (BackboneOutput, BaseModelOutput,
+                                 BaseModelOutputWithPooling,
+                                 ImageClassifierOutput, ModelOutput)
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings, torch_int)
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_hiera import HieraConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -219,11 +209,17 @@ class HieraPatchEmbeddings(nn.Module):
         # Support any number of spatial dimensions
         self.spatial_dims = len(config.patch_size)
         if self.spatial_dims != 2:
-            raise ValueError(f"The number of dimensions of the input image should be 2, but got {self.spatial_dims}.")
+            raise ValueError(
+                f"The number of dimensions of the input image should be 2, but got {self.spatial_dims}."
+            )
         self.num_channels = config.num_channels
         self.image_size = config.image_size[-2:]
-        self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
-        self.mask_spatial_shape = [i // s for i, s in zip(self.tokens_spatial_shape, config.masked_unit_size)]
+        self.tokens_spatial_shape = [
+            i // s for i, s in zip(config.image_size, config.patch_stride)
+        ]
+        self.mask_spatial_shape = [
+            i // s for i, s in zip(self.tokens_spatial_shape, config.masked_unit_size)
+        ]
         self.mask_ratio = config.mask_ratio
         self.is_mae = is_mae
         self.projection = nn.Conv2d(
@@ -235,7 +231,9 @@ class HieraPatchEmbeddings(nn.Module):
         )
 
     def masked_conv(
-        self, pixel_values: torch.FloatTensor, bool_masked_pos: Optional[torch.BoolTensor] = None
+        self,
+        pixel_values: torch.FloatTensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         """Zero-out the masked regions of the input before conv.
         Prevents leakage of masked regions when using overlapping kernels.
@@ -245,9 +243,13 @@ class HieraPatchEmbeddings(nn.Module):
 
         target_size = pixel_values.shape[2:]
         # Reshape bool_masked_pos to (batch_size, 1, mask_unit_height, mask_unit_width)
-        bool_masked_pos = bool_masked_pos.view(pixel_values.shape[0], 1, *self.mask_spatial_shape)
+        bool_masked_pos = bool_masked_pos.view(
+            pixel_values.shape[0], 1, *self.mask_spatial_shape
+        )
 
-        bool_masked_pos = nn.functional.interpolate(bool_masked_pos.float(), size=target_size)
+        bool_masked_pos = nn.functional.interpolate(
+            bool_masked_pos.float(), size=target_size
+        )
 
         return self.projection(pixel_values * bool_masked_pos)
 
@@ -278,7 +280,9 @@ class HieraPatchEmbeddings(nn.Module):
 
         # Generate the binary bool_masked_pos: 1 is *keep*, 0 is *remove*
         # Note this is opposite to original MAE
-        bool_masked_pos = torch.zeros([batch_size, num_windows], device=pixel_values.device)
+        bool_masked_pos = torch.zeros(
+            [batch_size, num_windows], device=pixel_values.device
+        )
         bool_masked_pos[:, :len_keep] = 1
         # Unshuffle to get the binary bool_masked_pos
         bool_masked_pos = torch.gather(bool_masked_pos, dim=1, index=ids_restore).bool()
@@ -291,7 +295,9 @@ class HieraPatchEmbeddings(nn.Module):
         noise: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.BoolTensor], Optional[torch.LongTensor]]:
         (bool_masked_pos, ids_restore) = (
-            self.random_masking(pixel_values, noise=noise) if self.is_mae else (None, None)
+            self.random_masking(pixel_values, noise=noise)
+            if self.is_mae
+            else (None, None)
         )
 
         embeddings = self.masked_conv(pixel_values, bool_masked_pos)
@@ -308,17 +314,27 @@ class HieraEmbeddings(nn.Module):
     def __init__(self, config: HieraConfig, is_mae: bool = False) -> None:
         super().__init__()
         self.patch_stride = config.patch_stride
-        tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
-        self.mask_spatial_shape = [i // s for i, s in zip(tokens_spatial_shape, config.masked_unit_size)]
+        tokens_spatial_shape = [
+            i // s for i, s in zip(config.image_size, config.patch_stride)
+        ]
+        self.mask_spatial_shape = [
+            i // s for i, s in zip(tokens_spatial_shape, config.masked_unit_size)
+        ]
         self.num_tokens = math.prod(tokens_spatial_shape)
         self.is_mae = is_mae
 
         self.patch_embeddings = HieraPatchEmbeddings(config, is_mae=is_mae)
 
-        self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.embed_dim))
+        self.position_embeddings = nn.Parameter(
+            torch.zeros(1, self.num_tokens, config.embed_dim)
+        )
 
     def interpolate_pos_encoding(
-        self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
+        self,
+        embeddings: torch.Tensor,
+        pos_embeds: torch.Tensor,
+        height: int,
+        width: int,
     ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -333,7 +349,11 @@ class HieraEmbeddings(nn.Module):
         num_positions = pos_embeds.shape[1]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        if (
+            not torch.jit.is_tracing()
+            and num_patches == num_positions
+            and height == width
+        ):
             return pos_embeds
 
         dim = embeddings.shape[-1]
@@ -356,10 +376,16 @@ class HieraEmbeddings(nn.Module):
         return pos_embeds
 
     def get_position_embedding(
-        self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
+        self,
+        embeddings: torch.Tensor,
+        height: int,
+        width: int,
+        interpolate_pos_encoding: bool,
     ) -> torch.FloatTensor:
         return (
-            self.interpolate_pos_encoding(embeddings, self.position_embeddings, height, width)
+            self.interpolate_pos_encoding(
+                embeddings, self.position_embeddings, height, width
+            )
             if interpolate_pos_encoding
             else self.position_embeddings
         )
@@ -371,8 +397,12 @@ class HieraEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.BoolTensor], Optional[torch.LongTensor]]:
         height, width = pixel_values.shape[-2:]
-        embeddings, bool_masked_pos, ids_restore = self.patch_embeddings(pixel_values, noise=noise)
-        embeddings = embeddings + self.get_position_embedding(embeddings, height, width, interpolate_pos_encoding)
+        embeddings, bool_masked_pos, ids_restore = self.patch_embeddings(
+            pixel_values, noise=noise
+        )
+        embeddings = embeddings + self.get_position_embedding(
+            embeddings, height, width, interpolate_pos_encoding
+        )
         return embeddings, bool_masked_pos, ids_restore
 
 
@@ -427,7 +457,14 @@ class HieraMaskUnitAttention(nn.Module):
 
         if self.query_stride > 1:
             # Refer to unroll to see how this performs a maxpool-Nd
-            query = query.view(batch_size, self.num_heads, num_windows, self.query_stride, -1, self.head_dim)
+            query = query.view(
+                batch_size,
+                self.num_heads,
+                num_windows,
+                self.query_stride,
+                -1,
+                self.head_dim,
+            )
             query = query.max(dim=3).values
 
         attn_weights = (query * self.scale) @ key.transpose(-1, -2)
@@ -438,14 +475,18 @@ class HieraMaskUnitAttention(nn.Module):
             attn_weights = attn_weights * head_mask
 
         attn_output = attn_weights @ value
-        attn_output = attn_output.transpose(1, 3).reshape(batch_size, -1, self.hidden_size_output)
+        attn_output = attn_output.transpose(1, 3).reshape(
+            batch_size, -1, self.hidden_size_output
+        )
         attn_output = self.proj(attn_output)
 
         return (attn_output, attn_weights) if output_attentions else (attn_output, None)
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -458,8 +499,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -522,7 +567,9 @@ class HieraLayer(nn.Module):
             use_mask_unit_attn=use_mask_unit_attn,
         )
 
-        self.layernorm_after = nn.LayerNorm(hidden_size_output, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(
+            hidden_size_output, eps=config.layer_norm_eps
+        )
         self.mlp = HieraMlp(config, hidden_size_output)
 
         self.drop_path = HieraDropPath(drop_path) if drop_path > 0 else nn.Identity()
@@ -542,7 +589,11 @@ class HieraLayer(nn.Module):
             hidden_states = self.proj(hidden_states_norm)
             # Refer to unroll to see how this performs a maxpool-Nd
             hidden_states = (
-                hidden_states.view(batch_size, self.query_stride, -1, self.hidden_size_output).max(dim=1).values
+                hidden_states.view(
+                    batch_size, self.query_stride, -1, self.hidden_size_output
+                )
+                .max(dim=1)
+                .values
             )
 
         (hidden_states_norm, attn_weights) = self.attn(
@@ -579,7 +630,9 @@ class HieraStage(nn.Module):
         # applied post pooling on lower resolution
         previous_stage_used_masked_attention = False
         if stage_num is not None:
-            previous_stage_used_masked_attention = config.masked_unit_attention[stage_num - 1 if stage_num > 0 else 0]
+            previous_stage_used_masked_attention = config.masked_unit_attention[
+                stage_num - 1 if stage_num > 0 else 0
+            ]
         self.layers = nn.ModuleList(
             [
                 HieraLayer(
@@ -590,14 +643,18 @@ class HieraStage(nn.Module):
                     drop_path=drop_path[i],
                     query_stride=query_stride[i],
                     window_size=window_size,
-                    use_mask_unit_attn=use_mask_unit_attn or (previous_stage_used_masked_attention and i == 0),
+                    use_mask_unit_attn=use_mask_unit_attn
+                    or (previous_stage_used_masked_attention and i == 0),
                 )
                 for i in range(depth)
             ]
         )
 
     def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.FloatTensor], output_attentions: bool = False
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.FloatTensor],
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -608,7 +665,9 @@ class HieraStage(nn.Module):
         return hidden_states, attn_weights
 
 
-def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shape: List[int]) -> torch.Tensor:
+def undo_windowing(
+    hidden_states: torch.Tensor, shape: List[int], mask_unit_shape: List[int]
+) -> torch.Tensor:
     """
     Restore spatial organization by undoing windowed organization of mask units.
 
@@ -624,7 +683,9 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
     # From: [batch_size, num_mask_unit_height*num_mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
     num_mask_units = [s // mu for s, mu in zip(shape, mask_unit_shape)]
-    hidden_states = hidden_states.view(batch_size, *num_mask_units, *mask_unit_shape, hidden_size)
+    hidden_states = hidden_states.view(
+        batch_size, *num_mask_units, *mask_unit_shape, hidden_size
+    )
 
     # From: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size]
@@ -643,7 +704,10 @@ class HieraEncoder(nn.Module):
         # query strides rule
         cumulative_depths = torch.tensor(config.depths).cumsum(0).tolist()
         query_pool_layer = cumulative_depths[: config.num_query_pool]
-        query_strides = [math.prod(config.query_stride) if i in query_pool_layer else 1 for i in range(total_depth)]
+        query_strides = [
+            math.prod(config.query_stride) if i in query_pool_layer else 1
+            for i in range(total_depth)
+        ]
 
         # Transformer blocks
         self.stages = nn.ModuleList()
@@ -652,7 +716,9 @@ class HieraEncoder(nn.Module):
         masked_unit_area = math.prod(config.masked_unit_size)
         query_stride_area = math.prod(config.query_stride)
         for idx_stage, depth in enumerate(config.depths):
-            hidden_size_output = int(config.embed_dim * config.embed_dim_multiplier**idx_stage)
+            hidden_size_output = int(
+                config.embed_dim * config.embed_dim_multiplier**idx_stage
+            )
 
             stage = HieraStage(
                 config=config,
@@ -661,7 +727,9 @@ class HieraEncoder(nn.Module):
                 hidden_size_output=hidden_size_output,
                 num_heads=config.num_heads[idx_stage],
                 drop_path=dpr[stage_ends[idx_stage] : stage_ends[idx_stage + 1]],
-                query_stride=query_strides[stage_ends[idx_stage] : stage_ends[idx_stage + 1]],
+                query_stride=query_strides[
+                    stage_ends[idx_stage] : stage_ends[idx_stage + 1]
+                ],
                 window_size=int(masked_unit_area * query_stride_area**-idx_stage),
                 use_mask_unit_attn=config.masked_unit_attention[idx_stage],
                 stage_num=idx_stage,
@@ -686,7 +754,10 @@ class HieraEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     def reroll(
-        self, hidden_states: torch.Tensor, stage_idx: int, bool_masked_pos: Optional[torch.BoolTensor] = None
+        self,
+        hidden_states: torch.Tensor,
+        stage_idx: int,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         """
         Roll the given tensor back up to spatial order assuming it's from the given block.
@@ -705,7 +776,11 @@ class HieraEncoder(nn.Module):
         for strides in schedule:
             # Extract the current patch from seq_len
             hidden_states = hidden_states.view(
-                batch_size, *strides, seq_len // math.prod(strides), *mask_unit_shape, hidden_size
+                batch_size,
+                *strides,
+                seq_len // math.prod(strides),
+                *mask_unit_shape,
+                hidden_size,
             )
 
             # Move that patch into the current MU
@@ -716,11 +791,15 @@ class HieraEncoder(nn.Module):
             # Reshape to [batch_size, seq_len//(stride*stride), *mask_units, hidden_size]
             for i in range(num_dim):
                 mask_unit_shape[i] *= strides[i]
-            hidden_states = hidden_states.reshape(batch_size, -1, *mask_unit_shape, hidden_size)
+            hidden_states = hidden_states.reshape(
+                batch_size, -1, *mask_unit_shape, hidden_size
+            )
             seq_len = hidden_states.shape[1]
 
         # Current shape (e.g., 2d: [batch_size, #num_mask_units_height*#num_mask_units_width, mask_unit_height, mask_unit_width, hidden_size])
-        hidden_states = hidden_states.view(batch_size, seq_len, *mask_unit_shape, hidden_size)
+        hidden_states = hidden_states.view(
+            batch_size, seq_len, *mask_unit_shape, hidden_size
+        )
 
         # If masked, return [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size]
         if bool_masked_pos is not None:
@@ -746,18 +825,27 @@ class HieraEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-            reshaped_hidden_states = self.reroll(hidden_states, stage_idx=0, bool_masked_pos=bool_masked_pos)
-            all_reshaped_hidden_states = all_reshaped_hidden_states + (reshaped_hidden_states,)
+            reshaped_hidden_states = self.reroll(
+                hidden_states, stage_idx=0, bool_masked_pos=bool_masked_pos
+            )
+            all_reshaped_hidden_states = all_reshaped_hidden_states + (
+                reshaped_hidden_states,
+            )
 
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, layer_head_mask, output_attentions
+                    stage_module.__call__,
+                    hidden_states,
+                    layer_head_mask,
+                    output_attentions,
                 )
             else:
-                layer_outputs = stage_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = stage_module(
+                    hidden_states, layer_head_mask, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -766,13 +854,22 @@ class HieraEncoder(nn.Module):
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-                reshaped_hidden_states = self.reroll(hidden_states, stage_idx=i, bool_masked_pos=bool_masked_pos)
-                all_reshaped_hidden_states = all_reshaped_hidden_states + (reshaped_hidden_states,)
+                reshaped_hidden_states = self.reroll(
+                    hidden_states, stage_idx=i, bool_masked_pos=bool_masked_pos
+                )
+                all_reshaped_hidden_states = all_reshaped_hidden_states + (
+                    reshaped_hidden_states,
+                )
 
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, all_hidden_states, all_self_attentions, all_reshaped_hidden_states]
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_self_attentions,
+                    all_reshaped_hidden_states,
+                ]
                 if v is not None
             )
         return HieraEncoderOutput(
@@ -784,7 +881,10 @@ class HieraEncoder(nn.Module):
 
 
 def unroll(
-    hidden_states: torch.Tensor, image_shape: Tuple[int, int], patch_stride: Tuple[int, int], schedule: List[List[int]]
+    hidden_states: torch.Tensor,
+    image_shape: Tuple[int, int],
+    patch_stride: Tuple[int, int],
+    schedule: List[List[int]],
 ) -> torch.Tensor:
     """
     Reorders the tokens such that patches are contiguous in memory.
@@ -826,7 +926,12 @@ def unroll(
         # Move the patch stride into the batch dimension
         # For example in 2d: [batch_size, stride, stride, height // stride, width // stride, hidden_size]
         num_dims = len(new_shape)
-        permute = [0] + list(range(2, num_dims - 1, 2)) + list(range(1, num_dims - 1, 2)) + [num_dims - 1]
+        permute = (
+            [0]
+            + list(range(2, num_dims - 1, 2))
+            + list(range(1, num_dims - 1, 2))
+            + [num_dims - 1]
+        )
         hidden_states = hidden_states.permute(permute)
 
         # Now finally flatten the relevant dims into the batch dimension
@@ -908,7 +1013,9 @@ HIERA_INPUTS_DOCSTRING = r"""
 class HieraPooler(nn.Module):
     def __init__(self, config: HieraConfig):
         super().__init__()
-        num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
+        num_features = int(
+            config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1)
+        )
         self.layernorm = nn.LayerNorm(num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1)
 
@@ -931,9 +1038,13 @@ class HieraPooler(nn.Module):
     """,
 )
 class HieraModel(HieraPreTrainedModel):
-    def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False):
+    def __init__(
+        self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False
+    ):
         super().__init__(config)
-        self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
+        self.num_features = int(
+            config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1)
+        )
 
         self.embeddings = HieraEmbeddings(config, is_mae=is_mae)
         self.encoder = HieraEncoder(config)
@@ -979,11 +1090,19 @@ class HieraModel(HieraPreTrainedModel):
                 mainly used for testing purposes to control randomness and maintain the reproducibility
                 when is_mae is set to True.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1011,7 +1130,9 @@ class HieraModel(HieraPreTrainedModel):
         if bool_masked_pos is not None:
             mask_unit_area = math.prod(self.config.masked_unit_size)
             batch_size, _, hidden_size = hidden_states.shape
-            positions = bool_masked_pos.unsqueeze(-1).tile(1, mask_unit_area, hidden_size)
+            positions = bool_masked_pos.unsqueeze(-1).tile(
+                1, mask_unit_area, hidden_size
+            )
             hidden_states = hidden_states[positions]
             hidden_states = hidden_states.view(batch_size, -1, hidden_size)
 
@@ -1029,9 +1150,15 @@ class HieraModel(HieraPreTrainedModel):
             pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             head_outputs = (
-                head_outputs + (bool_masked_pos, ids_restore) if bool_masked_pos is not None else head_outputs
+                (sequence_output, pooled_output)
+                if pooled_output is not None
+                else (sequence_output,)
+            )
+            head_outputs = (
+                head_outputs + (bool_masked_pos, ids_restore)
+                if bool_masked_pos is not None
+                else head_outputs
             )
             return head_outputs + encoder_outputs[1:]
 
@@ -1049,13 +1176,19 @@ class HieraModel(HieraPreTrainedModel):
 class HieraDecoder(nn.Module):
     def __init__(self, config: HieraConfig):
         super().__init__()
-        num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
-        tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
+        num_features = int(
+            config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1)
+        )
+        tokens_spatial_shape = [
+            i // s for i, s in zip(config.image_size, config.patch_stride)
+        ]
         self.tokens_spatial_shape_final = [
-            i // s ** (config.num_query_pool) for i, s in zip(tokens_spatial_shape, config.query_stride)
+            i // s ** (config.num_query_pool)
+            for i, s in zip(tokens_spatial_shape, config.query_stride)
         ]
         self.mask_unit_spatial_shape_final = [
-            i // s ** (config.num_query_pool) for i, s in zip(config.masked_unit_size, config.query_stride)
+            i // s ** (config.num_query_pool)
+            for i, s in zip(config.masked_unit_size, config.query_stride)
         ]
 
         self.decoder_embeddings = nn.Linear(num_features, config.decoder_hidden_size)
@@ -1063,7 +1196,11 @@ class HieraDecoder(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
 
         self.decoder_position_embeddings = nn.Parameter(
-            torch.zeros(1, math.prod(self.tokens_spatial_shape_final), config.decoder_hidden_size)
+            torch.zeros(
+                1,
+                math.prod(self.tokens_spatial_shape_final),
+                config.decoder_hidden_size,
+            )
         )
 
         self.decoder_block = HieraStage(
@@ -1078,10 +1215,14 @@ class HieraDecoder(nn.Module):
             window_size=0,
         )
 
-        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
+        self.decoder_norm = nn.LayerNorm(
+            config.decoder_hidden_size, eps=config.layer_norm_eps
+        )
 
         # patch stride of prediction
-        self.pred_stride = config.patch_stride[-1] * (config.query_stride[-1] ** config.num_query_pool)
+        self.pred_stride = config.patch_stride[-1] * (
+            config.query_stride[-1] ** config.num_query_pool
+        )
         pred_dim = (self.pred_stride ** len(config.query_stride)) * config.num_channels
 
         self.decoder_pred = nn.Linear(config.decoder_hidden_size, pred_dim)
@@ -1114,7 +1255,9 @@ class HieraDecoder(nn.Module):
         )
         mask_tokens = self.mask_token.view(1, 1, 1, 1, -1)
         bool_masked_pos = bool_masked_pos.reshape(batch_size, num_mask_units, 1, 1, 1)
-        bool_masked_pos = bool_masked_pos.expand(-1, -1, mask_unit_height, mask_unit_width, decoder_hidden_size)
+        bool_masked_pos = bool_masked_pos.expand(
+            -1, -1, mask_unit_height, mask_unit_width, decoder_hidden_size
+        )
         decoder_hidden_states[bool_masked_pos] = hidden_states.flatten()
         decoder_hidden_states = (
             1 - bool_masked_pos.float()
@@ -1133,7 +1276,9 @@ class HieraDecoder(nn.Module):
         )
 
         # Flatten
-        hidden_states = hidden_states.reshape(hidden_states.shape[0], -1, hidden_states.shape[-1])
+        hidden_states = hidden_states.reshape(
+            hidden_states.shape[0], -1, hidden_states.shape[-1]
+        )
         bool_masked_pos = bool_masked_pos.view(hidden_states.shape[0], -1)
 
         # Add pos embed
@@ -1155,17 +1300,26 @@ class HieraMultiScaleHead(nn.Module):
     def __init__(self, config: HieraConfig):
         super().__init__()
         self.mask_unit_spatial_shape_final = [
-            i // s ** (config.num_query_pool) for i, s in zip(config.masked_unit_size, config.query_stride)
+            i // s ** (config.num_query_pool)
+            for i, s in zip(config.masked_unit_size, config.query_stride)
         ]
         self.stage_dimensions = [
-            int(config.embed_dim * config.embed_dim_multiplier**i) for i in range(len(config.depths))
+            int(config.embed_dim * config.embed_dim_multiplier**i)
+            for i in range(len(config.depths))
         ]
         current_masked_unit_size = config.masked_unit_size
         self.multi_scale_fusion_heads = nn.ModuleList()
 
         for idx in range(config.num_query_pool):
-            kernel = [i // s for i, s in zip(current_masked_unit_size, self.mask_unit_spatial_shape_final)]
-            current_masked_unit_size = [i // s for i, s in zip(current_masked_unit_size, config.query_stride)]
+            kernel = [
+                i // s
+                for i, s in zip(
+                    current_masked_unit_size, self.mask_unit_spatial_shape_final
+                )
+            ]
+            current_masked_unit_size = [
+                i // s for i, s in zip(current_masked_unit_size, config.query_stride)
+            ]
             self.multi_scale_fusion_heads.append(
                 nn.Conv2d(
                     self.stage_dimensions[idx],
@@ -1176,12 +1330,16 @@ class HieraMultiScaleHead(nn.Module):
             )
         self.multi_scale_fusion_heads.append(nn.Identity())
 
-    def apply_fusion_head(self, head: nn.Module, hidden_states: torch.Tensor) -> torch.Tensor:
+    def apply_fusion_head(
+        self, head: nn.Module, hidden_states: torch.Tensor
+    ) -> torch.Tensor:
         if isinstance(head, nn.Identity):
             return hidden_states
 
         # Doing explicit to avoid problems with torch.fx
-        batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size = hidden_states.shape
+        batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size = (
+            hidden_states.shape
+        )
         # From: [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size]
         # To: head([batch_size * num_mask_units, hidden_size, mask_unit_height, mask_unit_width])
         hidden_states = hidden_states.reshape(
@@ -1192,9 +1350,15 @@ class HieraMultiScaleHead(nn.Module):
 
         # Restore original layout
         hidden_states = hidden_states.permute(0, 2, 3, 1)
-        mask_unit_height_final, mask_unit_width_final, hidden_size = hidden_states.shape[1:]
+        mask_unit_height_final, mask_unit_width_final, hidden_size = (
+            hidden_states.shape[1:]
+        )
         hidden_states = hidden_states.reshape(
-            batch_size, num_mask_units, mask_unit_height_final, mask_unit_width_final, hidden_size
+            batch_size,
+            num_mask_units,
+            mask_unit_height_final,
+            mask_unit_width_final,
+            hidden_size,
         )
 
         return hidden_states
@@ -1225,7 +1389,9 @@ class HieraForPreTraining(HieraPreTrainedModel):
         super().__init__(config)
         # Encoder
         self.hiera = HieraModel(config, add_pooling_layer=False, is_mae=True)
-        self.encoder_norm = nn.LayerNorm(self.hiera.num_features, eps=config.layer_norm_eps)
+        self.encoder_norm = nn.LayerNorm(
+            self.hiera.num_features, eps=config.layer_norm_eps
+        )
         # Multi-scale fusion heads
         self.multiscale_fusion = HieraMultiScaleHead(config)
         # Decoder
@@ -1235,7 +1401,9 @@ class HieraForPreTraining(HieraPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_pixel_label_2d(self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor) -> torch.Tensor:
+    def get_pixel_label_2d(
+        self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor
+    ) -> torch.Tensor:
         # bool_masked_pos (boolean tensor): True means *masked*
         pixel_values = pixel_values.permute(0, 2, 3, 1)
 
@@ -1250,7 +1418,12 @@ class HieraForPreTraining(HieraPreTrainedModel):
 
         return label
 
-    def forward_loss(self, pixel_values: torch.Tensor, logits: torch.Tensor, bool_masked_pos: torch.BoolTensor):
+    def forward_loss(
+        self,
+        pixel_values: torch.Tensor,
+        logits: torch.Tensor,
+        bool_masked_pos: torch.BoolTensor,
+    ):
         # We invert the bool_masked_pos such that 1.0 is *masked*
         bool_masked_pos = ~bool_masked_pos
         label = self.get_pixel_label_2d(pixel_values, bool_masked_pos)
@@ -1262,7 +1435,9 @@ class HieraForPreTraining(HieraPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(HIERA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=HieraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=HieraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1301,10 +1476,18 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> print(list(logits.shape))
         [1, 196, 768]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         outputs = self.hiera(
@@ -1321,7 +1504,9 @@ class HieraForPreTraining(HieraPreTrainedModel):
         bool_masked_pos = outputs[1]
         ids_to_restore = outputs[2]
         # Take only the query pooled and last hidden states
-        feature_maps = feature_maps[1 : self.hiera.config.num_query_pool + 1] + (feature_maps[-1],)
+        feature_maps = feature_maps[1 : self.hiera.config.num_query_pool + 1] + (
+            feature_maps[-1],
+        )
         fused_hidden_states = self.multiscale_fusion(feature_maps)
         fused_hidden_states = self.encoder_norm(fused_hidden_states)
 
@@ -1352,7 +1537,9 @@ class HieraForPreTraining(HieraPreTrainedModel):
             ids_restore=ids_to_restore,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
-            reshaped_hidden_states=outputs.reshaped_hidden_states if output_hidden_states else None,
+            reshaped_hidden_states=(
+                outputs.reshaped_hidden_states if output_hidden_states else None
+            ),
         )
 
 
@@ -1380,7 +1567,9 @@ class HieraForImageClassification(HieraPreTrainedModel):
 
         # Classifier head
         self.classifier = (
-            nn.Linear(self.hiera.num_features, config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(self.hiera.num_features, config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -1409,10 +1598,18 @@ class HieraForImageClassification(HieraPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         outputs = self.hiera(
@@ -1435,7 +1632,9 @@ class HieraForImageClassification(HieraPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1478,7 +1677,8 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         super()._init_backbone(config)
 
         self.num_features = [config.embed_dim] + [
-            int(config.embed_dim * config.embed_dim_multiplier**i) for i in range(len(config.depths))
+            int(config.embed_dim * config.embed_dim_multiplier**i)
+            for i in range(len(config.depths))
         ]
         self.embeddings = HieraEmbeddings(config, is_mae=False)
         self.encoder = HieraEncoder(config)
@@ -1527,11 +1727,19 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         embedding_output, _, _ = self.embeddings(pixel_values)
 
@@ -1549,9 +1757,13 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 batch_size, height, width, num_channels = hidden_state.shape
-                hidden_state = hidden_state.view(batch_size, height * width, num_channels)
+                hidden_state = hidden_state.view(
+                    batch_size, height * width, num_channels
+                )
                 hidden_state = self.hidden_states_norms[stage](hidden_state)
-                hidden_state = hidden_state.view(batch_size, height, width, num_channels)
+                hidden_state = hidden_state.view(
+                    batch_size, height, width, num_channels
+                )
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
@@ -1570,4 +1782,10 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         )
 
 
-__all__ = ["HieraForImageClassification", "HieraForPreTraining", "HieraBackbone", "HieraModel", "HieraPreTrainedModel"]
+__all__ = [
+    "HieraForImageClassification",
+    "HieraForPreTraining",
+    "HieraBackbone",
+    "HieraModel",
+    "HieraPreTrainedModel",
+]

@@ -24,8 +24,9 @@ from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (AnnotationFormatTestMixin,
+                                             ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -128,7 +129,9 @@ class YolosImageProcessingTester:
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -142,7 +145,9 @@ class YolosImageProcessingTester:
 
 @require_torch
 @require_vision
-class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+class YolosImageProcessingTest(
+    AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase
+):
     image_processing_class = YolosImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -162,31 +167,49 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
+        self.assertEqual(
+            image_processor.size, {"shortest_edge": 18, "longest_edge": 1333}
+        )
         self.assertEqual(image_processor.do_pad, True)
 
         image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+            self.image_processor_dict,
+            size=42,
+            max_size=84,
+            pad_and_return_pixel_mask=False,
         )
-        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
+        self.assertEqual(
+            image_processor.size, {"shortest_edge": 42, "longest_edge": 84}
+        )
         self.assertEqual(image_processor.do_pad, False)
 
     def test_equivalence_padding(self):
         # Initialize image_processings
         image_processing_1 = self.image_processing_class(**self.image_processor_dict)
-        image_processing_2 = self.image_processing_class(do_resize=False, do_normalize=False, do_rescale=False)
+        image_processing_2 = self.image_processing_class(
+            do_resize=False, do_normalize=False, do_rescale=False
+        )
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, torchify=True
+        )
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
         # Test whether the method "pad" and calling the image processor return the same tensors
-        encoded_images_with_method = image_processing_1.pad(image_inputs, return_tensors="pt")
+        encoded_images_with_method = image_processing_1.pad(
+            image_inputs, return_tensors="pt"
+        )
         encoded_images = image_processing_2(image_inputs, return_tensors="pt")
 
         torch.testing.assert_close(
-            encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], rtol=1e-4, atol=1e-4
+            encoded_images_with_method["pixel_values"],
+            encoded_images["pixel_values"],
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     @parameterized.expand(
@@ -213,8 +236,12 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
         shape = list(processed_image.shape[-2:])
         max_size, min_size = max(shape), min(shape)
-        self.assertTrue(max_size <= 1333, f"Expected max_size <= 1333, got image shape {shape}")
-        self.assertTrue(min_size <= 800, f"Expected min_size <= 800, got image shape {shape}")
+        self.assertTrue(
+            max_size <= 1333, f"Expected max_size <= 1333, got image shape {shape}"
+        )
+        self.assertTrue(
+            min_size <= 800, f"Expected min_size <= 800, got image shape {shape}"
+        )
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
@@ -227,23 +254,34 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
         # encode them
         image_processing = YolosImageProcessor.from_pretrained("hustvl/yolos-small")
-        encoding = image_processing(images=image, annotations=target, return_tensors="pt")
+        encoding = image_processing(
+            images=image, annotations=target, return_tensors="pt"
+        )
 
         # verify pixel values
         expected_shape = torch.Size([1, 3, 800, 1056])
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        torch.testing.assert_close(encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
         # verify area
-        expected_area = torch.tensor([5832.7256, 11144.6689, 484763.2500, 829269.8125, 146579.4531, 164177.6250])
+        expected_area = torch.tensor(
+            [5832.7256, 11144.6689, 484763.2500, 829269.8125, 146579.4531, 164177.6250]
+        )
         torch.testing.assert_close(encoding["labels"][0]["area"], expected_area)
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
-        torch.testing.assert_close(encoding["labels"][0]["boxes"][0], expected_boxes_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            encoding["labels"][0]["boxes"][0],
+            expected_boxes_slice,
+            rtol=1e-3,
+            atol=1e-3,
+        )
         # verify image_id
         expected_image_id = torch.tensor([39769])
         torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
@@ -252,10 +290,14 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         torch.testing.assert_close(encoding["labels"][0]["iscrowd"], expected_is_crowd)
         # verify class_labels
         expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
-        torch.testing.assert_close(encoding["labels"][0]["class_labels"], expected_class_labels)
+        torch.testing.assert_close(
+            encoding["labels"][0]["class_labels"], expected_class_labels
+        )
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        torch.testing.assert_close(encoding["labels"][0]["orig_size"], expected_orig_size)
+        torch.testing.assert_close(
+            encoding["labels"][0]["orig_size"], expected_orig_size
+        )
         # verify size
         expected_size = torch.tensor([800, 1056])
         torch.testing.assert_close(encoding["labels"][0]["size"], expected_size)
@@ -264,32 +306,49 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open(
+            "./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r"
+        ) as f:
             target = json.loads(f.read())
 
-        target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+        target = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": target,
+        }
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
         image_processing = YolosImageProcessor(format="coco_panoptic")
-        encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
+        encoding = image_processing(
+            images=image, annotations=target, masks_path=masks_path, return_tensors="pt"
+        )
 
         # verify pixel values
         expected_shape = torch.Size([1, 3, 800, 1056])
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        torch.testing.assert_close(encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
         # verify area
-        expected_area = torch.tensor([146591.5000, 163974.2500, 480092.2500, 11187.0000, 5824.5000, 7562.5000])
+        expected_area = torch.tensor(
+            [146591.5000, 163974.2500, 480092.2500, 11187.0000, 5824.5000, 7562.5000]
+        )
         torch.testing.assert_close(encoding["labels"][0]["area"], expected_area)
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
-        torch.testing.assert_close(encoding["labels"][0]["boxes"][0], expected_boxes_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            encoding["labels"][0]["boxes"][0],
+            expected_boxes_slice,
+            rtol=1e-3,
+            atol=1e-3,
+        )
         # verify image_id
         expected_image_id = torch.tensor([39769])
         torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
@@ -298,13 +357,19 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         torch.testing.assert_close(encoding["labels"][0]["iscrowd"], expected_is_crowd)
         # verify class_labels
         expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
-        torch.testing.assert_close(encoding["labels"][0]["class_labels"], expected_class_labels)
+        torch.testing.assert_close(
+            encoding["labels"][0]["class_labels"], expected_class_labels
+        )
         # verify masks
         expected_masks_sum = 815161
-        self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
+        self.assertEqual(
+            encoding["labels"][0]["masks"].sum().item(), expected_masks_sum
+        )
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        torch.testing.assert_close(encoding["labels"][0]["orig_size"], expected_orig_size)
+        torch.testing.assert_close(
+            encoding["labels"][0]["orig_size"], expected_orig_size
+        )
         # verify size
         expected_size = torch.tensor([800, 1056])
         torch.testing.assert_close(encoding["labels"][0]["size"], expected_size)
@@ -313,7 +378,9 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
     @slow
     def test_batched_coco_detection_annotations(self):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
+        image_1 = Image.open(
+            "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        ).resize((800, 800))
 
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
             target = json.loads(f.read())
@@ -373,12 +440,20 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
                 [0.5845, 0.4115, 0.3462, 0.7161],
             ]
         )
-        torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3, atol=1e-3
+        )
 
         # Check the masks have also been padded
-        self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1056]))
-        self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1056]))
+        self.assertEqual(
+            encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1056])
+        )
+        self.assertEqual(
+            encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1056])
+        )
 
         # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
         # format and not in the range [0, 1]
@@ -425,20 +500,36 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
                 unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
             ]
         ).T
-        torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1, atol=1)
-        torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1, atol=1)
+        torch.testing.assert_close(
+            encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1, atol=1
+        )
+        torch.testing.assert_close(
+            encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1, atol=1
+        )
 
     # Output size is slight different from DETR as yolos takes mod of 16
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
+        image_1 = Image.open(
+            "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        ).resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open(
+            "./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r"
+        ) as f:
             target = json.loads(f.read())
 
-        annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
-        annotation_1 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+        annotation_0 = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": target,
+        }
+        annotation_1 = {
+            "file_name": "000000039769.png",
+            "image_id": 39769,
+            "segments_info": target,
+        }
 
         w_0, h_0 = image_0.size
         w_1, h_1 = image_1.size
@@ -495,12 +586,20 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
                 [0.3026, 0.2994, 0.6051, 0.5987],
             ]
         )
-        torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3, atol=1e-3
+        )
 
         # Check the masks have also been padded
-        self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1056]))
-        self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1056]))
+        self.assertEqual(
+            encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1056])
+        )
+        self.assertEqual(
+            encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1056])
+        )
 
         # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
         # format and not in the range [0, 1]
@@ -548,8 +647,12 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
                 unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
             ]
         ).T
-        torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
-        torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
+        torch.testing.assert_close(
+            encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1
+        )
+        torch.testing.assert_close(
+            encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1
+        )
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->Yolos
     def test_max_width_max_height_resizing_and_pad_strategy(self):
@@ -573,7 +676,9 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
             # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
             image_processor = image_processing_class(
-                size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
+                size={"max_height": 100, "max_width": 100},
+                do_pad=True,
+                pad_size={"height": 100, "width": 100},
             )
             inputs = image_processor(images=[image_1], return_tensors="pt")
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))

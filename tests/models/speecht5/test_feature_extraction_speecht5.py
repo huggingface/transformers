@@ -24,8 +24,8 @@ from transformers import BatchFeature, SpeechT5FeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
-from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
-
+from ...test_sequence_feature_extraction_common import \
+    SequenceFeatureExtractionTestMixin
 
 if is_torch_available():
     import torch
@@ -74,7 +74,9 @@ class SpeechT5FeatureExtractionTester:
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length
         self.max_seq_length = max_seq_length
-        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
+        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (
+            self.batch_size - 1
+        )
         self.feature_size = feature_size
         self.padding_value = padding_value
         self.sampling_rate = sampling_rate
@@ -114,7 +116,9 @@ class SpeechT5FeatureExtractionTester:
             # make sure that inputs increase in size
             speech_inputs = [
                 _flatten(floats_list((x, self.feature_size)))
-                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+                for x in range(
+                    self.min_seq_length, self.max_seq_length, self.seq_length_diff
+                )
             ]
 
         if numpify:
@@ -124,12 +128,17 @@ class SpeechT5FeatureExtractionTester:
 
     def prepare_inputs_for_target(self, equal_length=False, numpify=False):
         if equal_length:
-            speech_inputs = [floats_list((self.max_seq_length, self.num_mel_bins)) for _ in range(self.batch_size)]
+            speech_inputs = [
+                floats_list((self.max_seq_length, self.num_mel_bins))
+                for _ in range(self.batch_size)
+            ]
         else:
             # make sure that inputs increase in size
             speech_inputs = [
                 floats_list((x, self.num_mel_bins))
-                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+                for x in range(
+                    self.min_seq_length, self.max_seq_length, self.seq_length_diff
+                )
             ]
 
         if numpify:
@@ -139,7 +148,9 @@ class SpeechT5FeatureExtractionTester:
 
 
 @require_torch
-class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class SpeechT5FeatureExtractionTest(
+    SequenceFeatureExtractionTestMixin, unittest.TestCase
+):
     feature_extraction_class = SpeechT5FeatureExtractor
 
     def setUp(self):
@@ -151,30 +162,49 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         # create three inputs of length 800, 1000, and 1200
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test not batched input
-        encoded_sequences_1 = feat_extract(speech_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_speech_inputs[0], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+        encoded_sequences_1 = feat_extract(
+            speech_inputs[0], return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs[0], return_tensors="np"
+        ).input_values
+        self.assertTrue(
+            np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3)
+        )
 
         # Test batched
-        encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
+        encoded_sequences_1 = feat_extract(
+            speech_inputs, return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feat_extract(
+            np_speech_inputs, return_tensors="np"
+        ).input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_zero_mean_unit_variance_normalization_np(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
         paddings = ["longest", "max_length", "do_not_pad"]
         max_lengths = [None, 1600, None]
         for max_length, padding in zip(max_lengths, paddings):
-            processed = feat_extract(speech_inputs, padding=padding, max_length=max_length, return_tensors="np")
+            processed = feat_extract(
+                speech_inputs,
+                padding=padding,
+                max_length=max_length,
+                return_tensors="np",
+            )
             input_values = processed.input_values
 
             self._check_zero_mean_unit_variance(input_values[0][:800])
@@ -184,7 +214,9 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             self._check_zero_mean_unit_variance(input_values[2][:1200])
 
     def test_zero_mean_unit_variance_normalization(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         lengths = range(800, 1400, 200)
         speech_inputs = [floats_list((1, x))[0] for x in lengths]
 
@@ -192,7 +224,9 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         max_lengths = [None, 1600, None]
 
         for max_length, padding in zip(max_lengths, paddings):
-            processed = feat_extract(speech_inputs, max_length=max_length, padding=padding)
+            processed = feat_extract(
+                speech_inputs, max_length=max_length, padding=padding
+            )
             input_values = processed.input_values
 
             self._check_zero_mean_unit_variance(input_values[0][:800])
@@ -200,10 +234,16 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
             self._check_zero_mean_unit_variance(input_values[2][:1200])
 
     def test_zero_mean_unit_variance_normalization_trunc_np_max_length(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         processed = feat_extract(
-            speech_inputs, truncation=True, max_length=1000, padding="max_length", return_tensors="np"
+            speech_inputs,
+            truncation=True,
+            max_length=1000,
+            padding="max_length",
+            return_tensors="np",
         )
         input_values = processed.input_values
 
@@ -212,10 +252,16 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self._check_zero_mean_unit_variance(input_values[2])
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         processed = feat_extract(
-            speech_inputs, truncation=True, max_length=1000, padding="longest", return_tensors="np"
+            speech_inputs,
+            truncation=True,
+            max_length=1000,
+            padding="longest",
+            return_tensors="np",
         )
         input_values = processed.input_values
 
@@ -228,7 +274,11 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         processed = feat_extract(
-            speech_inputs, truncation=True, max_length=2000, padding="longest", return_tensors="np"
+            speech_inputs,
+            truncation=True,
+            max_length=2000,
+            padding="longest",
+            return_tensors="np",
         )
         input_values = processed.input_values
 
@@ -240,44 +290,68 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertTrue(input_values.shape == (3, 1200))
 
     def test_double_precision_pad(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feature_extractor = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         np_speech_inputs = np.random.rand(100).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
 
         for inputs in [py_speech_inputs, np_speech_inputs]:
-            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
+            np_processed = feature_extractor.pad(
+                [{"input_values": inputs}], return_tensors="np"
+            )
             self.assertTrue(np_processed.input_values.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
+            pt_processed = feature_extractor.pad(
+                [{"input_values": inputs}], return_tensors="pt"
+            )
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
     def test_call_target(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feature_extractor = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         # create three inputs of length 800, 1000, and 1200
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
-        input_values = feature_extractor(audio_target=np_speech_inputs, padding=True, return_tensors="np").input_values
+        input_values = feature_extractor(
+            audio_target=np_speech_inputs, padding=True, return_tensors="np"
+        ).input_values
         self.assertTrue(input_values.ndim == 3)
         self.assertTrue(input_values.shape[-1] == feature_extractor.num_mel_bins)
 
         # Test not batched input
-        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+        encoded_sequences_1 = feature_extractor(
+            speech_inputs[0], return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feature_extractor(
+            np_speech_inputs[0], return_tensors="np"
+        ).input_values
+        self.assertTrue(
+            np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3)
+        )
 
         # Test batched
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
+        encoded_sequences_1 = feature_extractor(
+            speech_inputs, return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feature_extractor(
+            np_speech_inputs, return_tensors="np"
+        ).input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
         # Test 2-D numpy arrays are batched.
         speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
         np_speech_inputs = np.asarray(speech_inputs)
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
+        encoded_sequences_1 = feature_extractor(
+            speech_inputs, return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feature_extractor(
+            np_speech_inputs, return_tensors="np"
+        ).input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
@@ -288,9 +362,16 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         processed_features = BatchFeature({input_name: speech_inputs})
 
-        self.assertTrue(all(len(x) == len(y) for x, y in zip(speech_inputs, processed_features[input_name])))
+        self.assertTrue(
+            all(
+                len(x) == len(y)
+                for x, y in zip(speech_inputs, processed_features[input_name])
+            )
+        )
 
-        speech_inputs = self.feat_extract_tester.prepare_inputs_for_target(equal_length=True)
+        speech_inputs = self.feat_extract_tester.prepare_inputs_for_target(
+            equal_length=True
+        )
         processed_features = BatchFeature({input_name: speech_inputs}, tensor_type="np")
 
         batch_features_input = processed_features[input_name]
@@ -300,12 +381,18 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         self.assertTrue(
             batch_features_input.shape
-            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.num_mel_bins)
+            == (
+                self.feat_extract_tester.batch_size,
+                len(speech_inputs[0]),
+                self.feat_extract_tester.num_mel_bins,
+            )
         )
 
     @require_torch
     def test_batch_feature_target_pt(self):
-        speech_inputs = self.feat_extract_tester.prepare_inputs_for_target(equal_length=True)
+        speech_inputs = self.feat_extract_tester.prepare_inputs_for_target(
+            equal_length=True
+        )
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         input_name = feat_extract.model_input_names[0]
 
@@ -318,7 +405,11 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         self.assertTrue(
             batch_features_input.shape
-            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.num_mel_bins)
+            == (
+                self.feat_extract_tester.batch_size,
+                len(speech_inputs[0]),
+                self.feat_extract_tester.num_mel_bins,
+            )
         )
 
     @require_torch
@@ -331,10 +422,20 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         feat_extract.feature_size = feat_extract.num_mel_bins  # hack!
 
-        input_np = feat_extract.pad(processed_features, padding="longest", return_tensors="np")[input_name]
-        input_pt = feat_extract.pad(processed_features, padding="longest", return_tensors="pt")[input_name]
+        input_np = feat_extract.pad(
+            processed_features, padding="longest", return_tensors="np"
+        )[input_name]
+        input_pt = feat_extract.pad(
+            processed_features, padding="longest", return_tensors="pt"
+        )[input_name]
 
-        self.assertTrue(abs(input_np.astype(np.float32).sum() - input_pt.numpy().astype(np.float32).sum()) < 1e-2)
+        self.assertTrue(
+            abs(
+                input_np.astype(np.float32).sum()
+                - input_pt.numpy().astype(np.float32).sum()
+            )
+            < 1e-2
+        )
 
     def test_attention_mask_target(self):
         feat_dict = self.feat_extract_dict
@@ -350,7 +451,9 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         processed = feat_extract.pad(processed, padding="longest", return_tensors="np")
         self.assertIn("attention_mask", processed)
-        self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape[:2]))
+        self.assertListEqual(
+            list(processed.attention_mask.shape), list(processed[input_name].shape[:2])
+        )
         self.assertListEqual(processed.attention_mask.sum(-1).tolist(), input_lengths)
 
     def test_attention_mask_with_truncation_target(self):
@@ -367,20 +470,28 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         feat_extract.feature_size = feat_extract.num_mel_bins  # hack!
 
         processed_pad = feat_extract.pad(
-            processed, padding="max_length", max_length=max_length, truncation=True, return_tensors="np"
+            processed,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_tensors="np",
         )
         self.assertIn("attention_mask", processed_pad)
         self.assertListEqual(
-            list(processed_pad.attention_mask.shape), [processed_pad[input_name].shape[0], max_length]
+            list(processed_pad.attention_mask.shape),
+            [processed_pad[input_name].shape[0], max_length],
         )
         self.assertListEqual(
-            processed_pad.attention_mask[:, :max_length].sum(-1).tolist(), [max_length for x in speech_inputs]
+            processed_pad.attention_mask[:, :max_length].sum(-1).tolist(),
+            [max_length for x in speech_inputs],
         )
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -402,7 +513,9 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         feature_extractor = SpeechT5FeatureExtractor()
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
         self.assertEqual(input_values.shape, (1, 93680))
-        torch.testing.assert_close(input_values[0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(
+            input_values[0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6
+        )
 
     def test_integration_target(self):
         # fmt: off
@@ -416,6 +529,10 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         input_speech = self._load_datasamples(1)
         feature_extractor = SpeechT5FeatureExtractor()
-        input_values = feature_extractor(audio_target=input_speech, return_tensors="pt").input_values
+        input_values = feature_extractor(
+            audio_target=input_speech, return_tensors="pt"
+        ).input_values
         self.assertEqual(input_values.shape, (1, 366, 80))
-        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-4, atol=1e-4
+        )

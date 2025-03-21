@@ -24,13 +24,8 @@ import yaml
 from tqdm import tqdm
 
 from transformers.models.marian.convert_marian_to_pytorch import (
-    FRONT_MATTER_TEMPLATE,
-    convert,
-    convert_opus_name_to_hf_name,
-    download_and_unzip,
-    get_system_metadata,
-)
-
+    FRONT_MATTER_TEMPLATE, convert, convert_opus_name_to_hf_name,
+    download_and_unzip, get_system_metadata)
 
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
@@ -55,9 +50,13 @@ class TatoebaConverter:
     """
 
     def __init__(self, save_dir="marian_converted"):
-        assert Path(DEFAULT_REPO).exists(), "need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git"
+        assert Path(
+            DEFAULT_REPO
+        ).exists(), "need git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git"
         self.download_lang_info()
-        self.model_results = json.load(open("Tatoeba-Challenge/models/released-model-results.json"))
+        self.model_results = json.load(
+            open("Tatoeba-Challenge/models/released-model-results.json")
+        )
         self.alpha3_to_alpha2 = {}
         for line in open(ISO_PATH):
             parts = line.split("\t")
@@ -77,12 +76,19 @@ class TatoebaConverter:
         save_dir = Path("marian_ckpt")
         dest_dir = Path(self.model_card_dir)
         dest_dir.mkdir(exist_ok=True)
-        for model in tqdm(models_to_convert):  # k, prepro, download, test_set_url in tqdm(model_list):
+        for model in tqdm(
+            models_to_convert
+        ):  # k, prepro, download, test_set_url in tqdm(model_list):
             if "SentencePiece" not in model["pre-processing"]:
-                print(f"Skipping {model['release']} because it doesn't appear to use SentencePiece")
+                print(
+                    f"Skipping {model['release']} because it doesn't appear to use SentencePiece"
+                )
                 continue
             if not os.path.exists(save_dir / model["_name"]):
-                download_and_unzip(f"{TATOEBA_MODELS_URL}/{model['release']}", save_dir / model["_name"])
+                download_and_unzip(
+                    f"{TATOEBA_MODELS_URL}/{model['release']}",
+                    save_dir / model["_name"],
+                )
             # from convert_marian_to_pytorch
             opus_language_groups_to_hf = convert_opus_name_to_hf_name
             pair_name = opus_language_groups_to_hf(model["_name"])
@@ -134,7 +140,9 @@ class TatoebaConverter:
         """
         model_dir_url = f"{TATOEBA_MODELS_URL}/{model_dict['release']}"
         long_pair = model_dict["_name"].split("-")
-        assert len(long_pair) == 2, f"got a translation pair {model_dict['_name']} that doesn't appear to be a pair"
+        assert (
+            len(long_pair) == 2
+        ), f"got a translation pair {model_dict['_name']} that doesn't appear to be a pair"
         short_src = self.alpha3_to_alpha2.get(long_pair[0], long_pair[0])
         short_tgt = self.alpha3_to_alpha2.get(long_pair[1], long_pair[1])
         model_dict["_hf_model_id"] = f"opus-mt-{short_src}-{short_tgt}"
@@ -154,7 +162,9 @@ class TatoebaConverter:
                 a2_tgt_tags.append(tag)
 
         lang_tags = dedup(a2_src_tags + a2_tgt_tags)
-        src_multilingual, tgt_multilingual = (len(a2_src_tags) > 1), (len(a2_tgt_tags) > 1)
+        src_multilingual, tgt_multilingual = (len(a2_src_tags) > 1), (
+            len(a2_tgt_tags) > 1
+        )
         s, t = ",".join(a2_src_tags), ",".join(a2_tgt_tags)
 
         metadata = {
@@ -285,7 +295,9 @@ class TatoebaConverter:
             wget.download(ISO_URL, ISO_PATH)
         if not os.path.exists(LANG_CODE_PATH):
             LANG_CODE_PATH = hf_hub_download(
-                repo_id="huggingface/language_codes_marianMT", filename="language-codes-3b2.csv", repo_type="dataset"
+                repo_id="huggingface/language_codes_marianMT",
+                filename="language-codes-3b2.csv",
+                repo_type="dataset",
             )
 
     def parse_metadata(self, model_name, repo_path=DEFAULT_MODEL_DIR, method="best"):
@@ -300,8 +312,13 @@ class TatoebaConverter:
 
         if method == "best":
             # Sort by how early they appear in released-models-results
-            results = [url_to_name(model["download"]) for model in self.model_results[model_name]]
-            ymls = [f for f in os.listdir(p) if f.endswith(".yml") and f[:-4] in results]
+            results = [
+                url_to_name(model["download"])
+                for model in self.model_results[model_name]
+            ]
+            ymls = [
+                f for f in os.listdir(p) if f.endswith(".yml") and f[:-4] in results
+            ]
             ymls.sort(key=lambda x: results.index(x[:-4]))
             metadata = yaml.safe_load(open(p / ymls[0]))
             metadata.update(self.model_type_info_from_model_name(ymls[0][:-4]))
@@ -309,12 +326,16 @@ class TatoebaConverter:
             ymls = [f for f in os.listdir(p) if f.endswith(".yml")]
             # Sort by date
             ymls.sort(
-                key=lambda x: datetime.datetime.strptime(re.search(r"\d\d\d\d-\d\d?-\d\d?", x).group(), "%Y-%m-%d")
+                key=lambda x: datetime.datetime.strptime(
+                    re.search(r"\d\d\d\d-\d\d?-\d\d?", x).group(), "%Y-%m-%d"
+                )
             )
             metadata = yaml.safe_load(open(p / ymls[-1]))
             metadata.update(self.model_type_info_from_model_name(ymls[-1][:-4]))
         else:
-            raise NotImplementedError(f"Don't know argument method='{method}' to parse_metadata()")
+            raise NotImplementedError(
+                f"Don't know argument method='{method}' to parse_metadata()"
+            )
         metadata["_name"] = model_name
         return metadata
 
@@ -323,7 +344,10 @@ GROUP_MEMBERS = {
     # three letter code -> (group/language name, {constituents...}
     # if this language is on the target side the constituents can be used as target language codes.
     # if the language is on the source side they are supported natively without special codes.
-    "aav": ("Austro-Asiatic languages", {"hoc", "hoc_Latn", "kha", "khm", "khm_Latn", "mnw", "vie", "vie_Hani"}),
+    "aav": (
+        "Austro-Asiatic languages",
+        {"hoc", "hoc_Latn", "kha", "khm", "khm_Latn", "mnw", "vie", "vie_Hani"},
+    ),
     "afa": (
         "Afro-Asiatic languages",
         {
@@ -371,7 +395,10 @@ GROUP_MEMBERS = {
             "zul",
         },
     ),
-    "ara": ("Arabic", {"afb", "apc", "apc_Latn", "ara", "ara_Latn", "arq", "arq_Latn", "arz"}),
+    "ara": (
+        "Arabic",
+        {"afb", "apc", "apc_Latn", "ara", "ara_Latn", "arq", "arq_Latn", "arz"},
+    ),
     "art": (
         "Artificial languages",
         {
@@ -405,7 +432,20 @@ GROUP_MEMBERS = {
     "ben": ("Bengali", {"ben"}),
     "bnt": (
         "Bantu languages",
-        {"kin", "lin", "lug", "nya", "run", "sna", "swh", "toi_Latn", "tso", "umb", "xho", "zul"},
+        {
+            "kin",
+            "lin",
+            "lug",
+            "nya",
+            "run",
+            "sna",
+            "swh",
+            "toi_Latn",
+            "tso",
+            "umb",
+            "xho",
+            "zul",
+        },
     ),
     "bul": ("Bulgarian", {"bul", "bul_Latn"}),
     "cat": ("Catalan", {"cat"}),
@@ -486,7 +526,10 @@ GROUP_MEMBERS = {
     ),
     "gle": ("Irish", {"gle"}),
     "glg": ("Galician", {"glg"}),
-    "gmq": ("North Germanic languages", {"dan", "nob", "nob_Hebr", "swe", "isl", "nno", "non_Latn", "fao"}),
+    "gmq": (
+        "North Germanic languages",
+        {"dan", "nob", "nob_Hebr", "swe", "isl", "nno", "non_Latn", "fao"},
+    ),
     "gmw": (
         "West Germanic languages",
         {
@@ -763,15 +806,33 @@ GROUP_MEMBERS = {
             "zsm_Latn",
         },
     ),
-    "jpn": ("Japanese", {"jpn", "jpn_Bopo", "jpn_Hang", "jpn_Hani", "jpn_Hira", "jpn_Kana", "jpn_Latn", "jpn_Yiii"}),
+    "jpn": (
+        "Japanese",
+        {
+            "jpn",
+            "jpn_Bopo",
+            "jpn_Hang",
+            "jpn_Hani",
+            "jpn_Hira",
+            "jpn_Kana",
+            "jpn_Latn",
+            "jpn_Yiii",
+        },
+    ),
     "jpx": ("Japanese (family)", {"jpn"}),
     "kat": ("Georgian", {"kat"}),
     "kor": ("Korean", {"kor_Hani", "kor_Hang", "kor_Latn", "kor"}),
     "lav": ("Latvian", {"lav"}),
     "lit": ("Lithuanian", {"lit"}),
     "mkd": ("Macedonian", {"mkd"}),
-    "mkh": ("Mon-Khmer languages", {"vie_Hani", "mnw", "vie", "kha", "khm_Latn", "khm"}),
-    "msa": ("Malay (macrolanguage)", {"zsm_Latn", "ind", "max_Latn", "zlm_Latn", "min"}),
+    "mkh": (
+        "Mon-Khmer languages",
+        {"vie_Hani", "mnw", "vie", "kha", "khm_Latn", "khm"},
+    ),
+    "msa": (
+        "Malay (macrolanguage)",
+        {"zsm_Latn", "ind", "max_Latn", "zlm_Latn", "min"},
+    ),
     "mul": (
         "Multiple languages",
         {
@@ -1119,7 +1180,20 @@ GROUP_MEMBERS = {
     "por": ("Portuguese", {"por"}),
     "pqe": (
         "Eastern Malayo-Polynesian languages",
-        {"fij", "gil", "haw", "mah", "mri", "nau", "niu", "rap", "smo", "tah", "ton", "tvl"},
+        {
+            "fij",
+            "gil",
+            "haw",
+            "mah",
+            "mri",
+            "nau",
+            "niu",
+            "rap",
+            "smo",
+            "tah",
+            "ton",
+            "tvl",
+        },
     ),
     "roa": (
         "Romance languages",
@@ -1165,7 +1239,10 @@ GROUP_MEMBERS = {
     "run": ("Rundi", {"run"}),
     "rus": ("Russian", {"rus"}),
     "sal": ("Salishan languages", {"shs_Latn"}),
-    "sem": ("Semitic languages", {"acm", "afb", "amh", "apc", "ara", "arq", "ary", "arz", "heb", "mlt", "tir"}),
+    "sem": (
+        "Semitic languages",
+        {"acm", "afb", "amh", "apc", "ara", "arq", "ary", "arz", "heb", "mlt", "tir"},
+    ),
     "sla": (
         "Slavic languages",
         {
@@ -1295,8 +1372,14 @@ GROUP_MEMBERS = {
             "zho_Hant",
         },
     ),
-    "zle": ("East Slavic languages", {"bel", "orv_Cyrl", "bel_Latn", "rus", "ukr", "rue"}),
-    "zls": ("South Slavic languages", {"bos_Latn", "bul", "bul_Latn", "hrv", "mkd", "slv", "srp_Cyrl", "srp_Latn"}),
+    "zle": (
+        "East Slavic languages",
+        {"bel", "orv_Cyrl", "bel_Latn", "rus", "ukr", "rue"},
+    ),
+    "zls": (
+        "South Slavic languages",
+        {"bos_Latn", "bul", "bul_Latn", "hrv", "mkd", "slv", "srp_Cyrl", "srp_Latn"},
+    ),
     "zlw": ("West Slavic languages", {"csb_Latn", "dsb", "hsb", "pol", "ces"}),
 }
 
@@ -1319,9 +1402,20 @@ def dedup(lst):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-m", "--models", action="append", help="<Required> Set flag", required=True, nargs="+", dest="models"
+        "-m",
+        "--models",
+        action="append",
+        help="<Required> Set flag",
+        required=True,
+        nargs="+",
+        dest="models",
     )
-    parser.add_argument("-save_dir", "--save_dir", default="marian_converted", help="where to save converted models")
+    parser.add_argument(
+        "-save_dir",
+        "--save_dir",
+        default="marian_converted",
+        help="where to save converted models",
+    )
     args = parser.parse_args()
     resolver = TatoebaConverter(save_dir=args.save_dir)
     resolver.convert_models(args.models[0])

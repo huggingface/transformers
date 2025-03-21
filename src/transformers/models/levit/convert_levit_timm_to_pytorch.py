@@ -24,16 +24,20 @@ import timm
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import LevitConfig, LevitForImageClassificationWithTeacher, LevitImageProcessor
+from transformers import (LevitConfig, LevitForImageClassificationWithTeacher,
+                          LevitImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
 
 
 def convert_weight_and_push(
-    hidden_sizes: int, name: str, config: LevitConfig, save_directory: Path, push_to_hub: bool = True
+    hidden_sizes: int,
+    name: str,
+    config: LevitConfig,
+    save_directory: Path,
+    push_to_hub: bool = True,
 ):
     print(f"Converting {name}...")
 
@@ -79,20 +83,26 @@ def convert_weight_and_push(
         print(f"Pushed {checkpoint_name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(
+    save_directory: Path, model_name: str = None, push_to_hub: bool = True
+):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
-    ImageNetPreTrainedConfig = partial(LevitConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
+    ImageNetPreTrainedConfig = partial(
+        LevitConfig, num_labels=num_labels, id2label=id2label, label2id=label2id
+    )
 
     names_to_hidden_sizes = {
         "levit-128S": 128,
@@ -142,11 +152,21 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     if model_name:
         convert_weight_and_push(
-            names_to_hidden_sizes[model_name], model_name, names_to_config[model_name], save_directory, push_to_hub
+            names_to_hidden_sizes[model_name],
+            model_name,
+            names_to_config[model_name],
+            save_directory,
+            push_to_hub,
         )
     else:
         for model_name, config in names_to_config.items():
-            convert_weight_and_push(names_to_hidden_sizes[model_name], model_name, config, save_directory, push_to_hub)
+            convert_weight_and_push(
+                names_to_hidden_sizes[model_name],
+                model_name,
+                config,
+                save_directory,
+                push_to_hub,
+            )
     return config, expected_shape
 
 
@@ -166,7 +186,11 @@ if __name__ == "__main__":
         required=False,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image processor to the hub",
+    )
     parser.add_argument(
         "--no-push_to_hub",
         dest="push_to_hub",
@@ -177,4 +201,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
-    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_weights_and_push(
+        pytorch_dump_folder_path, args.model_name, args.push_to_hub
+    )

@@ -28,18 +28,13 @@ from huggingface_hub.utils import insecure_hashlib
 from torch import nn
 from tqdm import tqdm
 
-from transformers import (
-    GenerationConfig,
-    WhisperConfig,
-    WhisperFeatureExtractor,
-    WhisperForConditionalGeneration,
-    WhisperProcessor,
-    WhisperTokenizer,
-    WhisperTokenizerFast,
-)
-from transformers.models.whisper.tokenization_whisper import LANGUAGES, bytes_to_unicode
+from transformers import (GenerationConfig, WhisperConfig,
+                          WhisperFeatureExtractor,
+                          WhisperForConditionalGeneration, WhisperProcessor,
+                          WhisperTokenizer, WhisperTokenizerFast)
+from transformers.models.whisper.tokenization_whisper import (LANGUAGES,
+                                                              bytes_to_unicode)
 from transformers.utils.import_utils import _is_package_available
-
 
 _MODELS = {
     "tiny.en": "https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt",
@@ -159,11 +154,17 @@ def _download(url: str, root: str) -> Any:
         if insecure_hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
             return torch.load(io.BytesIO(model_bytes))
         else:
-            warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
+            warnings.warn(
+                f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file"
+            )
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
         with tqdm(
-            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
+            total=int(source.info().get("Content-Length")),
+            ncols=80,
+            unit="iB",
+            unit_scale=True,
+            unit_divisor=1024,
         ) as loop:
             while True:
                 buffer = source.read(8192)
@@ -265,7 +266,11 @@ def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> List[bytes]:
         if min_rank is None or (max_rank is not None and min_rank >= max_rank):
             break
         assert min_idx is not None
-        parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2 :]
+        parts = (
+            parts[:min_idx]
+            + [parts[min_idx] + parts[min_idx + 1]]
+            + parts[min_idx + 2 :]
+        )
     return parts
 
 
@@ -313,7 +318,9 @@ def convert_tiktoken_to_hf(
         vocab_file = f"{tmpdirname}/vocab.json"
         merge_file = f"{tmpdirname}/merges.txt"
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            )
 
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
@@ -322,7 +329,9 @@ def convert_tiktoken_to_hf(
 
         hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
 
-    hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens, special_tokens=True)
+    hf_tokenizer.add_tokens(
+        start_of_transcript + language_tokens + control_tokens, special_tokens=True
+    )
     hf_tokenizer.add_tokens(timestamp_tokens, special_tokens=False)
     return hf_tokenizer
 
@@ -330,8 +339,15 @@ def convert_tiktoken_to_hf(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
-    parser.add_argument("--checkpoint_path", type=str, help="Path to the downloaded checkpoints")
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--checkpoint_path", type=str, help="Path to the downloaded checkpoints"
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     parser.add_argument(
         "--convert_preprocessor",
         type=bool,
@@ -360,11 +376,17 @@ if __name__ == "__main__":
                 feature_size=model.config.num_mel_bins,
                 # the rest of default parameters are the same as hardcoded in openai/whisper
             )
-            processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+            processor = WhisperProcessor(
+                tokenizer=tokenizer, feature_extractor=feature_extractor
+            )
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
             # save fast tokenizer as well
-            fast_tokenizer = WhisperTokenizerFast.from_pretrained(args.pytorch_dump_folder_path)
-            fast_tokenizer.save_pretrained(args.pytorch_dump_folder_path, legacy_format=False)
+            fast_tokenizer = WhisperTokenizerFast.from_pretrained(
+                args.pytorch_dump_folder_path
+            )
+            fast_tokenizer.save_pretrained(
+                args.pytorch_dump_folder_path, legacy_format=False
+            )
 
     model.save_pretrained(args.pytorch_dump_folder_path)

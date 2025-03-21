@@ -5,7 +5,9 @@ from collections import defaultdict
 # Function to perform topological sorting
 def topological_sort(dependencies: dict):
     # Nodes are the name of the models to convert (we only add those to the graph)
-    nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
+    nodes = {
+        node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()
+    }
     # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
     graph = {}
     name_mapping = {}
@@ -23,7 +25,11 @@ def topological_sort(dependencies: dict):
         # Add them to the list
         sorting_list += list(leaf_nodes)
         # Remove the leafs from the graph (and from the deps of other nodes)
-        graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
+        graph = {
+            node: deps - leaf_nodes
+            for node, deps in graph.items()
+            if node not in leaf_nodes
+        }
 
     return [name_mapping[x] for x in sorting_list]
 

@@ -23,23 +23,20 @@ from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
-from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       select_best_resolution)
+from ...image_transforms import (PaddingMode, convert_to_rgb, pad, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (ChannelDimension, ImageInput, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            make_flat_list_of_images, to_numpy_array,
+                            valid_images, validate_preprocess_arguments)
 from ...utils import TensorType
 
 
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
+def divide_to_patches(
+    image: np.array, patch_size: int, input_data_format
+) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
 
@@ -68,7 +65,9 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
 
 
 def _get_patch_output_size(image, target_resolution, input_data_format):
-    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
+    original_height, original_width = get_image_size(
+        image, channel_dim=input_data_format
+    )
     target_height, target_width = target_resolution
 
     scale_w = target_width / original_width
@@ -213,10 +212,16 @@ class AriaImageProcessor(BaseImageProcessor):
         """
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        max_image_size = max_image_size if max_image_size is not None else self.max_image_size
-        min_image_size = min_image_size if min_image_size is not None else self.min_image_size
+        max_image_size = (
+            max_image_size if max_image_size is not None else self.max_image_size
+        )
+        min_image_size = (
+            min_image_size if min_image_size is not None else self.min_image_size
+        )
         split_image = split_image if split_image is not None else self.split_image
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
 
@@ -272,9 +277,15 @@ class AriaImageProcessor(BaseImageProcessor):
                 h, w = get_image_size(crop_image)
                 scale = max_image_size / max(h, w)
                 if w >= h:
-                    new_size = (max(int(h * scale), min_image_size), max_image_size)  # h, w
+                    new_size = (
+                        max(int(h * scale), min_image_size),
+                        max_image_size,
+                    )  # h, w
                 else:
-                    new_size = (max_image_size, max(int(w * scale), min_image_size))  # h, w
+                    new_size = (
+                        max_image_size,
+                        max(int(w * scale), min_image_size),
+                    )  # h, w
 
                 crop_image_resized = resize(
                     crop_image,
@@ -284,7 +295,10 @@ class AriaImageProcessor(BaseImageProcessor):
                     input_data_format=input_data_format,
                 )
 
-                padding_bottom, padding_right = max_image_size - new_size[0], max_image_size - new_size[1]
+                padding_bottom, padding_right = (
+                    max_image_size - new_size[0],
+                    max_image_size - new_size[1],
+                )
                 crop_image_padded = pad(
                     crop_image_resized,
                     ((0, padding_bottom), (0, padding_right)),
@@ -306,7 +320,9 @@ class AriaImageProcessor(BaseImageProcessor):
                         input_data_format=input_data_format,
                     )
                     crop_image_padded = (
-                        to_channel_dimension_format(crop_image_padded, data_format, input_data_format)
+                        to_channel_dimension_format(
+                            crop_image_padded, data_format, input_data_format
+                        )
                         if data_format is not None
                         else crop_image_padded
                     )
@@ -322,7 +338,11 @@ class AriaImageProcessor(BaseImageProcessor):
         )
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self,
+        image: np.array,
+        target_resolution: tuple,
+        resample,
+        input_data_format: ChannelDimension,
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -340,21 +360,33 @@ class AriaImageProcessor(BaseImageProcessor):
         Returns:
             np.array: The resized and padded image.
         """
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = _get_patch_output_size(
+            image, target_resolution, input_data_format
+        )
 
         # Resize the image
-        resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
+        resized_image = resize(
+            image,
+            (new_height, new_width),
+            resample=resample,
+            input_data_format=input_data_format,
+        )
 
         return resized_image
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self,
+        image: np.array,
+        target_resolution: tuple,
+        input_data_format: ChannelDimension,
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
         target_height, target_width = target_resolution
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = _get_patch_output_size(
+            image, target_resolution, input_data_format
+        )
 
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
@@ -412,7 +444,9 @@ class AriaImageProcessor(BaseImageProcessor):
 
         # call the general `pad` if padding on `height/width`, otherwise it's the `num_patched` dim
         if isinstance(padding, int) or len(padding) != 4:
-            return pad(image, padding, mode, constant_values, data_format, input_data_format)
+            return pad(
+                image, padding, mode, constant_values, data_format, input_data_format
+            )
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
@@ -423,9 +457,16 @@ class AriaImageProcessor(BaseImageProcessor):
             PaddingMode.REPLICATE: "edge",
             PaddingMode.SYMMETRIC: "symmetric",
         }
-        image = np.pad(image, padding, mode=padding_mode_mapping[mode], constant_values=constant_values)
+        image = np.pad(
+            image,
+            padding,
+            mode=padding_mode_mapping[mode],
+            constant_values=constant_values,
+        )
         image = (
-            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+            to_channel_dimension_format(image, data_format, input_data_format)
+            if data_format is not None
+            else image
         )
         return image
 
@@ -466,15 +507,24 @@ class AriaImageProcessor(BaseImageProcessor):
         image_size = get_image_size(image, channel_dim=input_data_format)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
         resized_image = self._resize_for_patching(
-            image, best_resolution, resample=resample, input_data_format=input_data_format
+            image,
+            best_resolution,
+            resample=resample,
+            input_data_format=input_data_format,
         )
-        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=input_data_format)
+        padded_image = self._pad_for_patching(
+            resized_image, best_resolution, input_data_format=input_data_format
+        )
 
-        patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
+        patches = divide_to_patches(
+            padded_image, patch_size=patch_size, input_data_format=input_data_format
+        )
 
         # make sure that all patches are in the input data format
         patches = [
-            to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                patch, channel_dim=data_format, input_channel_dim=input_data_format
+            )
             for patch in patches
         ]
         return patches

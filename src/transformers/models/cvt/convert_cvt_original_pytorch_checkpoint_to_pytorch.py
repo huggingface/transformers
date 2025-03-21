@@ -24,7 +24,8 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoImageProcessor, CvtConfig, CvtForImageClassification
+from transformers import (AutoImageProcessor, CvtConfig,
+                          CvtForImageClassification)
 
 
 def embeddings(idx):
@@ -228,28 +229,52 @@ def attention(idx, cnt):
         )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc1.weight")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.weight",
+            f"stage{idx}.blocks.{cnt}.mlp.fc1.weight",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc1.bias")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.intermediate.dense.bias",
+            f"stage{idx}.blocks.{cnt}.mlp.fc1.bias",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.output.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc2.weight")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.output.dense.weight",
+            f"stage{idx}.blocks.{cnt}.mlp.fc2.weight",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.output.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc2.bias")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.output.dense.bias",
+            f"stage{idx}.blocks.{cnt}.mlp.fc2.bias",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_before.weight", f"stage{idx}.blocks.{cnt}.norm1.weight")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_before.weight",
+            f"stage{idx}.blocks.{cnt}.norm1.weight",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_before.bias", f"stage{idx}.blocks.{cnt}.norm1.bias")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_before.bias",
+            f"stage{idx}.blocks.{cnt}.norm1.bias",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_after.weight", f"stage{idx}.blocks.{cnt}.norm2.weight")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_after.weight",
+            f"stage{idx}.blocks.{cnt}.norm2.weight",
+        )
     )
     attention_weights.append(
-        (f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_after.bias", f"stage{idx}.blocks.{cnt}.norm2.bias")
+        (
+            f"cvt.encoder.stages.{idx}.layers.{cnt}.layernorm_after.bias",
+            f"stage{idx}.blocks.{cnt}.norm2.bias",
+        )
     )
     return attention_weights
 
@@ -284,13 +309,17 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.loads(Path(hf_hub_download(repo_id, img_labels_file, repo_type="dataset")).read_text())
+    id2label = json.loads(
+        Path(hf_hub_download(repo_id, img_labels_file, repo_type="dataset")).read_text()
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
-    config = config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
+    config = config = CvtConfig(
+        num_labels=num_labels, id2label=id2label, label2id=label2id
+    )
 
     # For depth size 13 (13 = 1+2+10)
     if cvt_model.rsplit("/", 1)[-1][4:6] == "13":
@@ -307,7 +336,9 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
         config.embed_dim = [192, 768, 1024]
 
     model = CvtForImageClassification(config)
-    image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    image_processor = AutoImageProcessor.from_pretrained(
+        "facebook/convnext-base-224-22k-1k"
+    )
     image_processor.size["shortest_edge"] = image_size
     original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"))
 
@@ -325,7 +356,9 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
     for gg in list_of_state_dict:
         print(gg)
     for i in range(len(list_of_state_dict)):
-        huggingface_weights[list_of_state_dict[i][0]] = original_weights[list_of_state_dict[i][1]]
+        huggingface_weights[list_of_state_dict[i][0]] = original_weights[
+            list_of_state_dict[i][1]
+        ]
 
     model.load_state_dict(huggingface_weights)
     model.save_pretrained(pytorch_dump_folder)
@@ -355,8 +388,16 @@ if __name__ == "__main__":
         help="Input Image Size",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()
-    convert_cvt_checkpoint(args.cvt_model, args.image_size, args.cvt_file_name, args.pytorch_dump_folder_path)
+    convert_cvt_checkpoint(
+        args.cvt_model,
+        args.image_size,
+        args.cvt_file_name,
+        args.pytorch_dump_folder_path,
+    )

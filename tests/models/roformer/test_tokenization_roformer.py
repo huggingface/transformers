@@ -35,10 +35,14 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
     def get_tokenizer(self, **kwargs):
-        return self.tokenizer_class.from_pretrained("junnyu/roformer_chinese_base", **kwargs)
+        return self.tokenizer_class.from_pretrained(
+            "junnyu/roformer_chinese_base", **kwargs
+        )
 
     def get_rust_tokenizer(self, **kwargs):
-        return self.rust_tokenizer_class.from_pretrained("junnyu/roformer_chinese_base", **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(
+            "junnyu/roformer_chinese_base", **kwargs
+        )
 
     def get_chinese_input_output_texts(self):
         input_text = "永和服装饰品有限公司,今天天气非常好"
@@ -53,7 +57,20 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, output_text.split())
 
         input_tokens = tokens + [tokenizer.unk_token]
-        exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
+        exp_tokens = [
+            22943,
+            21332,
+            34431,
+            45904,
+            117,
+            306,
+            1231,
+            1231,
+            2653,
+            33994,
+            1266,
+            100,
+        ]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
     def test_rust_tokenizer(self):  # noqa: F811
@@ -62,7 +79,20 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize(input_text)
         self.assertListEqual(tokens, output_text.split())
         input_tokens = tokens + [tokenizer.unk_token]
-        exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
+        exp_tokens = [
+            22943,
+            21332,
+            34431,
+            45904,
+            117,
+            306,
+            1231,
+            1231,
+            2653,
+            33994,
+            1266,
+            100,
+        ]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
     @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")

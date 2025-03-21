@@ -19,27 +19,25 @@ import unittest
 
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        LayoutLMv3Config,
-        LayoutLMv3ForQuestionAnswering,
-        LayoutLMv3ForSequenceClassification,
-        LayoutLMv3ForTokenClassification,
-        LayoutLMv3Model,
-    )
+    from transformers import (MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+                              MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+                              MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+                              MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+                              LayoutLMv3Config, LayoutLMv3ForQuestionAnswering,
+                              LayoutLMv3ForSequenceClassification,
+                              LayoutLMv3ForTokenClassification,
+                              LayoutLMv3Model)
 
 if is_vision_available():
     from PIL import Image
@@ -129,7 +127,9 @@ class LayoutLMv3ModelTester:
                     bbox[i, j, 2] = bbox[i, j, 0]
                     bbox[i, j, 0] = t
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         input_mask = None
         if self.use_input_mask:
@@ -137,13 +137,19 @@ class LayoutLMv3ModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.text_seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.text_seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.text_seq_length], self.num_labels
+            )
 
         config = LayoutLMv3Config(
             vocab_size=self.vocab_size,
@@ -163,10 +169,27 @@ class LayoutLMv3ModelTester:
             patch_size=self.patch_size,
         )
 
-        return config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        return (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+        )
 
     def create_and_check_model(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
     ):
         model = LayoutLMv3Model(config=config)
         model.to(torch_device)
@@ -175,27 +198,49 @@ class LayoutLMv3ModelTester:
         # text + image
         result = model(input_ids, pixel_values=pixel_values)
         result = model(
-            input_ids, bbox=bbox, pixel_values=pixel_values, attention_mask=input_mask, token_type_ids=token_type_ids
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
         )
-        result = model(input_ids, bbox=bbox, pixel_values=pixel_values, token_type_ids=token_type_ids)
+        result = model(
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            token_type_ids=token_type_ids,
+        )
         result = model(input_ids, bbox=bbox, pixel_values=pixel_values)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
         # text only
         result = model(input_ids)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.text_seq_length, self.hidden_size),
         )
 
         # image only
         result = model(pixel_values=pixel_values)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.image_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.image_seq_length, self.hidden_size),
         )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
     ):
         config.num_labels = self.num_labels
         model = LayoutLMv3ForSequenceClassification(config)
@@ -212,7 +257,15 @@ class LayoutLMv3ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
     ):
         config.num_labels = self.num_labels
         model = LayoutLMv3ForTokenClassification(config=config)
@@ -226,10 +279,21 @@ class LayoutLMv3ModelTester:
             token_type_ids=token_type_ids,
             labels=token_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.text_seq_length, self.num_labels),
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        pixel_values,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
     ):
         model = LayoutLMv3ForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -243,8 +307,12 @@ class LayoutLMv3ModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -285,7 +353,10 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else ()
     )
     pipeline_model_mapping = (
-        {"document-question-answering": LayoutLMv3ForQuestionAnswering, "feature-extraction": LayoutLMv3Model}
+        {
+            "document-question-answering": LayoutLMv3ForQuestionAnswering,
+            "feature-extraction": LayoutLMv3Model,
+        }
         if is_torch_available()
         else {}
     )
@@ -309,20 +380,28 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LayoutLMv3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=LayoutLMv3Config, hidden_size=37
+        )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
         if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
             inputs_dict = {
-                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                if isinstance(v, torch.Tensor) and v.ndim > 1
-                else v
+                k: (
+                    v.unsqueeze(1)
+                    .expand(-1, self.model_tester.num_choices, -1)
+                    .contiguous()
+                    if isinstance(v, torch.Tensor) and v.ndim > 1
+                    else v
+                )
                 for k, v in inputs_dict.items()
             }
         if return_labels:
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+                inputs_dict["labels"] = torch.ones(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
             elif model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -362,7 +441,9 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -389,15 +470,21 @@ def prepare_img():
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
+        return (
+            LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
+        )
 
     @slow
     def test_inference_no_head(self):
-        model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base").to(torch_device)
+        model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base").to(
+            torch_device
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = image_processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+        pixel_values = image_processor(
+            images=image, return_tensors="pt"
+        ).pixel_values.to(torch_device)
 
         input_ids = torch.tensor([[1, 2]])
         bbox = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]]).unsqueeze(0)
@@ -414,7 +501,13 @@ class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0529, 0.3618, 0.1632], [-0.1587, -0.1667, -0.0400], [-0.1557, -0.1671, -0.0505]]
+            [
+                [-0.0529, 0.3618, 0.1632],
+                [-0.1587, -0.1667, -0.0400],
+                [-0.1557, -0.1671, -0.0505],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

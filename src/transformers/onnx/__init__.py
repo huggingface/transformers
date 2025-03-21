@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from ..utils import _LazyModule
 
-
 _import_structure = {
     "config": [
         "EXTERNAL_DATA_FORMAT_SIZE_LIMIT",
@@ -32,13 +31,9 @@ _import_structure = {
 
 
 if TYPE_CHECKING:
-    from .config import (
-        EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
-        OnnxConfig,
-        OnnxConfigWithPast,
-        OnnxSeq2SeqConfigWithPast,
-        PatchingSpec,
-    )
+    from .config import (EXTERNAL_DATA_FORMAT_SIZE_LIMIT, OnnxConfig,
+                         OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast,
+                         PatchingSpec)
     from .convert import export, validate_model_outputs
     from .features import FeaturesManager
     from .utils import ParameterFormat, compute_serialized_parameters_size
@@ -46,4 +41,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

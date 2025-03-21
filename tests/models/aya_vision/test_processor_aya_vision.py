@@ -19,11 +19,11 @@ import unittest
 from typing import Optional
 
 from transformers import AutoProcessor, AutoTokenizer, AyaVisionProcessor
-from transformers.testing_utils import require_read_token, require_torch, require_vision
+from transformers.testing_utils import (require_read_token, require_torch,
+                                        require_vision)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -52,7 +52,9 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained("CohereForAI/aya-vision-8b", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "CohereForAI/aya-vision-8b", padding_side="left"
+        )
         processor_kwargs = self.prepare_processor_dict()
         processor = AyaVisionProcessor.from_pretrained(
             "CohereForAI/aya-vision-8b",
@@ -92,9 +94,9 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         if batch_size == 1:
             return ["lower newer <image>"]
-        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
-            batch_size - 2
-        )
+        return ["lower newer <image>", "<image> upper older longer string"] + [
+            "<image> lower newer"
+        ] * (batch_size - 2)
 
     @require_torch
     def test_process_interleaved_images_videos(self):
@@ -113,7 +115,10 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                             "type": "image",
                             "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
                         },
-                        {"type": "text", "text": "What are the differences between these two images?"},
+                        {
+                            "type": "text",
+                            "text": "What are the differences between these two images?",
+                        },
                     ],
                 },
             ],
@@ -153,12 +158,14 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
             # We slice with [-inputs["input_ids"].shape[1] :] as the input_ids are left padded
             torch.testing.assert_close(
-                inputs["input_ids"][0], inputs_batched["input_ids"][i][-inputs["input_ids"].shape[1] :]
+                inputs["input_ids"][0],
+                inputs_batched["input_ids"][i][-inputs["input_ids"].shape[1] :],
             )
             torch.testing.assert_close(
                 inputs["pixel_values"],
                 inputs_batched["pixel_values"][
-                    images_patches_index : images_patches_index + inputs["pixel_values"].shape[0]
+                    images_patches_index : images_patches_index
+                    + inputs["pixel_values"].shape[0]
                 ],
             )
             images_patches_index += inputs["pixel_values"].shape[0]

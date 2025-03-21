@@ -21,20 +21,15 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download
 from requests.exceptions import HTTPError
 
-from transformers.utils import (
-    CONFIG_NAME,
-    FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    TRANSFORMERS_CACHE,
-    WEIGHTS_NAME,
-    cached_file,
-    has_file,
-)
-
+from transformers.utils import (CONFIG_NAME, FLAX_WEIGHTS_NAME,
+                                TF2_WEIGHTS_NAME, TRANSFORMERS_CACHE,
+                                WEIGHTS_NAME, cached_file, has_file)
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
 TINY_BERT_PT_ONLY = "hf-internal-testing/tiny-bert-pt-only"
-CACHE_DIR = os.path.join(TRANSFORMERS_CACHE, "models--hf-internal-testing--tiny-random-bert")
+CACHE_DIR = os.path.join(
+    TRANSFORMERS_CACHE, "models--hf-internal-testing--tiny-random-bert"
+)
 FULL_COMMIT_HASH = "9b8c223d42b2188cb49d29af482996f9d0f3e5a6"
 
 GATED_REPO = "hf-internal-testing/dummy-gated-model"
@@ -51,7 +46,9 @@ class GetFromCacheTests(unittest.TestCase):
             self.assertTrue(os.path.isdir(os.path.join(CACHE_DIR, subfolder)))
         with open(os.path.join(CACHE_DIR, "refs", "main")) as f:
             main_commit = f.read()
-        self.assertEqual(archive_file, os.path.join(CACHE_DIR, "snapshots", main_commit, CONFIG_NAME))
+        self.assertEqual(
+            archive_file, os.path.join(CACHE_DIR, "snapshots", main_commit, CONFIG_NAME)
+        )
         self.assertTrue(os.path.isfile(archive_file))
 
         # File is cached at the same place the second time.
@@ -60,35 +57,57 @@ class GetFromCacheTests(unittest.TestCase):
 
         # Using a specific revision to test the full commit hash.
         archive_file = cached_file(RANDOM_BERT, CONFIG_NAME, revision="9b8c223")
-        self.assertEqual(archive_file, os.path.join(CACHE_DIR, "snapshots", FULL_COMMIT_HASH, CONFIG_NAME))
+        self.assertEqual(
+            archive_file,
+            os.path.join(CACHE_DIR, "snapshots", FULL_COMMIT_HASH, CONFIG_NAME),
+        )
 
     def test_cached_file_errors(self):
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "is not a valid model identifier"
+        ):
             _ = cached_file("tiny-random-bert", CONFIG_NAME)
 
         with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
             _ = cached_file(RANDOM_BERT, CONFIG_NAME, revision="aaaa")
 
-        with self.assertRaisesRegex(EnvironmentError, "does not appear to have a file named"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named"
+        ):
             _ = cached_file(RANDOM_BERT, "conf")
 
     def test_non_existence_is_cached(self):
-        with self.assertRaisesRegex(EnvironmentError, "does not appear to have a file named"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named"
+        ):
             _ = cached_file(RANDOM_BERT, "conf")
 
         with open(os.path.join(CACHE_DIR, "refs", "main")) as f:
             main_commit = f.read()
-        self.assertTrue(os.path.isfile(os.path.join(CACHE_DIR, ".no_exist", main_commit, "conf")))
+        self.assertTrue(
+            os.path.isfile(os.path.join(CACHE_DIR, ".no_exist", main_commit, "conf"))
+        )
 
-        path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_missing_entries=False)
+        path = cached_file(
+            RANDOM_BERT, "conf", _raise_exceptions_for_missing_entries=False
+        )
         self.assertIsNone(path)
 
-        path = cached_file(RANDOM_BERT, "conf", local_files_only=True, _raise_exceptions_for_missing_entries=False)
+        path = cached_file(
+            RANDOM_BERT,
+            "conf",
+            local_files_only=True,
+            _raise_exceptions_for_missing_entries=False,
+        )
         self.assertIsNone(path)
 
         # Under the mock environment, hf_hub_download will always raise an HTTPError
-        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=HTTPError) as mock_head:
-            path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
+        with mock.patch(
+            "transformers.utils.hub.hf_hub_download", side_effect=HTTPError
+        ) as mock_head:
+            path = cached_file(
+                RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False
+            )
             self.assertIsNone(path)
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -101,13 +120,23 @@ class GetFromCacheTests(unittest.TestCase):
     def test_has_file_in_cache(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Empty cache dir + offline mode => return False
-            assert not has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
+            assert not has_file(
+                TINY_BERT_PT_ONLY,
+                WEIGHTS_NAME,
+                local_files_only=True,
+                cache_dir=tmp_dir,
+            )
 
             # Populate cache dir
             hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
 
             # Cache dir + offline mode => return True
-            assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
+            assert has_file(
+                TINY_BERT_PT_ONLY,
+                WEIGHTS_NAME,
+                local_files_only=True,
+                cache_dir=tmp_dir,
+            )
 
     def test_get_file_from_repo_distant(self):
         # should return None if the file does not exist
@@ -122,7 +151,9 @@ class GetFromCacheTests(unittest.TestCase):
         )
 
         # The function raises if the repository does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "is not a valid model identifier"
+        ):
             cached_file(
                 "bert-base-case",
                 CONFIG_NAME,
@@ -180,7 +211,9 @@ class GetFromCacheTests(unittest.TestCase):
 
     def test_get_file_gated_repo(self):
         """Test download file from a gated repo fails with correct message when not authenticated."""
-        with self.assertRaisesRegex(EnvironmentError, "You are trying to access a gated repo."):
+        with self.assertRaisesRegex(
+            EnvironmentError, "You are trying to access a gated repo."
+        ):
             # All files except README.md are protected on a gated repo.
             cached_file(GATED_REPO, "gated_file.txt", token=False)
 

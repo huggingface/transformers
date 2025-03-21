@@ -18,18 +18,11 @@ import argparse
 
 import torch
 
-from transformers import (
-    SpeechT5Config,
-    SpeechT5FeatureExtractor,
-    SpeechT5ForSpeechToSpeech,
-    SpeechT5ForSpeechToText,
-    SpeechT5ForTextToSpeech,
-    SpeechT5Processor,
-    SpeechT5Tokenizer,
-    logging,
-)
+from transformers import (SpeechT5Config, SpeechT5FeatureExtractor,
+                          SpeechT5ForSpeechToSpeech, SpeechT5ForSpeechToText,
+                          SpeechT5ForTextToSpeech, SpeechT5Processor,
+                          SpeechT5Tokenizer, logging)
 from transformers.tokenization_utils import AddedToken
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
@@ -183,7 +176,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
+    logger.info(
+        f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}."
+    )
 
 
 def should_ignore(name, ignore_keys):
@@ -272,7 +267,9 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
+def load_conv_layer(
+    full_name, value, feature_extractor, unused_weights, use_group_norm
+):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
     layer_id = int(items[0])
@@ -280,38 +277,60 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].conv.bias.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].conv.weight.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
+    elif (type_id == 2 and not use_group_norm) or (
+        type_id == 2 and layer_id == 0 and use_group_norm
+    ):
         if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
     else:
         unused_weights.append(full_name)
 
@@ -349,7 +368,9 @@ def convert_speecht5_checkpoint(
         raise ValueError(f"Unknown task name: {task}")
 
     if vocab_path:
-        tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
+        tokenizer = SpeechT5Tokenizer(
+            vocab_path, model_max_length=config.max_text_positions
+        )
 
         # Mask token behaves like a normal word, i.e. include the space before it
         mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
@@ -358,7 +379,9 @@ def convert_speecht5_checkpoint(
         tokenizer.add_tokens(["<ctc_blank>"])
 
     feature_extractor = SpeechT5FeatureExtractor()
-    processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+    processor = SpeechT5Processor(
+        tokenizer=tokenizer, feature_extractor=feature_extractor
+    )
     processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
@@ -380,14 +403,34 @@ if __name__ == "__main__":
         type=str,
         help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 't2s', 's2s'.",
     )
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--vocab_path", default=None, type=str, help="Path to SentencePiece model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to fairseq checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--vocab_path", default=None, type=str, help="Path to SentencePiece model"
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

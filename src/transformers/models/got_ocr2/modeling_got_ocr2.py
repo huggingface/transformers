@@ -32,10 +32,11 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      replace_return_docstrings)
 from ..auto import AutoModelForCausalLM
 from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
-
 
 _CONFIG_FOR_DOC = "GotOcr2Config"
 
@@ -60,7 +61,10 @@ class GotOcr2VisionAttention(nn.Module):
     def __init__(self, config, window_size):
         super().__init__()
         input_size = (
-            (config.image_size // config.patch_size, config.image_size // config.patch_size)
+            (
+                config.image_size // config.patch_size,
+                config.image_size // config.patch_size,
+            )
             if window_size == 0
             else (window_size, window_size)
         )
@@ -70,19 +74,25 @@ class GotOcr2VisionAttention(nn.Module):
         self.scale = head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.qkv = nn.Linear(
+            config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias
+        )
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
             if input_size is None:
-                raise ValueError("Input size must be provided if using relative positional encoding.")
+                raise ValueError(
+                    "Input size must be provided if using relative positional encoding."
+                )
 
             # initialize relative positional embeddings
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
-    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
+    def get_rel_pos(
+        self, q_size: int, k_size: int, rel_pos: torch.Tensor
+    ) -> torch.Tensor:
         """
         Get relative positional embeddings according to the relative positions of
             query and key sizes.
@@ -110,7 +120,9 @@ class GotOcr2VisionAttention(nn.Module):
         # Scale the coords with short length if shapes for q and k are different.
         q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
         k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
-        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
+        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(
+            q_size / k_size, 1.0
+        )
 
         return rel_pos_resized[relative_coords.long()]
 
@@ -156,7 +168,9 @@ class GotOcr2VisionAttention(nn.Module):
 
         return decomposed_rel_pos
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, output_attentions=False
+    ) -> torch.Tensor:
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
@@ -165,7 +179,9 @@ class GotOcr2VisionAttention(nn.Module):
             .permute(2, 0, 3, 1, 4)
         )
         # q, k, v with shape (batch_size * nHead, height * width, channel)
-        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+        query, key, value = qkv.reshape(
+            3, batch_size * self.num_attention_heads, height * width, -1
+        ).unbind(0)
 
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
@@ -176,12 +192,20 @@ class GotOcr2VisionAttention(nn.Module):
             decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
             attn_weights = attn_weights + decomposed_rel_pos
 
-        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
+        attn_weights = torch.nn.functional.softmax(
+            attn_weights, dtype=torch.float32, dim=-1
+        ).to(query.dtype)
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
-        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
-        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+        attn_output = (attn_probs @ value).reshape(
+            batch_size, self.num_attention_heads, height, width, -1
+        )
+        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(
+            batch_size, height, width, -1
+        )
 
         attn_output = self.proj(attn_output)
 
@@ -202,7 +226,9 @@ class GotOcr2VisionLayer(nn.Module):
         self.mlp = GotOcr2MLPBlock(config)
         self.window_size = window_size
 
-    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def window_partition(
+        self, hidden_states: torch.Tensor, window_size: int
+    ) -> Tuple[torch.Tensor, Tuple[int, int]]:
         """
         Args:
         Partition into non-overlapping windows with padding if needed.
@@ -221,13 +247,26 @@ class GotOcr2VisionLayer(nn.Module):
         pad_height, pad_width = height + pad_h, width + pad_w
 
         hidden_states = hidden_states.reshape(
-            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
+            batch_size,
+            pad_height // window_size,
+            window_size,
+            pad_width // window_size,
+            window_size,
+            channel,
         )
-        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
+        windows = (
+            hidden_states.permute(0, 1, 3, 2, 4, 5)
+            .contiguous()
+            .reshape(-1, window_size, window_size, channel)
+        )
         return windows, (pad_height, pad_width)
 
     def window_unpartition(
-        self, windows: torch.Tensor, window_size: int, padding_shape: Tuple[int, int], original_shape: Tuple[int, int]
+        self,
+        windows: torch.Tensor,
+        window_size: int,
+        padding_shape: Tuple[int, int],
+        original_shape: Tuple[int, int],
     ) -> torch.Tensor:
         """
         Args:
@@ -245,12 +284,21 @@ class GotOcr2VisionLayer(nn.Module):
         """
         pad_height, pad_width = padding_shape
         height, width = original_shape
-        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
+        batch_size = windows.shape[0] // (
+            pad_height * pad_width // window_size // window_size
+        )
         hidden_states = windows.reshape(
-            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
+            batch_size,
+            pad_height // window_size,
+            pad_width // window_size,
+            window_size,
+            window_size,
+            -1,
         )
         hidden_states = (
-            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
+            hidden_states.permute(0, 1, 3, 2, 4, 5)
+            .contiguous()
+            .reshape(batch_size, pad_height, pad_width, -1)
         )
 
         hidden_states = hidden_states[:, :height, :width, :].contiguous()
@@ -267,7 +315,9 @@ class GotOcr2VisionLayer(nn.Module):
         # Window partition
         if self.window_size > 0:
             height, width = hidden_states.shape[1], hidden_states.shape[2]
-            hidden_states, padding_shape = self.window_partition(hidden_states, self.window_size)
+            hidden_states, padding_shape = self.window_partition(
+                hidden_states, self.window_size
+            )
 
         hidden_states, attn_weights = self.attn(
             hidden_states=hidden_states,
@@ -275,7 +325,9 @@ class GotOcr2VisionLayer(nn.Module):
         )
         # Reverse window partition
         if self.window_size > 0:
-            hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
+            hidden_states = self.window_unpartition(
+                hidden_states, self.window_size, padding_shape, (height, width)
+            )
 
         hidden_states = residual + hidden_states
         layernorm_output = self.layer_norm2(hidden_states)
@@ -329,15 +381,27 @@ class GotOcr2PatchEmbeddings(nn.Module):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size
+        )
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
@@ -371,7 +435,9 @@ class GotOcr2LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+            x = torch.nn.functional.layer_norm(
+                x, self.normalized_shape, self.weight, self.bias, self.eps
+            )
         elif self.data_format == "channels_first":
             input_dtype = x.dtype
             x = x.float()
@@ -388,10 +454,22 @@ class GotOcr2VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
-        self.layer_norm1 = GotOcr2LayerNorm(config.output_channels, data_format="channels_first")
-        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
-        self.layer_norm2 = GotOcr2LayerNorm(config.output_channels, data_format="channels_first")
+        self.conv1 = nn.Conv2d(
+            config.hidden_size, config.output_channels, kernel_size=1, bias=False
+        )
+        self.layer_norm1 = GotOcr2LayerNorm(
+            config.output_channels, data_format="channels_first"
+        )
+        self.conv2 = nn.Conv2d(
+            config.output_channels,
+            config.output_channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.layer_norm2 = GotOcr2LayerNorm(
+            config.output_channels, data_format="channels_first"
+        )
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.permute(0, 3, 1, 2)
@@ -427,7 +505,9 @@ class GotOcr2VisionEncoder(nn.Module):
         for i in range(config.num_hidden_layers):
             layer = GotOcr2VisionLayer(
                 config,
-                window_size=config.window_size if i not in config.global_attn_indexes else 0,
+                window_size=(
+                    config.window_size if i not in config.global_attn_indexes else 0
+                ),
             )
             self.layers.append(layer)
 
@@ -445,11 +525,19 @@ class GotOcr2VisionEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, GotOcr2VisionEncoderOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -471,7 +559,9 @@ class GotOcr2VisionEncoder(nn.Module):
                     hidden_states,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, output_attentions=output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -504,12 +594,24 @@ class GotOcr2MultiModalProjector(nn.Module):
         vision_output_channels = config.vision_config.output_channels
         language_hidden_size = config.text_config.hidden_size
         self.conv_upsampler1 = nn.Conv2d(
-            vision_output_channels, vision_output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
+            vision_output_channels,
+            vision_output_channels * 2,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
         )
         self.conv_upsampler2 = nn.Conv2d(
-            vision_output_channels * 2, language_hidden_size, kernel_size=3, stride=2, padding=1, bias=False
+            vision_output_channels * 2,
+            language_hidden_size,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
         )
-        self.multimodal_projector = nn.Linear(language_hidden_size, language_hidden_size)
+        self.multimodal_projector = nn.Linear(
+            language_hidden_size, language_hidden_size
+        )
 
     def forward(self, vision_embeddings: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv_upsampler1(vision_embeddings)
@@ -699,7 +801,9 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
         self.pad_token_id = config.pad_token_id
 
@@ -739,7 +843,9 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         return self.multi_modal_projector(image_outputs)
 
     @add_start_docstrings_to_model_forward(GOT_OCR2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GotOcr2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=GotOcr2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -801,14 +907,24 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         when you're planning to sell a template."
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -819,17 +935,27 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
+            image_features = self.get_image_features(
+                pixel_values=pixel_values.to(inputs_embeds.dtype)
+            )
             n_image_tokens = (input_ids == self.config.image_token_index).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -852,16 +978,23 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:

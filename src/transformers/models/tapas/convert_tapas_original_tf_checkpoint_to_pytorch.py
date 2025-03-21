@@ -16,23 +16,21 @@
 
 import argparse
 
-from transformers import (
-    TapasConfig,
-    TapasForMaskedLM,
-    TapasForQuestionAnswering,
-    TapasForSequenceClassification,
-    TapasModel,
-    TapasTokenizer,
-    load_tf_weights_in_tapas,
-)
+from transformers import (TapasConfig, TapasForMaskedLM,
+                          TapasForQuestionAnswering,
+                          TapasForSequenceClassification, TapasModel,
+                          TapasTokenizer, load_tf_weights_in_tapas)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(
-    task, reset_position_index_per_cell, tf_checkpoint_path, tapas_config_file, pytorch_dump_path
+    task,
+    reset_position_index_per_cell,
+    tf_checkpoint_path,
+    tapas_config_file,
+    pytorch_dump_path,
 ):
     # Initialise PyTorch model.
     # If you want to convert a checkpoint that uses absolute position embeddings, make sure to set reset_position_index_per_cell of
@@ -93,17 +91,24 @@ def convert_tf_checkpoint_to_pytorch(
 
     # Save tokenizer files
     print(f"Save tokenizer files to {pytorch_dump_path}")
-    tokenizer = TapasTokenizer(vocab_file=tf_checkpoint_path[:-10] + "vocab.txt", model_max_length=512)
+    tokenizer = TapasTokenizer(
+        vocab_file=tf_checkpoint_path[:-10] + "vocab.txt", model_max_length=512
+    )
     tokenizer.save_pretrained(pytorch_dump_path)
 
-    print("Used relative position embeddings:", model.config.reset_position_index_per_cell)
+    print(
+        "Used relative position embeddings:", model.config.reset_position_index_per_cell
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--task", default="SQA", type=str, help="Model task for which to convert a checkpoint. Defaults to SQA."
+        "--task",
+        default="SQA",
+        type=str,
+        help="Model task for which to convert a checkpoint. Defaults to SQA.",
     )
     parser.add_argument(
         "--reset_position_index_per_cell",
@@ -112,7 +117,11 @@ if __name__ == "__main__":
         help="Whether to use relative position embeddings or not. Defaults to True.",
     )
     parser.add_argument(
-        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--tf_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
         "--tapas_config_file",
@@ -125,7 +134,11 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(

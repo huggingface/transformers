@@ -22,7 +22,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -130,7 +129,10 @@ class GPTJConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
         )
 
 
@@ -143,7 +145,9 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
     ):
-        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
+        super().__init__(
+            config, task=task, patching_specs=patching_specs, use_past=use_past
+        )
         if not getattr(self._config, "pad_token_id", None):
             # TODO: how to do that better?
             self._config.pad_token_id = 0
@@ -153,7 +157,10 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
             self.fill_with_past_key_values_(common_inputs, direction="inputs")
-            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
+            common_inputs["attention_mask"] = {
+                0: "batch",
+                1: "past_sequence + sequence",
+            }
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
@@ -176,7 +183,11 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
 
         # We need to order the input in the way they appears in the forward()
@@ -185,7 +196,9 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
         # Need to add the past_keys
         if self.use_past:
             if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                raise ValueError(
+                    "Cannot generate dummy past_keys inputs without PyTorch installed."
+                )
             else:
                 import torch
 
@@ -199,14 +212,19 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
                     self._config.hidden_size // self.num_attention_heads,
                 )
                 ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
+                    (torch.zeros(past_shape), torch.zeros(past_shape))
+                    for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             mask_dtype = ordered_inputs["attention_mask"].dtype
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
+                [
+                    ordered_inputs["attention_mask"],
+                    torch.ones(batch, past_key_values_length, dtype=mask_dtype),
+                ],
+                dim=1,
             )
 
         return ordered_inputs

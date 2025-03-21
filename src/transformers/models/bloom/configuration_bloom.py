@@ -19,14 +19,12 @@ from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
 from packaging import version
 
-
 if TYPE_CHECKING:
     from ... import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import is_torch_available, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -130,7 +128,9 @@ class BloomConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.pretraining_tp = pretraining_tp
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.apply_residual_connection_post_layernorm = (
+            apply_residual_connection_post_layernorm
+        )
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
 
@@ -151,7 +151,9 @@ class BloomOnnxConfig(OnnxConfigWithPast):
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
     ):
-        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
+        super().__init__(
+            config, task=task, patching_specs=patching_specs, use_past=use_past
+        )
         if not getattr(self._config, "pad_token_id", None):
             # TODO: how to do that better?
             self._config.pad_token_id = 0
@@ -161,8 +163,13 @@ class BloomOnnxConfig(OnnxConfigWithPast):
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
             # BLOOM stores values on dynamic axis 2. For more details see: https://github.com/huggingface/transformers/pull/18344
-            self.fill_with_past_key_values_(common_inputs, direction="inputs", inverted_values_shape=True)
-            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
+            self.fill_with_past_key_values_(
+                common_inputs, direction="inputs", inverted_values_shape=True
+            )
+            common_inputs["attention_mask"] = {
+                0: "batch",
+                1: "past_sequence + sequence",
+            }
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
 
@@ -189,7 +196,11 @@ class BloomOnnxConfig(OnnxConfigWithPast):
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
 
         # We need to order the input in the way they appears in the forward()
@@ -198,7 +209,9 @@ class BloomOnnxConfig(OnnxConfigWithPast):
         # Need to add the past_keys
         if self.use_past:
             if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                raise ValueError(
+                    "Cannot generate dummy past_keys inputs without PyTorch installed."
+                )
             else:
                 import torch
 
@@ -217,14 +230,19 @@ class BloomOnnxConfig(OnnxConfigWithPast):
                     head_dim,
                 )
                 ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_key_shape), torch.zeros(past_value_shape)) for _ in range(self.num_layers)
+                    (torch.zeros(past_key_shape), torch.zeros(past_value_shape))
+                    for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
             mask_dtype = ordered_inputs["attention_mask"].dtype
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
+                [
+                    ordered_inputs["attention_mask"],
+                    torch.ones(batch, past_key_values_length, dtype=mask_dtype),
+                ],
+                dim=1,
             )
 
         return ordered_inputs

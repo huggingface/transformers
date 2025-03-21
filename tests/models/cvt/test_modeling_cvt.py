@@ -18,13 +18,14 @@ import unittest
 from math import floor
 
 from transformers import CvtConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.file_utils import (cached_property, is_torch_available,
+                                     is_vision_available)
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -87,7 +88,9 @@ class CvtModelTester:
         self.layer_norm_eps = layer_norm_eps
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -121,9 +124,24 @@ class CvtModelTester:
         image_size = (self.image_size, self.image_size)
         height, width = image_size[0], image_size[1]
         for i in range(len(self.depth)):
-            height = floor(((height + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
-            width = floor(((width + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dim[-1], height, width))
+            height = floor(
+                (
+                    (height + 2 * self.patch_padding[i] - self.patch_sizes[i])
+                    / self.patch_stride[i]
+                )
+                + 1
+            )
+            width = floor(
+                (
+                    (width + 2 * self.patch_padding[i] - self.patch_sizes[i])
+                    / self.patch_stride[i]
+                )
+                + 1
+            )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.embed_dim[-1], height, width),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -147,9 +165,14 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (CvtModel, CvtForImageClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
+        {
+            "image-feature-extraction": CvtModel,
+            "image-classification": CvtForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -252,7 +275,9 @@ class CvtModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained("microsoft/cvt-13").to(torch_device)
+        model = CvtForImageClassification.from_pretrained("microsoft/cvt-13").to(
+            torch_device
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -268,4 +293,6 @@ class CvtModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.9285, 0.9015, -0.3150]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

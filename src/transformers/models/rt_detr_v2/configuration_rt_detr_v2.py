@@ -24,7 +24,6 @@ from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
-
 logger = logging.get_logger(__name__)
 
 

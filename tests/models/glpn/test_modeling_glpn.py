@@ -17,12 +17,12 @@
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -89,11 +89,15 @@ class GLPNModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
         return config, pixel_values, labels
@@ -118,9 +122,12 @@ class GLPNModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        expected_height = expected_width = self.image_size // (self.downsampling_rates[-1] * 2)
+        expected_height = expected_width = self.image_size // (
+            self.downsampling_rates[-1] * 2
+        )
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width),
         )
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
@@ -129,9 +136,15 @@ class GLPNModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(
+            result.predicted_depth.shape,
+            (self.batch_size, self.image_size, self.image_size),
+        )
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(
+            result.predicted_depth.shape,
+            (self.batch_size, self.image_size, self.image_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -142,9 +155,14 @@ class GLPNModelTester:
 
 @require_torch
 class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GLPNModel, GLPNForDepthEstimation) if is_torch_available() else ()
+    all_model_classes = (
+        (GLPNModel, GLPNForDepthEstimation) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"depth-estimation": GLPNForDepthEstimation, "image-feature-extraction": GLPNModel}
+        {
+            "depth-estimation": GLPNForDepthEstimation,
+            "image-feature-extraction": GLPNModel,
+        }
         if is_torch_available()
         else {}
     )
@@ -173,7 +191,9 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="GLPN does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(
+        reason="GLPN does not have get_input_embeddings method and get_output_embeddings methods"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -209,18 +229,30 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # verify the first attentions (first block, first layer)
             expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])) ** 2
+            expected_reduced_seq_len = (
+                self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])
+            ) ** 2
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads[0], expected_seq_len, expected_reduced_seq_len],
+                [
+                    self.model_tester.num_attention_heads[0],
+                    expected_seq_len,
+                    expected_reduced_seq_len,
+                ],
             )
 
             # verify the last attentions (last block, last layer)
             expected_seq_len = (self.model_tester.image_size // 32) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (32 * self.model_tester.sr_ratios[-1])) ** 2
+            expected_reduced_seq_len = (
+                self.model_tester.image_size // (32 * self.model_tester.sr_ratios[-1])
+            ) ** 2
             self.assertListEqual(
                 list(attentions[-1].shape[-3:]),
-                [self.model_tester.num_attention_heads[-1], expected_seq_len, expected_reduced_seq_len],
+                [
+                    self.model_tester.num_attention_heads[-1],
+                    expected_seq_len,
+                    expected_reduced_seq_len,
+                ],
             )
             out_len = len(outputs)
 
@@ -240,10 +272,16 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), expected_num_attentions)
             # verify the first attentions (first block, first layer)
             expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])) ** 2
+            expected_reduced_seq_len = (
+                self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])
+            ) ** 2
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads[0], expected_seq_len, expected_reduced_seq_len],
+                [
+                    self.model_tester.num_attention_heads[0],
+                    expected_seq_len,
+                    expected_reduced_seq_len,
+                ],
             )
 
     def test_hidden_states_output(self):
@@ -295,14 +333,18 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # TODO: remove the following 3 lines once we have a MODEL_FOR_DEPTH_ESTIMATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
             if model_class.__name__ == "GLPNForDepthEstimation":
-                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                batch_size, num_channels, height, width = inputs_dict[
+                    "pixel_values"
+                ].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device
                 ).long()
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -326,7 +368,9 @@ class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
         image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
-        model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
+        model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(
+            torch_device
+        )
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -340,7 +384,13 @@ class GLPNModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
+            [
+                [3.4291, 2.7865, 2.5151],
+                [3.2841, 2.7021, 2.3502],
+                [3.1147, 2.4625, 2.2481],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

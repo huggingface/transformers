@@ -27,9 +27,10 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw
 
-from transformers import GemmaTokenizerFast, Siglip2Config, Siglip2ImageProcessorFast, Siglip2Model, Siglip2Processor
+from transformers import (GemmaTokenizerFast, Siglip2Config,
+                          Siglip2ImageProcessorFast, Siglip2Model,
+                          Siglip2Processor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -189,7 +190,9 @@ def get_siglip2_tokenizer() -> GemmaTokenizerFast:
     return tokenizer
 
 
-def get_siglip2_image_processor(patch_size: int, max_num_patches: int) -> Siglip2ImageProcessorFast:
+def get_siglip2_image_processor(
+    patch_size: int, max_num_patches: int
+) -> Siglip2ImageProcessorFast:
     image_processor = Siglip2ImageProcessorFast(
         patch_size=patch_size,
         max_num_patches=max_num_patches,
@@ -251,14 +254,20 @@ def merge_qkv_for_head(state_dict: dict, config: Siglip2Config) -> dict:
     qkv_weights, qkv_biases = [], []
     for name in ["query", "key", "value"]:
         prefix = f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/{name}"
-        weight = state_dict.pop(f"{prefix}/kernel").reshape(-1, config.vision_config.hidden_size)
+        weight = state_dict.pop(f"{prefix}/kernel").reshape(
+            -1, config.vision_config.hidden_size
+        )
         bias = state_dict.pop(f"{prefix}/bias").reshape(-1)
         qkv_weights.append(weight)
         qkv_biases.append(bias)
 
     # Combine into single tensors
-    state_dict["params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/kernel"] = np.concatenate(qkv_weights, axis=1)
-    state_dict["params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/bias"] = np.concatenate(qkv_biases, axis=0)
+    state_dict["params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/kernel"] = (
+        np.concatenate(qkv_weights, axis=1)
+    )
+    state_dict["params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/bias"] = (
+        np.concatenate(qkv_biases, axis=0)
+    )
     return state_dict
 
 
@@ -330,7 +339,9 @@ def prepare_inputs():
 
 
 @torch.no_grad()
-def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False):
+def convert_siglip2_checkpoint(
+    model_name, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our Siglip2 structure.
     """
@@ -341,7 +352,9 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     checkpoint = MODEL_NAME_TO_CHECKPOINT_PATH[model_name]
     if not os.path.exists(checkpoint):
         org, repo_id, *filepath = checkpoint.split("/")
-        checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
+        checkpoint = hf_hub_download(
+            repo_id=f"{org}/{repo_id}", filename="/".join(filepath)
+        )
 
     print(f"Loading checkpoint from {checkpoint}...")
     data = np.load(checkpoint)
@@ -360,13 +373,24 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
         new_key = hf_keys[original_key]
         parameter = state_dict.pop(original_key)
 
-        hidden_size = config.vision_config.hidden_size if "vision" in new_key else config.text_config.hidden_size
+        hidden_size = (
+            config.vision_config.hidden_size
+            if "vision" in new_key
+            else config.text_config.hidden_size
+        )
 
-        if any(k in new_key for k in ("out_proj", "q_proj", "k_proj", "v_proj", "position_embedding")):
+        if any(
+            k in new_key
+            for k in ("out_proj", "q_proj", "k_proj", "v_proj", "position_embedding")
+        ):
             parameter = parameter.reshape(-1, hidden_size)
 
         # Transpose every weight except for position_embedding and token_embedding
-        if new_key.endswith("weight") and "position_embedding" not in new_key and "token_embedding" not in new_key:
+        if (
+            new_key.endswith("weight")
+            and "position_embedding" not in new_key
+            and "token_embedding" not in new_key
+        ):
             parameter = parameter.T
 
         # Reshape every bias
@@ -384,16 +408,26 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     print("Creating processor...")
     # TODO: update with more checkpoints
     tokenizer = get_siglip2_tokenizer()
-    image_processor = get_siglip2_image_processor(config.vision_config.patch_size, max_num_patches=256)
+    image_processor = get_siglip2_image_processor(
+        config.vision_config.patch_size, max_num_patches=256
+    )
     processor = Siglip2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
     # Verify logits
     if verify_logits:
         print(f"Verifying logits for {model_name}...")
         text, images = prepare_inputs()
-        inputs = processor(text=text, images=images, padding="max_length", max_length=64, return_tensors="pt")
+        inputs = processor(
+            text=text,
+            images=images,
+            padding="max_length",
+            max_length=64,
+            return_tensors="pt",
+        )
         outputs = model(**inputs)
-        torch.testing.assert_close(outputs.logits_per_text, EXPECTED_OUTPUTS[model_name], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(
+            outputs.logits_per_text, EXPECTED_OUTPUTS[model_name], atol=1e-3, rtol=1e-3
+        )
 
     # Save model
     if pytorch_dump_folder_path is not None:
@@ -431,8 +465,15 @@ if __name__ == "__main__":
         help="Whether to verify logits against the original implementation.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_siglip2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.verify_logits, args.push_to_hub)
+    convert_siglip2_checkpoint(
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.verify_logits,
+        args.push_to_hub,
+    )

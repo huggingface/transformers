@@ -4,7 +4,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
+from transformers.models.paligemma.modeling_paligemma import \
+    PaliGemmaForConditionalGeneration
 
 from ...cache_utils import Cache
 
@@ -16,10 +17,15 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         super().__init__(config=config)
 
         self.embedding_dim = self.config.embedding_dim
-        self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
+        self.custom_text_proj = nn.Linear(
+            self.config.text_config.hidden_size, self.embedding_dim
+        )
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"model.language_model.{k}"
+                for k in self.language_model._tied_weights_keys
+            ]
 
         self.post_init()
 
@@ -59,20 +65,33 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
             return_dict=True,
             num_logits_to_keep=num_logits_to_keep,
         )
-        last_hidden_states = vlm_outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
-        proj = self.custom_text_proj(last_hidden_states)  # (batch_size, sequence_length, dim)
+        last_hidden_states = vlm_outputs.hidden_states[
+            -1
+        ]  # (batch_size, sequence_length, hidden_size)
+        proj = self.custom_text_proj(
+            last_hidden_states
+        )  # (batch_size, sequence_length, dim)
 
         # L2 normalization
-        embeddings = proj / proj.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
+        embeddings = proj / proj.norm(
+            dim=-1, keepdim=True
+        )  # (batch_size, sequence_length, dim)
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
+        embeddings = embeddings * attention_mask.unsqueeze(
+            -1
+        )  # (batch_size, sequence_length, dim)
 
         return (embeddings,) + vlm_outputs
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing=True
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of=None,
+        mean_resizing=True,
     ) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        model_embeds = self.language_model.resize_token_embeddings(
+            new_num_tokens, pad_to_multiple_of, mean_resizing
+        )
 
         # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings

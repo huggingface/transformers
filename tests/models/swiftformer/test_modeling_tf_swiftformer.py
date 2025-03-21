@@ -18,22 +18,20 @@ import inspect
 import unittest
 
 from transformers import SwiftFormerConfig
-from transformers.testing_utils import (
-    require_tf,
-    require_vision,
-    slow,
-)
-from transformers.utils import cached_property, is_tf_available, is_vision_available
+from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import (cached_property, is_tf_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFSwiftFormerForImageClassification, TFSwiftFormerModel
+    from transformers import (TFSwiftFormerForImageClassification,
+                              TFSwiftFormerModel)
     from transformers.modeling_tf_utils import keras
 
 
@@ -71,7 +69,9 @@ class TFSwiftFormerModelTester:
         self.embed_dims = embed_dims
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -101,7 +101,9 @@ class TFSwiftFormerModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFSwiftFormerModel(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7)
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -111,7 +113,9 @@ class TFSwiftFormerModelTester:
 
         model = TFSwiftFormerForImageClassification(config)
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -122,16 +126,25 @@ class TFSwiftFormerModelTester:
 
 
 @require_tf
-class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TFSwiftFormerModelTest(
+    TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as SwiftFormer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TFSwiftFormerModel, TFSwiftFormerForImageClassification) if is_tf_available() else ()
+    all_model_classes = (
+        (TFSwiftFormerModel, TFSwiftFormerForImageClassification)
+        if is_tf_available()
+        else ()
+    )
 
     pipeline_model_mapping = (
-        {"feature-extraction": TFSwiftFormerModel, "image-classification": TFSwiftFormerForImageClassification}
+        {
+            "feature-extraction": TFSwiftFormerModel,
+            "image-classification": TFSwiftFormerForImageClassification,
+        }
         if is_tf_available()
         else {}
     )
@@ -250,11 +263,17 @@ def prepare_img():
 class TFSwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
+        return (
+            ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFSwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs")
+        model = TFSwiftFormerForImageClassification.from_pretrained(
+            "MBZUAI/swiftformer-xs"
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

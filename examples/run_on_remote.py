@@ -19,7 +19,6 @@ import shlex
 
 import runhouse as rh
 
-
 if __name__ == "__main__":
     # Refer to https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup for cloud access
     # setup instructions, if using on-demand hardware
@@ -35,28 +34,45 @@ if __name__ == "__main__":
     parser.add_argument("--instance", type=str, default="V100:1")
     parser.add_argument("--provider", type=str, default="cheapest")
     parser.add_argument("--use_spot", type=bool, default=False)
-    parser.add_argument("--example", type=str, default="pytorch/text-generation/run_generation.py")
+    parser.add_argument(
+        "--example", type=str, default="pytorch/text-generation/run_generation.py"
+    )
     args, unknown = parser.parse_known_args()
     if args.host != "localhost":
         if args.instance != "V100:1" or args.provider != "cheapest":
             raise ValueError("Cannot specify both BYO and on-demand cluster args")
         cluster = rh.cluster(
-            name="rh-cluster", ips=[args.host], ssh_creds={"ssh_user": args.user, "ssh_private_key": args.key_path}
+            name="rh-cluster",
+            ips=[args.host],
+            ssh_creds={"ssh_user": args.user, "ssh_private_key": args.key_path},
         )
     else:
         cluster = rh.cluster(
-            name="rh-cluster", instance_type=args.instance, provider=args.provider, use_spot=args.use_spot
+            name="rh-cluster",
+            instance_type=args.instance,
+            provider=args.provider,
+            use_spot=args.use_spot,
         )
     example_dir = args.example.rsplit("/", 1)[0]
 
     # Set up remote environment
     cluster.install_packages(["pip:./"])  # Installs transformers from local source
     # Note transformers is copied into the home directory on the remote machine, so we can install from there
-    cluster.run([f"pip install -r transformers/examples/{example_dir}/requirements.txt"])
-    cluster.run(["pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117"])
+    cluster.run(
+        [f"pip install -r transformers/examples/{example_dir}/requirements.txt"]
+    )
+    cluster.run(
+        [
+            "pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu117"
+        ]
+    )
 
     # Run example. You can bypass the CLI wrapper and paste your own code here.
-    cluster.run([f'python transformers/examples/{args.example} {" ".join(shlex.quote(arg) for arg in unknown)}'])
+    cluster.run(
+        [
+            f'python transformers/examples/{args.example} {" ".join(shlex.quote(arg) for arg in unknown)}'
+        ]
+    )
 
     # Alternatively, we can just import and run a training function (especially if there's no wrapper CLI):
     # from my_script... import train

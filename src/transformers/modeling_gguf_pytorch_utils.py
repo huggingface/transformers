@@ -19,15 +19,11 @@ from typing import NamedTuple, Optional
 import numpy as np
 from tqdm.auto import tqdm
 
-from .integrations import (
-    GGUF_CONFIG_MAPPING,
-    GGUF_TOKENIZER_MAPPING,
-    _gguf_parse_value,
-)
+from .integrations import (GGUF_CONFIG_MAPPING, GGUF_TOKENIZER_MAPPING,
+                           _gguf_parse_value)
 from .utils import is_torch_available
 from .utils.import_utils import is_gguf_available
 from .utils.logging import get_logger
-
 
 if is_torch_available():
     import torch
@@ -42,7 +38,10 @@ GGUF_TO_TRANSFORMERS_MAPPING = {
             "tensor_count": "tensor_count",
             "kv_count": "kv_count",
         },
-        "general": {"file_type": "file_type", "quantization_version": "quantization_version"},
+        "general": {
+            "file_type": "file_type",
+            "quantization_version": "quantization_version",
+        },
     },
     "config": GGUF_CONFIG_MAPPING,
     "tokenizer": {"tokenizer": GGUF_TOKENIZER_MAPPING["tokenizer"]},
@@ -80,7 +79,9 @@ class LlamaTensorProcessor(TensorProcessor):
             if ".attn_q." in name:
                 weights = self._reverse_permute_weights(weights, num_heads, num_heads)
             elif ".attn_k." in name:
-                weights = self._reverse_permute_weights(weights, num_heads, num_kv_heads)
+                weights = self._reverse_permute_weights(
+                    weights, num_heads, num_kv_heads
+                )
         return GGUFTensor(weights, name, {})
 
     def _reverse_permute_weights(
@@ -105,7 +106,9 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
             tensor_key_mapping = kwargs.get("tensor_key_mapping")
             parsed_parameters = kwargs.get("parsed_parameters")
             if tensor_key_mapping:
-                self._split_moe_expert_tensor(weights, parsed_parameters, name, tensor_key_mapping)
+                self._split_moe_expert_tensor(
+                    weights, parsed_parameters, name, tensor_key_mapping
+                )
                 return GGUFTensor(weights, None, {})
         if "ffn_gate_inp_shexp" in name:
             # for compatibility tensor shared_expert_gate must be (1, 2048) dim,
@@ -114,7 +117,11 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
+        self,
+        weights: np.ndarray,
+        parsed_parameters: dict[str, dict],
+        name: str,
+        tensor_key_mapping: dict,
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
@@ -123,7 +130,9 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         for i in range(0, w_counter):
             temp_name = name.replace("mlp.experts.", f"mlp.experts.{i}.")
             exp_weight = weights[i]
-            parsed_parameters["tensors"][temp_name] = torch.from_numpy(np.copy(exp_weight))
+            parsed_parameters["tensors"][temp_name] = torch.from_numpy(
+                np.copy(exp_weight)
+            )
 
 
 class BloomTensorProcessor(TensorProcessor):
@@ -258,7 +267,10 @@ TENSOR_PROCESSORS = {
 
 def read_field(reader, field):
     value = reader.fields[field]
-    return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
+    return [
+        _gguf_parse_value(value.parts[_data_index], value.types)
+        for _data_index in value.data
+    ]
 
 
 # modified from https://github.com/vllm-project/vllm/blob/v0.6.4.post1/vllm/model_executor/model_loader/loader.py#L1115-L1147
@@ -283,7 +295,9 @@ def get_gguf_hf_weights_map(
             "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
-        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
+        raise ImportError(
+            "Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch."
+        )
 
     model_type = hf_model.config.model_type if model_type is None else model_type
     num_layers = hf_model.config.num_hidden_layers if num_layers is None else num_layers
@@ -330,7 +344,9 @@ def get_gguf_hf_weights_map(
     # Therefore, we need to check submodule as well to get a correct mapping
     if named_children := hf_model.named_children():
         for name, child in named_children:
-            sub_map = get_gguf_hf_weights_map(child, model_type, num_layers, qual_name=f"{qual_name}{name}.")
+            sub_map = get_gguf_hf_weights_map(
+                child, model_type, num_layers, qual_name=f"{qual_name}{name}."
+            )
             # Ignore the keys that are already in the main map to avoid overwriting
             sub_map = {k: v for k, v in sub_map.items() if k not in gguf_to_hf_name_map}
             gguf_to_hf_name_map.update(sub_map)
@@ -338,7 +354,9 @@ def get_gguf_hf_weights_map(
     return gguf_to_hf_name_map
 
 
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None):
+def load_gguf_checkpoint(
+    gguf_checkpoint_path, return_tensors=False, model_to_load=None
+):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -357,7 +375,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
             "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
         )
-        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
+        raise ImportError(
+            "Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch."
+        )
 
     reader = GGUFReader(gguf_checkpoint_path)
     fields = reader.fields
@@ -392,19 +412,31 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if "stablelm" in architecture:
         attn_bias_name = {"attn_q.bias", "attn_k.bias", "attn_v.bias"}
         ffn_norm_name = "ffn_norm"
-        qkv_bias = any(bias_name in tensor.name for tensor in reader.tensors for bias_name in attn_bias_name)
-        use_parallel_residual = any(ffn_norm_name in tensor.name for tensor in reader.tensors)
+        qkv_bias = any(
+            bias_name in tensor.name
+            for tensor in reader.tensors
+            for bias_name in attn_bias_name
+        )
+        use_parallel_residual = any(
+            ffn_norm_name in tensor.name for tensor in reader.tensors
+        )
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
-    if architecture not in GGUF_SUPPORTED_ARCHITECTURES and updated_architecture not in GGUF_SUPPORTED_ARCHITECTURES:
-        raise ValueError(f"GGUF model with architecture {architecture} is not supported yet.")
+    if (
+        architecture not in GGUF_SUPPORTED_ARCHITECTURES
+        and updated_architecture not in GGUF_SUPPORTED_ARCHITECTURES
+    ):
+        raise ValueError(
+            f"GGUF model with architecture {architecture} is not supported yet."
+        )
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
     # tie_word_embeddings is true otherwise false
     exceptions = ["falcon", "bloom"]
     parsed_parameters["config"]["tie_word_embeddings"] = (
-        all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
+        all("output.weight" != tensor.name for tensor in reader.tensors)
+        or architecture in exceptions
     )
 
     # List all key-value pairs in a columnized format
@@ -414,7 +446,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         prefix = split[0]
         config_key = ".".join(split[1:])
 
-        value = [_gguf_parse_value(field.parts[_data_index], field.types) for _data_index in field.data]
+        value = [
+            _gguf_parse_value(field.parts[_data_index], field.types)
+            for _data_index in field.data
+        ]
 
         if len(value) == 1:
             value = value[0]
@@ -436,14 +471,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
                     reader_keys.remove(gguf_key)
 
         if gguf_key in reader_keys:
-            logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
+            logger.info(
+                f"Some keys were not parsed and added into account {gguf_key} | {value}"
+            )
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details
     if "vocab_size" not in parsed_parameters["config"]:
         tokenizer_parameters = parsed_parameters["tokenizer"]
         if "tokens" in tokenizer_parameters:
-            parsed_parameters["config"]["vocab_size"] = len(tokenizer_parameters["tokens"])
+            parsed_parameters["config"]["vocab_size"] = len(
+                tokenizer_parameters["tokens"]
+            )
         else:
             logger.warning(
                 "Can't find a way to retrieve missing config vocab_size from tokenizer parameters. "
@@ -459,7 +498,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
         processor = ProcessorClass(config=config)
 
-        for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
+        for tensor in tqdm(
+            reader.tensors, desc="Converting and de-quantizing GGUF tensors..."
+        ):
             name = tensor.name
             weights = dequantize(tensor.data, tensor.tensor_type)
 

@@ -18,7 +18,6 @@ import pytest
 
 from transformers.dynamic_module_utils import get_imports
 
-
 TOP_LEVEL_IMPORT = """
 import os
 """

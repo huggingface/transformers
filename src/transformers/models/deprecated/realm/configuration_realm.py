@@ -17,7 +17,6 @@
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -136,7 +135,12 @@ class RealmConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         # Common config
         self.vocab_size = vocab_size

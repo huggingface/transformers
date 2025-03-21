@@ -20,37 +20,27 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    backend_empty_cache,
-    cleanup,
-    require_bitsandbytes,
-    require_flash_attn,
-    require_read_token,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_gpu,
-    require_torch_sdpa,
-    slow,
-    torch_device,
-)
+from transformers import (AutoTokenizer, MistralConfig, is_torch_available,
+                          set_seed)
+from transformers.testing_utils import (backend_empty_cache, cleanup,
+                                        require_bitsandbytes,
+                                        require_flash_attn, require_read_token,
+                                        require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_gpu, require_torch_sdpa,
+                                        slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MistralForCausalLM,
-        MistralForQuestionAnswering,
-        MistralForSequenceClassification,
-        MistralForTokenClassification,
-        MistralModel,
-    )
+    from transformers import (MistralForCausalLM, MistralForQuestionAnswering,
+                              MistralForSequenceClassification,
+                              MistralForTokenClassification, MistralModel)
 
 
 class MistralModelTester:
@@ -116,19 +106,33 @@ class MistralModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return MistralConfig(
@@ -150,14 +154,24 @@ class MistralModelTester:
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Mistral
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = MistralModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Mistral
     def create_and_check_model_as_decoder(
@@ -188,7 +202,10 @@ class MistralModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Mistral
     def create_and_check_for_causal_lm(
@@ -207,7 +224,9 @@ class MistralModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Mistral
     def create_and_check_decoder_model_past_large_inputs(
@@ -264,13 +283,17 @@ class MistralModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
@@ -289,7 +312,9 @@ class MistralModelTester:
 
 
 @require_torch
-class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MistralModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             MistralModel,
@@ -332,7 +357,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = MistralModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MistralConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=MistralConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -356,12 +383,17 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = MistralForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_Mistral_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -369,12 +401,17 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = MistralForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_Mistral_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -383,13 +420,17 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
         ).to(torch.float)
         model = MistralForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Mistral,llama->Mistral
     def test_Mistral_token_classification_model(self):
@@ -397,21 +438,32 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        token_labels = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.seq_length],
+            config.num_labels,
+        )
         model = MistralForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
         self.assertEqual(
             result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+            (
+                self.model_tester.batch_size,
+                self.model_tester.seq_length,
+                self.model_tester.num_labels,
+            ),
         )
 
-    @unittest.skip(reason="Mistral buffers include complex numbers, which breaks this test")
+    @unittest.skip(
+        reason="Mistral buffers include complex numbers, which breaks this test"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Mistral uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(
+        reason="Mistral uses GQA on all models so the KV cache is a non standard format"
+    )
     def test_past_key_values_format(self):
         pass
 
@@ -433,7 +485,9 @@ class MistralIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -448,7 +502,9 @@ class MistralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
+        EXPECTED_MEAN = torch.tensor(
+            [[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
 
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -462,20 +518,31 @@ class MistralIntegrationTest(unittest.TestCase):
         }  # fmt: skip
 
         torch.testing.assert_close(
-            out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4
+            out[0, 0, :30],
+            EXPECTED_SLICE[self.cuda_compute_capability_major_version],
+            atol=1e-4,
+            rtol=1e-4,
         )
 
     @slow
     @require_bitsandbytes
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,"
+        EXPECTED_TEXT_COMPLETION = (
+            "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,"
+        )
 
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map={"": torch_device}, load_in_4bit=True
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", use_fast=False
         )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1",
+            device_map={"": torch_device},
+            load_in_4bit=True,
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(
+            model.model.embed_tokens.weight.device
+        )
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
@@ -485,19 +552,25 @@ class MistralIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_dola_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is 100% ketchup. I love it on everything, and I’m not ash"""
-        )
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything, and I’m not ash"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", use_fast=False
+        )
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
         )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(
+            model.model.embed_tokens.weight.device
+        )
 
         # greedy generation outputs
         generated_ids = model.generate(
-            input_ids, max_new_tokens=20, temperature=0, dola_layers="low", repetition_penalty=1.2
+            input_ids,
+            max_new_tokens=20,
+            temperature=0,
+            dola_layers="low",
+            repetition_penalty=1.2,
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -538,7 +611,10 @@ class MistralIntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1",
+            device_map="auto",
+            attn_implementation="sdpa",
+            torch_dtype=torch.float16,
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
@@ -558,9 +634,13 @@ class MistralIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", use_fast=False
+        )
 
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(
+            model.model.embed_tokens.weight.device
+        )
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
@@ -571,16 +651,24 @@ class MistralIntegrationTest(unittest.TestCase):
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", use_fast=False
+        )
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
         )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(
+            model.model.embed_tokens.weight.device
+        )
 
         # greedy generation outputs
         set_seed(0)
         generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
+            input_ids,
+            max_new_tokens=20,
+            do_sample=True,
+            temperature=0.3,
+            assistant_model=model,
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -594,7 +682,9 @@ class MistralIntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         if self.cuda_compute_capability_major_version == 7:
-            self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+            self.skipTest(
+                reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU."
+            )
 
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
@@ -603,48 +693,74 @@ class MistralIntegrationTest(unittest.TestCase):
         ]
 
         prompts = ["My favourite condiment is "]
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", use_fast=False
+        )
         tokenizer.pad_token = tokenizer.eos_token
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map=torch_device, torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1",
+            device_map=torch_device,
+            torch_dtype=torch.float16,
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False
+        )
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Sliding Window Cache
         generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="sliding_window"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
         forward_function = model.forward
-        model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        model.forward = torch.compile(
+            forward_function, mode="reduce-overhead", fullgraph=True
         )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = model.generate(
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
         # Sliding Window Cache + compile
         torch._dynamo.reset()
-        model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
+        model.forward = torch.compile(
+            forward_function, mode="reduce-overhead", fullgraph=True
         )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = model.generate(
+            **inputs,
+            max_new_tokens=NUM_TOKENS_TO_GENERATE,
+            do_sample=False,
+            cache_implementation="sliding_window"
+        )
+        static_compiled_text = tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
 
@@ -671,13 +787,23 @@ class Mask4DTestHard(unittest.TestCase):
 
     def get_test_data(self):
         template = "my favorite {}"
-        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
+        items = (
+            "pet is a",
+            "artist plays a",
+            "name is L",
+        )  # same number of tokens in each item
 
         batch_separate = [template.format(x) for x in items]  # 3 separate lines
-        batch_shared_prefix = template.format(" ".join(items))  # 1 line with options concatenated
+        batch_shared_prefix = template.format(
+            " ".join(items)
+        )  # 1 line with options concatenated
 
-        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(torch_device)
-        input_ids_shared_prefix = self.tokenizer(batch_shared_prefix, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(
+            torch_device
+        )
+        input_ids_shared_prefix = self.tokenizer(
+            batch_shared_prefix, return_tensors="pt"
+        ).input_ids.to(torch_device)
 
         mask_shared_prefix = torch.tensor(
             [
@@ -701,7 +827,11 @@ class Mask4DTestHard(unittest.TestCase):
             device=torch_device,
         )
 
-        position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
+        position_ids = (
+            torch.arange(input_ids.shape[1])
+            .tile(input_ids.shape[0], 1)
+            .to(torch_device)
+        )
 
         # building custom positions ids based on custom mask
         position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
@@ -709,9 +839,17 @@ class Mask4DTestHard(unittest.TestCase):
 
         # inverting the mask
         min_dtype = torch.finfo(self.model_dtype).min
-        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(
+            dtype=self.model_dtype
+        ) * min_dtype
 
-        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
+        return (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        )
 
     def test_stacked_causal_mask(self):
         (
@@ -729,12 +867,20 @@ class Mask4DTestHard(unittest.TestCase):
 
         # single forward run with 4D custom mask
         logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
+            input_ids_shared_prefix,
+            attention_mask=mask_shared_prefix,
+            position_ids=position_ids_shared_prefix,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
+            0,
+            torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[
+                1
+            ],
+            :,
         ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
+        decoded_shared_prefix = [
+            self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)
+        ]
 
         self.assertEqual(decoded, decoded_shared_prefix)
 
@@ -761,7 +907,9 @@ class Mask4DTestHard(unittest.TestCase):
         position_ids_1a = position_ids_shared_prefix[:, :part_a]
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
+        outs_1a = self.model.forward(
+            input_1a, attention_mask=mask_1a, position_ids=position_ids_1a
+        )
         past_key_values_a = outs_1a["past_key_values"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
@@ -769,12 +917,19 @@ class Mask4DTestHard(unittest.TestCase):
         position_ids_1b = position_ids_shared_prefix[:, part_a:]
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
         outs_1b = self.model.forward(
-            input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, past_key_values=past_key_values_a
+            input_1b,
+            attention_mask=mask_1b,
+            position_ids=position_ids_1b,
+            past_key_values=past_key_values_a,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
             for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
+                0,
+                torch.where(
+                    position_ids_shared_prefix == position_ids_shared_prefix.max()
+                )[1]
+                - part_a,
             ]
         ]
         self.assertEqual(decoded, decoded_1b)

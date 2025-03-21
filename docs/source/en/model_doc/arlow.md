@@ -49,6 +49,11 @@ The ArlowGPT model will use the following architecture:
 
 ---
 
+## ArlowTokenizer
+
+[[autodoc]] ArlowTokenizer
+
+---
 ## **📈 Future Work**
 - ✅ ArlowTokenizer 
 - 🚧 ArlowGPT Model Implementation (Coming Soon)
@@ -66,3 +71,4 @@ The ArlowGPT model will use the following architecture:
   howpublished = {\url{https://github.com/huggingface/transformers}}
 }
 ```
+

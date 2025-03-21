@@ -23,7 +23,6 @@ from unittest.mock import patch
 
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
 
-
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
     for dirname in [

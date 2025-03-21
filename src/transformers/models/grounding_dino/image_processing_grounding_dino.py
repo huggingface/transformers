@@ -17,53 +17,27 @@
 import io
 import pathlib
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, List,
+                    Optional, Set, Tuple, Union)
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
-from ...image_transforms import (
-    PaddingMode,
-    center_to_corners_format,
-    corners_to_center_format,
-    id_to_rgb,
-    pad,
-    rescale,
-    resize,
-    rgb_to_id,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_annotations,
-    validate_kwargs,
-    validate_preprocess_arguments,
-)
-from ...utils import (
-    ExplicitEnum,
-    TensorType,
-    is_flax_available,
-    is_jax_tensor,
-    is_scipy_available,
-    is_tf_available,
-    is_tf_tensor,
-    is_torch_available,
-    is_torch_tensor,
-    is_vision_available,
-    logging,
-)
-
+from ...image_transforms import (PaddingMode, center_to_corners_format,
+                                 corners_to_center_format, id_to_rgb, pad,
+                                 rescale, resize, rgb_to_id,
+                                 to_channel_dimension_format)
+from ...image_utils import (IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            is_scaled_image, make_list_of_images,
+                            to_numpy_array, valid_images, validate_annotations,
+                            validate_kwargs, validate_preprocess_arguments)
+from ...utils import (ExplicitEnum, TensorType, is_flax_available,
+                      is_jax_tensor, is_scipy_available, is_tf_available,
+                      is_tf_tensor, is_torch_available, is_torch_tensor,
+                      is_vision_available, logging)
 
 if is_torch_available():
     import torch
@@ -91,7 +65,10 @@ class AnnotationFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (
+    AnnotationFormat.COCO_DETECTION,
+    AnnotationFormat.COCO_PANOPTIC,
+)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -246,7 +223,9 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         if key == "boxes":
             boxes = value
             boxes = corners_to_center_format(boxes)
-            boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
+            boxes /= np.asarray(
+                [image_width, image_height, image_width, image_height], dtype=np.float32
+            )
             norm_annotation[key] = boxes
         else:
             norm_annotation[key] = value
@@ -263,7 +242,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: List[np.ndarray],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -282,7 +262,9 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray,
+    output_size: Tuple[int, int],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -351,14 +333,19 @@ def prepare_coco_detection_annotation(
 
     # Get all COCO annotations for the given image.
     annotations = target["annotations"]
-    annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
+    annotations = [
+        obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0
+    ]
 
     classes = [obj["category_id"] for obj in annotations]
     classes = np.asarray(classes, dtype=np.int64)
 
     # for conversion to coco api
     area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
-    iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=np.int64)
+    iscrowd = np.asarray(
+        [obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations],
+        dtype=np.int64,
+    )
 
     boxes = [obj["bbox"] for obj in annotations]
     # guard against no boxes via resizing
@@ -375,7 +362,9 @@ def prepare_coco_detection_annotation(
     new_target["boxes"] = boxes[keep]
     new_target["area"] = area[keep]
     new_target["iscrowd"] = iscrowd[keep]
-    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
+    new_target["orig_size"] = np.asarray(
+        [int(image_height), int(image_width)], dtype=np.int64
+    )
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
@@ -445,7 +434,9 @@ def prepare_coco_panoptic_annotation(
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
 
     new_target = {}
-    new_target["image_id"] = np.asarray([target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64)
+    new_target["image_id"] = np.asarray(
+        [target["image_id"] if "image_id" in target else target["id"]], dtype=np.int64
+    )
     new_target["size"] = np.asarray([image_height, image_width], dtype=np.int64)
     new_target["orig_size"] = np.asarray([image_height, image_width], dtype=np.int64)
 
@@ -460,13 +451,16 @@ def prepare_coco_panoptic_annotation(
             new_target["masks"] = masks
         new_target["boxes"] = masks_to_boxes(masks)
         new_target["class_labels"] = np.array(
-            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
+            [segment_info["category_id"] for segment_info in target["segments_info"]],
+            dtype=np.int64,
         )
         new_target["iscrowd"] = np.asarray(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
+            [segment_info["iscrowd"] for segment_info in target["segments_info"]],
+            dtype=np.int64,
         )
         new_target["area"] = np.asarray(
-            [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
+            [segment_info["area"] for segment_info in target["segments_info"]],
+            dtype=np.float32,
         )
 
     return new_target
@@ -474,7 +468,11 @@ def prepare_coco_panoptic_annotation(
 
 # Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
 def get_segmentation_image(
-    masks: np.ndarray, input_size: Tuple, target_size: Tuple, stuff_equiv_classes, deduplicate=False
+    masks: np.ndarray,
+    input_size: Tuple,
+    target_size: Tuple,
+    stuff_equiv_classes,
+    deduplicate=False,
 ):
     h, w = input_size
     final_h, final_w = target_size
@@ -499,7 +497,9 @@ def get_segmentation_image(
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_mask_area
-def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: int) -> np.ndarray:
+def get_mask_area(
+    seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: int
+) -> np.ndarray:
     final_h, final_w = target_size
     np_seg_img = seg_img.astype(np.uint8)
     np_seg_img = np_seg_img.reshape(final_h, final_w, 3)
@@ -509,7 +509,9 @@ def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: 
 
 
 # Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
-def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def score_labels_from_class_probabilities(
+    logits: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
     probs = scipy.special.softmax(logits, axis=-1)
     labels = probs.argmax(-1, keepdims=True)
     scores = np.take_along_axis(probs, labels, axis=-1)
@@ -561,7 +563,9 @@ def post_process_panoptic_sample(
         raise ValueError("Not as many boxes as there are classes")
 
     cur_masks = masks[keep]
-    cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
+    cur_masks = resize(
+        cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR
+    )
     cur_masks = safe_squeeze(cur_masks, 1)
     b, h, w = cur_masks.shape
 
@@ -573,7 +577,9 @@ def post_process_panoptic_sample(
         if not is_thing_map[label]:
             stuff_equiv_classes[label].append(k)
 
-    seg_img = get_segmentation_image(cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True)
+    seg_img = get_segmentation_image(
+        cur_masks, processed_size, target_size, stuff_equiv_classes, deduplicate=True
+    )
     area = get_mask_area(cur_masks, processed_size, n_classes=len(cur_scores))
 
     # We filter out any mask that is too small
@@ -584,7 +590,9 @@ def post_process_panoptic_sample(
             cur_masks = cur_masks[~filtered_small]
             cur_scores = cur_scores[~filtered_small]
             cur_classes = cur_classes[~filtered_small]
-            seg_img = get_segmentation_image(cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True)
+            seg_img = get_segmentation_image(
+                cur_masks, (h, w), target_size, stuff_equiv_classes, deduplicate=True
+            )
             area = get_mask_area(seg_img, target_size, n_classes=len(cur_scores))
             filtered_small = np.array([a <= 4 for a in area], dtype=bool)
     else:
@@ -626,7 +634,9 @@ def resize_annotation(
         resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
             The resampling filter to use when resizing the masks.
     """
-    ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
+    ratios = tuple(
+        float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size)
+    )
     ratio_height, ratio_width = ratios
 
     new_annotation = {}
@@ -635,7 +645,9 @@ def resize_annotation(
     for key, value in annotation.items():
         if key == "boxes":
             boxes = value
-            scaled_boxes = boxes * np.asarray([ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32)
+            scaled_boxes = boxes * np.asarray(
+                [ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32
+            )
             new_annotation["boxes"] = scaled_boxes
         elif key == "area":
             area = value
@@ -643,7 +655,9 @@ def resize_annotation(
             new_annotation["area"] = scaled_area
         elif key == "masks":
             masks = value[:, None]
-            masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
+            masks = np.array(
+                [resize(mask, target_size, resample=resample) for mask in masks]
+            )
             masks = masks.astype(np.float32)
             masks = masks[:, 0] > threshold
             new_annotation["masks"] = masks
@@ -730,7 +744,9 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
 
 
 # Copied from transformers.models.detr.image_processing_detr.check_segment_validity
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+def check_segment_validity(
+    mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8
+):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
     mask_k_area = mask_k.sum()
@@ -761,12 +777,17 @@ def compute_segments(
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segmentation = torch.zeros(
+        (height, width), dtype=torch.int32, device=mask_probs.device
+    )
     segments: List[Dict] = []
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+            mask_probs.unsqueeze(0),
+            size=target_size,
+            mode="bilinear",
+            align_corners=False,
         )[0]
 
     current_segment_id = 0
@@ -832,7 +853,9 @@ def _scale_boxes(boxes, target_sizes):
     else:
         raise ValueError("`target_sizes` must be a list, tuple or torch.Tensor")
 
-    scale_factor = torch.stack([image_width, image_height, image_width, image_height], dim=1)
+    scale_factor = torch.stack(
+        [image_width, image_height, image_width, image_height], dim=1
+    )
     scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
     boxes = boxes * scale_factor
     return boxes
@@ -923,7 +946,9 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         else:
             max_size = None if size is None else 1333
 
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        size = (
+            size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        )
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
@@ -939,7 +964,9 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.do_convert_annotations = do_convert_annotations
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
         self.pad_size = pad_size
@@ -977,7 +1004,9 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         if "max_size" in kwargs:
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop(
+                "pad_and_return_pixel_mask"
+            )
         return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->GroundingDino
@@ -996,12 +1025,21 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                False
+                if return_segmentation_masks is None
+                else return_segmentation_masks
+            )
             target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
+                image,
+                target,
+                return_segmentation_masks,
+                input_data_format=input_data_format,
             )
         elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                True if return_segmentation_masks is None else return_segmentation_masks
+            )
             target = prepare_coco_panoptic_annotation(
                 image,
                 target,
@@ -1059,11 +1097,17 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
-                image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
+                image,
+                size["shortest_edge"],
+                size["longest_edge"],
+                input_data_format=input_data_format,
             )
         elif "max_height" in size and "max_width" in size:
             new_size = get_image_size_for_max_height_width(
-                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+                image,
+                size["max_height"],
+                size["max_width"],
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             new_size = (size["height"], size["width"])
@@ -1094,7 +1138,9 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
+        return resize_annotation(
+            annotation, orig_size=orig_size, target_size=size, resample=resample
+        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
@@ -1123,10 +1169,17 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
+        return rescale(
+            image,
+            rescale_factor,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
-    def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+    def normalize_annotation(
+        self, annotation: Dict, image_size: Tuple[int, int]
+    ) -> Dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
         `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
@@ -1207,7 +1260,11 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         )
         if annotation is not None:
             annotation = self._update_annotation_for_padded_image(
-                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
+                annotation,
+                (input_height, input_width),
+                (output_height, output_width),
+                padding,
+                update_bboxes,
             )
         return padded_image, annotation
 
@@ -1261,9 +1318,13 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         if pad_size is not None:
             padded_size = (pad_size["height"], pad_size["width"])
         else:
-            padded_size = get_max_height_width(images, input_data_format=input_data_format)
+            padded_size = get_max_height_width(
+                images, input_data_format=input_data_format
+            )
 
-        annotation_list = annotations if annotations is not None else [None] * len(images)
+        annotation_list = (
+            annotations if annotations is not None else [None] * len(images)
+        )
         padded_images = []
         padded_annotations = []
         for image, annotation in zip(images, annotation_list):
@@ -1283,7 +1344,11 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
+                make_pixel_mask(
+                    image=image,
+                    output_size=padded_size,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1292,7 +1357,8 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in padded_annotations
+                BatchFeature(annotation, tensor_type=return_tensors)
+                for annotation in padded_annotations
             ]
 
         return encoded_inputs
@@ -1414,12 +1480,16 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         size = get_size_dict(size=size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
+        rescale_factor = (
+            self.rescale_factor if rescale_factor is None else rescale_factor
+        )
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
         do_convert_annotations = (
-            self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
+            self.do_convert_annotations
+            if do_convert_annotations is None
+            else do_convert_annotations
         )
         do_pad = self.do_pad if do_pad is None else do_pad
         pad_size = self.pad_size if pad_size is None else pad_size
@@ -1432,7 +1502,10 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self._valid_processor_keys,
+        )
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
         validate_preprocess_arguments(
@@ -1507,10 +1580,15 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, resample=resample, input_data_format=input_data_format
+                        image,
+                        size=size,
+                        resample=resample,
+                        input_data_format=input_data_format,
                     )
                     resized_annotation = self.resize_annotation(
-                        target, orig_size, get_image_size(resized_image, input_data_format)
+                        target,
+                        orig_size,
+                        get_image_size(resized_image, input_data_format),
                     )
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
@@ -1519,21 +1597,34 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 del resized_images, resized_annotations
             else:
                 images = [
-                    self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                    self.resize(
+                        image,
+                        size=size,
+                        resample=resample,
+                        input_data_format=input_data_format,
+                    )
                     for image in images
                 ]
 
         if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
+            images = [
+                self.rescale(image, rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
             images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
+                self.normalize(
+                    image, image_mean, image_std, input_data_format=input_data_format
+                )
+                for image in images
             ]
 
         if do_convert_annotations and annotations is not None:
             annotations = [
-                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+                self.normalize_annotation(
+                    annotation, get_image_size(image, input_data_format)
+                )
                 for annotation, image in zip(annotations, images)
             ]
 
@@ -1551,13 +1642,18 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             )
         else:
             images = [
-                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                to_channel_dimension_format(
+                    image, data_format, input_channel_dim=input_data_format
+                )
                 for image in images
             ]
-            encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+            encoded_inputs = BatchFeature(
+                data={"pixel_values": images}, tensor_type=return_tensors
+            )
             if annotations is not None:
                 encoded_inputs["labels"] = [
-                    BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                    BatchFeature(annotation, tensor_type=return_tensors)
+                    for annotation in annotations
                 ]
 
         return encoded_inputs
@@ -1592,7 +1688,9 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         batch_size = len(batch_logits)
 
         if target_sizes is not None and len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as images")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as images"
+            )
 
         # batch_logits of shape (batch_size, num_queries, num_classes)
         batch_class_logits = torch.max(batch_logits, dim=-1)

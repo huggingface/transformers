@@ -20,7 +20,6 @@ from copy import deepcopy
 
 from huggingface_hub import HfApi
 
-
 if __name__ == "__main__":
     api = HfApi()
 
@@ -62,7 +61,11 @@ if __name__ == "__main__":
     for author, _data in new_data_full.items():
         for model, model_result in _data.items():
             for device, failed_tests in model_result.items():
-                failed_tests = [x for x in failed_tests if x["author"] == author or x["merged_by"] == author]
+                failed_tests = [
+                    x
+                    for x in failed_tests
+                    if x["author"] == author or x["merged_by"] == author
+                ]
                 model_result[device] = failed_tests
             _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
         new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}

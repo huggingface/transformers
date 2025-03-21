@@ -25,23 +25,15 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, pad, to_channel_dimension_format, to_pil_image
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_nested_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
+from ...image_transforms import (PaddingMode, pad, to_channel_dimension_format,
+                                 to_pil_image)
+from ...image_utils import (IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            is_scaled_image, make_nested_list_of_images,
+                            to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
 from ...utils import TensorType, is_vision_available, logging
-
 
 if is_vision_available():
     import PIL
@@ -141,20 +133,27 @@ def get_resize_output_image_size(
     height, width = get_image_size(image, channel_dim=input_data_format)
 
     # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
-    height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
+    height, width = _resize_output_size_rescale_to_max_len(
+        height, width, max_len=resolution_max_side
+    )
     # Find the output size when scaling the image to be below the MAX_IMAGE_SIZE
-    height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
+    height, width = _resize_output_size_scale_below_upper_bound(
+        height, width, max_len=MAX_IMAGE_SIZE
+    )
     return height, width
 
 
 def get_max_height_width(
-    images_list: List[List[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images_list: List[List[np.ndarray]],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+        input_data_format = infer_channel_dimension_format(
+            images_list[0][0], num_channels=(1, 3, 4)
+        )
 
     max_height = max_width = float("-inf")
     for images in images_list:
@@ -166,7 +165,9 @@ def get_max_height_width(
 
 
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray,
+    output_size: Tuple[int, int],
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -201,7 +202,9 @@ def convert_to_rgb(
             The channel dimension format of the input image.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+        input_data_format = infer_channel_dimension_format(
+            image, num_channels=(1, 3, 4)
+        )
 
     # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
     # The resized image from PIL will always have channels last, so find the input format first.
@@ -219,7 +222,9 @@ def convert_to_rgb(
 
     output_array = np.array(alpha_composite)
     # The image is always in channels last format after converting from a PIL image
-    output_array = to_channel_dimension_format(output_array, data_format, input_channel_dim=ChannelDimension.LAST)
+    output_array = to_channel_dimension_format(
+        output_array, data_format, input_channel_dim=ChannelDimension.LAST
+    )
     return output_array
 
 
@@ -310,11 +315,15 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         self.size = size if size is not None else {"longest_edge": 4 * 364}
         self.resample = resample
         self.do_image_splitting = do_image_splitting
-        self.max_image_size = max_image_size if max_image_size is not None else {"longest_edge": 364}
+        self.max_image_size = (
+            max_image_size if max_image_size is not None else {"longest_edge": 364}
+        )
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
 
@@ -343,7 +352,9 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+            input_data_format = infer_channel_dimension_format(
+                image, num_channels=(1, 3, 4)
+            )
 
         # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
         # The resized image from PIL will always have channels last, so find the input format first.
@@ -351,24 +362,34 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         if "longest_edge" in size:
             size = get_resize_output_image_size(
-                image, resolution_max_side=size["longest_edge"], input_data_format=input_data_format
+                image,
+                resolution_max_side=size["longest_edge"],
+                input_data_format=input_data_format,
             )
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("size must be a dictionary with key 'longest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "size must be a dictionary with key 'longest_edge' or 'height' and 'width'."
+            )
 
         image_mode = None
         if image.ndim == 2 or image.shape[-1] == 1:
             image_mode = "P"
-        image = to_pil_image(image, image_mode=image_mode, input_data_format=input_data_format)
+        image = to_pil_image(
+            image, image_mode=image_mode, input_data_format=input_data_format
+        )
 
         resized_image = image.resize((size[1], size[0]), resample=resample)
         resized_image = np.array(resized_image)
 
         # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
         # so we need to add it back if necessary.
-        resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
+        resized_image = (
+            np.expand_dims(resized_image, axis=-1)
+            if resized_image.ndim == 2
+            else resized_image
+        )
         # The image is always in channels last format after converting from a PIL image
         resized_image = to_channel_dimension_format(
             resized_image, data_format, input_channel_dim=ChannelDimension.LAST
@@ -483,14 +504,22 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         if width >= height:
             width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
             height = int(width / aspect_ratio)
-            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            height = (
+                math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            )
         elif height > width:
-            height = math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            height = (
+                math.ceil(height / vision_encoder_max_size) * vision_encoder_max_size
+            )
             width = int(height * aspect_ratio)
             width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
         new_size = {"height": height, "width": width}
         return self.resize(
-            image, size=new_size, resample=resample, input_data_format=input_data_format, data_format=data_format
+            image,
+            size=new_size,
+            resample=resample,
+            input_data_format=input_data_format,
+            data_format=data_format,
         )
 
     def _pad_image(
@@ -576,9 +605,13 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 return np.zeros((*size, n_channels), dtype=np.uint8)
 
         padded_images_list = [
-            [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
+            [empty_image(pad_size, data_format) for _ in range(max_num_images)]
+            for _ in range(batch_size)
         ]
-        padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
+        padded_masks = [
+            [np.zeros(pad_size) for _ in range(max_num_images)]
+            for _ in range(batch_size)
+        ]
 
         for batch_idx in range(batch_size):
             for sample_idx, image in enumerate(images[batch_idx]):
@@ -674,13 +707,23 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
-        max_image_size = max_image_size if max_image_size is not None else self.max_image_size
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
+        do_image_splitting = (
+            do_image_splitting
+            if do_image_splitting is not None
+            else self.do_image_splitting
+        )
+        max_image_size = (
+            max_image_size if max_image_size is not None else self.max_image_size
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         do_pad = do_pad if do_pad is not None else self.do_pad
 
         images_list = make_nested_list_of_images(images)
@@ -704,21 +747,38 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # save the palettes for conversion to RGB
         palettes_list = [
-            [im.getpalette() if isinstance(im, Image.Image) and im.mode == "P" else None for im in images]
+            [
+                (
+                    im.getpalette()
+                    if isinstance(im, Image.Image) and im.mode == "P"
+                    else None
+                )
+                for im in images
+            ]
             for images in images_list
         ]
 
         # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images_list = [
+            [to_numpy_array(image) for image in images] for images in images_list
+        ]
 
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
             images_list = [
-                [np.expand_dims(img, axis=-1) if img.ndim == 2 else img for img in images] for images in images_list
+                [
+                    np.expand_dims(img, axis=-1) if img.ndim == 2 else img
+                    for img in images
+                ]
+                for images in images_list
             ]
         elif input_data_format == ChannelDimension.FIRST:
             images_list = [
-                [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
+                [
+                    np.expand_dims(img, axis=0) if img.ndim == 2 else img
+                    for img in images
+                ]
+                for images in images_list
             ]
 
         if do_rescale and is_scaled_image(images_list[0][0]):
@@ -729,12 +789,19 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            input_data_format = infer_channel_dimension_format(
+                images_list[0][0], num_channels=(1, 3, 4)
+            )
 
         if do_resize:
             images_list = [
                 [
-                    self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                    self.resize(
+                        image=image,
+                        size=size,
+                        resample=resample,
+                        input_data_format=input_data_format,
+                    )
                     for image in images
                 ]
                 for images in images_list
@@ -747,7 +814,10 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             images_list = [
                 [
                     self.resize_for_vision_encoder(
-                        image, max_image_size["longest_edge"], resample=resample, input_data_format=input_data_format
+                        image,
+                        max_image_size["longest_edge"],
+                        resample=resample,
+                        input_data_format=input_data_format,
                     )
                     for image in images
                 ]
@@ -784,7 +854,10 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 [
                     self.resize(
                         image=image,
-                        size={"height": max_image_size["longest_edge"], "width": max_image_size["longest_edge"]},
+                        size={
+                            "height": max_image_size["longest_edge"],
+                            "width": max_image_size["longest_edge"],
+                        },
                         resample=resample,
                         input_data_format=input_data_format,
                     )
@@ -803,14 +876,24 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images_list = [
-                [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
+                [
+                    self.rescale(
+                        image, rescale_factor, input_data_format=input_data_format
+                    )
+                    for image in images
+                ]
                 for images in images_list
             ]
 
         if do_normalize:
             images_list = [
                 [
-                    self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                    self.normalize(
+                        image=image,
+                        mean=image_mean,
+                        std=image_std,
+                        input_data_format=input_data_format,
+                    )
                     for image in images
                 ]
                 for images in images_list
@@ -819,23 +902,36 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         pixel_attention_mask = None
         if do_pad:
             images_list, pixel_attention_mask = self.pad(
-                images_list, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format
+                images_list,
+                return_pixel_mask=True,
+                return_tensors=return_tensors,
+                input_data_format=input_data_format,
             )
 
         if data_format is not None:
             images_list = [
                 [
-                    to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                    to_channel_dimension_format(
+                        image, data_format, input_channel_dim=input_data_format
+                    )
                     for image in images
                 ]
                 for images in images_list
             ]
 
         # Faster tensor conversion
-        data = {"pixel_values": np.array(images_list) if do_pad and return_tensors is not None else images_list}
+        data = {
+            "pixel_values": (
+                np.array(images_list)
+                if do_pad and return_tensors is not None
+                else images_list
+            )
+        }
         if pixel_attention_mask is not None:
             data["pixel_attention_mask"] = (
-                np.array(pixel_attention_mask) if do_pad and return_tensors is not None else pixel_attention_mask
+                np.array(pixel_attention_mask)
+                if do_pad and return_tensors is not None
+                else pixel_attention_mask
             )
 
         encoding = BatchFeature(data=data, tensor_type=return_tensors)

@@ -13,15 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import (
-    DPRContextEncoderTokenizer,
-    DPRContextEncoderTokenizerFast,
-    DPRQuestionEncoderTokenizer,
-    DPRQuestionEncoderTokenizerFast,
-    DPRReaderOutput,
-    DPRReaderTokenizer,
-    DPRReaderTokenizerFast,
-)
+from transformers import (DPRContextEncoderTokenizer,
+                          DPRContextEncoderTokenizerFast,
+                          DPRQuestionEncoderTokenizer,
+                          DPRQuestionEncoderTokenizerFast, DPRReaderOutput,
+                          DPRReaderTokenizer, DPRReaderTokenizerFast)
 from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_utils_base import BatchEncoding
 
@@ -53,7 +49,9 @@ class DPRReaderTokenizationTest(BertTokenizationTest):
 
     @slow
     def test_decode_best_spans(self):
-        tokenizer = self.tokenizer_class.from_pretrained("google-bert/bert-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "google-bert/bert-base-uncased"
+        )
 
         text_1 = tokenizer.encode("question sequence", add_special_tokens=False)
         text_2 = tokenizer.encode("title sequence", add_special_tokens=False)
@@ -76,13 +74,19 @@ class DPRReaderTokenizationTest(BertTokenizationTest):
 
     @slow
     def test_call(self):
-        tokenizer = self.tokenizer_class.from_pretrained("google-bert/bert-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "google-bert/bert-base-uncased"
+        )
 
         text_1 = tokenizer.encode("question sequence", add_special_tokens=False)
         text_2 = tokenizer.encode("title sequence", add_special_tokens=False)
         text_3 = tokenizer.encode("text sequence", add_special_tokens=False)
         expected_input_ids = [101] + text_1 + [102] + text_2 + [102] + text_3
-        encoded_input = tokenizer(questions=["question sequence"], titles=["title sequence"], texts=["text sequence"])
+        encoded_input = tokenizer(
+            questions=["question sequence"],
+            titles=["title sequence"],
+            texts=["text sequence"],
+        )
         self.assertIn("input_ids", encoded_input)
         self.assertIn("attention_mask", encoded_input)
         self.assertListEqual(encoded_input["input_ids"][0], expected_input_ids)

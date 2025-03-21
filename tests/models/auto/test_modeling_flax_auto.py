@@ -14,23 +14,28 @@
 
 import unittest
 
-from transformers import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, slow
-
+from transformers import (AutoConfig, AutoTokenizer, BertConfig, TensorType,
+                          is_flax_available)
+from transformers.testing_utils import (DUMMY_UNKNOWN_IDENTIFIER, require_flax,
+                                        slow)
 
 if is_flax_available():
     import jax
 
     from transformers.models.auto.modeling_flax_auto import FlaxAutoModel
     from transformers.models.bert.modeling_flax_bert import FlaxBertModel
-    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel
+    from transformers.models.roberta.modeling_flax_roberta import \
+        FlaxRobertaModel
 
 
 @require_flax
 class FlaxAutoModelTest(unittest.TestCase):
     @slow
     def test_bert_from_pretrained(self):
-        for model_name in ["google-bert/bert-base-cased", "google-bert/bert-large-uncased"]:
+        for model_name in [
+            "google-bert/bert-base-cased",
+            "google-bert/bert-large-uncased",
+        ]:
             with self.subTest(model_name):
                 config = AutoConfig.from_pretrained(model_name)
                 self.assertIsNotNone(config)
@@ -54,10 +59,15 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     @slow
     def test_bert_jax_jit(self):
-        for model_name in ["google-bert/bert-base-cased", "google-bert/bert-large-uncased"]:
+        for model_name in [
+            "google-bert/bert-base-cased",
+            "google-bert/bert-large-uncased",
+        ]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = FlaxBertModel.from_pretrained(model_name)
-            tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
+            tokens = tokenizer(
+                "Do you support jax jitted function?", return_tensors=TensorType.JAX
+            )
 
             @jax.jit
             def eval(**kwargs):
@@ -70,7 +80,9 @@ class FlaxAutoModelTest(unittest.TestCase):
         for model_name in ["FacebookAI/roberta-base", "FacebookAI/roberta-large"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = FlaxRobertaModel.from_pretrained(model_name)
-            tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
+            tokens = tokenizer(
+                "Do you support jax jitted function?", return_tensors=TensorType.JAX
+            )
 
             @jax.jit
             def eval(**kwargs):
@@ -80,15 +92,19 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+            EnvironmentError,
+            "bert-base is not a local folder and is not a valid model identifier",
         ):
             _ = FlaxAutoModel.from_pretrained("bert-base")
 
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+            EnvironmentError,
+            r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)",
         ):
-            _ = FlaxAutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+            _ = FlaxAutoModel.from_pretrained(
+                DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa"
+            )
 
     def test_model_file_not_found(self):
         with self.assertRaisesRegex(
@@ -98,5 +114,7 @@ class FlaxAutoModelTest(unittest.TestCase):
             _ = FlaxAutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_model_from_pt_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "Use `from_pt=True` to load this model"
+        ):
             _ = FlaxAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")

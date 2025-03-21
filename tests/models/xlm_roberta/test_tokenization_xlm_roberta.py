@@ -18,12 +18,13 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers import (SPIECE_UNDERLINE, XLMRobertaTokenizer,
+                          XLMRobertaTokenizerFast)
+from transformers.testing_utils import (get_tests_dir, require_sentencepiece,
+                                        require_tokenizers, slow)
 from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -106,7 +107,29 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ids,
             [
                 value + tokenizer.fairseq_offset
-                for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
+                for value in [
+                    8,
+                    21,
+                    84,
+                    55,
+                    24,
+                    19,
+                    7,
+                    2,
+                    602,
+                    347,
+                    347,
+                    347,
+                    3,
+                    12,
+                    66,
+                    46,
+                    72,
+                    80,
+                    6,
+                    2,
+                    4,
+                ]
                 #                                       ^ unk: 2 + 1 = 3                  unk: 2 + 1 = 3 ^
             ],
         )
@@ -145,11 +168,19 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             self.skipTest(reason="test_slow_tokenizer is set to False")
 
-        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-xlm-roberta", {})
+        self.tokenizers_list[0] = (
+            self.rust_tokenizer_class,
+            "hf-internal-testing/tiny-xlm-roberta",
+            {},
+        )
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -158,7 +189,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Checks it save with the same files + the tokenizer.json file for the fast one
                 self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
+                tokenizer_r_files = tuple(
+                    f for f in tokenizer_r_files if "tokenizer.json" not in f
+                )
                 self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
 
                 # Checks everything loads correctly in the same way
@@ -176,7 +209,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Save tokenizer rust, legacy_format=True
                 tmpdirname2 = tempfile.mkdtemp()
 
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
+                tokenizer_r_files = tokenizer_r.save_pretrained(
+                    tmpdirname2, legacy_format=True
+                )
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
                 # Checks it save with the same files
@@ -195,7 +230,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Save tokenizer rust, legacy_format=False
                 tmpdirname2 = tempfile.mkdtemp()
 
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
+                tokenizer_r_files = tokenizer_r.save_pretrained(
+                    tmpdirname2, legacy_format=False
+                )
                 tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
 
                 # Checks it saved the tokenizer.json file
@@ -252,7 +289,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # xlmr.eval()
         # xlmr.encode(symbols)
 
-        self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
+        self.assertListEqual(
+            original_tokenizer_encodings, self.big_tokenizer.encode(symbols)
+        )
 
     @slow
     def test_tokenization_base_hard_symbols(self):
@@ -331,7 +370,9 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # xlmr.eval()
         # xlmr.encode(symbols)
 
-        self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
+        self.assertListEqual(
+            original_tokenizer_encodings, self.big_tokenizer.encode(symbols)
+        )
 
     @slow
     def test_tokenizer_integration(self):

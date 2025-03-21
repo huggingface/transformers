@@ -17,18 +17,19 @@
 import unittest
 
 from transformers import TrOCRConfig
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
+from transformers.testing_utils import (is_torch_available, require_torch,
+                                        torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers.models.trocr.modeling_trocr import TrOCRDecoder, TrOCRForCausalLM
+    from transformers.models.trocr.modeling_trocr import (TrOCRDecoder,
+                                                          TrOCRForCausalLM)
 
 
 @require_torch
@@ -85,15 +86,21 @@ class TrOCRStandaloneDecoderModelTester:
         self.decoder_attention_idx = 1
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         lm_labels = None
         if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            lm_labels = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], self.vocab_size
+            )
 
         config = TrOCRConfig(
             vocab_size=self.vocab_size,
@@ -140,15 +147,21 @@ class TrOCRStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -159,9 +172,13 @@ class TrOCRStandaloneDecoderModelTester:
 
 
 @require_torch
-class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TrOCRStandaloneDecoderModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
+    )
     fx_compatible = True
     test_pruning = False
 
@@ -192,6 +209,8 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    @unittest.skip(
+        reason="The model doesn't support left padding"
+    )  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
         pass

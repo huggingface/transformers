@@ -20,18 +20,21 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers import (ResNetConfig, TableTransformerConfig,
+                          is_torch_available, is_vision_available)
+from transformers.testing_utils import (require_timm, require_torch,
+                                        require_vision, slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import TableTransformerForObjectDetection, TableTransformerModel
+    from transformers import (TableTransformerForObjectDetection,
+                              TableTransformerModel)
 
 
 if is_vision_available():
@@ -80,13 +83,19 @@ class TableTransformerModelTester:
         self.num_labels = num_labels
 
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
+        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(
+            self.max_size / 32
+        )
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.min_size, self.max_size]
+        )
 
-        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
+        pixel_mask = torch.ones(
+            [self.batch_size, self.min_size, self.max_size], device=torch_device
+        )
 
         labels = None
         if self.use_labels:
@@ -98,7 +107,9 @@ class TableTransformerModelTester:
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
+                target["masks"] = torch.rand(
+                    self.n_targets, self.min_size, self.max_size, device=torch_device
+                )
                 labels.append(target)
 
         config = self.get_config()
@@ -138,7 +149,9 @@ class TableTransformerModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def create_and_check_table_transformer_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_table_transformer_model(
+        self, config, pixel_values, pixel_mask, labels
+    ):
         model = TableTransformerModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -147,10 +160,13 @@ class TableTransformerModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.decoder_seq_length, self.hidden_size),
         )
 
-    def create_and_check_table_transformer_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_table_transformer_object_detection_head_model(
+        self, config, pixel_values, pixel_mask, labels
+    ):
         model = TableTransformerForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -158,16 +174,28 @@ class TableTransformerModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.num_queries, self.num_labels + 1),
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.num_queries, self.num_labels + 1),
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
-    def create_and_check_table_transformer_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_table_transformer_no_timm_backbone(
+        self, config, pixel_values, pixel_mask, labels
+    ):
         config.use_timm_backbone = False
         config.backbone_config = ResNetConfig()
         model = TableTransformerForObjectDetection(config=config)
@@ -177,18 +205,30 @@ class TableTransformerModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.num_queries, self.num_labels + 1),
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.num_queries, self.num_labels + 1),
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
 
 @require_torch
-class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(
+    ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             TableTransformerModel,
@@ -198,7 +238,10 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        {
+            "image-feature-extraction": TableTransformerModel,
+            "object-detection": TableTransformerForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -212,7 +255,9 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class.__name__ in ["TableTransformerForObjectDetection"]:
@@ -220,10 +265,15 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 for i in range(self.model_tester.batch_size):
                     target = {}
                     target["class_labels"] = torch.ones(
-                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                        size=(self.model_tester.n_targets,),
+                        device=torch_device,
+                        dtype=torch.long,
                     )
                     target["boxes"] = torch.ones(
-                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                        self.model_tester.n_targets,
+                        4,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     target["masks"] = torch.ones(
                         self.model_tester.n_targets,
@@ -239,7 +289,9 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     def setUp(self):
         self.model_tester = TableTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TableTransformerConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=TableTransformerConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -250,11 +302,15 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     def test_table_transformer_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_table_transformer_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_table_transformer_object_detection_head_model(
+            *config_and_inputs
+        )
 
     def test_table_transformer_no_timm_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_table_transformer_no_timm_backbone(*config_and_inputs)
+        self.model_tester.create_and_check_table_transformer_no_timm_backbone(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -264,7 +320,9 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")
+    @unittest.skip(
+        reason="Table Transformer does not have a get_input_embeddings method"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -299,7 +357,11 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -310,12 +372,20 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -337,16 +407,24 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(decoder_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        decoder_key_length,
+                    ],
                 )
 
                 # cross attentions
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(cross_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -373,12 +451,20 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -426,12 +512,16 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
             model = model_class(config)
             model.to(torch_device)
 
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             outputs = model(**inputs)
 
             self.assertIsNotNone(outputs.auxiliary_outputs)
-            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+            self.assertEqual(
+                len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1
+            )
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -449,7 +539,9 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                     if "head_mask" and "decoder_head_mask" in arg_names
                     else []
                 )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+                self.assertListEqual(
+                    arg_names[: len(expected_arg_names)], expected_arg_names
+                )
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
@@ -478,10 +570,14 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3
+                )
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.backbone.conv_encoder.intermediate_channel_sizes), 3
+                )
 
             self.assertTrue(outputs)
 
@@ -510,10 +606,14 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3
+                )
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.backbone.conv_encoder.intermediate_channel_sizes), 3
+                )
 
             self.assertTrue(outputs)
 
@@ -522,7 +622,12 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
         # use greyscale pixel values
         inputs_dict["pixel_values"] = floats_tensor(
-            [self.model_tester.batch_size, 1, self.model_tester.min_size, self.model_tester.max_size]
+            [
+                self.model_tester.batch_size,
+                1,
+                self.model_tester.min_size,
+                self.model_tester.max_size,
+            ]
         )
 
         # let's set num_channels to 1
@@ -576,11 +681,19 @@ def prepare_img():
 @slow
 class TableTransformerModelIntegrationTests(unittest.TestCase):
     def test_table_detection(self):
-        image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
-        model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
+        image_processor = AutoImageProcessor.from_pretrained(
+            "microsoft/table-transformer-detection"
+        )
+        model = TableTransformerForObjectDetection.from_pretrained(
+            "microsoft/table-transformer-detection"
+        )
         model.to(torch_device)
 
-        file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+        file_path = hf_hub_download(
+            repo_id="nielsr/example-pdf",
+            repo_type="dataset",
+            filename="example_pdf.png",
+        )
         image = Image.open(file_path).convert("RGB")
         inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
@@ -592,12 +705,25 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_logits = torch.tensor(
-            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+            [
+                [-6.7329, -16.9590, 6.7447],
+                [-8.0038, -22.3071, 6.9288],
+                [-7.2445, -20.9855, 7.3465],
+            ],
             device=torch_device,
         )
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4
+        )
 
         expected_boxes = torch.tensor(
-            [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
+            [
+                [0.4868, 0.1764, 0.6729],
+                [0.6674, 0.4621, 0.3864],
+                [0.4720, 0.1757, 0.6362],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-3, atol=1e-3
+        )

@@ -23,24 +23,22 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, ids_tensor,
+                                        random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TF_MODEL_FOR_PRETRAINING_MAPPING,
-        TFMobileBertForMaskedLM,
-        TFMobileBertForMultipleChoice,
-        TFMobileBertForNextSentencePrediction,
-        TFMobileBertForPreTraining,
-        TFMobileBertForQuestionAnswering,
-        TFMobileBertForSequenceClassification,
-        TFMobileBertForTokenClassification,
-        TFMobileBertModel,
-    )
+    from transformers import (TF_MODEL_FOR_PRETRAINING_MAPPING,
+                              TFMobileBertForMaskedLM,
+                              TFMobileBertForMultipleChoice,
+                              TFMobileBertForNextSentencePrediction,
+                              TFMobileBertForPreTraining,
+                              TFMobileBertForQuestionAnswering,
+                              TFMobileBertForSequenceClassification,
+                              TFMobileBertForTokenClassification,
+                              TFMobileBertModel)
 
 
 @require_tf
@@ -76,11 +74,15 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     # special case for ForPreTraining model, same as BERT tests
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["next_sentence_label"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
 
         return inputs_dict
 
@@ -144,14 +146,20 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
             token_type_ids = None
             if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+                token_type_ids = ids_tensor(
+                    [self.batch_size, self.seq_length], self.type_vocab_size
+                )
 
             sequence_labels = None
             token_labels = None
             choice_labels = None
             if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+                sequence_labels = ids_tensor(
+                    [self.batch_size], self.type_sequence_label_size
+                )
+                token_labels = ids_tensor(
+                    [self.batch_size, self.seq_length], self.num_labels
+                )
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = MobileBertConfig(
@@ -169,13 +177,32 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
                 embedding_size=self.embedding_size,
             )
 
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            return (
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            )
 
         def create_and_check_mobilebert_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             model = TFMobileBertModel(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
 
             inputs = [input_ids, input_mask]
@@ -184,79 +211,176 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
             result = model(input_ids)
 
             self.parent.assertEqual(
-                result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
+                result.last_hidden_state.shape,
+                (self.batch_size, self.seq_length, self.hidden_size),
             )
-            self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+            self.parent.assertEqual(
+                result.pooler_output.shape, (self.batch_size, self.hidden_size)
+            )
 
         def create_and_check_mobilebert_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             model = TFMobileBertForMaskedLM(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
-            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+            self.parent.assertEqual(
+                result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+            )
 
         def create_and_check_mobilebert_for_next_sequence_prediction(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             model = TFMobileBertForNextSentencePrediction(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
             self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
         def create_and_check_mobilebert_for_pretraining(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             model = TFMobileBertForPreTraining(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
             self.parent.assertEqual(
-                result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+                result.prediction_logits.shape,
+                (self.batch_size, self.seq_length, self.vocab_size),
             )
-            self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
+            self.parent.assertEqual(
+                result.seq_relationship_logits.shape, (self.batch_size, 2)
+            )
 
         def create_and_check_mobilebert_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             config.num_labels = self.num_labels
             model = TFMobileBertForSequenceClassification(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
-            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+            self.parent.assertEqual(
+                result.logits.shape, (self.batch_size, self.num_labels)
+            )
 
         def create_and_check_mobilebert_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             config.num_choices = self.num_choices
             model = TFMobileBertForMultipleChoice(config=config)
-            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+            multiple_choice_inputs_ids = tf.tile(
+                tf.expand_dims(input_ids, 1), (1, self.num_choices, 1)
+            )
+            multiple_choice_input_mask = tf.tile(
+                tf.expand_dims(input_mask, 1), (1, self.num_choices, 1)
+            )
+            multiple_choice_token_type_ids = tf.tile(
+                tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1)
+            )
             inputs = {
                 "input_ids": multiple_choice_inputs_ids,
                 "attention_mask": multiple_choice_input_mask,
                 "token_type_ids": multiple_choice_token_type_ids,
             }
             result = model(inputs)
-            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+            self.parent.assertEqual(
+                result.logits.shape, (self.batch_size, self.num_choices)
+            )
 
         def create_and_check_mobilebert_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             config.num_labels = self.num_labels
             model = TFMobileBertForTokenClassification(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
-            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+            self.parent.assertEqual(
+                result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+            )
 
         def create_and_check_mobilebert_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ):
             model = TFMobileBertForQuestionAnswering(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": input_mask,
+                "token_type_ids": token_type_ids,
+            }
             result = model(inputs)
-            self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-            self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+            self.parent.assertEqual(
+                result.start_logits.shape, (self.batch_size, self.seq_length)
+            )
+            self.parent.assertEqual(
+                result.end_logits.shape, (self.batch_size, self.seq_length)
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -269,12 +393,18 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
                 token_labels,
                 choice_labels,
             ) = config_and_inputs
-            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+            inputs_dict = {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": input_mask,
+            }
             return config, inputs_dict
 
     def setUp(self):
         self.model_tester = TFMobileBertModelTest.TFMobileBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MobileBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=MobileBertConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -289,27 +419,39 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mobilebert_for_multiple_choice(*config_and_inputs)
+        self.model_tester.create_and_check_mobilebert_for_multiple_choice(
+            *config_and_inputs
+        )
 
     def test_for_next_sequence_prediction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mobilebert_for_next_sequence_prediction(*config_and_inputs)
+        self.model_tester.create_and_check_mobilebert_for_next_sequence_prediction(
+            *config_and_inputs
+        )
 
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mobilebert_for_pretraining(*config_and_inputs)
+        self.model_tester.create_and_check_mobilebert_for_pretraining(
+            *config_and_inputs
+        )
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mobilebert_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_mobilebert_for_question_answering(
+            *config_and_inputs
+        )
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mobilebert_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_mobilebert_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_mobilebert_for_token_classification(
+            *config_and_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):

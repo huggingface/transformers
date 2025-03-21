@@ -22,7 +22,6 @@ import numpy as np
 
 from ...utils import is_torch_available
 
-
 if is_torch_available():
     import torch
 
@@ -30,7 +29,6 @@ from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -87,12 +85,19 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
         self.window = window_function(400, "povey", periodic=False)
 
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
 
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+        input_values: List[np.ndarray],
+        attention_mask: List[np.ndarray],
+        padding_value: float = 0.0,
     ) -> List[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
@@ -102,13 +107,17 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             normed_input_values = []
 
             for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(
+                    vector[:length].var() + 1e-7
+                )
                 if length < normed_slice.shape[0]:
                     normed_slice[length:] = padding_value
 
                 normed_input_values.append(normed_slice)
         else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+            normed_input_values = [
+                (x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values
+            ]
 
         return normed_input_values
 
@@ -124,7 +133,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         if len(waveform.shape) == 2:
             waveform = waveform[0]
 
-        waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
+        waveform = np.squeeze(waveform) * (
+            2**15
+        )  # Kaldi compliance: 16-bit signed integers
         features = spectrogram(
             waveform,
             self.window,
@@ -230,25 +241,36 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             )
 
         return_attention_mask = (
-            return_attention_mask if return_attention_mask is not None else self.return_attention_mask
+            return_attention_mask
+            if return_attention_mask is not None
+            else self.return_attention_mask
         )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        is_batched_numpy = (
+            isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        )
         if is_batched_numpy and len(raw_speech.shape) > 3:
-            raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")
+            raise ValueError(
+                f"Only mono-channel or stereo-channel audio is supported for input to {self}"
+            )
 
         acceptable_types = (
-            (torch.Tensor, np.ndarray, tuple, list) if is_torch_available() else (np.ndarray, tuple, list)
+            (torch.Tensor, np.ndarray, tuple, list)
+            if is_torch_available()
+            else (np.ndarray, tuple, list)
         )
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], acceptable_types))
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], acceptable_types))
         )
 
         if is_batched:
             raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(
+            np.float64
+        ):
             raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
@@ -261,7 +283,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         if do_normalize_per_mel_bins:
             # torch defaults to ddof=1, and numpy defaults to ddof=0
             features = [
-                (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
+                (x - np.expand_dims(x.mean(0), 0))
+                / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
                 for x in features
             ]
 
@@ -290,7 +313,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             attention_mask = attention_mask[:, : num_frames - remainder]
 
         input_features = np.reshape(
-            input_features, (batch_size, num_frames // self.stride, num_channels * self.stride)
+            input_features,
+            (batch_size, num_frames // self.stride, num_channels * self.stride),
         )
 
         indices = np.arange(0, num_frames - remainder)

@@ -21,7 +21,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_qwen2 import Qwen2Tokenizer
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -97,22 +96,30 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         # following GPT2TokenizerFast, also adding unk_token, bos_token, and eos_token
 
         bos_token = (
-            AddedToken(bos_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            AddedToken(
+                bos_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
             if isinstance(bos_token, str)
             else bos_token
         )
         eos_token = (
-            AddedToken(eos_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            AddedToken(
+                eos_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
             if isinstance(eos_token, str)
             else eos_token
         )
         unk_token = (
-            AddedToken(unk_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            AddedToken(
+                unk_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
             if isinstance(unk_token, str)
             else unk_token
         )
         pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            AddedToken(
+                pad_token, lstrip=False, rstrip=False, special=True, normalized=False
+            )
             if isinstance(pad_token, str)
             else pad_token
         )
@@ -129,6 +136,8 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         )
 
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)

@@ -19,23 +19,22 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers import (DabDetrConfig, ResNetConfig, is_torch_available,
+                          is_vision_available)
+from transformers.testing_utils import (require_timm, require_torch,
+                                        require_vision, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from transformers import (
-        DabDetrForObjectDetection,
-        DabDetrModel,
-    )
+    from transformers import DabDetrForObjectDetection, DabDetrModel
 
 
 if is_vision_available():
@@ -84,13 +83,19 @@ class DabDetrModelTester:
         self.num_labels = num_labels
 
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
+        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(
+            self.max_size / 32
+        )
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.min_size, self.max_size]
+        )
 
-        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
+        pixel_mask = torch.ones(
+            [self.batch_size, self.min_size, self.max_size], device=torch_device
+        )
 
         labels = None
         if self.use_labels:
@@ -102,7 +107,9 @@ class DabDetrModelTester:
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
+                target["masks"] = torch.rand(
+                    self.n_targets, self.min_size, self.max_size, device=torch_device
+                )
                 labels.append(target)
 
         config = self.get_config()
@@ -151,10 +158,13 @@ class DabDetrModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.decoder_seq_length, self.hidden_size),
         )
 
-    def create_and_check_dab_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_dab_detr_object_detection_head_model(
+        self, config, pixel_values, pixel_mask, labels
+    ):
         model = DabDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -162,19 +172,29 @@ class DabDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_queries, self.num_labels)
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
         result = model(pixel_values=pixel_values, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_queries, self.num_labels)
+        )
+        self.parent.assertEqual(
+            result.pred_boxes.shape, (self.batch_size, self.num_queries, 4)
+        )
 
 
 @require_torch
 class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (DabDetrModel, DabDetrForObjectDetection) if is_torch_available() else ()
+    all_model_classes = (
+        (DabDetrModel, DabDetrForObjectDetection) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "image-feature-extraction": DabDetrModel,
@@ -193,7 +213,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class.__name__ in ["DabDetrForObjectDetection"]:
@@ -201,10 +223,15 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 for i in range(self.model_tester.batch_size):
                     target = {}
                     target["class_labels"] = torch.ones(
-                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                        size=(self.model_tester.n_targets,),
+                        device=torch_device,
+                        dtype=torch.long,
                     )
                     target["boxes"] = torch.ones(
-                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                        self.model_tester.n_targets,
+                        4,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     target["masks"] = torch.ones(
                         self.model_tester.n_targets,
@@ -220,7 +247,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = DabDetrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DabDetrConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=DabDetrConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -231,7 +260,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_dab_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_dab_detr_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_dab_detr_object_detection_head_model(
+            *config_and_inputs
+        )
 
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
@@ -273,12 +304,18 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -312,31 +349,58 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
             if self.has_attentions:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(
-                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                    model, tuple_inputs, dict_inputs, {"output_attentions": True}
+                )
+
+                tuple_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                dict_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_attentions": True}
+                )
+
+                tuple_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                dict_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                check_equivalence(
+                    model,
+                    tuple_inputs,
+                    dict_inputs,
+                    {"output_hidden_states": True, "output_attentions": True},
                 )
 
     def test_hidden_states_output(self):
@@ -348,17 +412,26 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
 
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                if (
+                    hasattr(self.model_tester, "chunk_length")
+                    and self.model_tester.chunk_length > 1
+                ):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
                 seq_length = self.model_tester.seq_length
@@ -375,7 +448,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+                decoder_seq_length = getattr(
+                    self.model_tester, "decoder_seq_length", seq_len
+                )
 
                 self.assertListEqual(
                     [hidden_states[0].shape[1], hidden_states[0].shape[2]],
@@ -408,19 +483,31 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
             if "input_ids" not in batched_input:
                 return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
+                    1.0
+                    - F.cosine_similarity(
+                        tensor1.float().flatten(),
+                        tensor2.float().flatten(),
+                        dim=0,
+                        eps=1e-38,
+                    )
                 )
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (list, tuple)):
-                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                for batched_object_value, single_row_object_value in zip(
+                    batched_object, single_row_object
+                ):
+                    recursive_check(
+                        batched_object_value, single_row_object_value, model_name, key
+                    )
             elif isinstance(batched_object, dict):
                 for batched_object_value, single_row_object_value in zip(
                     batched_object.values(), single_row_object.values()
                 ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                    recursive_check(
+                        batched_object_value, single_row_object_value, model_name, key
+                    )
             # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
@@ -432,16 +519,20 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 slice_ids = [slice(0, index) for index in single_row_object.shape]
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                    torch.isnan(batched_row).any(),
+                    f"Batched output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                    torch.isinf(batched_row).any(),
+                    f"Batched output has `inf` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                    torch.isnan(single_row_object).any(),
+                    f"Single row output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                    torch.isinf(single_row_object).any(),
+                    f"Single row output has `inf` in {model_name} for key={key}",
                 )
                 self.assertTrue(
                     (equivalence(batched_row, single_row_object)) <= 1e-02,
@@ -459,7 +550,11 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             model_name = model_class.__name__
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                config, batched_input = (
+                    self.model_tester.prepare_config_and_inputs_for_model_class(
+                        model_class
+                    )
+                )
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
 
@@ -483,10 +578,15 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             for key in model_batched_output:
                 # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
-                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
+                if (
+                    hasattr(self, "zero_init_hidden_state")
+                    and "decoder_hidden_states" in key
+                ):
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+                recursive_check(
+                    model_batched_output[key], model_row_output[key], model_name, key
+                )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -506,7 +606,11 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -520,12 +624,20 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
             out_len = len(outputs)
             if self.is_encoder_decoder:
@@ -542,16 +654,24 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 # decoder attentions
                 decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(decoder_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        decoder_key_length,
+                    ],
                 )
 
                 # cross attentions
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(cross_attentions), self.model_tester.num_hidden_layers
+                )
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -580,12 +700,20 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -632,12 +760,16 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = model_class(config)
             model.to(torch_device)
 
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             outputs = model(**inputs)
 
             self.assertIsNotNone(outputs.auxiliary_outputs)
-            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+            self.assertEqual(
+                len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1
+            )
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -671,7 +803,9 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     if "head_mask" and "decoder_head_mask" in arg_names
                     else []
                 )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+                self.assertListEqual(
+                    arg_names[: len(expected_arg_names)], expected_arg_names
+                )
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
@@ -700,10 +834,14 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3
+                )
             else:
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertEqual(
+                    len(model.backbone.conv_encoder.intermediate_channel_sizes), 3
+                )
 
             self.assertTrue(outputs)
 
@@ -736,7 +874,10 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             rtol=1e-4,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif "activation_fn" in name and config.activation_function == "prelu":
+                    elif (
+                        "activation_fn" in name
+                        and config.activation_function == "prelu"
+                    ):
                         self.assertTrue(
                             param.data.mean() == 0.25,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -773,7 +914,11 @@ def prepare_img():
 class DabDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ConditionalDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return (
+            ConditionalDetrImageProcessor.from_pretrained(CHECKPOINT)
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_no_head(self):
         model = DabDetrModel.from_pretrained(CHECKPOINT).to(torch_device)
@@ -788,9 +933,15 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 300, 256))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.4879, -0.2594, 0.4524], [-0.4997, -0.4258, 0.4329], [-0.8220, -0.4996, 0.0577]]
+            [
+                [-0.4879, -0.2594, 0.4524],
+                [-0.4997, -0.4258, 0.4329],
+                [-0.8220, -0.4996, 0.0577],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4, rtol=2e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4, rtol=2e-4
+        )
 
     def test_inference_object_detection_head(self):
         model = DabDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
@@ -804,29 +955,51 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
             outputs = model(pixel_values)
 
         # verify logits + box predictions
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        expected_shape_logits = torch.Size(
+            (1, model.config.num_queries, model.config.num_labels)
+        )
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
-            [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
+            [
+                [-10.1765, -5.5243, -8.9324],
+                [-9.8138, -5.6721, -7.5161],
+                [-10.3054, -5.6081, -8.5931],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4, rtol=3e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4, rtol=3e-4
+        )
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
-            [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
+            [
+                [0.3708, 0.3000, 0.2753],
+                [0.5211, 0.6125, 0.9495],
+                [0.2897, 0.6730, 0.5459],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4, rtol=1e-4
+        )
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(torch_device)
+        expected_scores = torch.tensor([0.8732, 0.8563, 0.8554, 0.6079, 0.5896]).to(
+            torch_device
+        )
         expected_labels = [17, 75, 17, 75, 63]
-        expected_boxes = torch.tensor([14.6970, 49.3892, 320.5165, 469.2765]).to(torch_device)
+        expected_boxes = torch.tensor([14.6970, 49.3892, 320.5165, 469.2765]).to(
+            torch_device
+        )
 
         self.assertEqual(len(results["scores"]), 5)
-        torch.testing.assert_close(results["scores"], expected_scores, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            results["scores"], expected_scores, atol=1e-4, rtol=1e-4
+        )
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][0, :], expected_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            results["boxes"][0, :], expected_boxes, atol=1e-4, rtol=1e-4
+        )

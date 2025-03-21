@@ -21,23 +21,14 @@ import os
 import unicodedata
 from typing import Dict, List, Optional, Tuple, Union
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import (PreTrainedTokenizer, _is_control,
+                                   _is_punctuation, _is_whitespace)
 from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
-    ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
-    BatchEncoding,
-    EncodedInput,
-    EncodedInputPair,
-    PaddingStrategy,
-    PreTokenizedInput,
-    PreTokenizedInputPair,
-    TensorType,
-    TextInput,
-    TextInputPair,
-    TruncationStrategy,
-)
+    ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
+    BatchEncoding, EncodedInput, EncodedInputPair, PaddingStrategy,
+    PreTokenizedInput, PreTokenizedInputPair, TensorType, TextInput,
+    TextInputPair, TruncationStrategy)
 from ...utils import add_end_docstrings, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -146,7 +137,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         with open(word_pronunciation_file, "r", encoding="utf8") as in_file:
             self.word_pronunciation = json.load(in_file)
 
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()]
+        )
 
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
@@ -156,7 +149,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        self.wordpiece_tokenizer = RoCBertWordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+        self.wordpiece_tokenizer = RoCBertWordpieceTokenizer(
+            vocab=self.vocab, unk_token=str(unk_token)
+        )
         super().__init__(
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
@@ -188,7 +183,10 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(
-                text, never_split=self.all_special_tokens if not split_special_tokens else None
+                text,
+                never_split=(
+                    self.all_special_tokens if not split_special_tokens else None
+                ),
             ):
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
@@ -228,10 +226,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 tokens_shape_ids = self.convert_tokens_to_shape_ids(tokens)
                 tokens_proun_ids = self.convert_tokens_to_pronunciation_ids(tokens)
                 return tokens_ids, tokens_shape_ids, tokens_proun_ids
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
+            elif (
+                isinstance(text, (list, tuple))
+                and len(text) > 0
+                and isinstance(text[0], str)
+            ):
                 if is_split_into_words:
                     tokens = list(
-                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
+                        itertools.chain(
+                            *(
+                                self.tokenize(t, is_split_into_words=True, **kwargs)
+                                for t in text
+                            )
+                        )
                     )
                     tokens_ids = self.convert_tokens_to_ids(tokens)
                     tokens_shape_ids = self.convert_tokens_to_shape_ids(tokens)
@@ -242,8 +249,16 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                     tokens_shape_ids = self.convert_tokens_to_shape_ids(text)
                     tokens_proun_ids = self.convert_tokens_to_pronunciation_ids(text)
                     return tokens_ids, tokens_shape_ids, tokens_proun_ids
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                return text, [0] * len(text), [0] * len(text)  # shape and proun id is pad_value
+            elif (
+                isinstance(text, (list, tuple))
+                and len(text) > 0
+                and isinstance(text[0], int)
+            ):
+                return (
+                    text,
+                    [0] * len(text),
+                    [0] * len(text),
+                )  # shape and proun id is pad_value
             else:
                 if is_split_into_words:
                     raise ValueError(
@@ -295,7 +310,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def prepare_for_model(
         self,
         ids: List[int],
@@ -351,13 +368,15 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         pair = bool(pair_ids is not None)
@@ -391,11 +410,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         encoded_inputs = {}
 
         # Compute the total size of the returned encodings
-        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        total_len = (
+            len_ids
+            + len_pair_ids
+            + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        )
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and max_length
+            and total_len > max_length
+        ):
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
                 pair_ids=pair_ids,
@@ -427,7 +454,10 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
             input_shape_ids = self.build_inputs_with_special_tokens(
-                shape_ids, pair_shape_ids, self.word_shape["[UNK]"], self.word_shape["[UNK]"]
+                shape_ids,
+                pair_shape_ids,
+                self.word_shape["[UNK]"],
+                self.word_shape["[UNK]"],
             )
             input_pronunciation_ids = self.build_inputs_with_special_tokens(
                 pronunciation_ids,
@@ -438,9 +468,13 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         else:
             sequence = ids + pair_ids if pair_ids else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair_ids else [])
-            input_shape_ids = shape_ids + pair_shape_ids if pair_shape_ids else shape_ids
+            input_shape_ids = (
+                shape_ids + pair_shape_ids if pair_shape_ids else shape_ids
+            )
             input_pronunciation_ids = (
-                pronunciation_ids + pair_pronunciation_ids if pair_pronunciation_ids else pronunciation_ids
+                pronunciation_ids + pair_pronunciation_ids
+                if pair_pronunciation_ids
+                else pronunciation_ids
             )
 
         # Build output dictionary
@@ -451,12 +485,16 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
             if add_special_tokens:
-                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(
+                    ids, pair_ids
+                )
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
         # Check lengths
-        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            encoded_inputs["input_ids"], max_length, verbose
+        )
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -473,7 +511,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs,
+            tensor_type=return_tensors,
+            prepend_batch_axis=prepend_batch_axis,
         )
 
         return batch_outputs
@@ -496,10 +536,17 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = (
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(required_input) != max_length
+        )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
@@ -507,34 +554,53 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
 
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [self.pad_token_type_id] * difference
                     )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
                 for key in ["input_shape_ids", "input_pronunciation_ids"]:
                     if key in encoded_inputs:
-                        encoded_inputs[key] = encoded_inputs[key] + [self.pad_token_id] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                        encoded_inputs[key] = (
+                            encoded_inputs[key] + [self.pad_token_id] * difference
+                        )
+                encoded_inputs[self.model_input_names[0]] = (
+                    required_input + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        self.pad_token_type_id
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
                 for key in ["input_shape_ids", "input_pronunciation_ids"]:
                     if key in encoded_inputs:
-                        encoded_inputs[key] = [self.pad_token_id] * difference + encoded_inputs[key]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                        encoded_inputs[key] = [
+                            self.pad_token_id
+                        ] * difference + encoded_inputs[key]
+                encoded_inputs[self.model_input_names[0]] = [
+                    self.pad_token_id
+                ] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
@@ -575,10 +641,19 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 tokens_shape_ids = self.convert_tokens_to_shape_ids(tokens)
                 tokens_proun_ids = self.convert_tokens_to_pronunciation_ids(tokens)
                 return tokens_ids, tokens_shape_ids, tokens_proun_ids
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
+            elif (
+                isinstance(text, (list, tuple))
+                and len(text) > 0
+                and isinstance(text[0], str)
+            ):
                 if is_split_into_words:
                     tokens = list(
-                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
+                        itertools.chain(
+                            *(
+                                self.tokenize(t, is_split_into_words=True, **kwargs)
+                                for t in text
+                            )
+                        )
                     )
                     tokens_ids = self.convert_tokens_to_ids(tokens)
                     tokens_shape_ids = self.convert_tokens_to_shape_ids(tokens)
@@ -589,8 +664,16 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                     tokens_shape_ids = self.convert_tokens_to_shape_ids(text)
                     tokens_proun_ids = self.convert_tokens_to_pronunciation_ids(text)
                     return tokens_ids, tokens_shape_ids, tokens_proun_ids
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                return text, [0] * len(text), [0] * len(text)  # shape and proun id is pad_value
+            elif (
+                isinstance(text, (list, tuple))
+                and len(text) > 0
+                and isinstance(text[0], int)
+            ):
+                return (
+                    text,
+                    [0] * len(text),
+                    [0] * len(text),
+                )  # shape and proun id is pad_value
             else:
                 raise ValueError(
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
@@ -609,7 +692,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if not isinstance(ids_or_pair_ids, (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
-            elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
+            elif is_split_into_words and not isinstance(
+                ids_or_pair_ids[0], (list, tuple)
+            ):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
                 ids, pair_ids = ids_or_pair_ids
@@ -646,12 +731,18 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(
+        ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+    )
     def _batch_prepare_for_model(
         self,
         batch_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-        batch_shape_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-        batch_pronunciation_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
+        batch_shape_ids_pairs: List[
+            Union[PreTokenizedInputPair, Tuple[List[int], None]]
+        ],
+        batch_pronunciation_ids_pairs: List[
+            Union[PreTokenizedInputPair, Tuple[List[int], None]]
+        ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -681,7 +772,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         batch_outputs = {}
         for i, (first_ids, second_ids) in enumerate(batch_ids_pairs):
             first_shape_ids, second_shape_ids = batch_shape_ids_pairs[i]
-            first_pronunciation_ids, second_pronunciation_ids = batch_pronunciation_ids_pairs[i]
+            first_pronunciation_ids, second_pronunciation_ids = (
+                batch_pronunciation_ids_pairs[i]
+            )
             outputs = self.prepare_for_model(
                 first_ids,
                 first_shape_ids,
@@ -733,7 +826,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an shape_id using the shape vocab."""
         return self.word_shape.get(token, self.word_shape.get(self.unk_token))
 
-    def convert_tokens_to_shape_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_shape_ids(
+        self, tokens: Union[str, List[str]]
+    ) -> Union[int, List[int]]:
         if tokens is None:
             return None
 
@@ -744,9 +839,13 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_pronunciation_id(self, token):
         """Converts a token (str) in an shape_id using the shape vocab."""
-        return self.word_pronunciation.get(token, self.word_pronunciation.get(self.unk_token))
+        return self.word_pronunciation.get(
+            token, self.word_pronunciation.get(self.unk_token)
+        )
 
-    def convert_tokens_to_pronunciation_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_pronunciation_ids(
+        self, tokens: Union[str, List[str]]
+    ) -> Union[int, List[int]]:
         if tokens is None:
             return None
 
@@ -797,7 +896,10 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -817,7 +919,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is not None:
@@ -854,20 +958,25 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str, str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str, str, str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"],
+                (filename_prefix + "-" if filename_prefix else "")
+                + self.vocab_files_names["vocab_file"],
             )
             word_shape_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["word_shape_file"],
+                (filename_prefix + "-" if filename_prefix else "")
+                + self.vocab_files_names["word_shape_file"],
             )
             word_pronunciation_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["word_pronunciation_file"],
+                (filename_prefix + "-" if filename_prefix else "")
+                + self.vocab_files_names["word_pronunciation_file"],
             )
         else:
             raise ValueError(
@@ -887,10 +996,22 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 index += 1
 
         with open(word_shape_file, "w", encoding="utf8") as writer:
-            json.dump(self.word_shape, writer, ensure_ascii=False, indent=4, separators=(", ", ": "))
+            json.dump(
+                self.word_shape,
+                writer,
+                ensure_ascii=False,
+                indent=4,
+                separators=(", ", ": "),
+            )
 
         with open(word_pronunciation_file, "w", encoding="utf8") as writer:
-            json.dump(self.word_pronunciation, writer, ensure_ascii=False, indent=4, separators=(", ", ": "))
+            json.dump(
+                self.word_pronunciation,
+                writer,
+                ensure_ascii=False,
+                indent=4,
+                separators=(", ", ": "),
+            )
 
         return (
             vocab_file,
@@ -949,7 +1070,11 @@ class RoCBertBasicTokenizer:
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        never_split = (
+            self.never_split.union(set(never_split))
+            if never_split
+            else self.never_split
+        )
         text = self._clean_text(text)
 
         # This was added on November 1st, 2018 for the multilingual and Chinese
@@ -990,7 +1115,9 @@ class RoCBertBasicTokenizer:
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if not self.do_split_on_punc or (never_split is not None and text in never_split):
+        if not self.do_split_on_punc or (
+            never_split is not None and text in never_split
+        ):
             return [text]
         chars = list(text)
         i = 0

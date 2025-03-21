@@ -19,9 +19,7 @@ import os
 import unittest
 
 from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import (
-    VOCAB_FILES_NAMES,
-    GPTNeoXJapaneseTokenizer,
-)
+    VOCAB_FILES_NAMES, GPTNeoXJapaneseTokenizer)
 from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -61,7 +59,10 @@ class GPTNeoXJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "<|startoftext|>",
             "<|endoftext|>",
         ]
-        emoji_tokens = {"emoji": {"\ud83d\ude00": "<|emoji1|>"}, "emoji_inv": {"<|emoji1|>": "\ud83d\ude00"}}  # 😀
+        emoji_tokens = {
+            "emoji": {"\ud83d\ude00": "<|emoji1|>"},
+            "emoji_inv": {"<|emoji1|>": "\ud83d\ude00"},
+        }  # 😀
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
@@ -100,7 +101,19 @@ class GPTNeoXJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Testing tokenization
         input_text = "こんにちは、世界。　こんばんは、㔺界。"
-        expected_token = ["こん", "にちは", "、", "世界", "。", "<SP>", "こん", "ばんは", "、", "㔺界", "。"]
+        expected_token = [
+            "こん",
+            "にちは",
+            "、",
+            "世界",
+            "。",
+            "<SP>",
+            "こん",
+            "ばんは",
+            "、",
+            "㔺界",
+            "。",
+        ]
         tokens = tokenizer.tokenize(input_text)
         self.assertListEqual(tokens, expected_token)
 

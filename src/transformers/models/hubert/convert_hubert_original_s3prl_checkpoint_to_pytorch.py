@@ -18,8 +18,8 @@ import argparse
 
 import torch
 
-from transformers import HubertConfig, HubertForSequenceClassification, Wav2Vec2FeatureExtractor, logging
-
+from transformers import (HubertConfig, HubertForSequenceClassification,
+                          Wav2Vec2FeatureExtractor, logging)
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -28,18 +28,25 @@ SUPPORTED_MODELS = ["UtteranceLevel"]
 
 
 @torch.no_grad()
-def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, model_dump_path):
+def convert_s3prl_checkpoint(
+    base_model_name, config_path, checkpoint_path, model_dump_path
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    if checkpoint["Config"]["downstream_expert"]["modelrc"]["select"] not in SUPPORTED_MODELS:
+    if (
+        checkpoint["Config"]["downstream_expert"]["modelrc"]["select"]
+        not in SUPPORTED_MODELS
+    ):
         raise NotImplementedError(f"The supported s3prl models are {SUPPORTED_MODELS}")
 
     downstream_dict = checkpoint["Downstream"]
 
     hf_congfig = HubertConfig.from_pretrained(config_path)
-    hf_model = HubertForSequenceClassification.from_pretrained(base_model_name, config=hf_congfig)
+    hf_model = HubertForSequenceClassification.from_pretrained(
+        base_model_name, config=hf_congfig
+    )
     hf_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         base_model_name, return_attention_mask=True, do_normalize=False
     )
@@ -59,10 +66,33 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--base_model_name", default=None, type=str, help="Name of the huggingface pretrained base model."
+        "--base_model_name",
+        default=None,
+        type=str,
+        help="Name of the huggingface pretrained base model.",
     )
-    parser.add_argument("--config_path", default=None, type=str, help="Path to the huggingface classifier config.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to the s3prl checkpoint.")
-    parser.add_argument("--model_dump_path", default=None, type=str, help="Path to the final converted model.")
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to the huggingface classifier config.",
+    )
+    parser.add_argument(
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help="Path to the s3prl checkpoint.",
+    )
+    parser.add_argument(
+        "--model_dump_path",
+        default=None,
+        type=str,
+        help="Path to the final converted model.",
+    )
     args = parser.parse_args()
-    convert_s3prl_checkpoint(args.base_model_name, args.config_path, args.checkpoint_path, args.model_dump_path)
+    convert_s3prl_checkpoint(
+        args.base_model_name,
+        args.config_path,
+        args.checkpoint_path,
+        args.model_dump_path,
+    )

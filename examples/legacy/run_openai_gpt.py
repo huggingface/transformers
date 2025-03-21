@@ -37,20 +37,17 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
+                              TensorDataset)
 from tqdm import tqdm, trange
 
-from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    OpenAIGPTDoubleHeadsModel,
-    OpenAIGPTTokenizer,
-    get_linear_schedule_with_warmup,
-)
-
+from transformers import (CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTDoubleHeadsModel,
+                          OpenAIGPTTokenizer, get_linear_schedule_with_warmup)
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -71,7 +68,9 @@ def load_rocstories_dataset(dataset_path):
     return output
 
 
-def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token):
+def pre_process_datasets(
+    encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token
+):
     """Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
 
     To Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
@@ -88,8 +87,20 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
             i,
             (story, cont1, cont2, mc_label),
         ) in enumerate(dataset):
-            with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
-            with_cont2 = [start_token] + story[:cap_length] + [delimiter_token] + cont2[:cap_length] + [clf_token]
+            with_cont1 = (
+                [start_token]
+                + story[:cap_length]
+                + [delimiter_token]
+                + cont1[:cap_length]
+                + [clf_token]
+            )
+            with_cont2 = (
+                [start_token]
+                + story[:cap_length]
+                + [delimiter_token]
+                + cont2[:cap_length]
+                + [clf_token]
+            )
             input_ids[i, 0, : len(with_cont1)] = with_cont1
             input_ids[i, 1, : len(with_cont2)] = with_cont2
             mc_token_ids[i, 0] = len(with_cont1) - 1
@@ -104,9 +115,18 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="openai-community/openai-gpt", help="pretrained model name")
-    parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="openai-community/openai-gpt",
+        help="pretrained model name",
+    )
+    parser.add_argument(
+        "--do_train", action="store_true", help="Whether to run training."
+    )
+    parser.add_argument(
+        "--do_eval", action="store_true", help="Whether to run eval on the dev set."
+    )
     parser.add_argument(
         "--output_dir",
         default=None,
@@ -120,7 +140,9 @@ def main():
     parser.add_argument("--num_train_epochs", type=int, default=3)
     parser.add_argument("--train_batch_size", type=int, default=8)
     parser.add_argument("--eval_batch_size", type=int, default=16)
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument(
+        "--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer."
+    )
     parser.add_argument("--max_grad_norm", type=int, default=1)
     parser.add_argument(
         "--max_steps",
@@ -137,14 +159,20 @@ def main():
         help="Number of updates steps to accumulate before                        performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", type=float, default=6.25e-5)
-    parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
+    parser.add_argument(
+        "--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps."
+    )
     parser.add_argument("--lr_schedule", type=str, default="warmup_linear")
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--lm_coef", type=float, default=0.9)
     parser.add_argument("--n_valid", type=int, default=374)
 
-    parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
-    parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
+    parser.add_argument(
+        "--server_ip", type=str, default="", help="Can be used for distant debugging."
+    )
+    parser.add_argument(
+        "--server_port", type=str, default="", help="Can be used for distant debugging."
+    )
     args = parser.parse_args()
     print(args)
 
@@ -153,7 +181,9 @@ def main():
         import ptvsd
 
         print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+        ptvsd.enable_attach(
+            address=(args.server_ip, args.server_port), redirect_output=True
+        )
         ptvsd.wait_for_attach()
 
     random.seed(args.seed)
@@ -200,42 +230,69 @@ def main():
     # Compute the max input length for the Transformer
     max_length = model.config.n_positions // 2 - 2
     input_length = max(
-        len(story[:max_length]) + max(len(cont1[:max_length]), len(cont2[:max_length])) + 3
+        len(story[:max_length])
+        + max(len(cont1[:max_length]), len(cont2[:max_length]))
+        + 3
         for dataset in encoded_datasets
         for story, cont1, cont2, _ in dataset
     )
-    input_length = min(input_length, model.config.n_positions)  # Max size of input for the pre-trained model
+    input_length = min(
+        input_length, model.config.n_positions
+    )  # Max size of input for the pre-trained model
 
     # Prepare inputs tensors and dataloaders
-    tensor_datasets = pre_process_datasets(encoded_datasets, input_length, max_length, *special_tokens_ids)
+    tensor_datasets = pre_process_datasets(
+        encoded_datasets, input_length, max_length, *special_tokens_ids
+    )
     train_tensor_dataset, eval_tensor_dataset = tensor_datasets[0], tensor_datasets[1]
 
     train_data = TensorDataset(*train_tensor_dataset)
     train_sampler = RandomSampler(train_data)
-    train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+    train_dataloader = DataLoader(
+        train_data, sampler=train_sampler, batch_size=args.train_batch_size
+    )
 
     eval_data = TensorDataset(*eval_tensor_dataset)
     eval_sampler = SequentialSampler(eval_data)
-    eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size
+    )
 
     # Prepare optimizer
     if args.do_train:
         if args.max_steps > 0:
             t_total = args.max_steps
-            args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+            args.num_train_epochs = (
+                args.max_steps
+                // (len(train_dataloader) // args.gradient_accumulation_steps)
+                + 1
+            )
         else:
-            t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+            t_total = (
+                len(train_dataloader)
+                // args.gradient_accumulation_steps
+                * args.num_train_epochs
+            )
 
         param_optimizer = list(model.named_parameters())
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
-                "params": [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
+                "params": [
+                    p for n, p in param_optimizer if not any(nd in n for nd in no_decay)
+                ],
                 "weight_decay": args.weight_decay,
             },
-            {"params": [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+            {
+                "params": [
+                    p for n, p in param_optimizer if any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
         ]
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        optimizer = torch.optim.AdamW(
+            optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon
+        )
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
         )
@@ -250,7 +307,12 @@ def main():
             for step, batch in enumerate(tqdm_bar):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, mc_token_ids, lm_labels, mc_labels = batch
-                losses = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
+                losses = model(
+                    input_ids,
+                    mc_token_ids=mc_token_ids,
+                    lm_labels=lm_labels,
+                    mc_labels=mc_labels,
+                )
                 loss = args.lm_coef * losses[0] + losses[1]
                 loss.backward()
                 optimizer.step()
@@ -258,15 +320,21 @@ def main():
                 optimizer.zero_grad()
                 tr_loss += loss.item()
                 exp_average_loss = (
-                    loss.item() if exp_average_loss is None else 0.7 * exp_average_loss + 0.3 * loss.item()
+                    loss.item()
+                    if exp_average_loss is None
+                    else 0.7 * exp_average_loss + 0.3 * loss.item()
                 )
                 nb_tr_steps += 1
-                tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, scheduler.get_lr()[0])
+                tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(
+                    exp_average_loss, scheduler.get_lr()[0]
+                )
 
     # Save a trained model
     if args.do_train:
         # Save a trained model, configuration and tokenizer
-        model_to_save = model.module if hasattr(model, "module") else model  # Only save the model itself
+        model_to_save = (
+            model.module if hasattr(model, "module") else model
+        )  # Only save the model itself
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
@@ -290,7 +358,10 @@ def main():
             input_ids, mc_token_ids, lm_labels, mc_labels = batch
             with torch.no_grad():
                 _, mc_loss, _, mc_logits = model(
-                    input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels
+                    input_ids,
+                    mc_token_ids=mc_token_ids,
+                    lm_labels=lm_labels,
+                    mc_labels=mc_labels,
                 )
 
             mc_logits = mc_logits.detach().cpu().numpy()
@@ -306,7 +377,11 @@ def main():
         eval_loss = eval_loss / nb_eval_steps
         eval_accuracy = eval_accuracy / nb_eval_examples
         train_loss = tr_loss / nb_tr_steps if args.do_train else None
-        result = {"eval_loss": eval_loss, "eval_accuracy": eval_accuracy, "train_loss": train_loss}
+        result = {
+            "eval_loss": eval_loss,
+            "eval_accuracy": eval_accuracy,
+            "train_loss": train_loss,
+        }
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:

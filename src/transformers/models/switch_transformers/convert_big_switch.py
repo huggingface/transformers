@@ -9,9 +9,8 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from tensorflow.io import gfile
 
 from transformers.modeling_utils import dtype_byte_size
-from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import (
-    rename_keys,
-)
+from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import \
+    rename_keys
 from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
 from transformers.utils.hub import convert_file_size_to_int
 
@@ -68,7 +67,13 @@ def rename_and_save_block(current_block, save_path):
     torch.save(current_block, save_path)
 
 
-def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, weights_name: str = WEIGHTS_NAME):
+def shard_on_the_fly(
+    switch_checkpoint_path,
+    dump_path,
+    max_shard_size,
+    dtype,
+    weights_name: str = WEIGHTS_NAME,
+):
     max_shard_size = convert_file_size_to_int(max_shard_size)
     sharded_state_dicts = []
     current_block = {}
@@ -77,7 +82,9 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
 
     os.makedirs(dump_path, exist_ok=True)
     with gfile.GFile(switch_checkpoint_path + "/checkpoint", "rb") as fp:
-        checkpoint_info = serialization.msgpack_restore(fp.read())["optimizer"]["target"]
+        checkpoint_info = serialization.msgpack_restore(fp.read())["optimizer"][
+            "target"
+        ]
         checkpoint_info = flatten_dict(checkpoint_info, sep="/")
 
     all_layers = {}
@@ -103,7 +110,10 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         # If this weight is going to tip up over the maximal size, we split.
         if current_block_size + weight_size > max_shard_size:
             save_path = os.path.join(
-                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
+                dump_path,
+                weights_name.replace(
+                    ".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"
+                ),
             )
             rename_and_save_block(current_block, save_path)
             sharded_state_dicts.append(current_block.keys())
@@ -116,7 +126,10 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         total_size += weight_size
 
     # Add the last block
-    save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
+    save_path = os.path.join(
+        dump_path,
+        weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"),
+    )
     rename_and_save_block(current_block, save_path)
     sharded_state_dicts.append(current_block.keys())
 
@@ -131,7 +144,9 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         shard_file = weights_name.replace(
             ".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin"
         )  # len(sharded_state_dicts):05d}
-        temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin"))
+        temp_filename = os.path.join(
+            dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin")
+        )
         os.rename(temp_filename, os.path.join(dump_path, shard_file))
         shards[shard_file] = shard
         for key in shard:
@@ -158,8 +173,16 @@ if __name__ == "__main__":
         required=False,
         help="Path to a directory containing a folder per layer. Follows the original Google format.",
     )
-    parser.add_argument("--max_shard_size", default="10GB", required=False, help="Max shard size")
-    parser.add_argument("--dtype", default="bfloat16", type=str, required=False, help="dtype of the saved model")
+    parser.add_argument(
+        "--max_shard_size", default="10GB", required=False, help="Max shard size"
+    )
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        type=str,
+        required=False,
+        help="dtype of the saved model",
+    )
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default="/mnt/disks/disk_switch/original_checkpoints/switch-xxl-128-converted",
@@ -177,7 +200,9 @@ if __name__ == "__main__":
 
 
 def sanity_check():
-    from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration, T5Tokenizer
+    from transformers import (SwitchTransformersConfig,
+                              SwitchTransformersForConditionalGeneration,
+                              T5Tokenizer)
 
     config = SwitchTransformersConfig.from_pretrained("google/switch-base-8")
     config.save_pretrained("/home/arthur_huggingface_co/transformers/switch_converted")

@@ -23,19 +23,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2CLS
-from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
+from ...modeling_outputs import (BaseModelOutputWithNoAttention,
+                                 ImageClassifierOutputWithNoAttention)
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_swiftformer import SwiftFormerConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -79,7 +72,9 @@ class SwiftFormerPatchEmbedding(nn.Module):
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -92,8 +87,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -133,11 +132,23 @@ class SwiftFormerEmbeddings(nn.Module):
         in_chans = embed_dims[index]
         embed_dim = embed_dims[index + 1]
 
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
-        padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        stride = (
+            stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
+        )
+        padding = (
+            padding
+            if isinstance(padding, collections.abc.Iterable)
+            else (padding, padding)
+        )
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
+        self.proj = nn.Conv2d(
+            in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding
+        )
         self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps)
 
     def forward(self, x):
@@ -165,7 +176,9 @@ class SwiftFormerConvEncoder(nn.Module):
         self.act = nn.GELU()
         self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
         self.drop_path = nn.Dropout(p=config.drop_conv_encoder_rate)
-        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.layer_scale = nn.Parameter(
+            torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True
+        )
 
     def forward(self, x):
         input = x
@@ -265,7 +278,9 @@ class SwiftFormerLocalRepresentation(nn.Module):
         self.act = nn.GELU()
         self.point_wise_conv2 = nn.Conv2d(dim, dim, kernel_size=1)
         self.drop_path = nn.Identity()
-        self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
+        self.layer_scale = nn.Parameter(
+            torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True
+        )
 
     def forward(self, x):
         input = x
@@ -288,7 +303,9 @@ class SwiftFormerEncoderBlock(nn.Module):
     Output: tensor of shape `[batch_size, channels,height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0) -> None:
+    def __init__(
+        self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0
+    ) -> None:
         super().__init__()
 
         layer_scale_init_value = config.layer_scale_init_value
@@ -297,20 +314,26 @@ class SwiftFormerEncoderBlock(nn.Module):
         self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
         self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
         self.linear = SwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = (
+            SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
+        )
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
-                layer_scale_init_value * torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True
+                layer_scale_init_value * torch.ones(dim).unsqueeze(-1).unsqueeze(-1),
+                requires_grad=True,
             )
             self.layer_scale_2 = nn.Parameter(
-                layer_scale_init_value * torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True
+                layer_scale_init_value * torch.ones(dim).unsqueeze(-1).unsqueeze(-1),
+                requires_grad=True,
             )
 
     def forward(self, x):
         x = self.local_representation(x)
         batch_size, channels, height, width = x.shape
-        res = self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
+        res = self.attn(
+            x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels)
+        )
         res = res.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
         if self.use_layer_scale:
             x = x + self.drop_path(self.layer_scale_1 * res)
@@ -340,10 +363,16 @@ class SwiftFormerStage(nn.Module):
 
         blocks = []
         for block_idx in range(depth):
-            block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
+            block_dpr = (
+                config.drop_path_rate
+                * (block_idx + sum(layer_depths[:index]))
+                / (sum(layer_depths) - 1)
+            )
 
             if depth - block_idx <= 1:
-                blocks.append(SwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
+                blocks.append(
+                    SwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr)
+                )
             else:
                 blocks.append(SwiftFormerConvEncoder(config, dim=dim))
 
@@ -385,9 +414,13 @@ class SwiftFormerEncoder(nn.Module):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
@@ -485,9 +518,13 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         r""" """
 
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -525,8 +562,16 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
 
         # Classifier head
         self.norm = nn.BatchNorm2d(embed_dims[-1], eps=config.batch_norm_eps)
-        self.head = nn.Linear(embed_dims[-1], self.num_labels) if self.num_labels > 0 else nn.Identity()
-        self.dist_head = nn.Linear(embed_dims[-1], self.num_labels) if self.num_labels > 0 else nn.Identity()
+        self.head = (
+            nn.Linear(embed_dims[-1], self.num_labels)
+            if self.num_labels > 0
+            else nn.Identity()
+        )
+        self.dist_head = (
+            nn.Linear(embed_dims[-1], self.num_labels)
+            if self.num_labels > 0
+            else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -551,7 +596,9 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # run base model
         outputs = self.swiftformer(
@@ -575,7 +622,9 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -604,4 +653,8 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         )
 
 
-__all__ = ["SwiftFormerForImageClassification", "SwiftFormerModel", "SwiftFormerPreTrainedModel"]
+__all__ = [
+    "SwiftFormerForImageClassification",
+    "SwiftFormerModel",
+    "SwiftFormerPreTrainedModel",
+]

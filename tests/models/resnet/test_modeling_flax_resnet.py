@@ -22,12 +22,12 @@ from transformers.utils import cached_property, is_vision_available
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
-
 if is_flax_available():
     import jax
     import jax.numpy as jnp
 
-    from transformers.models.resnet.modeling_flax_resnet import FlaxResNetForImageClassification, FlaxResNetModel
+    from transformers.models.resnet.modeling_flax_resnet import (
+        FlaxResNetForImageClassification, FlaxResNetModel)
 
 if is_vision_available():
     from PIL import Image
@@ -66,7 +66,9 @@ class FlaxResNetModelTester:
         self.num_stages = len(hidden_sizes)
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         config = self.get_config()
 
@@ -90,7 +92,12 @@ class FlaxResNetModelTester:
         # Output shape (b, c, h, w)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (
+                self.batch_size,
+                self.hidden_sizes[-1],
+                self.image_size // 32,
+                self.image_size // 32,
+            ),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values):
@@ -108,7 +115,11 @@ class FlaxResNetModelTester:
 
 @require_flax
 class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxResNetModel, FlaxResNetForImageClassification) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxResNetModel, FlaxResNetForImageClassification)
+        if is_flax_available()
+        else ()
+    )
 
     is_encoder_decoder = False
     test_head_masking = False
@@ -116,7 +127,9 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self) -> None:
         self.model_tester = FlaxResNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=ResNetConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -164,7 +177,11 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -207,7 +224,11 @@ def prepare_img():
 class FlaxResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("microsoft/resnet-50") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):

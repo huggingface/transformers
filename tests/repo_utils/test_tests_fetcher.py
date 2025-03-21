@@ -24,28 +24,18 @@ from git import Repo
 
 from transformers.testing_utils import CaptureStdout
 
-
 REPO_PATH = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.append(os.path.join(REPO_PATH, "utils"))
 
 import tests_fetcher  # noqa: E402
-from tests_fetcher import (  # noqa: E402
-    checkout_commit,
-    clean_code,
-    create_reverse_dependency_map,
-    create_reverse_dependency_tree,
-    diff_is_docstring_only,
-    extract_imports,
-    get_all_tests,
-    get_diff,
-    get_module_dependencies,
-    get_tree_starting_at,
-    infer_tests_to_run,
-    init_test_examples_dependencies,
-    parse_commit_message,
-    print_tree_deps_of,
-)
-
+from tests_fetcher import clean_code  # noqa: E402
+from tests_fetcher import (checkout_commit, create_reverse_dependency_map,
+                           create_reverse_dependency_tree,
+                           diff_is_docstring_only, extract_imports,
+                           get_all_tests, get_diff, get_module_dependencies,
+                           get_tree_starting_at, infer_tests_to_run,
+                           init_test_examples_dependencies,
+                           parse_commit_message, print_tree_deps_of)
 
 BERT_MODELING_FILE = "src/transformers/models/bert/modeling_bert.py"
 BERT_MODEL_FILE = """from ...modeling_utils import PreTrainedModel
@@ -102,7 +92,10 @@ def create_tmp_repo(tmp_dir, models=None):
     with open(transformers_dir / "__init__.py", "w") as f:
         init_lines = ["from .utils import cached_file, is_torch_available"]
         init_lines.extend(
-            [f"from .models.{model} import {cls}Config, {cls}Model" for model, cls in zip(models, class_names)]
+            [
+                f"from .models.{model} import {cls}Config, {cls}Model"
+                for model, cls in zip(models, class_names)
+            ]
         )
         f.write("\n".join(init_lines) + "\n")
     with open(transformers_dir / "configuration_utils.py", "w") as f:
@@ -113,7 +106,9 @@ def create_tmp_repo(tmp_dir, models=None):
     utils_dir = tmp_dir / "src" / "transformers" / "utils"
     utils_dir.mkdir(exist_ok=True)
     with open(utils_dir / "__init__.py", "w") as f:
-        f.write("from .hub import cached_file\nfrom .imports import is_torch_available\n")
+        f.write(
+            "from .hub import cached_file\nfrom .imports import is_torch_available\n"
+        )
     with open(utils_dir / "hub.py", "w") as f:
         f.write("import huggingface_hub\n\ncode")
     with open(utils_dir / "imports.py", "w") as f:
@@ -128,7 +123,9 @@ def create_tmp_repo(tmp_dir, models=None):
         model_dir = tmp_dir / "src" / "transformers" / "models" / model
         model_dir.mkdir(parents=True, exist_ok=True)
         with open(model_dir / "__init__.py", "w") as f:
-            f.write(f"from .configuration_{model} import {cls}Config\nfrom .modeling_{model} import {cls}Model\n")
+            f.write(
+                f"from .configuration_{model} import {cls}Config\nfrom .modeling_{model} import {cls}Model\n"
+            )
         with open(model_dir / f"configuration_{model}.py", "w") as f:
             f.write("from ...configuration_utils import PretrainedConfig\ncode")
         with open(model_dir / f"modeling_{model}.py", "w") as f:
@@ -184,7 +181,9 @@ def patch_transformer_repo_path(new_folder):
     finally:
         tests_fetcher.PATH_TO_REPO = old_repo_path
         tests_fetcher.PATH_TO_EXAMPLES = tests_fetcher.PATH_TO_REPO / "examples"
-        tests_fetcher.PATH_TO_TRANFORMERS = tests_fetcher.PATH_TO_REPO / "src/transformers"
+        tests_fetcher.PATH_TO_TRANFORMERS = (
+            tests_fetcher.PATH_TO_REPO / "src/transformers"
+        )
         tests_fetcher.PATH_TO_TESTS = tests_fetcher.PATH_TO_REPO / "tests"
 
 
@@ -212,7 +211,9 @@ class TestFetcherTester(unittest.TestCase):
             tmp_folder = Path(tmp_folder)
             repo = create_tmp_repo(tmp_folder)
             initial_sha = repo.head.commit.hexsha
-            new_sha = commit_changes(BERT_MODELING_FILE, BERT_MODEL_FILE_NEW_DOCSTRING, repo)
+            new_sha = commit_changes(
+                BERT_MODELING_FILE, BERT_MODEL_FILE_NEW_DOCSTRING, repo
+            )
 
             assert repo.head.commit.hexsha == new_sha
             with checkout_commit(repo, initial_sha):
@@ -226,8 +227,14 @@ class TestFetcherTester(unittest.TestCase):
 
     def test_clean_code(self):
         # Clean code removes all strings in triple quotes
-        assert clean_code('"""\nDocstring\n"""\ncode\n"""Long string"""\ncode\n') == "code\ncode"
-        assert clean_code("'''\nDocstring\n'''\ncode\n'''Long string'''\ncode\n'''") == "code\ncode"
+        assert (
+            clean_code('"""\nDocstring\n"""\ncode\n"""Long string"""\ncode\n')
+            == "code\ncode"
+        )
+        assert (
+            clean_code("'''\nDocstring\n'''\ncode\n'''Long string'''\ncode\n'''")
+            == "code\ncode"
+        )
 
         # Clean code removes all comments
         assert clean_code("code\n# Comment\ncode") == "code\ncode"
@@ -238,7 +245,10 @@ class TestFetcherTester(unittest.TestCase):
             tmp_folder = Path(tmp_folder)
             create_tmp_repo(tmp_folder)
             with patch_transformer_repo_path(tmp_folder):
-                assert get_all_tests() == ["tests/models/bert", "tests/test_modeling_common.py"]
+                assert get_all_tests() == [
+                    "tests/models/bert",
+                    "tests/test_modeling_common.py",
+                ]
 
     def test_get_all_tests_on_full_repo(self):
         all_tests = get_all_tests()
@@ -274,7 +284,11 @@ class TestFetcherTester(unittest.TestCase):
             commit_changes(bert_file, BERT_MODEL_FILE_NEW_DOCSTRING, repo)
             assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == []
 
-            commit_changes(bert_file, BERT_MODEL_FILE_NEW_DOCSTRING + "\n# Adding a comment\n", repo)
+            commit_changes(
+                bert_file,
+                BERT_MODEL_FILE_NEW_DOCSTRING + "\n# Adding a comment\n",
+                repo,
+            )
             assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == []
 
             commit_changes(bert_file, BERT_MODEL_FILE_NEW_CODE, repo)
@@ -282,8 +296,14 @@ class TestFetcherTester(unittest.TestCase):
                 "src/transformers/models/bert/modeling_bert.py"
             ]
 
-            commit_changes("src/transformers/utils/hub.py", "import huggingface_hub\n\nnew code", repo)
-            assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == ["src/transformers/utils/hub.py"]
+            commit_changes(
+                "src/transformers/utils/hub.py",
+                "import huggingface_hub\n\nnew code",
+                repo,
+            )
+            assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == [
+                "src/transformers/utils/hub.py"
+            ]
             assert get_diff(repo, repo.head.commit, [initial_commit]) == [
                 "src/transformers/models/bert/modeling_bert.py",
                 "src/transformers/utils/hub.py",
@@ -305,14 +325,20 @@ class TestFetcherTester(unittest.TestCase):
             ]
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
-                assert extract_imports("src/transformers/utils/__init__.py") == expected_utils_imports
+                assert (
+                    extract_imports("src/transformers/utils/__init__.py")
+                    == expected_utils_imports
+                )
 
             with open(tmp_folder / BERT_MODELING_FILE, "w") as f:
                 f.write(
                     "from ...utils import cached_file, is_torch_available\nfrom .configuration_bert import BertConfig\n"
                 )
             expected_bert_imports = [
-                ("src/transformers/utils/__init__.py", ["cached_file", "is_torch_available"]),
+                (
+                    "src/transformers/utils/__init__.py",
+                    ["cached_file", "is_torch_available"],
+                ),
                 ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
             ]
             with patch_transformer_repo_path(tmp_folder):
@@ -325,7 +351,10 @@ class TestFetcherTester(unittest.TestCase):
                 )
             expected_bert_imports = [
                 ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
-                ("src/transformers/utils/__init__.py", ["cached_file", "is_torch_available"]),
+                (
+                    "src/transformers/utils/__init__.py",
+                    ["cached_file", "is_torch_available"],
+                ),
             ]
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
@@ -340,7 +369,10 @@ class TestFetcherTester(unittest.TestCase):
                     "from transformers.utils import cached_file, is_torch_available\nfrom transformers.models.bert.configuration_bert import BertConfig\n"
                 )
             expected_bert_imports = [
-                ("src/transformers/utils/__init__.py", ["cached_file", "is_torch_available"]),
+                (
+                    "src/transformers/utils/__init__.py",
+                    ["cached_file", "is_torch_available"],
+                ),
                 ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
             ]
             with patch_transformer_repo_path(tmp_folder):
@@ -353,7 +385,10 @@ class TestFetcherTester(unittest.TestCase):
                 )
             expected_bert_imports = [
                 ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
-                ("src/transformers/utils/__init__.py", ["cached_file", "is_torch_available"]),
+                (
+                    "src/transformers/utils/__init__.py",
+                    ["cached_file", "is_torch_available"],
+                ),
             ]
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
@@ -365,7 +400,10 @@ class TestFetcherTester(unittest.TestCase):
                 )
             expected_bert_imports = [
                 ("src/transformers/__init__.py", ["BertConfig"]),
-                ("src/transformers/utils/__init__.py", ["cached_file", "is_torch_available"]),
+                (
+                    "src/transformers/utils/__init__.py",
+                    ["cached_file", "is_torch_available"],
+                ),
             ]
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
@@ -381,7 +419,10 @@ class TestFetcherTester(unittest.TestCase):
                 "src/transformers/utils/imports.py",
             ]
             with patch_transformer_repo_path(tmp_folder):
-                assert get_module_dependencies(BERT_MODELING_FILE) == expected_bert_dependencies
+                assert (
+                    get_module_dependencies(BERT_MODELING_FILE)
+                    == expected_bert_dependencies
+                )
 
             expected_test_bert_dependencies = [
                 "tests/test_modeling_common.py",
@@ -407,7 +448,10 @@ class TestFetcherTester(unittest.TestCase):
                 "src/transformers/utils/imports.py",
             ]
             with patch_transformer_repo_path(tmp_folder):
-                assert get_module_dependencies(BERT_MODELING_FILE) == expected_bert_dependencies
+                assert (
+                    get_module_dependencies(BERT_MODELING_FILE)
+                    == expected_bert_dependencies
+                )
 
             # Test with an object non-imported in the init
             create_tmp_repo(tmp_folder)
@@ -421,16 +465,23 @@ class TestFetcherTester(unittest.TestCase):
                 "src/transformers/utils/imports.py",
             ]
             with patch_transformer_repo_path(tmp_folder):
-                assert get_module_dependencies(BERT_MODELING_FILE) == expected_bert_dependencies
+                assert (
+                    get_module_dependencies(BERT_MODELING_FILE)
+                    == expected_bert_dependencies
+                )
 
             # Test with an example
             create_tmp_repo(tmp_folder)
 
-            expected_example_dependencies = ["src/transformers/models/bert/modeling_bert.py"]
+            expected_example_dependencies = [
+                "src/transformers/models/bert/modeling_bert.py"
+            ]
 
             with patch_transformer_repo_path(tmp_folder):
                 assert (
-                    get_module_dependencies("examples/pytorch/text-classification/run_glue.py")
+                    get_module_dependencies(
+                        "examples/pytorch/text-classification/run_glue.py"
+                    )
                     == expected_example_dependencies
                 )
 
@@ -447,21 +498,29 @@ class TestFetcherTester(unittest.TestCase):
                 "src/transformers/models/bert/configuration_bert.py",
                 "src/transformers/models/bert/modeling_bert.py",
             ]
-            assert {f for f, g in tree if g == "src/transformers/__init__.py"} == set(init_edges)
+            assert {f for f, g in tree if g == "src/transformers/__init__.py"} == set(
+                init_edges
+            )
 
             bert_edges = [
                 "src/transformers/modeling_utils.py",
                 "src/transformers/utils/imports.py",
                 "src/transformers/models/bert/configuration_bert.py",
             ]
-            assert {f for f, g in tree if g == "src/transformers/models/bert/modeling_bert.py"} == set(bert_edges)
+            assert {
+                f
+                for f, g in tree
+                if g == "src/transformers/models/bert/modeling_bert.py"
+            } == set(bert_edges)
 
             test_bert_edges = [
                 "tests/test_modeling_common.py",
                 "src/transformers/models/bert/configuration_bert.py",
                 "src/transformers/models/bert/modeling_bert.py",
             ]
-            assert {f for f, g in tree if g == "tests/models/bert/test_modeling_bert.py"} == set(test_bert_edges)
+            assert {
+                f for f, g in tree if g == "tests/models/bert/test_modeling_bert.py"
+            } == set(test_bert_edges)
 
     def test_get_tree_starting_at(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -470,20 +529,37 @@ class TestFetcherTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 edges = create_reverse_dependency_tree()
 
-                bert_tree = get_tree_starting_at("src/transformers/models/bert/modeling_bert.py", edges)
-                config_utils_tree = get_tree_starting_at("src/transformers/configuration_utils.py", edges)
+                bert_tree = get_tree_starting_at(
+                    "src/transformers/models/bert/modeling_bert.py", edges
+                )
+                config_utils_tree = get_tree_starting_at(
+                    "src/transformers/configuration_utils.py", edges
+                )
 
             expected_bert_tree = [
                 "src/transformers/models/bert/modeling_bert.py",
-                [("src/transformers/models/bert/modeling_bert.py", "tests/models/bert/test_modeling_bert.py")],
+                [
+                    (
+                        "src/transformers/models/bert/modeling_bert.py",
+                        "tests/models/bert/test_modeling_bert.py",
+                    )
+                ],
             ]
             assert bert_tree == expected_bert_tree
 
             expected_config_tree = [
                 "src/transformers/configuration_utils.py",
-                [("src/transformers/configuration_utils.py", "src/transformers/models/bert/configuration_bert.py")],
                 [
-                    ("src/transformers/models/bert/configuration_bert.py", "tests/models/bert/test_modeling_bert.py"),
+                    (
+                        "src/transformers/configuration_utils.py",
+                        "src/transformers/models/bert/configuration_bert.py",
+                    )
+                ],
+                [
+                    (
+                        "src/transformers/models/bert/configuration_bert.py",
+                        "tests/models/bert/test_modeling_bert.py",
+                    ),
                     (
                         "src/transformers/models/bert/configuration_bert.py",
                         "src/transformers/models/bert/modeling_bert.py",
@@ -491,7 +567,9 @@ class TestFetcherTester(unittest.TestCase):
                 ],
             ]
             # Order of the edges is random
-            assert [set(v) for v in config_utils_tree] == [set(v) for v in expected_config_tree]
+            assert [set(v) for v in config_utils_tree] == [
+                set(v) for v in expected_config_tree
+            ]
 
     def test_print_tree_deps_of(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -551,7 +629,9 @@ src/transformers/configuration_utils.py
             with patch_transformer_repo_path(tmp_folder):
                 example_deps, all_examples = init_test_examples_dependencies()
                 assert example_deps == expected_example_deps
-                assert {str(f.relative_to(tmp_folder)) for f in all_examples} == expected_examples
+                assert {
+                    str(f.relative_to(tmp_folder)) for f in all_examples
+                } == expected_examples
 
     def test_create_reverse_dependency_map(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -572,7 +652,10 @@ src/transformers/configuration_utils.py
                 "examples/tensorflow/test_tensorflow_examples.py",
                 "examples/tensorflow/text-classification/run_glue.py",
             }
-            assert set(reverse_map["src/transformers/models/bert/modeling_bert.py"]) == expected_bert_deps
+            assert (
+                set(reverse_map["src/transformers/models/bert/modeling_bert.py"])
+                == expected_bert_deps
+            )
 
             # init gets the direct deps (and their recursive deps)
             expected_init_deps = {
@@ -593,7 +676,9 @@ src/transformers/configuration_utils.py
                 "examples/tensorflow/test_tensorflow_examples.py",
                 "examples/tensorflow/text-classification/run_glue.py",
             }
-            assert set(reverse_map["src/transformers/__init__.py"]) == expected_init_deps
+            assert (
+                set(reverse_map["src/transformers/__init__.py"]) == expected_init_deps
+            )
 
             expected_init_deps = {
                 "src/transformers/__init__.py",
@@ -607,7 +692,10 @@ src/transformers/configuration_utils.py
                 "examples/tensorflow/test_tensorflow_examples.py",
                 "examples/tensorflow/text-classification/run_glue.py",
             }
-            assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
+            assert (
+                set(reverse_map["src/transformers/models/bert/__init__.py"])
+                == expected_init_deps
+            )
 
             # Test that with more models init of bert only gets deps to bert.
             create_tmp_repo(tmp_folder, models=["bert", "gpt2"])
@@ -627,7 +715,10 @@ src/transformers/configuration_utils.py
                 "examples/tensorflow/test_tensorflow_examples.py",
                 "examples/tensorflow/text-classification/run_glue.py",
             }
-            assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
+            assert (
+                set(reverse_map["src/transformers/models/bert/__init__.py"])
+                == expected_init_deps
+            )
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
@@ -636,7 +727,11 @@ src/transformers/configuration_utils.py
             models = ["bert", "gpt2"] + [f"bert{i}" for i in range(10)]
             repo = create_tmp_repo(tmp_folder, models=models)
 
-            commit_changes("src/transformers/models/bert/modeling_bert.py", BERT_MODEL_FILE_NEW_CODE, repo)
+            commit_changes(
+                "src/transformers/models/bert/modeling_bert.py",
+                BERT_MODEL_FILE_NEW_CODE,
+                repo,
+            )
 
             example_tests = {
                 "examples/flax/test_flax_examples.py",
@@ -645,7 +740,9 @@ src/transformers/configuration_utils.py
             }
 
             with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                infer_tests_to_run(
+                    tmp_folder / "test-output.txt", diff_with_last_commit=True
+                )
                 with open(tmp_folder / "test-output.txt", "r") as f:
                     tests_to_run = f.read()
                 with open(tmp_folder / "examples_test_list.txt", "r") as f:
@@ -667,11 +764,15 @@ src/transformers/configuration_utils.py
             model_dir.mkdir(exist_ok=True)
 
             with open(model_dir / "__init__.py", "w") as f:
-                f.write("from .configuration_t5 import T5Config\nfrom .modeling_t5 import T5Model\n")
+                f.write(
+                    "from .configuration_t5 import T5Config\nfrom .modeling_t5 import T5Model\n"
+                )
             with open(model_dir / "configuration_t5.py", "w") as f:
                 f.write("from ...configuration_utils import PretrainedConfig\ncode")
             with open(model_dir / "modeling_t5.py", "w") as f:
-                modeling_code = BERT_MODEL_FILE.replace("bert", "t5").replace("Bert", "T5")
+                modeling_code = BERT_MODEL_FILE.replace("bert", "t5").replace(
+                    "Bert", "T5"
+                )
                 f.write(modeling_code)
 
             test_dir = tmp_folder / "tests/models/t5"
@@ -708,7 +809,10 @@ src/transformers/configuration_utils.py
                 with open(tmp_folder / "examples_test_list.txt", "r") as f:
                     example_tests_to_run = f.read()
 
-            expected_tests = [f"tests/models/{name}/test_modeling_{name}.py" for name in models + ["t5"]]
+            expected_tests = [
+                f"tests/models/{name}/test_modeling_{name}.py"
+                for name in models + ["t5"]
+            ]
             expected_tests = set(expected_tests + ["tests/test_modeling_common.py"])
             assert set(tests_to_run.split(" ")) == expected_tests
             assert set(example_tests_to_run.split(" ")) == example_tests
@@ -727,7 +831,9 @@ src/transformers/configuration_utils.py
             )
 
             with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                infer_tests_to_run(
+                    tmp_folder / "test-output.txt", diff_with_last_commit=True
+                )
                 with open(tmp_folder / "test-output.txt", "r") as f:
                     tests_to_run = f.read()
 
@@ -748,7 +854,9 @@ src/transformers/configuration_utils.py
             )
 
             with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                infer_tests_to_run(
+                    tmp_folder / "test-output.txt", diff_with_last_commit=True
+                )
                 with open(tmp_folder / "examples_test_list.txt", "r") as f:
                     example_tests_to_run = f.read()
 
@@ -763,26 +871,80 @@ src/transformers/configuration_utils.py
             )
 
             with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", diff_with_last_commit=True)
+                infer_tests_to_run(
+                    tmp_folder / "test-output.txt", diff_with_last_commit=True
+                )
                 with open(tmp_folder / "examples_test_list.txt", "r") as f:
                     example_tests_to_run = f.read()
 
             assert example_tests_to_run == "examples/pytorch/test_pytorch_examples.py"
 
     def test_parse_commit_message(self):
-        assert parse_commit_message("Normal commit") == {"skip": False, "no_filter": False, "test_all": False}
+        assert parse_commit_message("Normal commit") == {
+            "skip": False,
+            "no_filter": False,
+            "test_all": False,
+        }
 
-        assert parse_commit_message("[skip ci] commit") == {"skip": True, "no_filter": False, "test_all": False}
-        assert parse_commit_message("[ci skip] commit") == {"skip": True, "no_filter": False, "test_all": False}
-        assert parse_commit_message("[skip-ci] commit") == {"skip": True, "no_filter": False, "test_all": False}
-        assert parse_commit_message("[skip_ci] commit") == {"skip": True, "no_filter": False, "test_all": False}
+        assert parse_commit_message("[skip ci] commit") == {
+            "skip": True,
+            "no_filter": False,
+            "test_all": False,
+        }
+        assert parse_commit_message("[ci skip] commit") == {
+            "skip": True,
+            "no_filter": False,
+            "test_all": False,
+        }
+        assert parse_commit_message("[skip-ci] commit") == {
+            "skip": True,
+            "no_filter": False,
+            "test_all": False,
+        }
+        assert parse_commit_message("[skip_ci] commit") == {
+            "skip": True,
+            "no_filter": False,
+            "test_all": False,
+        }
 
-        assert parse_commit_message("[no filter] commit") == {"skip": False, "no_filter": True, "test_all": False}
-        assert parse_commit_message("[no-filter] commit") == {"skip": False, "no_filter": True, "test_all": False}
-        assert parse_commit_message("[no_filter] commit") == {"skip": False, "no_filter": True, "test_all": False}
-        assert parse_commit_message("[filter-no] commit") == {"skip": False, "no_filter": True, "test_all": False}
+        assert parse_commit_message("[no filter] commit") == {
+            "skip": False,
+            "no_filter": True,
+            "test_all": False,
+        }
+        assert parse_commit_message("[no-filter] commit") == {
+            "skip": False,
+            "no_filter": True,
+            "test_all": False,
+        }
+        assert parse_commit_message("[no_filter] commit") == {
+            "skip": False,
+            "no_filter": True,
+            "test_all": False,
+        }
+        assert parse_commit_message("[filter-no] commit") == {
+            "skip": False,
+            "no_filter": True,
+            "test_all": False,
+        }
 
-        assert parse_commit_message("[test all] commit") == {"skip": False, "no_filter": False, "test_all": True}
-        assert parse_commit_message("[all test] commit") == {"skip": False, "no_filter": False, "test_all": True}
-        assert parse_commit_message("[test-all] commit") == {"skip": False, "no_filter": False, "test_all": True}
-        assert parse_commit_message("[all_test] commit") == {"skip": False, "no_filter": False, "test_all": True}
+        assert parse_commit_message("[test all] commit") == {
+            "skip": False,
+            "no_filter": False,
+            "test_all": True,
+        }
+        assert parse_commit_message("[all test] commit") == {
+            "skip": False,
+            "no_filter": False,
+            "test_all": True,
+        }
+        assert parse_commit_message("[test-all] commit") == {
+            "skip": False,
+            "no_filter": False,
+            "test_all": True,
+        }
+        assert parse_commit_message("[all_test] commit") == {
+            "skip": False,
+            "no_filter": False,
+            "test_all": True,
+        }

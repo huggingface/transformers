@@ -21,18 +21,14 @@ import requests
 from PIL import Image
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    cleanup,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
-
+from transformers.testing_utils import (cleanup, require_torch_gpu, slow,
+                                        torch_device)
 
 if is_torch_available():
     import torch
 
-    from transformers import ShieldGemma2ForImageClassification, ShieldGemma2Processor
+    from transformers import (ShieldGemma2ForImageClassification,
+                              ShieldGemma2Processor)
 
 
 @slow

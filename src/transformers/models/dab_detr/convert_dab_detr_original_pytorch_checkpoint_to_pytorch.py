@@ -23,9 +23,9 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import ConditionalDetrImageProcessor, DabDetrConfig, DabDetrForObjectDetection
+from transformers import (ConditionalDetrImageProcessor, DabDetrConfig,
+                          DabDetrForObjectDetection)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -113,11 +113,15 @@ def write_image_processor(model_name, pytorch_dump_folder_path, push_to_hub):
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        image_processor.push_to_hub(repo_id=model_name, commit_message="Add new image processor")
+        image_processor.push_to_hub(
+            repo_id=model_name, commit_message="Add new image processor"
+        )
 
 
 @torch.no_grad()
-def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub):
+def write_model(
+    model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub
+):
     # load modified config. Why? After loading the default config, the backbone kwargs are already set.
     if "dc5" in model_name:
         config = DabDetrConfig(dilation=True)
@@ -133,24 +137,32 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
     if "pat3" in model_name:
         config.num_patterns = 3
         # only when the number of patterns (num_patterns parameter in config) are more than 0 like r50-pat3 or r50dc5-pat3
-        ORIGINAL_TO_CONVERTED_KEY_MAPPING.update({r"transformer.patterns.weight": r"patterns.weight"})
+        ORIGINAL_TO_CONVERTED_KEY_MAPPING.update(
+            {r"transformer.patterns.weight": r"patterns.weight"}
+        )
 
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     # load original model from local path
-    loaded = torch.load(pretrained_model_weights_path, map_location=torch.device("cpu"))["model"]
+    loaded = torch.load(
+        pretrained_model_weights_path, map_location=torch.device("cpu")
+    )["model"]
     # Renaming the original model state dictionary to HF compatibile
     all_keys = list(loaded.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
     state_dict = {}
     for key in all_keys:
         if "backbone.0.body" in key:
-            new_key = key.replace("backbone.0.body", "backbone.conv_encoder.model._backbone")
+            new_key = key.replace(
+                "backbone.0.body", "backbone.conv_encoder.model._backbone"
+            )
             state_dict[new_key] = loaded[key]
         # Q, K, V encoder values mapping
         elif re.search("self_attn.in_proj_(weight|bias)", key):
@@ -164,13 +176,25 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
 
             in_proj_value = loaded.pop(key)
             if "weight" in key:
-                state_dict[f"encoder.layers.{layer_num}.self_attn.q_proj.weight"] = in_proj_value[:256, :]
-                state_dict[f"encoder.layers.{layer_num}.self_attn.k_proj.weight"] = in_proj_value[256:512, :]
-                state_dict[f"encoder.layers.{layer_num}.self_attn.v_proj.weight"] = in_proj_value[-256:, :]
+                state_dict[f"encoder.layers.{layer_num}.self_attn.q_proj.weight"] = (
+                    in_proj_value[:256, :]
+                )
+                state_dict[f"encoder.layers.{layer_num}.self_attn.k_proj.weight"] = (
+                    in_proj_value[256:512, :]
+                )
+                state_dict[f"encoder.layers.{layer_num}.self_attn.v_proj.weight"] = (
+                    in_proj_value[-256:, :]
+                )
             elif "bias" in key:
-                state_dict[f"encoder.layers.{layer_num}.self_attn.q_proj.bias"] = in_proj_value[:256]
-                state_dict[f"encoder.layers.{layer_num}.self_attn.k_proj.bias"] = in_proj_value[256:512]
-                state_dict[f"encoder.layers.{layer_num}.self_attn.v_proj.bias"] = in_proj_value[-256:]
+                state_dict[f"encoder.layers.{layer_num}.self_attn.q_proj.bias"] = (
+                    in_proj_value[:256]
+                )
+                state_dict[f"encoder.layers.{layer_num}.self_attn.k_proj.bias"] = (
+                    in_proj_value[256:512]
+                )
+                state_dict[f"encoder.layers.{layer_num}.self_attn.v_proj.bias"] = (
+                    in_proj_value[-256:]
+                )
         else:
             new_key = new_keys[key]
             state_dict[new_key] = loaded[key]
@@ -195,12 +219,16 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
         model.push_to_hub(repo_id=model_name, commit_message="Add new model")
 
 
-def convert_dab_detr_checkpoint(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub):
+def convert_dab_detr_checkpoint(
+    model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub
+):
     logger.info("Converting image processor...")
     write_image_processor(model_name, pytorch_dump_folder_path, push_to_hub)
 
     logger.info(f"Converting model {model_name}...")
-    write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub)
+    write_model(
+        model_name, pretrained_model_weights_path, pytorch_dump_folder_path, push_to_hub
+    )
 
 
 if __name__ == "__main__":
@@ -219,7 +247,10 @@ if __name__ == "__main__":
         help="The path of the original model weights like: modelzoo/checkpoint.pth",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="DAB_DETR", type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default="DAB_DETR",
+        type=str,
+        help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
         "--push_to_hub",
@@ -229,5 +260,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_dab_detr_checkpoint(
-        args.model_name, args.pretrained_model_weights_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.model_name,
+        args.pretrained_model_weights_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )

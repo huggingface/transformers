@@ -20,18 +20,20 @@ import argparse
 import logging
 
 import datasets
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import (Tokenizer, decoders, normalizers, pre_tokenizers,
+                        processors)
 from tokenizers.models import Unigram
 from tokenizers.trainers import UnigramTrainer
 
 from transformers import AlbertTokenizerFast
 
-
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train a unigram tokenizer on the wikitext dataset.")
+    parser = argparse.ArgumentParser(
+        description="Train a unigram tokenizer on the wikitext dataset."
+    )
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -39,7 +41,10 @@ def parse_args():
         help="Name of the training. Explore datasets at: hf.co/datasets.",
     )
     parser.add_argument(
-        "--dataset_config", type=str, default="wikitext-103-raw-v1", help="Configuration name of the dataset."
+        "--dataset_config",
+        type=str,
+        default="wikitext-103-raw-v1",
+        help="Configuration name of the dataset.",
     )
     parser.add_argument(
         "--trust_remote_code",
@@ -79,7 +84,10 @@ def parse_args():
 
 def main(args):
     dataset = datasets.load_dataset(
-        args.dataset_name, args.dataset_config, split="train", trust_remote_code=args.trust_remote_code
+        args.dataset_name,
+        args.dataset_config,
+        split="train",
+        trust_remote_code=args.trust_remote_code,
     )
 
     if args.limit is not None:
@@ -93,7 +101,9 @@ def main(args):
 
     # Prepare the tokenizer.
     tokenizer = Tokenizer(Unigram())
-    tokenizer.normalizer = normalizers.Sequence([normalizers.Replace("``", '"'), normalizers.Replace("''", '"')])
+    tokenizer.normalizer = normalizers.Sequence(
+        [normalizers.Replace("``", '"'), normalizers.Replace("''", '"')]
+    )
     tokenizer.pre_tokenizer = pre_tokenizers.Metaspace()
 
     # Prepare the trainer.

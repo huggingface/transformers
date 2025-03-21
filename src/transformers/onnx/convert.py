@@ -22,14 +22,8 @@ import numpy as np
 from packaging.version import Version, parse
 
 from ..tokenization_utils_base import PreTrainedTokenizerBase
-from ..utils import (
-    TensorType,
-    is_tf_available,
-    is_torch_available,
-    logging,
-)
+from ..utils import TensorType, is_tf_available, is_torch_available, logging
 from .config import OnnxConfig
-
 
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
@@ -80,7 +74,9 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export_pytorch(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     model: "PreTrainedModel",
     config: OnnxConfig,
     opset: int,
@@ -111,14 +107,18 @@ def export_pytorch(
     """
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
+        raise ValueError(
+            "You cannot provide both a tokenizer and a preprocessor to export the model."
+        )
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info(
+            "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
+        )
         preprocessor = tokenizer
 
     if issubclass(type(model), PreTrainedModel):
@@ -132,14 +132,21 @@ def export_pytorch(
 
             # Check if we need to override certain configuration item
             if config.values_override is not None:
-                logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
-                for override_config_key, override_config_value in config.values_override.items():
+                logger.info(
+                    f"Overriding {len(config.values_override)} configuration item(s)"
+                )
+                for (
+                    override_config_key,
+                    override_config_value,
+                ) in config.values_override.items():
                     logger.info(f"\t- {override_config_key} -> {override_config_value}")
                     setattr(model.config, override_config_key, override_config_value)
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+            model_inputs = config.generate_dummy_inputs(
+                preprocessor, framework=TensorType.PYTORCH
+            )
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
@@ -147,18 +154,25 @@ def export_pytorch(
                 for k, v in model_inputs.items():
                     if isinstance(v, Tuple):
                         model_inputs_device[k] = tuple(
-                            x.to(device) if isinstance(x, torch.Tensor) else None for x in v
+                            x.to(device) if isinstance(x, torch.Tensor) else None
+                            for x in v
                         )
                     elif isinstance(v, List):
                         model_inputs_device[k] = [
-                            tuple(x.to(device) if isinstance(x, torch.Tensor) else None for x in t) for t in v
+                            tuple(
+                                x.to(device) if isinstance(x, torch.Tensor) else None
+                                for x in t
+                            )
+                            for t in v
                         ]
                     else:
                         model_inputs_device[k] = v.to(device)
 
                 model_inputs = model_inputs_device
 
-            inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
+            inputs_match, matched_inputs = ensure_model_and_config_inputs_match(
+                model, model_inputs.keys()
+            )
             onnx_outputs = list(config.outputs.keys())
 
             if not inputs_match:
@@ -214,14 +228,18 @@ def export_tensorflow(
     import tf2onnx
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and preprocessor to export the model.")
+        raise ValueError(
+            "You cannot provide both a tokenizer and preprocessor to export the model."
+        )
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info(
+            "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
+        )
         preprocessor = tokenizer
 
     model.config.return_dict = True
@@ -229,17 +247,25 @@ def export_tensorflow(
     # Check if we need to override certain configuration item
     if config.values_override is not None:
         logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
-        for override_config_key, override_config_value in config.values_override.items():
+        for (
+            override_config_key,
+            override_config_value,
+        ) in config.values_override.items():
             logger.info(f"\t- {override_config_key} -> {override_config_value}")
             setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
-    model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
-    inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
+    model_inputs = config.generate_dummy_inputs(
+        preprocessor, framework=TensorType.TENSORFLOW
+    )
+    inputs_match, matched_inputs = ensure_model_and_config_inputs_match(
+        model, model_inputs.keys()
+    )
     onnx_outputs = list(config.outputs.keys())
 
     input_signature = [
-        tf.TensorSpec([None] * tensor.ndim, dtype=tensor.dtype, name=key) for key, tensor in model_inputs.items()
+        tf.TensorSpec([None] * tensor.ndim, dtype=tensor.dtype, name=key)
+        for key, tensor in model_inputs.items()
     ]
     onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=opset)
     onnx.save(onnx_model, output.as_posix())
@@ -249,7 +275,9 @@ def export_tensorflow(
 
 
 def export(
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     model: Union["PreTrainedModel", "TFPreTrainedModel"],
     config: OnnxConfig,
     opset: int,
@@ -289,14 +317,18 @@ def export(
         raise RuntimeError("`tf2onnx` does not support export on CUDA device.")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
+        raise ValueError(
+            "You cannot provide both a tokenizer and a preprocessor to export the model."
+        )
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info(
+            "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
+        )
         preprocessor = tokenizer
 
     if is_torch_available():
@@ -309,14 +341,26 @@ def export(
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
-        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer, device=device)
+        return export_pytorch(
+            preprocessor,
+            model,
+            config,
+            opset,
+            output,
+            tokenizer=tokenizer,
+            device=device,
+        )
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
-        return export_tensorflow(preprocessor, model, config, opset, output, tokenizer=tokenizer)
+        return export_tensorflow(
+            preprocessor, model, config, opset, output, tokenizer=tokenizer
+        )
 
 
 def validate_model_outputs(
     config: OnnxConfig,
-    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
+    preprocessor: Union[
+        "PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"
+    ],
     reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     onnx_model: Path,
     onnx_named_outputs: List[str],
@@ -328,14 +372,18 @@ def validate_model_outputs(
     logger.info("Validating ONNX model...")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validate the model outputs.")
+        raise ValueError(
+            "You cannot provide both a tokenizer and a preprocessor to validate the model outputs."
+        )
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
         )
-        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info(
+            "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
+        )
         preprocessor = tokenizer
 
     # generate inputs with a different batch_size and seq_len that was used for conversion to properly test
@@ -357,7 +405,9 @@ def validate_model_outputs(
 
     # Create ONNX Runtime session
     options = SessionOptions()
-    session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
+    session = InferenceSession(
+        onnx_model.as_posix(), options, providers=["CPUExecutionProvider"]
+    )
 
     # Compute outputs from the reference model
     if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
@@ -378,14 +428,21 @@ def validate_model_outputs(
             ref_outputs_dict[name] = value
 
     # Create onnxruntime inputs from the reference model inputs
-    reference_model_inputs_onnxruntime = config.generate_dummy_inputs_onnxruntime(reference_model_inputs)
+    reference_model_inputs_onnxruntime = config.generate_dummy_inputs_onnxruntime(
+        reference_model_inputs
+    )
 
     # We flatten potential collection of inputs (i.e. past_keys)
     onnx_inputs = {}
     for name, value in reference_model_inputs_onnxruntime.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
-            onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})
+            onnx_inputs.update(
+                {
+                    tensor_name: pt_tensor.numpy()
+                    for tensor_name, pt_tensor in value.items()
+                }
+            )
         else:
             onnx_inputs[name] = value.numpy()
 
@@ -393,7 +450,9 @@ def validate_model_outputs(
     onnx_outputs = session.run(onnx_named_outputs, onnx_inputs)
 
     # Check we have a subset of the keys into onnx_outputs against ref_outputs
-    ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_named_outputs)
+    ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(
+        onnx_named_outputs
+    )
     if not onnx_outputs_set.issubset(ref_outputs_set):
         logger.info(
             f"\t-[x] ONNX model output names {onnx_outputs_set} do not match reference model {ref_outputs_set}"
@@ -404,7 +463,9 @@ def validate_model_outputs(
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        logger.info(f"\t-[✓] ONNX model output names match reference model ({onnx_outputs_set})")
+        logger.info(
+            f"\t-[✓] ONNX model output names match reference model ({onnx_outputs_set})"
+        )
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
@@ -416,7 +477,9 @@ def validate_model_outputs(
 
         # Shape
         if not ort_value.shape == ref_value.shape:
-            logger.info(f"\t\t-[x] shape {ort_value.shape} doesn't match {ref_value.shape}")
+            logger.info(
+                f"\t\t-[x] shape {ort_value.shape} doesn't match {ref_value.shape}"
+            )
             raise ValueError(
                 "Outputs shape doesn't match between reference model and ONNX exported model: "
                 f"Got {ref_value.shape} (reference) and {ort_value.shape} (ONNX)"
@@ -456,5 +519,9 @@ def ensure_model_and_config_inputs_match(
 
     # Make sure the input order match (VERY IMPORTANT !!!!)
     matching_inputs = forward_inputs_set.intersection(model_inputs_set)
-    ordered_inputs = [parameter for parameter in forward_parameters.keys() if parameter in matching_inputs]
+    ordered_inputs = [
+        parameter
+        for parameter in forward_parameters.keys()
+        if parameter in matching_inputs
+    ]
     return is_ok, ordered_inputs

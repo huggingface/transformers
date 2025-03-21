@@ -21,11 +21,12 @@ import torch
 from transformers import GPT2Config, GPT2Model, load_tf_weights_in_gpt2
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
-
 logging.set_verbosity_info()
 
 
-def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path):
+def convert_gpt2_checkpoint_to_pytorch(
+    gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path
+):
     # Construct model
     if gpt2_config_file == "":
         config = GPT2Config()
@@ -50,10 +51,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--gpt2_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+        "--gpt2_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the TensorFlow checkpoint path.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
         "--gpt2_config_file",
@@ -65,4 +74,6 @@ if __name__ == "__main__":
         ),
     )
     args = parser.parse_args()
-    convert_gpt2_checkpoint_to_pytorch(args.gpt2_checkpoint_path, args.gpt2_config_file, args.pytorch_dump_folder_path)
+    convert_gpt2_checkpoint_to_pytorch(
+        args.gpt2_checkpoint_path, args.gpt2_config_file, args.pytorch_dump_folder_path
+    )

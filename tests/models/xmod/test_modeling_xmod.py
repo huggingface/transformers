@@ -15,28 +15,25 @@
 import unittest
 
 from transformers import XLMRobertaTokenizer, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (require_sentencepiece,
+                                        require_tokenizers, require_torch,
+                                        slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                     ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        XmodConfig,
-        XmodForCausalLM,
-        XmodForMaskedLM,
-        XmodForMultipleChoice,
-        XmodForQuestionAnswering,
-        XmodForSequenceClassification,
-        XmodForTokenClassification,
-        XmodModel,
-    )
-    from transformers.models.xmod.modeling_xmod import XmodEmbeddings, create_position_ids_from_input_ids
+    from transformers import (XmodConfig, XmodForCausalLM, XmodForMaskedLM,
+                              XmodForMultipleChoice, XmodForQuestionAnswering,
+                              XmodForSequenceClassification,
+                              XmodForTokenClassification, XmodModel)
+    from transformers.models.xmod.modeling_xmod import (
+        XmodEmbeddings, create_position_ids_from_input_ids)
 
 
 class XmodModelTester:
@@ -97,19 +94,33 @@ class XmodModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return XmodConfig(
@@ -139,8 +150,12 @@ class XmodModelTester:
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+        encoder_hidden_states = floats_tensor(
+            [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        encoder_attention_mask = ids_tensor(
+            [self.batch_size, self.seq_length], vocab_size=2
+        )
 
         return (
             config,
@@ -155,17 +170,31 @@ class XmodModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = XmodModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -196,9 +225,16 @@ class XmodModelTester:
             token_type_ids=token_type_ids,
             encoder_hidden_states=encoder_hidden_states,
         )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -215,8 +251,15 @@ class XmodModelTester:
         model = XmodForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -278,53 +321,107 @@ class XmodModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = XmodForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = XmodForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = XmodForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = (
+            input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_token_type_ids = (
+            token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_input_mask = (
+            input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = XmodForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -336,8 +433,12 @@ class XmodModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -350,12 +451,18 @@ class XmodModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
 @require_torch
-class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class XmodModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             XmodForCausalLM,
@@ -394,7 +501,10 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         feature_extractor_name,
         processor_name,
     ):
-        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if (
+            pipeline_test_case_name == "QAPipelineTests"
+            and not tokenizer_name.endswith("Fast")
+        ):
             return True
 
         return False
@@ -454,12 +564,16 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         config_and_inputs[0].position_embedding_type = "relative_key"
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -488,7 +602,14 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
         expected_positions = torch.as_tensor(
-            [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
+            [
+                [
+                    0 + model.padding_idx + 1,
+                    1 + model.padding_idx + 1,
+                    2 + model.padding_idx + 1,
+                    model.padding_idx,
+                ]
+            ]
         )
 
         position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
@@ -511,7 +632,9 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             2 + embeddings.padding_idx + 1,
             3 + embeddings.padding_idx + 1,
         ]
-        expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
+        expected_positions = torch.as_tensor(
+            [expected_single_positions, expected_single_positions]
+        )
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
@@ -527,9 +650,13 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_freeze_embeddings_and_language_adapters(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
         model = XmodForMaskedLM(config=config)
-        num_trainable_params_before = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        num_trainable_params_before = sum(
+            p.numel() for p in model.parameters() if p.requires_grad
+        )
         model.freeze_embeddings_and_language_adapters()
-        num_trainable_params_after = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        num_trainable_params_after = sum(
+            p.numel() for p in model.parameters() if p.requires_grad
+        )
         self.assertLess(num_trainable_params_after, num_trainable_params_before)
 
 
@@ -543,22 +670,66 @@ class XmodModelIntegrationTest(unittest.TestCase):
 
         # language en_XX
         model.set_default_language("en_XX")
-        input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
+        input_ids = torch.tensor(
+            [[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]]
+        )
         # The dog is cute and lives in the garden house
-        expected_output_shape = torch.Size((1, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_shape = torch.Size(
+            (1, 12, 768)
+        )  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = torch.tensor(
-            [[-0.2394, -0.0036, 0.1252, -0.0087, 0.1325, 0.0580, -0.2049, -0.1978, -0.1223, 0.0648, -0.2599, -0.3724]]
+            [
+                [
+                    -0.2394,
+                    -0.0036,
+                    0.1252,
+                    -0.0087,
+                    0.1325,
+                    0.0580,
+                    -0.2049,
+                    -0.1978,
+                    -0.1223,
+                    0.0648,
+                    -0.2599,
+                    -0.3724,
+                ]
+            ]
         )
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3
+        )
 
         # language de_DE
         model.set_default_language("de_DE")
-        input_ids = torch.tensor([[0, 1310, 49083, 443, 269, 71, 5486, 165, 60429, 660, 23, 2315, 58761, 18391, 5, 2]])
+        input_ids = torch.tensor(
+            [
+                [
+                    0,
+                    1310,
+                    49083,
+                    443,
+                    269,
+                    71,
+                    5486,
+                    165,
+                    60429,
+                    660,
+                    23,
+                    2315,
+                    58761,
+                    18391,
+                    5,
+                    2,
+                ]
+            ]
+        )
         # Der Hund ist niedlich und wohnt in einem Gartenhaus.
-        expected_output_shape = torch.Size((1, 16, 768))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_shape = torch.Size(
+            (1, 16, 768)
+        )  # batch_size, sequence_length, embedding_vector_dim
         # fmt: off
         expected_output_values_last_dim = torch.tensor(
             [[0.0162, 0.0075, -0.1882, 0.2335, -0.0952, -0.3994, -0.0317, -0.1174, 0.0177, 0.4280, -0.0240, -0.2138,
@@ -568,7 +739,9 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3
+        )
 
     @slow
     def test_xmod_large_prenorm(self):
@@ -576,9 +749,13 @@ class XmodModelIntegrationTest(unittest.TestCase):
 
         # language en_XX
         model.set_default_language("en_XX")
-        input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
+        input_ids = torch.tensor(
+            [[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]]
+        )
         # The dog is cute and lives in the garden house
-        expected_output_shape = torch.Size((1, 12, 1024))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_shape = torch.Size(
+            (1, 12, 1024)
+        )  # batch_size, sequence_length, embedding_vector_dim
         # fmt: off
         expected_output_values_last_dim = torch.tensor(
             [[-0.0121, -0.0194, -0.0240, -0.0160, -0.0205, -0.0159, -0.0243, -0.0206, -0.0161, -0.0335, -0.0196,
@@ -588,13 +765,38 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3
+        )
 
         # language de_DE
         model.set_default_language("de_DE")
-        input_ids = torch.tensor([[0, 1310, 49083, 443, 269, 71, 5486, 165, 60429, 660, 23, 2315, 58761, 18391, 5, 2]])
+        input_ids = torch.tensor(
+            [
+                [
+                    0,
+                    1310,
+                    49083,
+                    443,
+                    269,
+                    71,
+                    5486,
+                    165,
+                    60429,
+                    660,
+                    23,
+                    2315,
+                    58761,
+                    18391,
+                    5,
+                    2,
+                ]
+            ]
+        )
         # Der Hund ist niedlich und wohnt in einem Gartenhaus.
-        expected_output_shape = torch.Size((1, 16, 1024))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_shape = torch.Size(
+            (1, 16, 1024)
+        )  # batch_size, sequence_length, embedding_vector_dim
         # fmt: off
         expected_output_values_last_dim = torch.tensor(
             [[-0.0120, -0.0262, -0.0253, -0.0112, -0.0128, -0.0164, -0.0080, -0.0081, -0.0192, -0.0117, -0.0170,
@@ -604,7 +806,9 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3
+        )
 
     @slow
     def test_multilingual_batch(self):
@@ -618,7 +822,9 @@ class XmodModelIntegrationTest(unittest.TestCase):
         ])
         # fmt: on
         lang_ids = torch.LongTensor([0, 8, 8, 0])
-        expected_output_shape = torch.Size((4, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
+        expected_output_shape = torch.Size(
+            (4, 12, 768)
+        )  # batch_size, sequence_length, embedding_vector_dim
         # fmt: off
         expected_output_values_last_dim = torch.tensor([
             [-0.2394, -0.0036, 0.1252, -0.0087, 0.1325, 0.0580, -0.2049, -0.1978, -0.1223, 0.0648, -0.2599, -0.3724],
@@ -630,12 +836,16 @@ class XmodModelIntegrationTest(unittest.TestCase):
         output = model(input_ids, lang_ids=lang_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3
+        )
 
     @slow
     def test_end_to_end_mask_fill(self):
         tokenizer = XLMRobertaTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
-        model = XmodForMaskedLM.from_pretrained("facebook/xmod-base", default_language="en_XX")
+        model = XmodForMaskedLM.from_pretrained(
+            "facebook/xmod-base", default_language="en_XX"
+        )
         model.to(torch_device)
 
         sentences = [
@@ -654,21 +864,31 @@ class XmodModelIntegrationTest(unittest.TestCase):
         _, predictions = probs.topk(1)
         predictions = predictions.squeeze(-1)
 
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(
+            torch_device
+        )
         output_non_padded = model(input_ids=inputs_non_padded)
         probs_non_padded = output_non_padded.logits.softmax(dim=-1)
         _, predictions_non_padded = probs_non_padded.topk(1)
         predictions_non_padded = predictions_non_padded.squeeze(-1)
 
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(
+            torch_device
+        )
         output_padded = model(input_ids=inputs_padded)
         probs_padded = output_padded.logits.softmax(dim=-1)
         _, predictions_padded = probs_padded.topk(1)
         predictions_padded = predictions_padded.squeeze(-1)
 
-        batch_out_sentence = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(predictions_non_padded[0], skip_special_tokens=True)
-        padded_sentence = tokenizer.decode(predictions_padded[0], skip_special_tokens=True)
+        batch_out_sentence = tokenizer.batch_decode(
+            predictions, skip_special_tokens=True
+        )
+        non_padded_sentence = tokenizer.decode(
+            predictions_non_padded[0], skip_special_tokens=True
+        )
+        padded_sentence = tokenizer.decode(
+            predictions_padded[0], skip_special_tokens=True
+        )
 
         expected_output_sentence = [
             "Hello, my dog is a little girl.",

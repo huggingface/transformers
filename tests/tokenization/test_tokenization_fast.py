@@ -20,7 +20,8 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, LlamaTokenizerFast, PreTrainedTokenizerFast
+from transformers import (AutoTokenizer, LlamaTokenizerFast,
+                          PreTrainedTokenizerFast)
 from transformers.testing_utils import require_tokenizers
 
 from ..test_tokenization_common import TokenizerTesterMixin
@@ -34,15 +35,22 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_vocab_key = "tokenizer_file"
 
     def setUp(self):
-        self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
+        self.test_rust_tokenizer = (
+            False  # because we don't have pretrained_vocab_files_map
+        )
         super().setUp()
         self.test_rust_tokenizer = True
 
-        model_paths = ["robot-test/dummy-tokenizer-fast", "robot-test/dummy-tokenizer-wordlevel"]
+        model_paths = [
+            "robot-test/dummy-tokenizer-fast",
+            "robot-test/dummy-tokenizer-wordlevel",
+        ]
         self.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
 
         # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
-        self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
+        self.tokenizers_list = [
+            (PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths
+        ]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
         tokenizer.save_pretrained(self.tmpdirname)
@@ -71,11 +79,15 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_additional_special_tokens_serialization(self):
         pass
 
-    @unittest.skip(reason="PreTrainedTokenizerFast is the only tokenizer that is not linked to any model")
+    @unittest.skip(
+        reason="PreTrainedTokenizerFast is the only tokenizer that is not linked to any model"
+    )
     def test_prepare_for_model(self):
         pass
 
-    @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
+    @unittest.skip(
+        reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature"
+    )
     def test_rust_tokenizer_signature(self):
         pass
 
@@ -86,7 +98,9 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 try:
                     self.tmpdirname = tempfile.mkdtemp()
-                    tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                    tokenizer = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, **kwargs
+                    )
 
                     tokenizer.save_pretrained(self.tmpdirname)
                     super().test_training_new_tokenizer()
@@ -103,7 +117,9 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 try:
                     self.tmpdirname = tempfile.mkdtemp()
-                    tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                    tokenizer = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, **kwargs
+                    )
 
                     tokenizer.save_pretrained(self.tmpdirname)
                     super().test_training_new_tokenizer_with_special_tokens_change()
@@ -114,10 +130,14 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
                     self.tmpdirname = tmpdirname_orig
 
     def test_training_new_tokenizer_with_bytelevel(self):
-        tokenizer = self.rust_tokenizer_class.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer = self.rust_tokenizer_class.from_pretrained(
+            self.bytelevel_bpe_model_name
+        )
 
         toy_text_iterator = ("a" for _ in range(1000))
-        new_tokenizer = tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        new_tokenizer = tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )
 
         encoding_ids = new_tokenizer.encode("a🤗")
         self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
@@ -125,11 +145,16 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_init_from_tokenizers_model(self):
         from tokenizers import Tokenizer
 
-        sentences = ["Hello, y'all!", "How are you 😁 ? There should not be any issue right?"]
+        sentences = [
+            "Hello, y'all!",
+            "How are you 😁 ? There should not be any issue right?",
+        ]
 
         tokenizer = Tokenizer.from_pretrained("google-t5/t5-base")
         # Enable padding
-        tokenizer.enable_padding(pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=8)
+        tokenizer.enable_padding(
+            pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=8
+        )
         self.assertEqual(
             tokenizer.padding,
             {
@@ -153,9 +178,17 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(tok.init_kwargs["pad_to_multiple_of"], 8)
             self.assertEqual(tok(sentences, padding = True), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1, 0, 0, 0, 0,0, 0, 0, 0],[ 571, 33, 25, 3, 2, 3, 58, 290, 225, 59, 36, 136, 962, 269, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
 
-        tokenizer.enable_truncation(8, stride=0, strategy="longest_first", direction="right")
+        tokenizer.enable_truncation(
+            8, stride=0, strategy="longest_first", direction="right"
+        )
         self.assertEqual(
-            tokenizer.truncation, {"max_length": 8, "stride": 0, "strategy": "longest_first", "direction": "right"}
+            tokenizer.truncation,
+            {
+                "max_length": 8,
+                "stride": 0,
+                "strategy": "longest_first",
+                "direction": "right",
+            },
         )
         fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
         tmpdirname = tempfile.mkdtemp()
@@ -217,7 +250,9 @@ class TokenizerVersioningTest(unittest.TestCase):
             # Hack to save this in the tokenizer_config.json
             tokenizer.init_kwargs["fast_tokenizer_files"] = ["tokenizer.4.0.0.json"]
             tokenizer.save_pretrained(tmp_dir)
-            json.dump(json_tokenizer, open(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), "w"))
+            json.dump(
+                json_tokenizer, open(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), "w")
+            )
 
             # This should pick the new tokenizer file as the version of Transformers is > 4.0.0
             new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
@@ -227,7 +262,10 @@ class TokenizerVersioningTest(unittest.TestCase):
 
             # Will need to be adjusted if we reach v42 and this test is still here.
             # Should pick the old tokenizer file as the version of Transformers is < 4.0.0
-            shutil.move(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), os.path.join(tmp_dir, "tokenizer.42.0.0.json"))
+            shutil.move(
+                os.path.join(tmp_dir, "tokenizer.4.0.0.json"),
+                os.path.join(tmp_dir, "tokenizer.42.0.0.json"),
+            )
             tokenizer.init_kwargs["fast_tokenizer_files"] = ["tokenizer.42.0.0.json"]
             tokenizer.save_pretrained(tmp_dir)
             new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
@@ -260,13 +298,17 @@ class ReduceMutableBorrowTests(unittest.TestCase):
     def test_async_share_tokenizer(self):
         # See https://github.com/huggingface/transformers/pull/12550
         # and https://github.com/huggingface/tokenizers/issues/537
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-wordlevel")
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            "robot-test/dummy-tokenizer-wordlevel"
+        )
         text = "The Matrix is a 1999 science fiction action film."
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(self.fetch, tokenizer, text) for i in range(10)]
             return_value = [future.result() for future in futures]
-            self.assertEqual(return_value, [[1, 10, 0, 8, 0, 18, 0, 0, 0, 2] for i in range(10)])
+            self.assertEqual(
+                return_value, [[1, 10, 0, 8, 0, 18, 0, 0, 0, 2] for i in range(10)]
+            )
 
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")

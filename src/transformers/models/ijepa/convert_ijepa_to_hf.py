@@ -26,13 +26,8 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import (
-    IJepaConfig,
-    IJepaModel,
-    ViTImageProcessor,
-)
+from transformers import IJepaConfig, IJepaModel, ViTImageProcessor
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -97,16 +92,24 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[
+            : config.hidden_size
         ]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
         state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[
+            -config.hidden_size :
+        ]
 
 
 def rename_key(dct, old, new):
@@ -163,8 +166,12 @@ def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_
 
     # Load original checkpoint
     checkpoint_url = checkpoint_mapping[model_name]
-    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["encoder"]
-    original_state_dict = {k.replace("module.", ""): v for k, v in original_state_dict.items()}
+    original_state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu"
+    )["encoder"]
+    original_state_dict = {
+        k.replace("module.", ""): v for k, v in original_state_dict.items()
+    }
 
     # Rename keys
     state_dict = original_state_dict.copy()
@@ -188,16 +195,32 @@ def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_
 
         expected_slices = {
             "ijepa_vith14_1k": torch.Tensor(
-                [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+                [
+                    [-0.0621, -0.0054, -2.7513],
+                    [-0.1952, 0.0909, -3.9536],
+                    [0.0942, -0.0331, -1.2833],
+                ]
             ),
             "ijepa_vith14_22k": torch.Tensor(
-                [[0.0358, -0.0045, -0.2154], [0.0418, -0.0246, 0.0108], [0.2529, -0.0345, -0.0246]]
+                [
+                    [0.0358, -0.0045, -0.2154],
+                    [0.0418, -0.0246, 0.0108],
+                    [0.2529, -0.0345, -0.0246],
+                ]
             ),
             "ijepa_vith16_1k": torch.Tensor(
-                [[0.5145, -0.1259, 0.0615], [0.1132, 0.0028, -0.0496], [1.1586, -0.0056, -0.0387]]
+                [
+                    [0.5145, -0.1259, 0.0615],
+                    [0.1132, 0.0028, -0.0496],
+                    [1.1586, -0.0056, -0.0387],
+                ]
             ),
             "ijepa_vitg16_22k": torch.Tensor(
-                [[0.0512, -0.0510, -0.0649], [0.1972, 0.0380, -0.0790], [0.1667, -0.0834, -0.1240]]
+                [
+                    [0.0512, -0.0510, -0.0649],
+                    [0.1972, 0.0380, -0.0790],
+                    [0.1667, -0.0834, -0.1240],
+                ]
             ),
         }
 
@@ -210,12 +233,18 @@ def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_
     if output_dir:
         Path(output_dir).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {output_dir}")
-        image_processor.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        image_processor.save_pretrained(
+            output_dir, safe_serialization=safe_serialization
+        )
         model.save_pretrained(output_dir, safe_serialization=safe_serialization)
 
     if push_to_hub:
-        image_processor.push_to_hub(repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization)
-        model.push_to_hub(repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization)
+        image_processor.push_to_hub(
+            repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization
+        )
+        model.push_to_hub(
+            repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization
+        )
 
     if output_dir:
         del model, state_dict
@@ -247,7 +276,10 @@ def main():
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+        "--safe_serialization",
+        default=True,
+        type=bool,
+        help="Whether or not to save using `safetensors`.",
     )
     parser.add_argument(
         "--push_to_hub",
@@ -255,12 +287,20 @@ def main():
         help="Whether or not to push the model to the 🤗 Hub.",
     )
     parser.add_argument(
-        "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
+        "--verify_logits",
+        action="store_false",
+        help="Whether or not to verify logits after conversion.",
     )
 
     parser.set_defaults()
     args = parser.parse_args()
-    write_model(args.model_name, args.output_dir, args.safe_serialization, args.push_to_hub, args.verify_logits)
+    write_model(
+        args.model_name,
+        args.output_dir,
+        args.safe_serialization,
+        args.push_to_hub,
+        args.verify_logits,
+    )
 
 
 if __name__ == "__main__":

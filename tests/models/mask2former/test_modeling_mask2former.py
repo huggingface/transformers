@@ -19,29 +19,25 @@ import unittest
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers import (Mask2FormerConfig, is_torch_available,
+                          is_vision_available)
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from transformers.testing_utils import (
-    require_timm,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_torch_multi_gpu,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_timm, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16,
+                                        require_torch_multi_gpu,
+                                        require_vision, slow, torch_device)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
+    from transformers import (Mask2FormerForUniversalSegmentation,
+                              Mask2FormerModel)
 
     if is_vision_available():
         from transformers import Mask2FormerImageProcessor
@@ -81,16 +77,24 @@ class Mask2FormerModelTester:
         self.num_hidden_layers = num_hidden_layers
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
-            torch_device
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.min_size, self.max_size]
+        ).to(torch_device)
+
+        pixel_mask = torch.ones(
+            [self.batch_size, self.min_size, self.max_size], device=torch_device
         )
 
-        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
-
         mask_labels = (
-            torch.rand([self.batch_size, self.num_labels, self.min_size, self.max_size], device=torch_device) > 0.5
+            torch.rand(
+                [self.batch_size, self.num_labels, self.min_size, self.max_size],
+                device=torch_device,
+            )
+            > 0.5
         ).float()
-        class_labels = (torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5).long()
+        class_labels = (
+            torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5
+        ).long()
 
         config = self.get_config()
         return config, pixel_values, pixel_mask, mask_labels, class_labels
@@ -133,11 +137,19 @@ class Mask2FormerModelTester:
         pixel_decoder_hidden_states = output.pixel_decoder_hidden_states
         transformer_decoder_hidden_states = output.transformer_decoder_hidden_states
 
-        self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config.depths))
-        self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone_config.depths))
-        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_layers)
+        self.parent.assertTrue(
+            len(encoder_hidden_states), len(config.backbone_config.depths)
+        )
+        self.parent.assertTrue(
+            len(pixel_decoder_hidden_states), len(config.backbone_config.depths)
+        )
+        self.parent.assertTrue(
+            len(transformer_decoder_hidden_states), config.decoder_layers
+        )
 
-    def create_and_check_mask2former_model(self, config, pixel_values, pixel_mask, output_hidden_states=False):
+    def create_and_check_mask2former_model(
+        self, config, pixel_values, pixel_mask, output_hidden_states=False
+    ):
         with torch.no_grad():
             model = Mask2FormerModel(config=config)
             model.to(torch_device)
@@ -166,18 +178,26 @@ class Mask2FormerModelTester:
 
         def comm_check_on_output(result):
             # let's still check that all the required stuff is there
-            self.parent.assertTrue(result.transformer_decoder_last_hidden_state is not None)
+            self.parent.assertTrue(
+                result.transformer_decoder_last_hidden_state is not None
+            )
             self.parent.assertTrue(result.pixel_decoder_last_hidden_state is not None)
             self.parent.assertTrue(result.encoder_last_hidden_state is not None)
             # okay, now we need to check the logits shape
             # due to the encoder compression, masks have a //4 spatial size
             self.parent.assertEqual(
                 result.masks_queries_logits.shape,
-                (self.batch_size, self.num_queries, self.min_size // 4, self.max_size // 4),
+                (
+                    self.batch_size,
+                    self.num_queries,
+                    self.min_size // 4,
+                    self.max_size // 4,
+                ),
             )
             # + 1 for null class
             self.parent.assertEqual(
-                result.class_queries_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1)
+                result.class_queries_logits.shape,
+                (self.batch_size, self.num_queries, self.num_labels + 1),
             )
 
         with torch.no_grad():
@@ -187,7 +207,10 @@ class Mask2FormerModelTester:
             comm_check_on_output(result)
 
             result = model(
-                pixel_values=pixel_values, pixel_mask=pixel_mask, mask_labels=mask_labels, class_labels=class_labels
+                pixel_values=pixel_values,
+                pixel_mask=pixel_mask,
+                mask_labels=mask_labels,
+                class_labels=class_labels,
             )
 
         comm_check_on_output(result)
@@ -198,8 +221,14 @@ class Mask2FormerModelTester:
 
 @require_torch
 class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
+    all_model_classes = (
+        (Mask2FormerModel, Mask2FormerForUniversalSegmentation)
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
+    )
 
     is_encoder_decoder = False
     test_pruning = False
@@ -209,18 +238,24 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = Mask2FormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Mask2FormerConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Mask2FormerConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_mask2former_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_mask2former_model(config, **inputs, output_hidden_states=False)
+        self.model_tester.create_and_check_mask2former_model(
+            config, **inputs, output_hidden_states=False
+        )
 
     def test_mask2former_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mask2former_instance_segmentation_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_mask2former_instance_segmentation_head_model(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Mask2Former does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -266,7 +301,9 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def test_hidden_states_output(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_mask2former_model(config, **inputs, output_hidden_states=True)
+        self.model_tester.create_and_check_mask2former_model(
+            config, **inputs, output_hidden_states=True
+        )
 
     def test_attention_outputs(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -281,25 +318,33 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.skipTest(reason="model_tester.is_training is set to False")
 
         model_class = self.all_model_classes[1]
-        config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values, pixel_mask, mask_labels, class_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
 
         model = model_class(config)
         model.to(torch_device)
         model.train()
 
-        loss = model(pixel_values, mask_labels=mask_labels, class_labels=class_labels).loss
+        loss = model(
+            pixel_values, mask_labels=mask_labels, class_labels=class_labels
+        ).loss
         loss.backward()
 
     def test_retain_grad_hidden_states_attentions(self):
         model_class = self.all_model_classes[1]
-        config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values, pixel_mask, mask_labels, class_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
         config.output_hidden_states = True
         config.output_attentions = True
 
         model = model_class(config).to(torch_device)
         model.train()
 
-        outputs = model(pixel_values, mask_labels=mask_labels, class_labels=class_labels)
+        outputs = model(
+            pixel_values, mask_labels=mask_labels, class_labels=class_labels
+        )
 
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_hidden_states.retain_grad()
@@ -336,9 +381,13 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
             if model.__class__.__name__ == "Mask2FormerModel":
-                self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+                self.assertEqual(
+                    model.pixel_level_module.encoder.out_indices, [1, 2, 3]
+                )
             elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
-                self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+                self.assertEqual(
+                    model.model.pixel_level_module.encoder.out_indices, [1, 2, 3]
+                )
 
         # Load a HF backbone
         config.backbone = "microsoft/resnet-18"
@@ -347,9 +396,13 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
             if model.__class__.__name__ == "Mask2FormerModel":
-                self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+                self.assertEqual(
+                    model.pixel_level_module.encoder.out_indices, [1, 2, 3]
+                )
             elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
-                self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+                self.assertEqual(
+                    model.model.pixel_level_module.encoder.out_indices, [1, 2, 3]
+                )
 
 
 TOLERANCE = 1e-4
@@ -370,10 +423,16 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return (
+            Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints)
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_no_head(self):
-        model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
+        model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(
+            torch_device
+        )
         image_processor = self.default_image_processor
         image = prepare_img()
         inputs = image_processor(image, return_tensors="pt").to(torch_device)
@@ -387,34 +446,56 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
-            [[-0.2790, -1.0717, -1.1668], [-0.5128, -0.3128, -0.4987], [-0.5832, 0.1971, -0.0197]]
+            [
+                [-0.2790, -1.0717, -1.1668],
+                [-0.5128, -0.3128, -0.4987],
+                [-0.5832, 0.1971, -0.0197],
+            ]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
-                outputs.encoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
+                outputs.encoder_last_hidden_state[0, 0, :3, :3],
+                expected_slice_hidden_state,
+                atol=TOLERANCE,
             )
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[0.8973, 1.1847, 1.1776], [1.1934, 1.5040, 1.5128], [1.1153, 1.4486, 1.4951]]
+            [
+                [0.8973, 1.1847, 1.1776],
+                [1.1934, 1.5040, 1.5128],
+                [1.1153, 1.4486, 1.4951],
+            ]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
-                outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
+                outputs.pixel_decoder_last_hidden_state[0, 0, :3, :3],
+                expected_slice_hidden_state,
+                atol=TOLERANCE,
             )
         )
 
         expected_slice_hidden_state = torch.tensor(
-            [[2.1152, 1.7000, -0.8603], [1.5808, 1.8004, -0.9353], [1.6043, 1.7495, -0.5999]]
+            [
+                [2.1152, 1.7000, -0.8603],
+                [1.5808, 1.8004, -0.9353],
+                [1.6043, 1.7495, -0.5999],
+            ]
         ).to(torch_device)
         self.assertTrue(
             torch.allclose(
-                outputs.transformer_decoder_last_hidden_state[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
+                outputs.transformer_decoder_last_hidden_state[0, :3, :3],
+                expected_slice_hidden_state,
+                atol=TOLERANCE,
             )
         )
 
     def test_inference_universal_segmentation_head(self):
-        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = (
+            Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device)
+            .eval()
+        )
         image_processor = self.default_image_processor
         image = prepare_img()
         inputs = image_processor(image, return_tensors="pt").to(torch_device)
@@ -429,7 +510,8 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         # masks_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
-            masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
+            masks_queries_logits.shape,
+            (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4),
         )
         expected_slice = [
             [-8.7839, -9.0056, -8.8121],
@@ -437,10 +519,18 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             [-6.6105, -6.3427, -6.4675],
         ]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
-        torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            masks_queries_logits[0, 0, :3, :3],
+            expected_slice,
+            rtol=TOLERANCE,
+            atol=TOLERANCE,
+        )
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
-        self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
+        self.assertEqual(
+            class_queries_logits.shape,
+            (1, model.config.num_queries, model.config.num_labels + 1),
+        )
         expected_slice = torch.tensor(
             [
                 [1.8324, -8.0835, -4.1922],
@@ -449,7 +539,10 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         torch.testing.assert_close(
-            outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+            outputs.class_queries_logits[0, :3, :3],
+            expected_slice,
+            rtol=TOLERANCE,
+            atol=TOLERANCE,
         )
 
     @require_torch_accelerator
@@ -462,18 +555,27 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        inputs = image_processor(image, return_tensors="pt").to(
+            torch_device, dtype=torch.float16
+        )
 
         with torch.no_grad():
             _ = model(**inputs)
 
     def test_with_segmentation_maps_and_loss(self):
-        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = (
+            Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device)
+            .eval()
+        )
         image_processor = self.default_image_processor
 
         inputs = image_processor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
-            segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
+            segmentation_maps=[
+                np.zeros((384, 384)).astype(np.float32),
+                np.zeros((384, 384)).astype(np.float32),
+            ],
             return_tensors="pt",
         )
 
@@ -489,7 +591,11 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
-        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        model = (
+            Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device)
+            .eval()
+        )
         image_processor = self.default_image_processor
         image = prepare_img()
         inputs = image_processor(image, return_tensors="pt").to(torch_device)
@@ -501,12 +607,26 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         )
         with torch.no_grad():
             eager_outputs = model(**inputs)
-            exported_outputs = exported_program.module().forward(inputs["pixel_values"], inputs["pixel_mask"])
-        self.assertEqual(eager_outputs.masks_queries_logits.shape, exported_outputs.masks_queries_logits.shape)
-        torch.testing.assert_close(
-            eager_outputs.masks_queries_logits, exported_outputs.masks_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
+            exported_outputs = exported_program.module().forward(
+                inputs["pixel_values"], inputs["pixel_mask"]
+            )
+        self.assertEqual(
+            eager_outputs.masks_queries_logits.shape,
+            exported_outputs.masks_queries_logits.shape,
         )
-        self.assertEqual(eager_outputs.class_queries_logits.shape, exported_outputs.class_queries_logits.shape)
         torch.testing.assert_close(
-            eager_outputs.class_queries_logits, exported_outputs.class_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
+            eager_outputs.masks_queries_logits,
+            exported_outputs.masks_queries_logits,
+            rtol=TOLERANCE,
+            atol=TOLERANCE,
+        )
+        self.assertEqual(
+            eager_outputs.class_queries_logits.shape,
+            exported_outputs.class_queries_logits.shape,
+        )
+        torch.testing.assert_close(
+            eager_outputs.class_queries_logits,
+            exported_outputs.class_queries_logits,
+            rtol=TOLERANCE,
+            atol=TOLERANCE,
         )

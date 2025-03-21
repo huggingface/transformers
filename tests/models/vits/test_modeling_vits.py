@@ -23,26 +23,16 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 from transformers import PretrainedConfig, VitsConfig
-from transformers.testing_utils import (
-    is_flaky,
-    is_torch_available,
-    require_torch,
-    require_torch_fp16,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (is_flaky, is_torch_available,
+                                        require_torch, require_torch_fp16,
+                                        require_torch_multi_gpu, slow,
+                                        torch_device)
 from transformers.trainer_utils import set_seed
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    global_rng,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, global_rng, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -57,7 +47,12 @@ GENERATION_CONFIG_NAME = "generation_config.json"
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+        if (
+            "_range" in key
+            or "_std" in key
+            or "initializer_factor" in key
+            or "layer_scale" in key
+        ):
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -110,7 +105,9 @@ class VitsModelTester:
         self.resblock_dilation_sizes = resblock_dilation_sizes
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(2)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
@@ -158,7 +155,9 @@ class VitsModelTester:
 class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (VitsModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
+        {"feature-extraction": VitsModel, "text-to-audio": VitsModel}
+        if is_torch_available()
+        else {}
     )
     is_encoder_decoder = False
     test_pruning = False
@@ -253,7 +252,9 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -282,13 +283,19 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
                 set_seed(0)
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
                 set_seed(0)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -300,7 +307,9 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     else:
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -321,31 +330,58 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
             if self.has_attentions:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(
-                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                    model, tuple_inputs, dict_inputs, {"output_attentions": True}
+                )
+
+                tuple_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                dict_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_attentions": True}
+                )
+
+                tuple_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                dict_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                check_equivalence(
+                    model,
+                    tuple_inputs,
+                    dict_inputs,
+                    {"output_hidden_states": True, "output_attentions": True},
                 )
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass
@@ -376,14 +412,17 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 # the config file (and the generation config file, if it can generate) should be saved
                 self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
                 self.assertEqual(
-                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                    model.can_generate(),
+                    os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME)),
                 )
 
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
                     set_seed(0)
-                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                    second = model(**self._prepare_for_class(inputs_dict, model_class))[
+                        0
+                    ]
 
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
@@ -418,7 +457,9 @@ class VitsModelIntegrationTests(unittest.TestCase):
         set_seed(555)  # make deterministic
 
         input_text = "Mister quilter is the apostle of the middle classes and we are glad to welcome his gospel!"
-        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(
+            torch_device
+        )
 
         with torch.no_grad():
             outputs = model(input_ids)
@@ -434,14 +475,21 @@ class VitsModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.waveform[0, 10000:10030].cpu(),
+            EXPECTED_LOGITS,
+            rtol=1e-4,
+            atol=1e-4,
+        )
 
     @require_torch_fp16
     def test_forward_fp16(self):
         # GPU gives different results than CPU
         torch_device = "cpu"
 
-        model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16)
+        model = VitsModel.from_pretrained(
+            "facebook/mms-tts-eng", torch_dtype=torch.float16
+        )
         model.to(torch_device)
 
         tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
@@ -449,7 +497,9 @@ class VitsModelIntegrationTests(unittest.TestCase):
         set_seed(555)  # make deterministic
 
         input_text = "Mister quilter is the apostle of the middle classes and we are glad to welcome his gospel!"
-        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(
+            torch_device
+        )
 
         with torch.no_grad():
             outputs = model(input_ids)
@@ -465,4 +515,9 @@ class VitsModelIntegrationTests(unittest.TestCase):
             ]
         ).to(torch.float16)
         # fmt: on
-        torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.waveform[0, 10000:10030].cpu(),
+            EXPECTED_LOGITS,
+            rtol=1e-4,
+            atol=1e-4,
+        )

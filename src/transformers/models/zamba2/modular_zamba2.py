@@ -27,42 +27,40 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_mamba_ssm_available,
-)
+from ...utils import logging
+from ...utils.import_utils import (is_causal_conv1d_available,
+                                   is_mamba_ssm_available)
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
-from ..mamba2.modeling_mamba2 import pad_tensor_by_size, reshape_into_chunks, segment_sum
-from ..zamba.modeling_zamba import (
-    ZambaAttention,
-    ZambaAttentionDecoderLayer,
-    ZambaForCausalLM,
-    ZambaForSequenceClassification,
-    ZambaHybridDynamicCache,
-    ZambaHybridLayer,
-    ZambaMambaDecoderLayer,
-    ZambaModel,
-    ZambaRMSNorm,
-    eager_attention_forward,
-)
+from ..mamba2.modeling_mamba2 import (pad_tensor_by_size, reshape_into_chunks,
+                                      segment_sum)
+from ..zamba.modeling_zamba import (ZambaAttention, ZambaAttentionDecoderLayer,
+                                    ZambaForCausalLM,
+                                    ZambaForSequenceClassification,
+                                    ZambaHybridDynamicCache, ZambaHybridLayer,
+                                    ZambaMambaDecoderLayer, ZambaModel,
+                                    ZambaRMSNorm, eager_attention_forward)
 from .configuration_zamba2 import Zamba2Config
 
-
 if is_mamba_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+    from mamba_ssm.ops.triton.selective_state_update import \
+        selective_state_update
+    from mamba_ssm.ops.triton.ssd_combined import (
+        mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined)
 else:
-    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
+    (
+        selective_state_update,
+        mamba_chunk_scan_combined,
+        mamba_split_conv1d_scan_combined,
+    ) = (None, None, None)
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
+is_fast_path_available = all(
+    (selective_state_update, causal_conv1d_fn, causal_conv1d_update)
+)
 
 
 _CONFIG_FOR_DOC = "Zyphra/Zamba2-2.7B"
@@ -84,10 +82,16 @@ class Zamba2RMSNormGated(torch.nn.Module):
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
         *prefix_dims, last_dim = hidden_states.shape
         group_count = last_dim // self.group_size
-        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        hidden_states_group = hidden_states.view(
+            *prefix_dims, group_count, self.group_size
+        )
         variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
-        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
+        hidden_states_group = hidden_states_group * torch.rsqrt(
+            variance + self.variance_epsilon
+        )
+        hidden_states = hidden_states_group.view(
+            *prefix_dims, group_count * self.group_size
+        )
         return self.weight * hidden_states.to(input_dtype)
 
 
@@ -110,7 +114,11 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     """
 
     def __init__(
-        self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self,
+        config: Zamba2Config,
+        batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
     ):
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
@@ -128,21 +136,36 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
         for i in range(config.num_hidden_layers):
             self.conv_states[i] = torch.zeros(
                 batch_size,
-                self.intermediate_size + 2 * config.mamba_ngroups * config.mamba_d_state,
+                self.intermediate_size
+                + 2 * config.mamba_ngroups * config.mamba_d_state,
                 self.conv_kernel_size,
                 device=device,
                 dtype=dtype,
             )
             self.ssm_states[i] = torch.zeros(
-                batch_size, self.n_mamba_heads, config.mamba_headdim, self.ssm_state_size, device=device, dtype=dtype
+                batch_size,
+                self.n_mamba_heads,
+                config.mamba_headdim,
+                self.ssm_state_size,
+                device=device,
+                dtype=dtype,
             )
             if self.layers_block_type[i] == "hybrid":
                 self.transformer_layers.append(i)
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.key_cache = [
+            torch.tensor([[]] * batch_size, device=device)
+            for _ in range(config.num_hidden_layers)
+        ]
+        self.value_cache = [
+            torch.tensor([[]] * batch_size, device=device)
+            for _ in range(config.num_hidden_layers)
+        ]
 
     def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
+        self,
+        layer_idx: int,
+        new_conv_state: torch.Tensor,
+        cache_position: torch.LongTensor,
     ) -> torch.Tensor:
         conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
@@ -160,7 +183,11 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
-        layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
+        layer_idx = (
+            self.transformer_layers[0]
+            if layer_idx not in self.transformer_layers
+            else layer_idx
+        )
         if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
@@ -215,16 +242,40 @@ class Zamba2Attention(ZambaAttention):
             for i in range(self.num_fwd_mem_blocks):
                 if i % config.num_mem_blocks == block_id:
                     linear_q_adapter = nn.Sequential(
-                        nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
-                        nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
+                        nn.Linear(
+                            self.attention_hidden_size,
+                            self.config.adapter_rank,
+                            bias=False,
+                        ),
+                        nn.Linear(
+                            self.config.adapter_rank,
+                            self.attention_hidden_size,
+                            bias=False,
+                        ),
                     )
                     linear_k_adapter = nn.Sequential(
-                        nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
-                        nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
+                        nn.Linear(
+                            self.attention_hidden_size,
+                            self.config.adapter_rank,
+                            bias=False,
+                        ),
+                        nn.Linear(
+                            self.config.adapter_rank,
+                            self.attention_hidden_size,
+                            bias=False,
+                        ),
                     )
                     linear_v_adapter = nn.Sequential(
-                        nn.Linear(self.attention_hidden_size, self.config.adapter_rank, bias=False),
-                        nn.Linear(self.config.adapter_rank, self.attention_hidden_size, bias=False),
+                        nn.Linear(
+                            self.attention_hidden_size,
+                            self.config.adapter_rank,
+                            bias=False,
+                        ),
+                        nn.Linear(
+                            self.config.adapter_rank,
+                            self.attention_hidden_size,
+                            bias=False,
+                        ),
                     )
                 else:
                     linear_q_adapter = nn.Identity()
@@ -234,7 +285,9 @@ class Zamba2Attention(ZambaAttention):
                 self.linear_k_adapter_list.append(linear_k_adapter)
                 self.linear_v_adapter_list.append(linear_v_adapter)
 
-        self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
+        self.layer_dic = {
+            value: index for index, value in enumerate(self.layer_block_map)
+        }
 
     def forward(
         self,
@@ -253,9 +306,15 @@ class Zamba2Attention(ZambaAttention):
         value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
             adapter_layer_idx = self.layer_dic[layer_idx]
-            query_states = query_states + self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
-            key_states = key_states + self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
-            value_states = value_states + self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
+            query_states = query_states + self.linear_q_adapter_list[adapter_layer_idx](
+                hidden_states
+            )
+            key_states = key_states + self.linear_k_adapter_list[adapter_layer_idx](
+                hidden_states
+            )
+            value_states = value_states + self.linear_v_adapter_list[adapter_layer_idx](
+                hidden_states
+            )
 
         query_states = query_states.view(hidden_shape).transpose(1, 2)
         key_states = key_states.view(hidden_shape).transpose(1, 2)
@@ -263,20 +322,28 @@ class Zamba2Attention(ZambaAttention):
 
         if self.config.use_mem_rope:
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(
+                query_states, key_states, cos, sin
+            )
 
         if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, layer_idx)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, layer_idx
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -353,12 +420,16 @@ class Zamba2MambaMixer(nn.Module):
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
         self.norm = Zamba2RMSNormGated(
-            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=1e-5
+            self.intermediate_size,
+            group_size=self.intermediate_size // self.n_groups,
+            eps=1e-5,
         )
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
-        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
+        self.out_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.add_bias_linear
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -377,14 +448,26 @@ class Zamba2MambaMixer(nn.Module):
 
         batch_size, seq_len, _ = hidden_states.shape
         groups_time_state_size = self.n_groups * self.ssm_state_size
-        d_to_remove = 2 * self.intermediate_size + 2 * self.n_groups * self.ssm_state_size + self.num_heads
+        d_to_remove = (
+            2 * self.intermediate_size
+            + 2 * self.n_groups * self.ssm_state_size
+            + self.num_heads
+        )
 
         # getting projected states from cache if it exists
         if cache_params is not None and cache_params.has_previous_state:
             in_projected_states = self.in_proj(hidden_states.squeeze(1))  # (B 2D)
             d_mlp = (in_projected_states.shape[-1] - d_to_remove) // 2
-            split_projection_dim = [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads]
-            _, _, gate, hidden_states_B_C, dt = torch.split(in_projected_states, split_projection_dim, dim=-1)
+            split_projection_dim = [
+                d_mlp,
+                d_mlp,
+                self.intermediate_size,
+                self.conv_dim,
+                self.num_heads,
+            ]
+            _, _, gate, hidden_states_B_C, dt = torch.split(
+                in_projected_states, split_projection_dim, dim=-1
+            )
 
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
@@ -396,18 +479,28 @@ class Zamba2MambaMixer(nn.Module):
 
             hidden_states, B, C = torch.split(
                 hidden_states_B_C,
-                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                [
+                    self.intermediate_size,
+                    groups_time_state_size,
+                    groups_time_state_size,
+                ],
                 dim=-1,
             )
             A = -torch.exp(self.A_log.float())  # (nheads,)
 
-            A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            A = (
+                A[:, None, ...][:, :, None]
+                .expand(-1, self.head_dim, self.ssm_state_size)
+                .to(dtype=torch.float32)
+            )
             dt = dt[:, :, None].expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
             B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
-            hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
+            hidden_states_reshaped = hidden_states.view(
+                batch_size, self.num_heads, self.head_dim
+            )
             hidden_states = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states_reshaped,
@@ -420,7 +513,9 @@ class Zamba2MambaMixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+            hidden_states = hidden_states.view(
+                batch_size, self.num_heads * self.head_dim
+            )
             hidden_states = self.norm(hidden_states, gate)
             out = self.out_proj(hidden_states)[:, None, ...]
         # if no cache is found, calling the kernel
@@ -431,14 +526,25 @@ class Zamba2MambaMixer(nn.Module):
                 hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
             # 1. Gated MLP's linear projection
             projected_states = self.in_proj(hidden_states)
-            A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
-            dt_limit_kwargs = {} if self.time_step_limit is None else {"dt_limit": self.time_step_limit}
+            A = -torch.exp(
+                self.A_log.float()
+            )  # (num_heads) or (intermediate_size, state_size)
+            dt_limit_kwargs = (
+                {}
+                if self.time_step_limit is None
+                else {"dt_limit": self.time_step_limit}
+            )
             if attention_mask is not None:
                 input_not_masked = torch.all(attention_mask == 1)
             else:
                 input_not_masked = True
 
-            if self.use_mem_eff_path and self.training and cache_params is None and input_not_masked:
+            if (
+                self.use_mem_eff_path
+                and self.training
+                and cache_params is None
+                and input_not_masked
+            ):
                 out, ssm_state = mamba_split_conv1d_scan_combined(
                     projected_states,
                     self.conv1d.weight.squeeze(1),
@@ -471,12 +577,15 @@ class Zamba2MambaMixer(nn.Module):
                 if cache_params is not None:
                     hidden_states_B_C_t = hidden_states_B_C.transpose(1, 2)
                     conv_state = nn.functional.pad(
-                        hidden_states_B_C_t, (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
+                        hidden_states_B_C_t,
+                        (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0),
                     )
                     cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
-                        self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[:, :seq_len]
+                        self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[
+                            :, :seq_len
+                        ]
                     )  # (B, L, self.d_inner + 2 * ngroups * d_state)
                 else:
                     hidden_states_B_C = causal_conv1d_fn(
@@ -487,13 +596,19 @@ class Zamba2MambaMixer(nn.Module):
                     ).transpose(1, 2)[:, :seq_len]
                 hidden_states, B, C = torch.split(
                     hidden_states_B_C,
-                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                    [
+                        self.intermediate_size,
+                        groups_time_state_size,
+                        groups_time_state_size,
+                    ],
                     dim=-1,
                 )
                 if attention_mask is not None and not torch.all(attention_mask == 1):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(
+                        dtype
+                    )
                 scan_output, ssm_state = mamba_chunk_scan_combined(
                     hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                     time_step,
@@ -719,13 +834,17 @@ class Zamba2MambaMixer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+            return self.cuda_kernels_forward(
+                hidden_states, cache_params, attention_mask
+            )
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
 class Zamba2MLP(nn.Module):
-    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int = None):
+    def __init__(
+        self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int = None
+    ):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
@@ -737,16 +856,24 @@ class Zamba2MLP(nn.Module):
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
 
-        self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
+        self.gate_up_proj = nn.Linear(
+            self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear
+        )
+        self.down_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.add_bias_linear
+        )
         self.act_fn = ACT2FN[config.hidden_act]
 
         self.gate_up_proj_adapter_list = nn.ModuleList([])
         for i in range(self.num_fwd_mem_blocks):
             if i % config.num_mem_blocks == block_id:
                 gate_up_proj_adapter = nn.Sequential(
-                    nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False),
-                    nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False),
+                    nn.Linear(
+                        self.config.hidden_size, self.config.adapter_rank, bias=False
+                    ),
+                    nn.Linear(
+                        self.config.adapter_rank, 2 * self.intermediate_size, bias=False
+                    ),
                 )
             else:
                 gate_up_proj_adapter = nn.Identity()
@@ -758,7 +885,9 @@ class Zamba2MLP(nn.Module):
     def forward(self, hidden_state, layer_idx=None):
         gate_up_state = self.gate_up_proj(hidden_state)
         layer_idx = self.layer_dic[layer_idx]
-        gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
+        gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](
+            hidden_state
+        )
 
         gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
         hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
@@ -767,12 +896,21 @@ class Zamba2MLP(nn.Module):
 
 
 class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
-    def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
+    def __init__(
+        self,
+        config: Zamba2Config,
+        block_id: int = None,
+        layer_idx: Optional[int] = None,
+    ):
         self.block_id = block_id
         num_gs = len(config.hybrid_layer_ids)
         super().__init__(config, layer_idx)
-        self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
-        self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
+        self.self_attn = Zamba2Attention(
+            config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id
+        )
+        self.feed_forward = Zamba2MLP(
+            config, num_fwd_mem_blocks=num_gs, block_id=block_id
+        )
 
     def forward(
         self,
@@ -784,7 +922,9 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         output_attentions: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
@@ -805,7 +945,9 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
         """
-        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
+        hidden_states = torch.concatenate(
+            [hidden_states, original_hidden_states], dim=-1
+        )
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -832,12 +974,17 @@ class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
     def __init__(self, config: Zamba2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
-        self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Zamba2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
 
 class Zamba2HybridLayer(ZambaHybridLayer):
     def __init__(
-        self, shared_transformer: Zamba2AttentionDecoderLayer, linear: nn.Linear, mamba: Zamba2MambaDecoderLayer
+        self,
+        shared_transformer: Zamba2AttentionDecoderLayer,
+        linear: nn.Linear,
+        mamba: Zamba2MambaDecoderLayer,
     ):
         super().__init__(shared_transformer, linear, mamba)
         del self.shared_transf
@@ -854,7 +1001,9 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -936,7 +1085,10 @@ class Zamba2PreTrainedModel(PreTrainedModel):
 
             dt = torch.exp(
                 torch.rand(self.config.n_mamba_heads)
-                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                * (
+                    math.log(self.config.time_step_max)
+                    - math.log(self.config.time_step_min)
+                )
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
@@ -961,8 +1113,13 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        blocks = [Zamba2AttentionDecoderLayer(config, block_id=k) for k in range(config.num_mem_blocks)]
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
+        blocks = [
+            Zamba2AttentionDecoderLayer(config, block_id=k)
+            for k in range(config.num_mem_blocks)
+        ]
         mamba_layers = []
         linear_layers = []
         self.layers_block_type = config.layers_block_type
@@ -970,7 +1127,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
             if config.layers_block_type[i] == "mamba":
                 mamba_layers.append(Zamba2MambaDecoderLayer(config, layer_idx=i))
             elif config.layers_block_type[i] == "hybrid":
-                linear_layers.append(nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False))
+                linear_layers.append(
+                    nn.Linear(
+                        self.config.hidden_size, self.config.hidden_size, bias=False
+                    )
+                )
                 mamba_layers.append(Zamba2MambaDecoderLayer(config, layer_idx=i))
         mamba_layers = iter(mamba_layers)
         linear_layers = iter(linear_layers)
@@ -979,7 +1140,9 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self.layers = nn.ModuleList(layers)
 
         self._attn_implementation = config._attn_implementation
-        self.final_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.final_layernorm = Zamba2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         if config.use_mem_rope:
             if config.use_long_context:
                 logger.warning_once(
@@ -1014,7 +1177,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
                     adapter_id = 0
                     for _layer_type in self.layers_block_type:
-                        if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
+                        if (
+                            _layer_type == "hybrid"
+                            and adapter_id % self.config.num_mem_blocks
+                            == block.block_id
+                        ):
                             adapter_pattern = re.compile(
                                 r"^shared_transformer\.feed_forward\.gate_up_proj_adapter_list\."
                                 + str(adapter_id)
@@ -1025,7 +1192,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     if self.config.use_shared_attention_adapter:
                         adapter_id = 0
                         for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
+                            if (
+                                _layer_type == "hybrid"
+                                and adapter_id % self.config.num_mem_blocks
+                                == block.block_id
+                            ):
                                 attn_adapter_pattern = re.compile(
                                     r"^shared_transformer\.self_attn\."
                                     + r"(?:linear_q_adapter_list|linear_k_adapter_list|linear_v_adapter_list)\."
@@ -1034,7 +1205,9 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                                 )
                                 self._tied_weights_keys.append(attn_adapter_pattern)
                             adapter_id += 1
-                layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))
+                layers.append(
+                    Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers))
+                )
             else:
                 layers.append(next(mamba_layers))
         return layers
@@ -1052,13 +1225,21 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1080,22 +1261,32 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         # original_hidden_states: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
 
         if use_cache and past_key_values is None:
-            batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
-            past_key_values = Zamba2HybridDynamicCache(self.config, batch_size, dtype=self.dtype, device=self.device)
+            batch_size = (
+                input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+            )
+            past_key_values = Zamba2HybridDynamicCache(
+                self.config, batch_size, dtype=self.dtype, device=self.device
+            )
 
         if cache_position is None:
             past_seen_tokens = (
-                past_key_values.get_seq_length(layer_idx=self.first_transformer_layer_id)
+                past_key_values.get_seq_length(
+                    layer_idx=self.first_transformer_layer_id
+                )
                 if past_key_values is not None
                 else 0
             )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position
+        )
 
         # create position embeddings to be shared across the decoder layers
         if self.config.use_mem_rope:

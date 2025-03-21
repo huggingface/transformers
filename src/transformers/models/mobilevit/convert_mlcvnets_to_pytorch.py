@@ -23,14 +23,10 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import (
-    MobileViTConfig,
-    MobileViTForImageClassification,
-    MobileViTForSemanticSegmentation,
-    MobileViTImageProcessor,
-)
+from transformers import (MobileViTConfig, MobileViTForImageClassification,
+                          MobileViTForSemanticSegmentation,
+                          MobileViTImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -62,7 +58,9 @@ def get_mobilevit_config(mobilevit_name):
         filename = "imagenet-1k-id2label.json"
 
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -139,7 +137,9 @@ def rename_key(name, base_model=False):
     if "seg_head." in name:
         name = name.replace("seg_head.", "segmentation_head.")
     if "segmentation_head.classifier.classifier." in name:
-        name = name.replace("segmentation_head.classifier.classifier.", "segmentation_head.classifier.")
+        name = name.replace(
+            "segmentation_head.classifier.classifier.", "segmentation_head.classifier."
+        )
 
     if "classifier.fc." in name:
         name = name.replace("classifier.fc.", "classifier.")
@@ -166,10 +166,10 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
             layer_num = int(key_split[0][6:]) - 1
             transformer_num = int(key_split[3])
             layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}")
-            dim = layer.transformer.layer[transformer_num].attention.attention.all_head_size
-            prefix = (
-                f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
-            )
+            dim = layer.transformer.layer[
+                transformer_num
+            ].attention.attention.all_head_size
+            prefix = f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
             if "weight" in key:
                 orig_state_dict[prefix + "query.weight"] = val[:dim, :]
                 orig_state_dict[prefix + "key.weight"] = val[dim : dim * 2, :]
@@ -192,7 +192,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_movilevit_checkpoint(
+    mobilevit_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our MobileViT structure.
     """
@@ -211,7 +213,9 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     model.load_state_dict(new_state_dict)
 
     # Check outputs on an image, prepared by MobileViTImageProcessor
-    image_processor = MobileViTImageProcessor(crop_size=config.image_size, size=config.image_size + 32)
+    image_processor = MobileViTImageProcessor(
+        crop_size=config.image_size, size=config.image_size + 32
+    )
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
@@ -222,25 +226,61 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
         if mobilevit_name == "deeplabv3_mobilevit_s":
             expected_logits = torch.tensor(
                 [
-                    [[6.2065, 6.1292, 6.2070], [6.1079, 6.1254, 6.1747], [6.0042, 6.1071, 6.1034]],
-                    [[-6.9253, -6.8653, -7.0398], [-7.3218, -7.3983, -7.3670], [-7.1961, -7.2482, -7.1569]],
-                    [[-4.4723, -4.4348, -4.3769], [-5.3629, -5.4632, -5.4598], [-5.1587, -5.3402, -5.5059]],
+                    [
+                        [6.2065, 6.1292, 6.2070],
+                        [6.1079, 6.1254, 6.1747],
+                        [6.0042, 6.1071, 6.1034],
+                    ],
+                    [
+                        [-6.9253, -6.8653, -7.0398],
+                        [-7.3218, -7.3983, -7.3670],
+                        [-7.1961, -7.2482, -7.1569],
+                    ],
+                    [
+                        [-4.4723, -4.4348, -4.3769],
+                        [-5.3629, -5.4632, -5.4598],
+                        [-5.1587, -5.3402, -5.5059],
+                    ],
                 ]
             )
         elif mobilevit_name == "deeplabv3_mobilevit_xs":
             expected_logits = torch.tensor(
                 [
-                    [[5.4449, 5.5733, 5.6314], [5.1815, 5.3930, 5.5963], [5.1656, 5.4333, 5.4853]],
-                    [[-9.4423, -9.7766, -9.6714], [-9.1581, -9.5720, -9.5519], [-9.1006, -9.6458, -9.5703]],
-                    [[-7.7721, -7.3716, -7.1583], [-8.4599, -8.0624, -7.7944], [-8.4172, -7.8366, -7.5025]],
+                    [
+                        [5.4449, 5.5733, 5.6314],
+                        [5.1815, 5.3930, 5.5963],
+                        [5.1656, 5.4333, 5.4853],
+                    ],
+                    [
+                        [-9.4423, -9.7766, -9.6714],
+                        [-9.1581, -9.5720, -9.5519],
+                        [-9.1006, -9.6458, -9.5703],
+                    ],
+                    [
+                        [-7.7721, -7.3716, -7.1583],
+                        [-8.4599, -8.0624, -7.7944],
+                        [-8.4172, -7.8366, -7.5025],
+                    ],
                 ]
             )
         elif mobilevit_name == "deeplabv3_mobilevit_xxs":
             expected_logits = torch.tensor(
                 [
-                    [[6.9811, 6.9743, 7.3123], [7.1777, 7.1931, 7.3938], [7.5633, 7.8050, 7.8901]],
-                    [[-10.5536, -10.2332, -10.2924], [-10.2336, -9.8624, -9.5964], [-10.8840, -10.8158, -10.6659]],
-                    [[-3.4938, -3.0631, -2.8620], [-3.4205, -2.8135, -2.6875], [-3.4179, -2.7945, -2.8750]],
+                    [
+                        [6.9811, 6.9743, 7.3123],
+                        [7.1777, 7.1931, 7.3938],
+                        [7.5633, 7.8050, 7.8901],
+                    ],
+                    [
+                        [-10.5536, -10.2332, -10.2924],
+                        [-10.2336, -9.8624, -9.5964],
+                        [-10.8840, -10.8158, -10.6659],
+                    ],
+                    [
+                        [-3.4938, -3.0631, -2.8620],
+                        [-3.4205, -2.8135, -2.6875],
+                        [-3.4179, -2.7945, -2.8750],
+                    ],
                 ]
             )
         else:
@@ -296,16 +336,27 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--checkpoint_path", required=True, type=str, help="Path to the original state dict (.pt file)."
+        "--checkpoint_path",
+        required=True,
+        type=str,
+        help="Path to the original state dict (.pt file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        required=True,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
     convert_movilevit_checkpoint(
-        args.mobilevit_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.mobilevit_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )

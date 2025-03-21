@@ -8,17 +8,11 @@ import torch.utils.checkpoint
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaMLP,
-    LlamaModel,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
+from ..llama.modeling_llama import (LlamaAttention, LlamaDecoderLayer,
+                                    LlamaForCausalLM, LlamaMLP, LlamaModel,
+                                    apply_rotary_pos_emb,
+                                    eager_attention_forward)
 from .configuration_olmo import OlmoConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -32,9 +26,13 @@ class OlmoLayerNorm(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_dtype = hidden_states.dtype
-        return F.layer_norm(hidden_states.to(dtype=torch.float32), self.normalized_shape, None, None, eps=1e-5).to(
-            orig_dtype
-        )
+        return F.layer_norm(
+            hidden_states.to(dtype=torch.float32),
+            self.normalized_shape,
+            None,
+            None,
+            eps=1e-5,
+        ).to(orig_dtype)
 
 
 class OlmoMLP(LlamaMLP):
@@ -72,22 +70,30 @@ class OlmoAttention(LlamaAttention):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -117,7 +123,10 @@ class OlmoModel(LlamaModel):
     def __init__(self, config: OlmoConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                OlmoDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = OlmoLayerNorm(config.hidden_size)
 

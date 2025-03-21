@@ -27,28 +27,19 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithCrossAttentions,
-)
+from ...modeling_attn_mask_utils import (_prepare_4d_attention_mask,
+                                         _prepare_4d_causal_attention_mask)
+from ...modeling_outputs import (BaseModelOutput,
+                                 BaseModelOutputWithPastAndCrossAttentions,
+                                 BaseModelOutputWithPooling,
+                                 CausalLMOutputWithCrossAttentions)
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import Conv1D, isin_mps_friendly
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from .configuration_clvp import (
-    ClvpConfig,
-    ClvpDecoderConfig,
-    ClvpEncoderConfig,
-)
-
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
+from .configuration_clvp import (ClvpConfig, ClvpDecoderConfig,
+                                 ClvpEncoderConfig)
 
 logger = logging.get_logger(__name__)
 
@@ -57,7 +48,9 @@ _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+    return nn.functional.cross_entropy(
+        logits, torch.arange(len(logits), device=logits.device)
+    )
 
 
 # Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clvp, image_loss->speech_loss
@@ -122,26 +115,38 @@ def _pad_extra_bos_eos_tokens(
     if add_bos_token:
         input_ids = torch.nn.functional.pad(input_ids, (1, 0), value=bos_token_id)
         attention_mask = (
-            torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
+            torch.nn.functional.pad(attention_mask, (1, 0), value=1)
+            if attention_mask is not None
+            else attention_mask
         )
 
     modified_input_ids = input_ids
     if add_eos_token:
         modified_input_ids = torch.zeros(
-            (input_ids.shape[0], input_ids.shape[1] + 1), dtype=input_ids.dtype, device=input_ids.device
+            (input_ids.shape[0], input_ids.shape[1] + 1),
+            dtype=input_ids.dtype,
+            device=input_ids.device,
         )
         for i, each_input_id in enumerate(input_ids):
             # locate where the valid tokens end and then add the eos token
             if isin_mps_friendly(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
                 modified_input_ids[i] = torch.concatenate(
-                    [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]
+                    [
+                        each_input_id[:pos],
+                        torch.tensor([eos_token_id], device=input_ids.device),
+                        each_input_id[pos:],
+                    ]
                 )
             else:
                 # if there are no pad tokens present, then add eos to the end
-                modified_input_ids[i] = torch.nn.functional.pad(each_input_id, (0, 1), value=eos_token_id)
+                modified_input_ids[i] = torch.nn.functional.pad(
+                    each_input_id, (0, 1), value=eos_token_id
+                )
         attention_mask = (
-            torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
+            torch.nn.functional.pad(attention_mask, (1, 0), value=1)
+            if attention_mask is not None
+            else attention_mask
         )
 
     return modified_input_ids, attention_mask
@@ -252,7 +257,9 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+        inv_freq = 1.0 / (
+            10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim)
+        )
 
         self.register_buffer("inv_freq", inv_freq)
         self.cached_sequence_length = None
@@ -261,11 +268,16 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         sequence_length = hidden_states.shape[1]
 
-        if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
+        if (
+            sequence_length == self.cached_sequence_length
+            and self.cached_rotary_positional_embedding is not None
+        ):
             return self.cached_rotary_positional_embedding
 
         self.cached_sequence_length = sequence_length
-        time_stamps = torch.arange(sequence_length, device=hidden_states.device).type_as(self.inv_freq)
+        time_stamps = torch.arange(
+            sequence_length, device=hidden_states.device
+        ).type_as(self.inv_freq)
         freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
         embeddings = torch.cat((freqs, freqs), dim=-1)
 
@@ -294,18 +306,30 @@ class ClvpSelfAttention(nn.Module):
 
         if hasattr(config, "max_position_embeddings"):
             max_positions = config.max_position_embeddings
-            bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
+            bias = torch.tril(
+                torch.ones((max_positions, max_positions), dtype=torch.bool)
+            )
             bias = bias.view(1, 1, max_positions, max_positions)
             self.register_buffer("bias", bias, persistent=False)
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
+        self.k_proj = nn.Linear(
+            self.embed_dim, self.embed_dim, bias=config.use_attention_bias
+        )
+        self.v_proj = nn.Linear(
+            self.embed_dim, self.embed_dim, bias=config.use_attention_bias
+        )
+        self.q_proj = nn.Linear(
+            self.embed_dim, self.embed_dim, bias=config.use_attention_bias
+        )
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -317,11 +341,17 @@ class ClvpSelfAttention(nn.Module):
         use_cache: Optional[bool] = False,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor,
+        Optional[torch.FloatTensor],
+        Optional[Tuple[torch.FloatTensor]],
+    ]:
         # Raise error when position_ids is None but rotary_pos_emb is provided, because we need that when applying
         # rotary_pos_emb to query and key states.
         if rotary_pos_emb is not None and position_ids is None:
-            raise ValueError("`position_ids` must be provided when `rotary_pos_emb` is not None.")
+            raise ValueError(
+                "`position_ids` must be provided when `rotary_pos_emb` is not None."
+            )
 
         bsz, _, embed_dim = hidden_states.size()
 
@@ -358,7 +388,9 @@ class ClvpSelfAttention(nn.Module):
             )
 
             cos, sin = rotary_pos_emb.cos().squeeze(0), rotary_pos_emb.sin().squeeze(0)
-            query_rot, key_rot, value_rot = apply_rotary_pos_emb(query_rot, key_rot, value_rot, cos, sin, position_ids)
+            query_rot, key_rot, value_rot = apply_rotary_pos_emb(
+                query_rot, key_rot, value_rot, cos, sin, position_ids
+            )
 
             # [batch_size, num_heads, seq_length, head_dim]
             query_states = torch.cat((query_rot, query_pass), dim=-1)
@@ -382,7 +414,9 @@ class ClvpSelfAttention(nn.Module):
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
         attn_output = torch.matmul(attn_probs, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
@@ -447,7 +481,9 @@ class ClvpEncoderLayer(nn.Module):
         self.mlp = ClvpEncoderMLP(config)
 
         self.input_rmsnorm = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.post_attention_rmsnorm = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_rmsnorm = ClvpRMSNorm(
+            self.embed_dim, eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -510,7 +546,9 @@ class ClvpDecoderMLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(
+        self, hidden_states: Optional[Tuple[torch.FloatTensor]]
+    ) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -526,7 +564,9 @@ class ClvpDecoderLayer(nn.Module):
 
         self.input_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = ClvpSelfAttention(config)
-        self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.post_attention_layernorm = nn.LayerNorm(
+            hidden_size, eps=config.layer_norm_epsilon
+        )
 
         self.mlp = ClvpDecoderMLP(inner_dim, config)
 
@@ -539,7 +579,10 @@ class ClvpDecoderLayer(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[
+        Tuple[torch.Tensor],
+        Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]],
+    ]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         attn_outputs = self.attn(
@@ -589,25 +632,36 @@ class ClvpConditioningEncoder(nn.Module):
         self.text_config = config.text_config
         self.decoder_config = config.decoder_config
 
-        self.text_token_embedding = nn.Embedding(self.text_config.vocab_size, self.decoder_config.hidden_size)
+        self.text_token_embedding = nn.Embedding(
+            self.text_config.vocab_size, self.decoder_config.hidden_size
+        )
         self.text_position_embedding = nn.Embedding(
             self.decoder_config.max_text_tokens, self.decoder_config.hidden_size
         )
 
-        self.mel_conv = nn.Conv1d(self.decoder_config.feature_size, self.decoder_config.hidden_size, kernel_size=1)
+        self.mel_conv = nn.Conv1d(
+            self.decoder_config.feature_size,
+            self.decoder_config.hidden_size,
+            kernel_size=1,
+        )
 
         # define group norms to be used before each attention layer
         num_groups = self.compute_groupnorm_groups(self.decoder_config.hidden_size)
         self.group_norms = nn.ModuleList(
             [
-                nn.GroupNorm(num_groups, self.decoder_config.hidden_size, eps=1e-5, affine=True)
+                nn.GroupNorm(
+                    num_groups, self.decoder_config.hidden_size, eps=1e-5, affine=True
+                )
                 for _ in range(self.decoder_config.num_mel_attn_blocks)
             ]
         )
 
         # define the attention layers
         self.mel_attn_blocks = nn.ModuleList(
-            [ClvpSelfAttention(self.decoder_config) for _ in range(self.decoder_config.num_mel_attn_blocks)]
+            [
+                ClvpSelfAttention(self.decoder_config)
+                for _ in range(self.decoder_config.num_mel_attn_blocks)
+            ]
         )
 
         self.gradient_checkpointing = False
@@ -642,7 +696,9 @@ class ClvpConditioningEncoder(nn.Module):
     ):
         # process text
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             batch_size, seq_length = input_ids.size()
         elif inputs_embeds is not None:
@@ -652,7 +708,9 @@ class ClvpConditioningEncoder(nn.Module):
 
         # construct attention mask if not given
         if attention_mask is None:
-            attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=input_ids.device)
+            attention_mask = torch.ones(
+                [batch_size, seq_length], dtype=torch.long, device=input_ids.device
+            )
 
         # We add bos and eos input_ids in the modeling file instead of the tokenizer file to keep the logic simple
         # This logic is specific to ClvpConditioningEncoder and not used by other modules.
@@ -675,8 +733,13 @@ class ClvpConditioningEncoder(nn.Module):
             for i, mel_attn_block in enumerate(self.mel_attn_blocks):
                 residual_mel_spec = mel_spec.transpose(1, 2)
 
-                mel_spec = torch.utils.checkpoint.checkpoint(self.group_norms[i], mel_spec).transpose(1, 2)
-                mel_spec = torch.utils.checkpoint.checkpoint(mel_attn_block, mel_spec)[0] + residual_mel_spec
+                mel_spec = torch.utils.checkpoint.checkpoint(
+                    self.group_norms[i], mel_spec
+                ).transpose(1, 2)
+                mel_spec = (
+                    torch.utils.checkpoint.checkpoint(mel_attn_block, mel_spec)[0]
+                    + residual_mel_spec
+                )
                 mel_spec = mel_spec.transpose(1, 2)
 
         else:
@@ -730,14 +793,27 @@ class ClvpPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, ClvpEncoderMLP):
             factor = self.config.initializer_factor
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            in_proj_std = (
+                (module.config.hidden_size**-0.5)
+                * ((2 * module.config.num_hidden_layers) ** -0.5)
+                * factor
+            )
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
+            nn.init.normal_(
+                (
+                    module.fc1.proj.weight
+                    if getattr(module.fc1, "proj")
+                    else module.fc1.weight
+                ),
+                std=fc_std,
+            )
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
             config = self.config.get_text_config()
             factor = config.initializer_factor
-            module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
+            module.projection.weight.data.normal_(
+                mean=0.0, std=factor * (config.hidden_size**-0.5)
+            )
         elif isinstance(module, ClvpConditioningEncoder):
             module.mel_conv.weight.data.normal_(mean=0.0, std=factor)
             module.mel_conv.bias.data.zero_()
@@ -745,7 +821,11 @@ class ClvpPreTrainedModel(PreTrainedModel):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
                     p.data.normal_(
-                        mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers))
+                        mean=0.0,
+                        std=(
+                            self.config.initializer_range
+                            / math.sqrt(2 * self.config.num_hidden_layers)
+                        ),
                     )
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -882,13 +962,23 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
         self.config = config
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.rotary_pos_emb = ClvpRotaryPositionalEmbedding(config) if config.use_rotary_embedding else None
-        self.layers = nn.ModuleList([ClvpEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.rotary_pos_emb = (
+            ClvpRotaryPositionalEmbedding(config)
+            if config.use_rotary_embedding
+            else None
+        )
+        self.layers = nn.ModuleList(
+            [ClvpEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
 
         self.sequence_summary = SequenceSummary(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
-        self.projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.projection = nn.Linear(
+            config.hidden_size, config.projection_dim, bias=False
+        )
 
         self.gradient_checkpointing = False
 
@@ -939,14 +1029,24 @@ class ClvpEncoder(ClvpPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -960,7 +1060,9 @@ class ClvpEncoder(ClvpPreTrainedModel):
         # expand attention_mask and create position_ids if needed
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype
+            )
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -970,7 +1072,11 @@ class ClvpEncoder(ClvpPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        rotary_pos_emb = self.rotary_pos_emb(inputs_embeds) if self.rotary_pos_emb is not None else None
+        rotary_pos_emb = (
+            self.rotary_pos_emb(inputs_embeds)
+            if self.rotary_pos_emb is not None
+            else None
+        )
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
@@ -1012,7 +1118,15 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v for v in [embeds, last_hidden_state, pooled_output, encoder_states, all_attentions] if v is not None
+                v
+                for v in [
+                    embeds,
+                    last_hidden_state,
+                    pooled_output,
+                    encoder_states,
+                    all_attentions,
+                ]
+                if v is not None
             )
 
         return ClvpEncoderOutput(
@@ -1034,12 +1148,23 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         self.config = config
 
-        self.input_embeds_layer = nn.Embedding(self.config.vocab_size, self.config.hidden_size)
-        self.position_embeds_layer = nn.Embedding(self.config.max_position_embeddings, self.config.hidden_size)
+        self.input_embeds_layer = nn.Embedding(
+            self.config.vocab_size, self.config.hidden_size
+        )
+        self.position_embeds_layer = nn.Embedding(
+            self.config.max_position_embeddings, self.config.hidden_size
+        )
 
         self.drop = nn.Dropout(self.config.embd_pdrop)
-        self.layers = nn.ModuleList([ClvpDecoderLayer(self.config) for _ in range(self.config.num_hidden_layers)])
-        self.layer_norm = nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_epsilon)
+        self.layers = nn.ModuleList(
+            [
+                ClvpDecoderLayer(self.config)
+                for _ in range(self.config.num_hidden_layers)
+            ]
+        )
+        self.layer_norm = nn.LayerNorm(
+            self.config.hidden_size, eps=self.config.layer_norm_epsilon
+        )
 
         self.gradient_checkpointing = False
 
@@ -1074,15 +1199,25 @@ class ClvpDecoder(ClvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -1106,7 +1241,10 @@ class ClvpDecoder(ClvpPreTrainedModel):
             past_key_values_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(
-                past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length,
+                input_shape[-1] + past_key_values_length,
+                dtype=torch.long,
+                device=device,
             )
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
@@ -1144,7 +1282,9 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
         all_hidden_states = () if output_hidden_states else None
         for i, (block, past_key_value) in enumerate(zip(self.layers, past_key_values)):
             if output_hidden_states:
@@ -1175,9 +1315,13 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 presents = presents + (outputs[1],)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (
+                    outputs[2 if use_cache else 1],
+                )
                 if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
+                    all_cross_attentions = all_cross_attentions + (
+                        outputs[3 if use_cache else 2],
+                    )
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1190,7 +1334,13 @@ class ClvpDecoder(ClvpPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    presents,
+                    all_hidden_states,
+                    all_self_attentions,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
 
@@ -1240,12 +1390,20 @@ class ClvpModel(ClvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -1286,7 +1444,9 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         self.model = ClvpModel(self.config)
 
         self.final_norm = nn.LayerNorm(self.config.hidden_size)
-        self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=True)
+        self.lm_head = nn.Linear(
+            self.config.hidden_size, self.config.vocab_size, bias=True
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1338,34 +1498,57 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
                 )
             )
             mel_start_token_embedding += self.model.decoder.position_embeds_layer(
-                torch.full((conditioning_embeds.shape[0], 1), fill_value=0, device=conditioning_embeds.device)
+                torch.full(
+                    (conditioning_embeds.shape[0], 1),
+                    fill_value=0,
+                    device=conditioning_embeds.device,
+                )
             )
-            conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
+            conditioning_embeds = torch.concat(
+                [conditioning_embeds, mel_start_token_embedding], dim=1
+            )
 
             # subtract the positional_ids here
             if hasattr(model_kwargs, "attention_mask"):
                 position_ids = model_kwargs["attention_mask"].long().cumsum(-1) - 1
             else:
                 position_ids = torch.range(
-                    0, conditioning_embeds.shape[1] - 1, dtype=torch.long, device=conditioning_embeds.device
+                    0,
+                    conditioning_embeds.shape[1] - 1,
+                    dtype=torch.long,
+                    device=conditioning_embeds.device,
                 )
-            position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1)
+            position_ids = position_ids.unsqueeze(0).repeat(
+                conditioning_embeds.shape[0], 1
+            )
 
-            model_kwargs["inputs_embeds"] = conditioning_embeds - self.model.decoder.position_embeds_layer(
-                position_ids
+            model_kwargs["inputs_embeds"] = (
+                conditioning_embeds
+                - self.model.decoder.position_embeds_layer(position_ids)
             )
             model_kwargs["input_ids"] = (
-                torch.ones((model_kwargs["inputs_embeds"].shape[0], 1), dtype=torch.long, device=self.device)
+                torch.ones(
+                    (model_kwargs["inputs_embeds"].shape[0], 1),
+                    dtype=torch.long,
+                    device=self.device,
+                )
                 * self.config.bos_token_id
             )
 
             return model_kwargs["inputs_embeds"], "inputs_embeds", model_kwargs
 
-        inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
+        inputs = self._maybe_initialize_input_ids_for_generation(
+            inputs, bos_token_id, model_kwargs
+        )
         return inputs, input_name, model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        conditioning_embeds=None,
+        **kwargs,
     ):
         # Overwritten: has `conditioning_embeds`-related logic
 
@@ -1399,7 +1582,9 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             position_ids = None
 
         if conditioning_embeds is not None and past_key_values is not None:
-            position_ids = torch.tensor([input_ids_length], dtype=torch.long, device=input_ids.device)
+            position_ids = torch.tensor(
+                [input_ids_length], dtype=torch.long, device=input_ids.device
+            )
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1440,12 +1625,20 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1474,7 +1667,9 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+            )
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1500,7 +1695,10 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         beam_idx at every generation step.
         """
         return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            tuple(
+                past_state.index_select(0, beam_idx.to(past_state.device))
+                for past_state in layer_past
+            )
             for layer_past in past_key_values
         )
 
@@ -1542,14 +1740,18 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         self.text_encoder_model = ClvpEncoder(config.text_config)
         self.speech_encoder_model = ClvpEncoder(config.speech_config)
 
-        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
+        self.logit_scale = nn.Parameter(
+            torch.tensor(self.config.logit_scale_init_value)
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
     # taken from the original repo,
     # link : https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/api.py#L117
-    def fix_speech_decoder_output(self, speech_ids: torch.LongTensor) -> torch.LongTensor:
+    def fix_speech_decoder_output(
+        self, speech_ids: torch.LongTensor
+    ) -> torch.LongTensor:
         """
         This method modifies the output of the decoder model, such as replacing the `eos_token_id` and changing the
         last few tokens of each sequence.
@@ -1561,8 +1763,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
         speech_ids = speech_ids[:, 1:]
 
-        stop_token_indices = torch.where(speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0)
-        speech_ids = torch.masked_fill(speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0])
+        stop_token_indices = torch.where(
+            speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0
+        )
+        speech_ids = torch.masked_fill(
+            speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0]
+        )
 
         for i, each_seq_stop_token_index in enumerate(stop_token_indices):
             # This means that no stop tokens were found so the sentence was still being generated, in that case we don't need
@@ -1574,7 +1780,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             speech_ids[i, stm:] = decoder_fixing_codes[0]
             if stm - 3 < speech_ids.shape[1]:
                 speech_ids[i, -3:] = torch.tensor(
-                    [decoder_fixing_codes[1:]], device=speech_ids.device, dtype=torch.long
+                    [decoder_fixing_codes[1:]],
+                    device=speech_ids.device,
+                    dtype=torch.long,
                 )
 
         return speech_ids
@@ -1703,7 +1911,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         """
 
         if speech_ids is None:
-            if (input_ids is None and conditioning_encoder_inputs_embeds is None) or input_features is None:
+            if (
+                input_ids is None and conditioning_encoder_inputs_embeds is None
+            ) or input_features is None:
                 raise ValueError(
                     "Either speech_ids or input_ids/conditioning_encoder_inputs_embeds and input_features must be provided."
                 )
@@ -1779,9 +1989,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         conditioning_embeds = self.conditioning_encoder(
             input_features=input_features,
@@ -1927,7 +2141,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             generation_config = self.generation_config
 
         generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        model_kwargs = generation_config.update(
+            **kwargs
+        )  # All unused kwargs must be model kwargs
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
@@ -1961,7 +2177,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         if pad_to_max_mel_tokens is not None:
             padding_needed = pad_to_max_mel_tokens - speech_ids.shape[-1]
             speech_ids = torch.nn.functional.pad(
-                speech_ids, (0, padding_needed), value=self.generation_config.eos_token_id
+                speech_ids,
+                (0, padding_needed),
+                value=self.generation_config.eos_token_id,
             )
 
         speech_ids = self.fix_speech_decoder_output(speech_ids)

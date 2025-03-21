@@ -22,23 +22,22 @@ from huggingface_hub import hf_hub_download
 
 from transformers import TimesformerConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
-        TimesformerForVideoClassification,
-        TimesformerModel,
-    )
+    from transformers import (MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
+                              TimesformerForVideoClassification,
+                              TimesformerModel)
 
 
 if is_vision_available():
@@ -94,7 +93,13 @@ class TimesformerModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
+            [
+                self.batch_size,
+                self.num_frames,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
+            ]
         )
 
         labels = None
@@ -129,7 +134,10 @@ class TimesformerModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_video_classification(self, config, pixel_values, labels):
         model = TimesformerForVideoClassification(config)
@@ -156,9 +164,16 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TimesformerModel, TimesformerForVideoClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (TimesformerModel, TimesformerForVideoClassification)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
-        {"feature-extraction": TimesformerModel, "video-classification": TimesformerForVideoClassification}
+        {
+            "feature-extraction": TimesformerModel,
+            "video-classification": TimesformerForVideoClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -172,7 +187,10 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=TimesformerConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -221,7 +239,9 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.skipTest(reason="Model has no attentions")
 
         else:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             for model_class in self.all_model_classes:
@@ -253,7 +273,11 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 # attentions has shape (batch_size x num_frames) x num_heads x (num_patches per frame + 1) x (num_patches per frame + 1)
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len // num_frames + 1, seq_len // num_frames + 1],
+                    [
+                        self.model_tester.num_attention_heads,
+                        seq_len // num_frames + 1,
+                        seq_len // num_frames + 1,
+                    ],
                 )
                 out_len = len(outputs)
 
@@ -270,12 +294,18 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
                 self_attentions = outputs.attentions
 
-                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(
+                    len(self_attentions), self.model_tester.num_hidden_layers
+                )
 
                 # attentions has shape (batch_size x num_frames) x num_heads x (num_patches per frame + 1) x (num_patches per frame + 1)
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len // num_frames + 1, seq_len // num_frames + 1],
+                    [
+                        self.model_tester.num_attention_heads,
+                        seq_len // num_frames + 1,
+                        seq_len // num_frames + 1,
+                    ],
                 )
 
     def test_hidden_states_output(self):
@@ -315,7 +345,9 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
     file = hf_hub_download(
-        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+        repo_id="hf-internal-testing/spaghetti-video",
+        filename="eating_spaghetti.npy",
+        repo_type="dataset",
     )
     video = np.load(file)
     return list(video)
@@ -328,16 +360,18 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessor(
+                image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5]
+            )
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_for_video_classification(self):
-        model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400").to(
-            torch_device
-        )
+        model = TimesformerForVideoClassification.from_pretrained(
+            "facebook/timesformer-base-finetuned-k400"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         video = prepare_video()
@@ -353,4 +387,6 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.3016, -0.7713, -0.4205]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

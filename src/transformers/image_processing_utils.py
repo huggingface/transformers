@@ -23,7 +23,6 @@ from .image_transforms import center_crop, normalize, rescale
 from .image_utils import ChannelDimension, get_image_size
 from .utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -42,7 +41,9 @@ class BaseImageProcessor(ImageProcessingMixin):
         return self.preprocess(images, **kwargs)
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
-        raise NotImplementedError("Each image processor must implement its own preprocess method")
+        raise NotImplementedError(
+            "Each image processor must implement its own preprocess method"
+        )
 
     def rescale(
         self,
@@ -74,7 +75,13 @@ class BaseImageProcessor(ImageProcessingMixin):
         Returns:
             `np.ndarray`: The rescaled image.
         """
-        return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
+        return rescale(
+            image,
+            scale=scale,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def normalize(
         self,
@@ -110,7 +117,12 @@ class BaseImageProcessor(ImageProcessingMixin):
             `np.ndarray`: The normalized image.
         """
         return normalize(
-            image, mean=mean, std=std, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            mean=mean,
+            std=std,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
     def center_crop(
@@ -143,7 +155,9 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(
+                f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}"
+            )
         return center_crop(
             image,
             size=(size["height"], size["width"]),
@@ -179,12 +193,17 @@ def is_valid_size_dict(size_dict):
 
 
 def convert_to_size_dict(
-    size, max_size: Optional[int] = None, default_to_square: bool = True, height_width_order: bool = True
+    size,
+    max_size: Optional[int] = None,
+    default_to_square: bool = True,
+    height_width_order: bool = True,
 ):
     # By default, if size is an int we assume it represents a tuple of (size, size).
     if isinstance(size, int) and default_to_square:
         if max_size is not None:
-            raise ValueError("Cannot specify both size as an int, with default_to_square=True and max_size")
+            raise ValueError(
+                "Cannot specify both size as an int, with default_to_square=True and max_size"
+            )
         return {"height": size, "width": size}
     # In other configs, if size is an int and default_to_square is False, size represents the length of
     # the shortest edge after resizing.
@@ -235,7 +254,9 @@ def get_size_dict(
             If `size` is an int, whether to default to a square image or not.
     """
     if not isinstance(size, dict):
-        size_dict = convert_to_size_dict(size, max_size, default_to_square, height_width_order)
+        size_dict = convert_to_size_dict(
+            size, max_size, default_to_square, height_width_order
+        )
         logger.info(
             f"{param_name} should be a dictionary on of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size}."
             f" Converted to {size_dict}.",
@@ -274,12 +295,17 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
 
     for height, width in possible_resolutions:
         scale = min(width / original_width, height / original_height)
-        downscaled_width, downscaled_height = int(original_width * scale), int(original_height * scale)
-        effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
+        downscaled_width, downscaled_height = int(original_width * scale), int(
+            original_height * scale
+        )
+        effective_resolution = min(
+            downscaled_width * downscaled_height, original_width * original_height
+        )
         wasted_resolution = (width * height) - effective_resolution
 
         if effective_resolution > max_effective_resolution or (
-            effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution
+            effective_resolution == max_effective_resolution
+            and wasted_resolution < min_wasted_resolution
         ):
             max_effective_resolution = effective_resolution
             min_wasted_resolution = wasted_resolution
@@ -292,7 +318,9 @@ def get_patch_output_size(image, target_resolution, input_data_format):
     """
     Given an image and a target resolution, calculate the output size of the image after cropping to the target
     """
-    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
+    original_height, original_width = get_image_size(
+        image, channel_dim=input_data_format
+    )
     target_height, target_width = target_resolution
 
     scale_w = target_width / original_width

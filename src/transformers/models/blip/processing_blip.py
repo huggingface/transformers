@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import (BatchEncoding, PreTokenizedInput,
+                                        TextInput)
 
 
 class BlipProcessorKwargs(ProcessingKwargs, total=False):
@@ -107,7 +108,9 @@ class BlipProcessor(ProcessorMixin):
         if text is not None:
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
         if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+            encoding_image_processor = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
 
             if text_encoding is not None:
                 encoding_image_processor.update(text_encoding)

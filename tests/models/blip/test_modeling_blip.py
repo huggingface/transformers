@@ -23,39 +23,26 @@ import numpy as np
 import requests
 
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, require_vision,
+                                        slow, torch_device)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        BlipForConditionalGeneration,
-        BlipForImageTextRetrieval,
-        BlipForQuestionAnswering,
-        BlipModel,
-        BlipTextModel,
-        BlipVisionModel,
-    )
+    from transformers import (BlipForConditionalGeneration,
+                              BlipForImageTextRetrieval,
+                              BlipForQuestionAnswering, BlipModel,
+                              BlipTextModel, BlipVisionModel)
 
 
 if is_vision_available():
@@ -104,7 +91,9 @@ class BlipVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -133,9 +122,16 @@ class BlipVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -159,7 +155,9 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -213,11 +211,15 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -309,8 +311,13 @@ class BlipTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -328,7 +335,9 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=BlipTextConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -361,11 +370,15 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="BlipTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(
+        reason="BlipTextModel has no base class and is not available in MODEL_MAPPING"
+    )
     def test_save_load_fast_init_to_base(self):
         pass
 
@@ -386,12 +399,18 @@ class BlipModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -399,7 +418,9 @@ class BlipModelTester:
 
     def get_config(self):
         return BlipConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -407,10 +428,12 @@ class BlipModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -446,9 +469,17 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipModelTester(self)
-        common_properties = ["logit_scale_init_value", "image_text_hidden_size", "projection_dim", "label_smoothing"]
+        common_properties = [
+            "logit_scale_init_value",
+            "image_text_hidden_size",
+            "projection_dim",
+            "label_smoothing",
+        ]
         self.config_tester = ConfigTester(
-            self, config_class=BlipConfig, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=BlipConfig,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_model(self):
@@ -545,10 +576,14 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -576,7 +611,9 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = BlipVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save BlipConfig and check if we can load BlipTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -658,12 +695,18 @@ class BlipTextRetrievalModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -671,7 +714,9 @@ class BlipTextRetrievalModelTester:
 
     def get_config(self):
         return BlipConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -679,10 +724,12 @@ class BlipTextRetrievalModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -706,13 +753,21 @@ class BlipTextImageModelsModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length  # need seq_length for pt-tf equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
+        self.seq_length = (
+            self.text_model_tester.seq_length
+        )  # need seq_length for pt-tf equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -720,7 +775,9 @@ class BlipTextImageModelsModelTester:
 
     def get_config(self):
         return BlipConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -728,10 +785,12 @@ class BlipTextImageModelsModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -755,12 +814,18 @@ class BlipVQAModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.batch_size = (
+            self.text_model_tester.batch_size
+        )  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        text_config, input_ids, attention_mask = (
+            self.text_model_tester.prepare_config_and_inputs()
+        )
+        vision_config, pixel_values = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
@@ -768,7 +833,9 @@ class BlipVQAModelTester:
 
     def get_config(self):
         return BlipConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -776,10 +843,12 @@ class BlipVQAModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -835,12 +904,17 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(self.model_tester.get_config()).to(torch_device)
             model.train()
-            loss = model(**self.model_tester.prepare_config_and_inputs_for_common()[1]).loss
+            loss = model(
+                **self.model_tester.prepare_config_and_inputs_for_common()[1]
+            ).loss
             loss.backward()
 
             # verify the gradients are not None
             for name, param in model.named_parameters():
-                self.assertIsNotNone(param.grad, f"Gradients should not be None - got {param.grad} for {name}")
+                self.assertIsNotNone(
+                    param.grad,
+                    f"Gradients should not be None - got {param.grad} for {name}",
+                )
 
     def test_forward_signature(self):
         """
@@ -927,13 +1001,26 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                     "decoder_attention_mask",
                 ]
                 expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                    [
+                        "head_mask",
+                        "decoder_head_mask",
+                        "cross_attn_head_mask",
+                        "encoder_outputs",
+                    ]
+                    if "head_mask"
+                    and "decoder_head_mask"
+                    and "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+                self.assertListEqual(
+                    arg_names[: len(expected_arg_names)], expected_arg_names
+                )
             else:
-                expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]
+                expected_arg_names = (
+                    ["input_ids"]
+                    if model_class != BlipForConditionalGeneration
+                    else ["pixel_values"]
+                )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_training(self):
@@ -941,13 +1028,17 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
@@ -960,7 +1051,9 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.use_cache = False
             config.return_dict = True
 
@@ -968,7 +1061,9 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
@@ -1059,10 +1154,14 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -1090,7 +1189,9 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = BlipVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save BlipConfig and check if we can load BlipTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -1157,13 +1258,26 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                     "decoder_attention_mask",
                 ]
                 expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                    [
+                        "head_mask",
+                        "decoder_head_mask",
+                        "cross_attn_head_mask",
+                        "encoder_outputs",
+                    ]
+                    if "head_mask"
+                    and "decoder_head_mask"
+                    and "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+                self.assertListEqual(
+                    arg_names[: len(expected_arg_names)], expected_arg_names
+                )
             else:
-                expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]
+                expected_arg_names = (
+                    ["input_ids"]
+                    if model_class != BlipForConditionalGeneration
+                    else ["pixel_values"]
+                )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_training(self):
@@ -1171,13 +1285,17 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
@@ -1190,7 +1308,9 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.use_cache = False
             config.return_dict = True
 
@@ -1198,7 +1318,9 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
 
             # hardcode labels to be the same as input_ids
             inputs["labels"] = inputs["input_ids"]
@@ -1277,10 +1399,14 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -1308,7 +1434,9 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
             vision_config = BlipVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            self.assertDictEqual(
+                config.vision_config.to_dict(), vision_config.to_dict()
+            )
 
         # Save BlipConfig and check if we can load BlipTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -1335,8 +1463,12 @@ def prepare_img():
 @slow
 class BlipModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        ).to(torch_device)
+        processor = BlipProcessor.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
         image = prepare_img()
 
         # image only
@@ -1345,18 +1477,37 @@ class BlipModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
+        self.assertEqual(
+            predictions[0].tolist(),
+            [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+        )
 
         # image and context
         context = ["a picture of"]
-        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=context, return_tensors="pt").to(
+            torch_device
+        )
 
         predictions = model.generate(**inputs)
 
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
+            [
+                30522,
+                1037,
+                3861,
+                1997,
+                1037,
+                2450,
+                1998,
+                2014,
+                3899,
+                2006,
+                1996,
+                3509,
+                102,
+            ],
         )
 
     @require_torch_accelerator
@@ -1365,45 +1516,79 @@ class BlipModelIntegrationTest(unittest.TestCase):
         model = BlipForConditionalGeneration.from_pretrained(
             "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
         ).to(torch_device)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        processor = BlipProcessor.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
         image = prepare_img()
 
         # image only
-        inputs = processor(images=image, return_tensors="pt").to(torch_device, torch.float16)
-
-        predictions = model.generate(**inputs)
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
-
-        # image and context
-        context = ["a picture of"]
-        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=image, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         predictions = model.generate(**inputs)
 
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
+            [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+        )
+
+        # image and context
+        context = ["a picture of"]
+        inputs = processor(images=image, text=context, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+
+        predictions = model.generate(**inputs)
+
+        # Test output
+        self.assertEqual(
+            predictions[0].tolist(),
+            [
+                30522,
+                1037,
+                3861,
+                1997,
+                1037,
+                2450,
+                1998,
+                2014,
+                3899,
+                2006,
+                1996,
+                3509,
+                102,
+            ],
         )
 
     def test_inference_interpolate_pos_encoding(self):
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        ).to(torch_device)
+        processor = BlipProcessor.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
         processor.image_processor.size = {"height": 500, "width": 500}
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs, interpolate_pos_encoding=True)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[
+            0
+        ].strip()
 
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 1037, 3899, 102])
+        self.assertEqual(
+            predictions[0].tolist(),
+            [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 1037, 3899, 102],
+        )
         self.assertEqual(generated_text, "a woman sitting on the beach with a dog")
 
     def test_inference_vqa(self):
-        model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)
+        model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(
+            torch_device
+        )
         processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         image = prepare_img()
@@ -1416,7 +1601,9 @@ class BlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out[0].tolist(), [30522, 1015, 102])
 
     def test_inference_itm(self):
-        model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco").to(torch_device)
+        model = BlipForImageTextRetrieval.from_pretrained(
+            "Salesforce/blip-itm-base-coco"
+        ).to(torch_device)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         image = prepare_img()
@@ -1429,5 +1616,9 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         expected_scores = torch.Tensor([[0.0029, 0.9971]])
 
-        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(out[0].cpu(), torch.Tensor([[0.5162]]), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            out[0].cpu(), torch.Tensor([[0.5162]]), rtol=1e-3, atol=1e-3
+        )

@@ -19,19 +19,10 @@ import re
 
 import numpy
 
-from .utils import (
-    ExplicitEnum,
-    expand_dims,
-    is_numpy_array,
-    is_safetensors_available,
-    is_torch_tensor,
-    logging,
-    reshape,
-    squeeze,
-    tensor_size,
-)
+from .utils import (ExplicitEnum, expand_dims, is_numpy_array,
+                    is_safetensors_available, is_torch_tensor, logging,
+                    reshape, squeeze, tensor_size)
 from .utils import transpose as transpose_func
-
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -84,7 +75,9 @@ def convert_tf_weight_name_to_pt_weight_name(
         "_._", "/"
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
-    tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
+    tf_name = tf_name.split(
+        "/"
+    )  # Convert from TF2.0 '/' separators to PyTorch '.' separators
     # Some weights have a single name without "/" such as final_logits_bias in BART
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
@@ -92,9 +85,17 @@ def convert_tf_weight_name_to_pt_weight_name(
     tf_weight_shape = list(tf_weight_shape)
 
     # When should we transpose the weights
-    if tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 4:
+    if (
+        tf_name[-1] == "kernel"
+        and tf_weight_shape is not None
+        and len(tf_weight_shape) == 4
+    ):
         transpose = TransposeType.CONV2D
-    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 3:
+    elif (
+        tf_name[-1] == "kernel"
+        and tf_weight_shape is not None
+        and len(tf_weight_shape) == 3
+    ):
         transpose = TransposeType.CONV1D
     elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
@@ -203,7 +204,9 @@ def load_pytorch_checkpoint_in_tf2_model(
 
         pt_state_dict.update(state_dict)
 
-    logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
+    logger.info(
+        f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters"
+    )
 
     return load_pytorch_weights_in_tf2_model(
         tf_model,
@@ -216,12 +219,17 @@ def load_pytorch_checkpoint_in_tf2_model(
     )
 
 
-def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_model_in_tf2_model(
+    tf_model, pt_model, tf_inputs=None, allow_missing_keys=False
+):
     """Load pytorch checkpoints in a TF 2.0 model"""
     pt_state_dict = pt_model.state_dict()
 
     return load_pytorch_weights_in_tf2_model(
-        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+        tf_model,
+        pt_state_dict,
+        tf_inputs=tf_inputs,
+        allow_missing_keys=allow_missing_keys,
     )
 
 
@@ -247,7 +255,8 @@ def load_pytorch_weights_in_tf2_model(
 
     # Numpy doesn't understand bfloat16, so upcast to a dtype that doesn't lose precision
     pt_state_dict = {
-        k: v.numpy() if v.dtype != torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()
+        k: v.numpy() if v.dtype != torch.bfloat16 else v.float().numpy()
+        for k, v in pt_state_dict.items()
     }
     return load_pytorch_state_dict_in_tf2_model(
         tf_model,
@@ -272,7 +281,9 @@ def _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name
             " BertForSequenceClassification model)."
         )
     else:
-        logger.warning(f"All PyTorch model weights were used when initializing {class_name}.\n")
+        logger.warning(
+            f"All PyTorch model weights were used when initializing {class_name}.\n"
+        )
     if len(missing_keys) > 0:
         logger.warning(
             f"Some weights or buffers of the TF 2.0 model {class_name} were not initialized from the"
@@ -357,7 +368,9 @@ def load_pytorch_state_dict_in_tf2_model(
     # and there is no MainLayer class. This means that TF base classes have one
     # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
     start_prefix_to_remove = ""
-    if not any(s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys.keys()):
+    if not any(
+        s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys.keys()
+    ):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
@@ -375,8 +388,14 @@ def load_pytorch_state_dict_in_tf2_model(
             name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
-            aliases = tf_to_pt_weight_rename(name)  # Is a tuple to account for possible name aliasing
-            for alias in aliases:  # The aliases are in priority order, take the first one that matches
+            aliases = tf_to_pt_weight_rename(
+                name
+            )  # Is a tuple to account for possible name aliasing
+            for (
+                alias
+            ) in (
+                aliases
+            ):  # The aliases are in priority order, take the first one that matches
                 if alias in tf_keys_to_pt_keys:
                     name = alias
                     break
@@ -391,7 +410,10 @@ def load_pytorch_state_dict_in_tf2_model(
                 continue
             elif tf_model._keys_to_ignore_on_load_missing is not None:
                 # authorized missing keys don't have to be loaded
-                if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
+                if any(
+                    re.search(pat, name) is not None
+                    for pat in tf_model._keys_to_ignore_on_load_missing
+                ):
                     continue
             raise AttributeError(f"{name} not found in PyTorch model")
         state_dict_name = tf_keys_to_pt_keys[name]
@@ -404,9 +426,7 @@ def load_pytorch_state_dict_in_tf2_model(
         except tf.errors.InvalidArgumentError as e:
             if not ignore_mismatched_sizes:
                 error_msg = str(e)
-                error_msg += (
-                    "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
-                )
+                error_msg += "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 raise tf.errors.InvalidArgumentError(error_msg)
             else:
                 mismatched_keys.append((name, array.shape, symbolic_weight.shape))
@@ -429,7 +449,12 @@ def load_pytorch_state_dict_in_tf2_model(
         for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
     if not skip_logger_warnings:
-        _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name=tf_model.__class__.__name__)
+        _log_key_warnings(
+            missing_keys,
+            unexpected_keys,
+            mismatched_keys,
+            class_name=tf_model.__class__.__name__,
+        )
 
     if output_loading_info:
         loading_info = {
@@ -469,12 +494,19 @@ def load_sharded_pytorch_safetensors_in_tf2_model(
         all_loading_infos.append(loading_info)
     # Now we just need to merge the loading info
     # Keys are missing only if they're missing in *every* shard
-    missing_keys = sorted(set.intersection(*[set(info["missing_keys"]) for info in all_loading_infos]))
+    missing_keys = sorted(
+        set.intersection(*[set(info["missing_keys"]) for info in all_loading_infos])
+    )
     # Keys are unexpected/mismatched if they're unexpected/mismatched in *any* shard
     unexpected_keys = sum([info["unexpected_keys"] for info in all_loading_infos], [])
     mismatched_keys = sum([info["mismatched_keys"] for info in all_loading_infos], [])
 
-    _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name=tf_model.__class__.__name__)
+    _log_key_warnings(
+        missing_keys,
+        unexpected_keys,
+        mismatched_keys,
+        class_name=tf_model.__class__.__name__,
+    )
 
     if output_loading_info:
         loading_info = {
@@ -493,7 +525,11 @@ def load_sharded_pytorch_safetensors_in_tf2_model(
 
 
 def load_tf2_checkpoint_in_pytorch_model(
-    pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+    pt_model,
+    tf_checkpoint_path,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
 ):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
@@ -516,7 +552,9 @@ def load_tf2_checkpoint_in_pytorch_model(
     logger.info(f"Loading TensorFlow weights from {tf_checkpoint_path}")
 
     # Instantiate and load the associated TF 2.0 model
-    tf_model_class_name = "TF" + pt_model.__class__.__name__  # Add "TF" at the beginning
+    tf_model_class_name = (
+        "TF" + pt_model.__class__.__name__
+    )  # Add "TF" at the beginning
     tf_model_class = getattr(transformers, tf_model_class_name)
     tf_model = tf_model_class(pt_model.config)
 
@@ -529,20 +567,30 @@ def load_tf2_checkpoint_in_pytorch_model(
     load_tf_weights(tf_model, tf_checkpoint_path)
 
     return load_tf2_model_in_pytorch_model(
-        pt_model, tf_model, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+        pt_model,
+        tf_model,
+        allow_missing_keys=allow_missing_keys,
+        output_loading_info=output_loading_info,
     )
 
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False, output_loading_info=False):
+def load_tf2_model_in_pytorch_model(
+    pt_model, tf_model, allow_missing_keys=False, output_loading_info=False
+):
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
     return load_tf2_weights_in_pytorch_model(
-        pt_model, weights, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+        pt_model,
+        weights,
+        allow_missing_keys=allow_missing_keys,
+        output_loading_info=output_loading_info,
     )
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, output_loading_info=False):
+def load_tf2_weights_in_pytorch_model(
+    pt_model, tf_weights, allow_missing_keys=False, output_loading_info=False
+):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -556,11 +604,16 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     tf_state_dict = {tf_weight.name: tf_weight.numpy() for tf_weight in tf_weights}
     return load_tf2_state_dict_in_pytorch_model(
-        pt_model, tf_state_dict, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+        pt_model,
+        tf_state_dict,
+        allow_missing_keys=allow_missing_keys,
+        output_loading_info=output_loading_info,
     )
 
 
-def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_keys=False, output_loading_info=False):
+def load_tf2_state_dict_in_pytorch_model(
+    pt_model, tf_state_dict, allow_missing_keys=False, output_loading_info=False
+):
     import torch
 
     new_pt_params_dict = {}
@@ -569,14 +622,18 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
     start_prefix_to_remove = ""
-    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
+    if not any(
+        s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()
+    ):
         start_prefix_to_remove = pt_model.base_model_prefix + "."
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables
     tf_weights_map = {}
     for name, tf_weight in tf_state_dict.items():
         pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=tf_weight.shape
+            name,
+            start_prefix_to_remove=start_prefix_to_remove,
+            tf_weight_shape=tf_weight.shape,
         )
         tf_weights_map[pt_name] = (tf_weight, transpose)
 
@@ -586,7 +643,9 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
         # Handle PyTorch shared weight ()not duplicated in TF 2.0
         if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
-            new_pt_params_dict[pt_weight_name] = loaded_pt_weights_data_ptr[pt_weight.data_ptr()]
+            new_pt_params_dict[pt_weight_name] = loaded_pt_weights_data_ptr[
+                pt_weight.data_ptr()
+            ]
             continue
 
         pt_weight_name_to_check = pt_weight_name
@@ -625,7 +684,9 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = array
         all_tf_weights.discard(pt_weight_name)
 
-    missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
+    missing_keys, unexpected_keys = pt_model.load_state_dict(
+        new_pt_params_dict, strict=False
+    )
     missing_keys += missing_keys_pt
 
     # Some models may have keys that are not in the state by design, removing them before needlessly warning
@@ -649,7 +710,9 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
             " TFBertForSequenceClassification model)."
         )
     else:
-        logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
+        logger.warning(
+            f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n"
+        )
     if len(missing_keys) > 0:
         logger.warning(
             f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model and are newly"
@@ -666,7 +729,10 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
 
     if output_loading_info:
-        loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+        loading_info = {
+            "missing_keys": missing_keys,
+            "unexpected_keys": unexpected_keys,
+        }
         return pt_model, loading_info
 
     return pt_model

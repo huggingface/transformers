@@ -22,20 +22,15 @@ import torch
 from datasets import load_dataset
 
 from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from transformers import (
-    is_torch_available,
-)
+from tests.test_modeling_common import (ModelTesterMixin, floats_tensor,
+                                        ids_tensor)
+from transformers import is_torch_available
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
-from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
+from transformers.models.colpali.modeling_colpali import (
+    ColPaliForRetrieval, ColPaliForRetrievalOutput)
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
-
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 if is_torch_available():
     import torch
@@ -157,7 +152,13 @@ class ColPaliForRetrievalModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vlm_config.text_config.vocab_size - 1) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length],
+                config.vlm_config.text_config.vocab_size - 1,
+            )
+            + 1
+        )
         attention_mask = input_ids.ne(1).to(torch_device)
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
@@ -188,7 +189,9 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ColPaliForRetrievalModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=ColPaliConfig, has_text_modality=False
+        )
 
         # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
 
@@ -318,7 +321,9 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         ).eval()
 
         # Load the test dataset
-        ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
+        ds = load_dataset(
+            "hf-internal-testing/document-visual-retrieval-test", split="test"
+        )
 
         # Preprocess the examples
         batch_images = self.processor(images=ds["image"]).to(torch_device)
@@ -336,10 +341,15 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         )  # (len(qs), len(ps))
 
         assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
-        assert scores.shape == (len(ds), len(ds)), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"
+        assert scores.shape == (
+            len(ds),
+            len(ds),
+        ), f"Expected shape {(len(ds), len(ds))}, got {scores.shape}"
 
         # Check if the maximum scores per row are in the diagonal of the matrix score
-        self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
+        self.assertTrue(
+            (scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all()
+        )
 
         # Further validation: fine-grained check, with a hardcoded score from the original implementation
         expected_scores = torch.tensor(
@@ -351,4 +361,6 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
             dtype=scores.dtype,
         )
 
-        assert torch.allclose(scores, expected_scores, atol=1), f"Expected scores {expected_scores}, got {scores}"
+        assert torch.allclose(
+            scores, expected_scores, atol=1
+        ), f"Expected scores {expected_scores}, got {scores}"

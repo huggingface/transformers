@@ -24,14 +24,10 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import (
-    Dinov2Config,
-    PromptDepthAnythingConfig,
-    PromptDepthAnythingForDepthEstimation,
-    PromptDepthAnythingImageProcessor,
-)
+from transformers import (Dinov2Config, PromptDepthAnythingConfig,
+                          PromptDepthAnythingForDepthEstimation,
+                          PromptDepthAnythingImageProcessor)
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -41,21 +37,30 @@ def get_dpt_config(model_name):
     if "small" in model_name or "vits" in model_name:
         out_indices = [3, 6, 9, 12]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-small",
+            out_indices=out_indices,
+            apply_layernorm=True,
+            reshape_hidden_states=False,
         )
         fusion_hidden_size = 64
         neck_hidden_sizes = [48, 96, 192, 384]
     elif "base" in model_name or "vitb" in model_name:
         out_indices = [3, 6, 9, 12]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-base", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-base",
+            out_indices=out_indices,
+            apply_layernorm=True,
+            reshape_hidden_states=False,
         )
         fusion_hidden_size = 128
         neck_hidden_sizes = [96, 192, 384, 768]
     elif "large" in model_name or "vitl" in model_name:
         out_indices = [5, 12, 18, 24]
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-large", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
+            "facebook/dinov2-large",
+            out_indices=out_indices,
+            apply_layernorm=True,
+            reshape_hidden_states=False,
         )
         fusion_hidden_size = 256
         neck_hidden_sizes = [256, 512, 1024, 1024]
@@ -87,9 +92,15 @@ def transform_qkv_weights(key, value, config):
 
     suffix = "bias" if "bias" in key else "weight"
     return {
-        f"backbone.encoder.layer.{layer_idx}.attention.attention.query.{suffix}": value[:hidden_size],
-        f"backbone.encoder.layer.{layer_idx}.attention.attention.key.{suffix}": value[hidden_size : hidden_size * 2],
-        f"backbone.encoder.layer.{layer_idx}.attention.attention.value.{suffix}": value[-hidden_size:],
+        f"backbone.encoder.layer.{layer_idx}.attention.attention.query.{suffix}": value[
+            :hidden_size
+        ],
+        f"backbone.encoder.layer.{layer_idx}.attention.attention.key.{suffix}": value[
+            hidden_size : hidden_size * 2
+        ],
+        f"backbone.encoder.layer.{layer_idx}.attention.attention.value.{suffix}": value[
+            -hidden_size:
+        ],
     }
 
 
@@ -151,7 +162,9 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
+def convert_dpt_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub, verify_logits
+):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -205,9 +218,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    prompt_depth_url = (
-        "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
-    )
+    prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
     prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
 
     inputs = processor(image, return_tensors="pt", prompt_depth=prompt_depth)
@@ -225,20 +236,34 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         expected_shape = torch.Size([1, 756, 1008])
         if model_name == "prompt-depth-anything-vits":
             expected_slice = torch.tensor(
-                [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
+                [
+                    [3.0100, 3.0016, 3.0219],
+                    [3.0046, 3.0137, 3.0275],
+                    [3.0083, 3.0191, 3.0292],
+                ]
             )
         elif model_name == "prompt-depth-anything-vits-transparent":
             expected_slice = torch.tensor(
-                [[3.0058, 3.0397, 3.0460], [3.0314, 3.0393, 3.0504], [3.0326, 3.0465, 3.0545]]
+                [
+                    [3.0058, 3.0397, 3.0460],
+                    [3.0314, 3.0393, 3.0504],
+                    [3.0326, 3.0465, 3.0545],
+                ]
             )
         elif model_name == "prompt-depth-anything-vitl":
             expected_slice = torch.tensor(
-                [[3.1336, 3.1358, 3.1363], [3.1368, 3.1267, 3.1414], [3.1397, 3.1385, 3.1448]]
+                [
+                    [3.1336, 3.1358, 3.1363],
+                    [3.1368, 3.1267, 3.1414],
+                    [3.1397, 3.1385, 3.1448],
+                ]
             )
         else:
             raise ValueError("Not supported")
         assert predicted_depth.shape == torch.Size(expected_shape)
-        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=5e-3)  # 5mm tolerance
+        assert torch.allclose(
+            predicted_depth[0, :3, :3], expected_slice, atol=5e-3
+        )  # 5mm tolerance
         print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -289,4 +314,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
+    convert_dpt_checkpoint(
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.verify_logits,
+    )

@@ -17,14 +17,15 @@
 import unittest
 
 from transformers import GPTNeoXJapaneseConfig, is_torch_available
-from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
+from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import \
+    GPTNeoXJapaneseTokenizer
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -96,7 +97,9 @@ class GPTNeoXJapaneseModelTester:
 
         token_labels = None
         if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -134,7 +137,10 @@ class GPTNeoXJapaneseModelTester:
         model.eval()
         _ = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(self, config, input_ids, input_mask):
         config.add_cross_attention = True
@@ -142,16 +148,25 @@ class GPTNeoXJapaneseModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
-    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, token_labels):
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, input_mask, token_labels
+    ):
         model = GPTNeoXJapaneseForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
-    def create_and_check_decoder_model_past_large_inputs(self, config, input_ids, input_mask):
+    def create_and_check_decoder_model_past_large_inputs(
+        self, config, input_ids, input_mask
+    ):
         config.is_decoder = True
         model = GPTNeoXJapaneseForCausalLM(config=config)
         model.to(torch_device)
@@ -169,7 +184,11 @@ class GPTNeoXJapaneseModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True)
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        )
         output_from_no_past = output_from_no_past["hidden_states"][0]
         output_from_past = model(
             next_tokens,
@@ -180,13 +199,17 @@ class GPTNeoXJapaneseModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -196,10 +219,19 @@ class GPTNeoXJapaneseModelTester:
 
 
 @require_torch
-class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
+class GPTNeoXModelJapaneseTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
-        {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
+        {
+            "feature-extraction": GPTNeoXJapaneseModel,
+            "text-generation": GPTNeoXJapaneseForCausalLM,
+        }
         if is_torch_available()
         else {}
     )
@@ -210,30 +242,46 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     def setUp(self):
         self.model_tester = GPTNeoXJapaneseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXJapaneseConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=GPTNeoXJapaneseConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
         self.model_tester.create_and_check_model(config, input_ids, input_mask)
 
     def test_model_as_decoder(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs_for_decoder()
+        )
+        self.model_tester.create_and_check_model_as_decoder(
+            config, input_ids, input_mask
+        )
 
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs_for_decoder()
+        )
 
         input_mask = None
 
-        self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
+        self.model_tester.create_and_check_model_as_decoder(
+            config, input_ids, input_mask
+        )
 
     def test_decoder_model_past_large_inputs(self):
-        config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(config, input_ids, input_mask)
+        config, input_ids, input_mask, token_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            config, input_ids, input_mask
+        )
 
     def test_model_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -260,7 +308,9 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         for prompt in prompts:
             input_ids = tokenizer(prompt, return_tensors="pt").input_ids
             generated_ids = model.generate(input_ids, max_length=50)
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 

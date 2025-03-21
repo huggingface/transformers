@@ -22,8 +22,8 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
-
+from .utils import (is_torch_greater_or_equal, is_torch_xla_available,
+                    is_torchdynamo_compiling, logging)
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
@@ -47,7 +47,8 @@ _torch_distributed_available = torch.distributed.is_available()
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import Replicate
-    from torch.distributed.tensor.parallel import ColwiseParallel, RowwiseParallel
+    from torch.distributed.tensor.parallel import (ColwiseParallel,
+                                                   RowwiseParallel)
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -61,7 +62,9 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
 
 
-def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
+def prune_linear_layer(
+    layer: nn.Linear, index: torch.LongTensor, dim: int = 0
+) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
 
@@ -84,7 +87,9 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
             b = layer.bias[index].clone().detach()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
-    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
+    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(
+        layer.weight.device
+    )
     new_layer.weight.requires_grad = False
     new_layer.weight.copy_(W.contiguous())
     new_layer.weight.requires_grad = True
@@ -157,7 +162,9 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
     return new_layer
 
 
-def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None) -> nn.Linear | Conv1D:
+def prune_layer(
+    layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None
+) -> nn.Linear | Conv1D:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 
@@ -248,9 +255,15 @@ def apply_chunking_to_forward(
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
 
         # chunk input tensor into tuples
-        input_tensors_chunks = tuple(input_tensor.chunk(num_chunks, dim=chunk_dim) for input_tensor in input_tensors)
+        input_tensors_chunks = tuple(
+            input_tensor.chunk(num_chunks, dim=chunk_dim)
+            for input_tensor in input_tensors
+        )
         # apply forward fn to every tuple
-        output_chunks = tuple(forward_fn(*input_tensors_chunk) for input_tensors_chunk in zip(*input_tensors_chunks))
+        output_chunks = tuple(
+            forward_fn(*input_tensors_chunk)
+            for input_tensors_chunk in zip(*input_tensors_chunks)
+        )
         # concatenate output at same dimension
         return torch.cat(output_chunks, dim=chunk_dim)
 
@@ -274,7 +287,9 @@ def find_pruneable_heads_and_indices(
         into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
-    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
+    heads = (
+        set(heads) - already_pruned_heads
+    )  # Convert to set and remove already pruned heads
     for head in heads:
         # Compute how many pruned heads are before the head and move the index accordingly
         head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
@@ -284,7 +299,9 @@ def find_pruneable_heads_and_indices(
     return heads, index
 
 
-def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None) -> tuple[torch.Tensor, ...]:
+def meshgrid(
+    *tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None
+) -> tuple[torch.Tensor, ...]:
     """
     Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
 
@@ -314,7 +331,9 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     return tensor.device, unique_id, storage_size(tensor)
 
 
-def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
+def isin_mps_friendly(
+    elements: torch.Tensor, test_elements: torch.Tensor | int
+) -> torch.Tensor:
     """
     Same as `torch.isin` without flags, but MPS-friendly. We can remove this function when we stop supporting
     torch <= 2.3. See https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
@@ -332,7 +351,13 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         test_elements = torch.tensor(test_elements)
         if test_elements.ndim == 0:
             test_elements = test_elements.unsqueeze(0)
-        return elements.tile(test_elements.shape[0], 1).eq(test_elements.unsqueeze(1)).sum(dim=0).bool().squeeze()
+        return (
+            elements.tile(test_elements.shape[0], 1)
+            .eq(test_elements.unsqueeze(1))
+            .sum(dim=0)
+            .bool()
+            .squeeze()
+        )
     else:
         # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
         return torch.isin(elements, test_elements)
@@ -375,9 +400,12 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
                 # check if the function is already cached, otherwise create it
                 if not hasattr(self, f"_cached_{func.__name__}"):
                     self.__setattr__(
-                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                        f"_cached_{func.__name__}",
+                        lru_cache(*lru_args, **lru_kwargs)(func.__get__(self)),
                     )
-                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+                return self.__getattribute__(f"_cached_{func.__name__}")(
+                    *args, **kwargs
+                )
             else:
                 # Otherwise, just call the original function
                 return func(self, *args, **kwargs)
@@ -447,9 +475,13 @@ def distribute_module(
             module.register_forward_pre_hook(lambda _, inputs: input_fn(inputs, device_mesh))  # type: ignore[call-arg]
         elif num_args == 3:
             # input_fn takes in module, inputs, device mesh
-            module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
+            module.register_forward_pre_hook(
+                lambda mod, inputs: input_fn(mod, inputs, device_mesh)
+            )
         else:
-            raise ValueError(f"input_fn should take in 3 arguments, but got {num_args} arguments!")
+            raise ValueError(
+                f"input_fn should take in 3 arguments, but got {num_args} arguments!"
+            )
     # register output_fn as module forward hook
     if output_fn is not None:
         num_args = len(inspect.signature(output_fn).parameters)
@@ -465,8 +497,12 @@ def distribute_module(
                 lambda mod, inputs, outputs: output_fn(outputs, device_mesh)  # type: ignore[call-arg]
             )
         elif num_args == 3:
-            module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
+            module.register_forward_hook(
+                lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh)
+            )
         else:
-            raise ValueError(f"output_fn should take in 3 arguments, but got {num_args} arguments!")
+            raise ValueError(
+                f"output_fn should take in 3 arguments, but got {num_args} arguments!"
+            )
 
     return module

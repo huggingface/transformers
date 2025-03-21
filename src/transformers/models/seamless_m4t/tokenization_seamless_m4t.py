@@ -21,15 +21,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import sentencepiece as spm
 
 from ...convert_slow_tokenizer import import_protobuf
-from ...tokenization_utils import (
-    BatchEncoding,
-    PreTokenizedInput,
-    PreTrainedTokenizer,
-    TextInput,
-)
+from ...tokenization_utils import (BatchEncoding, PreTokenizedInput,
+                                   PreTrainedTokenizer, TextInput)
 from ...tokenization_utils_base import AddedToken
 from ...utils import PaddingStrategy, logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -151,10 +146,26 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         # Mimic fairseq token-to-id alignment for the first 4 token
         self._added_tokens_decoder = {
-            0: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
-            1: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
-            2: AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token,
-            3: AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token,
+            0: (
+                AddedToken(pad_token, special=True)
+                if isinstance(pad_token, str)
+                else pad_token
+            ),
+            1: (
+                AddedToken(unk_token, special=True)
+                if isinstance(unk_token, str)
+                else unk_token
+            ),
+            2: (
+                AddedToken(bos_token, special=True)
+                if isinstance(bos_token, str)
+                else bos_token
+            ),
+            3: (
+                AddedToken(eos_token, special=True)
+                if isinstance(eos_token, str)
+                else eos_token
+            ),
         }
 
         # The first "real" token "an" has position 4 in the original fairseq vocab and position 3 in the spm vocab
@@ -209,11 +220,21 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
+        text_pair: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
+        text_target: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
         ] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         pad_to_multiple_of: Optional[int] = 2,
@@ -307,7 +328,10 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -327,14 +351,21 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         prefix_ones = [1] * len(self.prefix_tokens)
         suffix_ones = [1] * len(self.suffix_tokens)
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+        return (
+            prefix_ones
+            + ([0] * len(token_ids_0))
+            + ([0] * len(token_ids_1))
+            + suffix_ones
+        )
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
@@ -391,13 +422,25 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self,
+        raw_inputs,
+        return_tensors: str,
+        src_lang: Optional[str],
+        tgt_lang: Optional[str],
+        **extra_kwargs,
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
-            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model.")
+            raise ValueError(
+                "Translation requires a `src_lang` and a `tgt_lang` for this model."
+            )
         self.src_lang = src_lang
-        inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
+        inputs = self(
+            raw_inputs,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            **extra_kwargs,
+        )
         if "__" not in tgt_lang:
             tgt_lang = f"__{tgt_lang}__"
         tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
@@ -406,7 +449,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         vocab = {
-            self.convert_ids_to_tokens(i): i for i in range(self.fairseq_offset, self.vocab_size + self.fairseq_offset)
+            self.convert_ids_to_tokens(i): i
+            for i in range(self.fairseq_offset, self.vocab_size + self.fairseq_offset)
         }
         vocab.update(self.added_tokens_encoder)
         return vocab
@@ -424,7 +468,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model_pb2 = import_protobuf(
+                f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)"
+            )
             model = model_pb2.ModelProto.FromString(sp_model)
             normalizer_spec = model_pb2.NormalizerSpec()
             normalizer_spec.add_dummy_prefix = False
@@ -448,7 +494,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         tokens = super().tokenize(text, **kwargs)
 
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+        if (
+            len(tokens) > 1
+            and tokens[0] == SPIECE_UNDERLINE
+            and tokens[1] in self.all_special_tokens
+        ):
             tokens = tokens[1:]
         return tokens
 
@@ -469,7 +519,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        return (
+            tokens[self.unk_token_length :]
+            if len(tokens) >= self.unk_token_length
+            else tokens
+        )
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -492,15 +546,21 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return out_string
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:

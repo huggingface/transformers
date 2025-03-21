@@ -22,9 +22,9 @@ import torch
 from fairseq.models.xmod import XMODModel as FairseqXmodModel
 from packaging import version
 
-from transformers import XmodConfig, XmodForMaskedLM, XmodForSequenceClassification
+from transformers import (XmodConfig, XmodForMaskedLM,
+                          XmodForSequenceClassification)
 from transformers.utils import logging
-
 
 if version.parse(fairseq.__version__) < version.parse("0.12.2"):
     raise Exception("requires fairseq >= 0.12.2")
@@ -50,7 +50,9 @@ def convert_xmod_checkpoint_to_pytorch(
         task="multilingual_masked_lm",
         data_name_or_path=str(data_dir),
         bpe="sentencepiece",
-        sentencepiece_model=str(Path(xmod_checkpoint_path).parent / "sentencepiece.bpe.model"),
+        sentencepiece_model=str(
+            Path(xmod_checkpoint_path).parent / "sentencepiece.bpe.model"
+        ),
         src_dict=str(data_dir / "dict.txt"),
     )
     xmod.eval()  # disable dropout
@@ -74,22 +76,34 @@ def convert_xmod_checkpoint_to_pytorch(
         languages=xmod.cfg.model.languages,
     )
     if classification_head:
-        config.num_labels = xmod.model.classification_heads["mnli"].out_proj.weight.shape[0]
+        config.num_labels = xmod.model.classification_heads[
+            "mnli"
+        ].out_proj.weight.shape[0]
 
     print("Our X-MOD config:", config)
 
-    model = XmodForSequenceClassification(config) if classification_head else XmodForMaskedLM(config)
+    model = (
+        XmodForSequenceClassification(config)
+        if classification_head
+        else XmodForMaskedLM(config)
+    )
     model.eval()
 
     # Now let's copy all the weights.
     # Embeddings
-    model.roberta.embeddings.word_embeddings.weight = xmod_sent_encoder.embed_tokens.weight
-    model.roberta.embeddings.position_embeddings.weight = xmod_sent_encoder.embed_positions.weight
+    model.roberta.embeddings.word_embeddings.weight = (
+        xmod_sent_encoder.embed_tokens.weight
+    )
+    model.roberta.embeddings.position_embeddings.weight = (
+        xmod_sent_encoder.embed_positions.weight
+    )
     model.roberta.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.roberta.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c xmod doesn't use them.
 
-    model.roberta.embeddings.LayerNorm.weight = xmod_sent_encoder.layernorm_embedding.weight
+    model.roberta.embeddings.LayerNorm.weight = (
+        xmod_sent_encoder.layernorm_embedding.weight
+    )
     model.roberta.embeddings.LayerNorm.bias = xmod_sent_encoder.layernorm_embedding.bias
 
     for i in range(config.num_hidden_layers):
@@ -117,7 +131,9 @@ def convert_xmod_checkpoint_to_pytorch(
         # self-attention output
         self_output = layer.attention.output
         if self_output.dense.weight.shape != xmod_layer.self_attn.out_proj.weight.shape:
-            raise AssertionError("Dimensions of self-attention output weights do not match.")
+            raise AssertionError(
+                "Dimensions of self-attention output weights do not match."
+            )
         self_output.dense.weight = xmod_layer.self_attn.out_proj.weight
         self_output.dense.bias = xmod_layer.self_attn.out_proj.bias
         self_output.LayerNorm.weight = xmod_layer.self_attn_layer_norm.weight
@@ -142,7 +158,9 @@ def convert_xmod_checkpoint_to_pytorch(
             bert_output.adapter_layer_norm.weight = xmod_layer.adapter_layer_norm.weight
             bert_output.adapter_layer_norm.bias = xmod_layer.adapter_layer_norm.bias
 
-        if sorted(bert_output.adapter_modules.keys()) != sorted(xmod_layer.adapter_modules.keys()):
+        if sorted(bert_output.adapter_modules.keys()) != sorted(
+            xmod_layer.adapter_modules.keys()
+        ):
             raise AssertionError("Lists of language adapters do not match.")
         for lang_code, adapter in xmod_layer.adapter_modules.items():
             to_adapter = bert_output.adapter_modules[lang_code]
@@ -159,10 +177,16 @@ def convert_xmod_checkpoint_to_pytorch(
         model.roberta.encoder.LayerNorm.bias = xmod_sent_encoder.layer_norm.bias
 
     if classification_head:
-        model.classifier.dense.weight = xmod.model.classification_heads["mnli"].dense.weight
+        model.classifier.dense.weight = xmod.model.classification_heads[
+            "mnli"
+        ].dense.weight
         model.classifier.dense.bias = xmod.model.classification_heads["mnli"].dense.bias
-        model.classifier.out_proj.weight = xmod.model.classification_heads["mnli"].out_proj.weight
-        model.classifier.out_proj.bias = xmod.model.classification_heads["mnli"].out_proj.bias
+        model.classifier.out_proj.weight = xmod.model.classification_heads[
+            "mnli"
+        ].out_proj.weight
+        model.classifier.out_proj.bias = xmod.model.classification_heads[
+            "mnli"
+        ].out_proj.bias
     else:
         # LM Head
         model.lm_head.dense.weight = xmod.model.encoder.lm_head.dense.weight
@@ -178,7 +202,9 @@ def convert_xmod_checkpoint_to_pytorch(
 
     our_output = model(input_ids)[0]
     if classification_head:
-        their_output = xmod.model.classification_heads["mnli"](xmod.extract_features(input_ids))
+        their_output = xmod.model.classification_heads["mnli"](
+            xmod.extract_features(input_ids)
+        )
     else:
         their_output = xmod.model(input_ids, lang_id=[SAMPLE_LANGUAGE])[0]
     print(our_output.shape, their_output.shape)
@@ -198,15 +224,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--xmod_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--xmod_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
-        "--classification_head", action="store_true", help="Whether to convert a final classification head."
+        "--classification_head",
+        action="store_true",
+        help="Whether to convert a final classification head.",
     )
     args = parser.parse_args()
     convert_xmod_checkpoint_to_pytorch(
-        args.xmod_checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
+        args.xmod_checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.classification_head,
     )

@@ -21,18 +21,14 @@ import unittest
 from datasets import load_dataset
 
 from transformers import SegGptConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -94,15 +90,26 @@ class SegGptModelTester:
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size // 2, self.image_size]
+        )
         prompt_pixel_values = floats_tensor(
             [self.batch_size, self.num_channels, self.image_size // 2, self.image_size]
         )
-        prompt_masks = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
+        prompt_masks = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size // 2, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
+            labels = floats_tensor(
+                [
+                    self.batch_size,
+                    self.num_channels,
+                    self.image_size // 2,
+                    self.image_size,
+                ]
+            )
 
         config = self.get_config()
 
@@ -126,7 +133,9 @@ class SegGptModelTester:
             decoder_hidden_size=self.decoder_hidden_size,
         )
 
-    def create_and_check_model(self, config, pixel_values, prompt_pixel_values, prompt_masks, labels):
+    def create_and_check_model(
+        self, config, pixel_values, prompt_pixel_values, prompt_masks, labels
+    ):
         model = SegGptModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -165,7 +174,9 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SegGptModel, SegGptForImageSegmentation) if is_torch_available() else ()
+    all_model_classes = (
+        (SegGptModel, SegGptForImageSegmentation) if is_torch_available() else ()
+    )
     fx_compatible = False
 
     test_pruning = False
@@ -175,12 +186,16 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     pipeline_model_mapping = (
-        {"feature-extraction": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
+        {"feature-extraction": SegGptModel, "mask-generation": SegGptModel}
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
         self.model_tester = SegGptModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SegGptConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=SegGptConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -221,10 +236,16 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -250,21 +271,29 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self):
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (list, tuple)):
-                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                for batched_object_value, single_row_object_value in zip(
+                    batched_object, single_row_object
+                ):
+                    recursive_check(
+                        batched_object_value, single_row_object_value, model_name, key
+                    )
             else:
                 batched_row = batched_object[:1]
                 self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                    torch.isnan(batched_row).any(),
+                    f"Batched output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                    torch.isinf(batched_row).any(),
+                    f"Batched output has `inf` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                    torch.isnan(single_row_object).any(),
+                    f"Single row output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                    torch.isinf(single_row_object).any(),
+                    f"Single row output has `inf` in {model_name} for key={key}",
                 )
                 self.assertTrue(
                     torch.max(torch.abs(batched_row - single_row_object)) <= 1e-03,
@@ -299,15 +328,21 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if key == "hidden_states":
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+                recursive_check(
+                    model_batched_output[key], model_row_output[key], model_name, key
+                )
 
     def test_seggpt_loss(self):
         torch.manual_seed(100)
         config = self.model_tester.get_config()
 
-        prompt_masks = torch.rand(1, config.num_channels, config.image_size, config.image_size)
+        prompt_masks = torch.rand(
+            1, config.num_channels, config.image_size, config.image_size
+        )
         label = torch.rand(1, config.num_channels, config.image_size, config.image_size)
-        pred_masks = torch.rand(1, config.num_channels, config.image_size * 2, config.image_size)
+        pred_masks = torch.rand(
+            1, config.num_channels, config.image_size * 2, config.image_size
+        )
         # seq_len x 2 because the loss concatenates prompt_masks and labels as pred_masks is concatenated
         bool_masked_pos = torch.rand(1, self.model_tester.seq_length * 2) > 0.5
 
@@ -315,7 +350,9 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         loss_value = loss(prompt_masks, pred_masks, label, bool_masked_pos)
         expected_loss_value = torch.tensor(0.3340)
 
-        torch.testing.assert_close(loss_value, expected_loss_value, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            loss_value, expected_loss_value, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -337,9 +374,9 @@ def prepare_bool_masked_pos(config: SegGptConfig):
     torch.manual_seed(2)
     num_masked_patches = int(num_patches * mask_ratio)
     shuffle_idx = torch.randperm(num_patches)
-    bool_masked_pos = torch.FloatTensor([0] * (num_patches - num_masked_patches) + [1] * num_masked_patches)[
-        shuffle_idx
-    ]
+    bool_masked_pos = torch.FloatTensor(
+        [0] * (num_patches - num_masked_patches) + [1] * num_masked_patches
+    )[shuffle_idx]
     bool_masked_pos = bool_masked_pos.unsqueeze(0).bool()
 
     return bool_masked_pos
@@ -350,11 +387,17 @@ def prepare_bool_masked_pos(config: SegGptConfig):
 class SegGptModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large") if is_vision_available() else None
+        return (
+            SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_one_shot_inference(self):
-        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(
+            torch_device
+        )
 
         image_processor = self.default_image_processor
 
@@ -382,15 +425,31 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
-                [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
-                [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
+                [
+                    [-2.1208, -2.1190, -2.1198],
+                    [-2.1237, -2.1228, -2.1227],
+                    [-2.1232, -2.1226, -2.1228],
+                ],
+                [
+                    [-2.0405, -2.0396, -2.0403],
+                    [-2.0434, -2.0434, -2.0433],
+                    [-2.0428, -2.0432, -2.0434],
+                ],
+                [
+                    [-1.8102, -1.8088, -1.8099],
+                    [-1.8131, -1.8126, -1.8129],
+                    [-1.8130, -1.8128, -1.8131],
+                ],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.pred_masks[0, :, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.pred_masks[0, :, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
-        result = image_processor.post_process_semantic_segmentation(outputs, [input_image.size[::-1]])[0]
+        result = image_processor.post_process_semantic_segmentation(
+            outputs, [input_image.size[::-1]]
+        )[0]
 
         result_expected_shape = torch.Size((170, 297))
         expected_area = 1082
@@ -400,7 +459,9 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_few_shot_inference(self):
-        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(
+            torch_device
+        )
         image_processor = self.default_image_processor
 
         images, masks = prepare_img()
@@ -423,18 +484,34 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((2, 3, 896, 448))
         expected_slice = torch.tensor(
             [
-                [[-2.1201, -2.1192, -2.1189], [-2.1217, -2.1210, -2.1204], [-2.1216, -2.1202, -2.1194]],
-                [[-2.0393, -2.0390, -2.0387], [-2.0402, -2.0402, -2.0397], [-2.0400, -2.0394, -2.0388]],
-                [[-1.8083, -1.8076, -1.8077], [-1.8105, -1.8102, -1.8099], [-1.8105, -1.8095, -1.8090]],
+                [
+                    [-2.1201, -2.1192, -2.1189],
+                    [-2.1217, -2.1210, -2.1204],
+                    [-2.1216, -2.1202, -2.1194],
+                ],
+                [
+                    [-2.0393, -2.0390, -2.0387],
+                    [-2.0402, -2.0402, -2.0397],
+                    [-2.0400, -2.0394, -2.0388],
+                ],
+                [
+                    [-1.8083, -1.8076, -1.8077],
+                    [-1.8105, -1.8102, -1.8099],
+                    [-1.8105, -1.8095, -1.8090],
+                ],
             ]
         ).to(torch_device)
 
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
-        torch.testing.assert_close(outputs.pred_masks[0, :, 448:451, :3], expected_slice, rtol=4e-4, atol=4e-4)
+        torch.testing.assert_close(
+            outputs.pred_masks[0, :, 448:451, :3], expected_slice, rtol=4e-4, atol=4e-4
+        )
 
     @slow
     def test_one_shot_with_label(self):
-        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(
+            torch_device
+        )
 
         image_processor = self.default_image_processor
 
@@ -453,9 +530,9 @@ class SegGptModelIntegrationTest(unittest.TestCase):
             do_convert_rgb=False,
         ).to(torch_device)
 
-        labels = image_processor(images=None, prompt_masks=label, return_tensors="pt", do_convert_rgb=False)[
-            "prompt_masks"
-        ].to(torch_device)
+        labels = image_processor(
+            images=None, prompt_masks=label, return_tensors="pt", do_convert_rgb=False
+        )["prompt_masks"].to(torch_device)
 
         bool_masked_pos = prepare_bool_masked_pos(model.config).to(torch_device)
 

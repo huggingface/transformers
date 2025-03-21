@@ -24,7 +24,6 @@ import regex as re
 
 from ...utils import is_tf_available, is_torch_available, logging, to_py_obj
 
-
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -32,7 +31,6 @@ if TYPE_CHECKING:
         import tensorflow as tf
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-
 
 logger = logging.get_logger(__name__)
 
@@ -54,7 +52,9 @@ def bytes_to_unicode():
     tables between utf-8 bytes and unicode strings.
     """
     bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
@@ -154,10 +154,26 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         return_token_type_ids=False,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
+        bos_token = (
+            AddedToken(bos_token, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
         self.add_bos_token = add_bos_token
         self.return_token_type_ids = return_token_type_ids
         if self.return_token_type_ids:
@@ -177,7 +193,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         self.add_prefix_space = add_prefix_space
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.pat = re.compile(
+            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        )
         super().__init__(
             errors=errors,
             unk_token=unk_token,
@@ -273,7 +291,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
+        text = bytearray([self.byte_decoder[c] for c in text]).decode(
+            "utf-8", errors=self.errors
+        )
         return text
 
     def create_token_type_ids_from_sequences(
@@ -305,24 +325,35 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
         merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["merges_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False)
+                + "\n"
+            )
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+            for bpe_tokens, token_index in sorted(
+                self.bpe_ranks.items(), key=lambda kv: kv[1]
+            ):
                 if index != token_index:
                     logger.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
@@ -392,7 +423,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             m = pattern.search(string, start_pos)
             return m.start() if m else -1
 
-        terminals = [re.compile(pattern, re.MULTILINE) for pattern in truncate_before_pattern]
+        terminals = [
+            re.compile(pattern, re.MULTILINE) for pattern in truncate_before_pattern
+        ]
 
         prints = list(re.finditer("^print", completion, re.MULTILINE))
 
@@ -407,7 +440,11 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         start_pos = 0
 
         terminals_pos = [
-            pos for pos in [find_re(completion, terminal, start_pos) for terminal in terminals] if pos != -1
+            pos
+            for pos in [
+                find_re(completion, terminal, start_pos) for terminal in terminals
+            ]
+            if pos != -1
         ]
 
         if len(terminals_pos) > 0:

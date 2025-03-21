@@ -27,8 +27,8 @@ from typing import List, Optional
 import tqdm
 from filelock import FileLock
 
-from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
-
+from transformers import (PreTrainedTokenizer, is_tf_available,
+                          is_torch_available)
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,9 @@ if is_torch_available():
             lock_path = cached_features_file + ".lock"
             with FileLock(lock_path):
                 if os.path.exists(cached_features_file) and not overwrite_cache:
-                    logger.info(f"Loading features from cached file {cached_features_file}")
+                    logger.info(
+                        f"Loading features from cached file {cached_features_file}"
+                    )
                     self.features = torch.load(cached_features_file)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
@@ -130,7 +132,9 @@ if is_torch_available():
                         max_seq_length,
                         tokenizer,
                     )
-                    logger.info("Saving features into cached file %s", cached_features_file)
+                    logger.info(
+                        "Saving features into cached file %s", cached_features_file
+                    )
                     torch.save(self.features, cached_features_file)
 
         def __len__(self):
@@ -180,9 +184,13 @@ if is_tf_available():
             )
 
             def gen():
-                for ex_index, ex in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
+                for ex_index, ex in tqdm.tqdm(
+                    enumerate(self.features), desc="convert examples to features"
+                ):
                     if ex_index % 10000 == 0:
-                        logger.info("Writing example %d of %d" % (ex_index, len(examples)))
+                        logger.info(
+                            "Writing example %d of %d" % (ex_index, len(examples))
+                        )
 
                     yield (
                         {
@@ -217,7 +225,9 @@ if is_tf_available():
             )
 
         def get_dataset(self):
-            self.dataset = self.dataset.apply(tf.data.experimental.assert_cardinality(len(self.features)))
+            self.dataset = self.dataset.apply(
+                tf.data.experimental.assert_cardinality(len(self.features))
+            )
 
             return self.dataset
 
@@ -307,7 +317,12 @@ class RaceProcessor(DataProcessor):
                     InputExample(
                         example_id=race_id,
                         question=question,
-                        contexts=[article, article, article, article],  # this is not efficient but convenient
+                        contexts=[
+                            article,
+                            article,
+                            article,
+                            article,
+                        ],  # this is not efficient but convenient
                         endings=[options[0], options[1], options[2], options[3]],
                         label=truth,
                     )
@@ -321,18 +336,24 @@ class SynonymProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} train".format(data_dir))
-        return self._create_examples(self._read_csv(os.path.join(data_dir, "mctrain.csv")), "train")
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "mctrain.csv")), "train"
+        )
 
     def get_dev_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} dev".format(data_dir))
-        return self._create_examples(self._read_csv(os.path.join(data_dir, "mchp.csv")), "dev")
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "mchp.csv")), "dev"
+        )
 
     def get_test_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} dev".format(data_dir))
 
-        return self._create_examples(self._read_csv(os.path.join(data_dir, "mctest.csv")), "test")
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "mctest.csv")), "test"
+        )
 
     def get_labels(self):
         """See base class."""
@@ -367,12 +388,16 @@ class SwagProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} train".format(data_dir))
-        return self._create_examples(self._read_csv(os.path.join(data_dir, "train.csv")), "train")
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "train.csv")), "train"
+        )
 
     def get_dev_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} dev".format(data_dir))
-        return self._create_examples(self._read_csv(os.path.join(data_dir, "val.csv")), "dev")
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "val.csv")), "dev"
+        )
 
     def get_test_examples(self, data_dir):
         """See base class."""
@@ -381,7 +406,9 @@ class SwagProcessor(DataProcessor):
             "For swag testing, the input file does not contain a label column. It can not be tested in current code "
             "setting!"
         )
-        return self._create_examples(self._read_csv(os.path.join(data_dir, "test.csv")), "test")
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "test.csv")), "test"
+        )
 
     def get_labels(self):
         """See base class."""
@@ -394,7 +421,9 @@ class SwagProcessor(DataProcessor):
     def _create_examples(self, lines: List[List[str]], type: str):
         """Creates examples for the training and dev sets."""
         if type == "train" and lines[0][-1] != "label":
-            raise ValueError("For training, the input file must contain a label column.")
+            raise ValueError(
+                "For training, the input file must contain a label column."
+            )
 
         examples = [
             InputExample(
@@ -418,16 +447,22 @@ class ArcProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} train".format(data_dir))
-        return self._create_examples(self._read_json(os.path.join(data_dir, "train.jsonl")), "train")
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "train.jsonl")), "train"
+        )
 
     def get_dev_examples(self, data_dir):
         """See base class."""
         logger.info("LOOKING AT {} dev".format(data_dir))
-        return self._create_examples(self._read_json(os.path.join(data_dir, "dev.jsonl")), "dev")
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "dev.jsonl")), "dev"
+        )
 
     def get_test_examples(self, data_dir):
         logger.info("LOOKING AT {} test".format(data_dir))
-        return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
+        return self._create_examples(
+            self._read_json(os.path.join(data_dir, "test.jsonl")), "test"
+        )
 
     def get_labels(self):
         """See base class."""
@@ -486,7 +521,12 @@ class ArcProcessor(DataProcessor):
                             options[2]["para"].replace("_", ""),
                             options[3]["para"].replace("_", ""),
                         ],
-                        endings=[options[0]["text"], options[1]["text"], options[2]["text"], options[3]["text"]],
+                        endings=[
+                            options[0]["text"],
+                            options[1]["text"],
+                            options[2]["text"],
+                            options[3]["text"],
+                        ],
                         label=truth,
                     )
                 )
@@ -516,11 +556,15 @@ def convert_examples_to_features(
     label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
-    for ex_index, example in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
+    for ex_index, example in tqdm.tqdm(
+        enumerate(examples), desc="convert examples to features"
+    ):
         if ex_index % 10000 == 0:
             logger.info("Writing example %d of %d" % (ex_index, len(examples)))
         choices_inputs = []
-        for ending_idx, (context, ending) in enumerate(zip(example.contexts, example.endings)):
+        for ending_idx, (context, ending) in enumerate(
+            zip(example.contexts, example.endings)
+        ):
             text_a = context
             if example.question.find("_") != -1:
                 # this is for cloze question
@@ -550,10 +594,14 @@ def convert_examples_to_features(
 
         input_ids = [x["input_ids"] for x in choices_inputs]
         attention_mask = (
-            [x["attention_mask"] for x in choices_inputs] if "attention_mask" in choices_inputs[0] else None
+            [x["attention_mask"] for x in choices_inputs]
+            if "attention_mask" in choices_inputs[0]
+            else None
         )
         token_type_ids = (
-            [x["token_type_ids"] for x in choices_inputs] if "token_type_ids" in choices_inputs[0] else None
+            [x["token_type_ids"] for x in choices_inputs]
+            if "token_type_ids" in choices_inputs[0]
+            else None
         )
 
         features.append(
@@ -573,5 +621,10 @@ def convert_examples_to_features(
     return features
 
 
-processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "syn": SynonymProcessor}
+processors = {
+    "race": RaceProcessor,
+    "swag": SwagProcessor,
+    "arc": ArcProcessor,
+    "syn": SynonymProcessor,
+}
 MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "syn", 5}

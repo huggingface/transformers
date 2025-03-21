@@ -21,30 +21,21 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        GPT2Tokenizer,
-        OPTForCausalLM,
-        OPTForQuestionAnswering,
-        OPTForSequenceClassification,
-        OPTModel,
-    )
+    from transformers import (GPT2Tokenizer, OPTForCausalLM,
+                              OPTForQuestionAnswering,
+                              OPTForSequenceClassification, OPTModel)
 
 
 def prepare_opt_inputs_dict(
@@ -114,12 +105,16 @@ class OPTModelTester:
         self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.get_config()
         inputs_dict = prepare_opt_inputs_dict(config, input_ids, decoder_input_ids)
@@ -160,7 +155,12 @@ class OPTModelTester:
         head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -172,39 +172,65 @@ class OPTModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
         # test no attention_mask works
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
         _, past_key_values = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
 
 @require_torch
-class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OPTModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
-        (OPTModel, OPTForCausalLM, OPTForSequenceClassification, OPTForQuestionAnswering)
+        (
+            OPTModel,
+            OPTForCausalLM,
+            OPTForSequenceClassification,
+            OPTForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -261,12 +287,16 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -305,19 +335,26 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model = OPTForCausalLM(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
     def test_opt_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
+        )
         model = OPTForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
     def test_opt_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -326,15 +363,21 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+            [self.model_tester.batch_size, config.num_labels],
+            self.model_tester.type_sequence_label_size,
         ).to(torch.float)
         model = OPTForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_labels),
+        )
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(
+        reason="Does not work on the tiny model as we keep hitting edge cases."
+    )
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
@@ -367,7 +410,9 @@ class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = _long_tensor(
+            [[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]
+        )
 
         with torch.no_grad():
             output = model(input_ids=input_ids).last_hidden_state
@@ -411,15 +456,59 @@ class OPTEmbeddingsTest(unittest.TestCase):
             "Computers and mobile phones have taken",
         ]
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
-        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(dim=-1)
+        inputs = tokenizer(
+            prompts, return_tensors="pt", padding=True, add_special_tokens=False
+        )
+        logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(
+            dim=-1
+        )
         # logits_meta = torch.load(self.path_logits_meta)
         logits_meta = torch.Tensor(
             [
-                [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],
-                [-4.7073, -10.6276, -3.9415, -21.5242, -0.2822, -0.2822, -0.2822, -0.2822, -0.2822],
-                [0.6247, -3.4229, -8.9179, -1.4297, -14.1650, 1.4146, -9.0218, -0.2703, -0.2703],
-                [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
+                [
+                    1.3851,
+                    -13.8923,
+                    -10.5229,
+                    -10.7533,
+                    -0.2309,
+                    -10.2384,
+                    -0.5365,
+                    -9.0947,
+                    -5.1670,
+                ],
+                [
+                    -4.7073,
+                    -10.6276,
+                    -3.9415,
+                    -21.5242,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                    -0.2822,
+                ],
+                [
+                    0.6247,
+                    -3.4229,
+                    -8.9179,
+                    -1.4297,
+                    -14.1650,
+                    1.4146,
+                    -9.0218,
+                    -0.2703,
+                    -0.2703,
+                ],
+                [
+                    6.4783,
+                    -1.9913,
+                    -10.7926,
+                    -2.3336,
+                    1.5092,
+                    -0.9974,
+                    -6.8213,
+                    1.3477,
+                    1.3477,
+                ],
             ]
         )
         assert torch.allclose(logits, logits_meta, atol=1e-4)
@@ -455,7 +544,9 @@ class OPTGenerationTest(unittest.TestCase):
 
             generated_ids = model.generate(input_ids, max_length=10)
 
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
@@ -483,15 +574,26 @@ class OPTGenerationTest(unittest.TestCase):
             attention_mask=inputs["attention_mask"].to(torch_device),
         )
 
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(
+            torch_device
+        )
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        num_paddings = (
+            inputs_non_padded.shape[-1]
+            - inputs["attention_mask"][-1].long().sum().cpu().item()
+        )
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(
+            torch_device
+        )
+        output_padded = model.generate(
+            input_ids=inputs_padded, max_length=model.config.max_length - num_paddings
+        )
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(
+            output_non_padded[0], skip_special_tokens=True
+        )
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
@@ -520,7 +622,9 @@ class OPTGenerationTest(unittest.TestCase):
 
             generated_ids = model.generate(input_ids, max_length=10)
 
-            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            generated_string = tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )
             predicted_outputs += generated_string
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
@@ -532,12 +636,20 @@ class OPTGenerationTest(unittest.TestCase):
         # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.
         # please refer to this github thread: https://github.com/huggingface/transformers/pull/17437 for more details
         model_name = "facebook/opt-1.3b"
-        tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            model_name, use_fast=False, padding_side="left"
+        )
 
-        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = OPTForCausalLM.from_pretrained(
+            model_name, torch_dtype=torch.float16, use_cache=True
+        ).to(torch_device)
         model = model.eval()
 
-        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+        batch = tokenizer(
+            ["Who are you?", "Joe Biden is the president of"],
+            padding=True,
+            return_tensors="pt",
+        )
 
         input_ids = batch["input_ids"].to(torch_device)
         attention_mask = batch["attention_mask"].to(torch_device)
@@ -558,9 +670,13 @@ class OPTGenerationTest(unittest.TestCase):
 
         opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
         opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
-        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(
+            torch_device
+        )
 
-        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256)
+        outputs = opt_model.generate(
+            input_ids, penalty_alpha=0.6, top_k=5, max_length=256
+        )
         generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(

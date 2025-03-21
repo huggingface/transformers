@@ -17,21 +17,21 @@
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import (TestCasePlus, require_bitsandbytes,
+                                        require_torch, slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
+    from transformers import (EsmForMaskedLM, EsmForSequenceClassification,
+                              EsmForTokenClassification, EsmModel)
     from transformers.models.esm.modeling_esm import (
-        EsmEmbeddings,
-        create_position_ids_from_input_ids,
-    )
+        EsmEmbeddings, create_position_ids_from_input_ids)
 
 
 # copied from tests.test_modeling_roberta
@@ -95,13 +95,24 @@ class EsmModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return EsmConfig(
@@ -119,7 +130,15 @@ class EsmModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
         model = EsmModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -127,27 +146,48 @@ class EsmModelTester:
         result = model(input_ids)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = EsmForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = EsmForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_forward_and_backwards(
         self,
@@ -164,7 +204,9 @@ class EsmModelTester:
             model.gradient_checkpointing_enable()
         model.to(torch_device)
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         result.loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
@@ -236,7 +278,9 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_esm_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+        self.model_tester.create_and_check_forward_and_backwards(
+            *config_and_inputs, gradient_checkpointing=True
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -284,7 +328,9 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             2 + embeddings.padding_idx + 1,
             3 + embeddings.padding_idx + 1,
         ]
-        expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
+        expected_positions = torch.as_tensor(
+            [expected_single_positions, expected_single_positions]
+        )
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
@@ -314,9 +360,17 @@ class EsmModelIntegrationTest(TestCasePlus):
             self.assertEqual(output.shape, expected_shape)
 
             expected_slice = torch.tensor(
-                [[[8.9215, -10.5898, -6.4671], [-6.3967, -13.9114, -1.1212], [-7.7812, -13.9516, -3.7406]]]
+                [
+                    [
+                        [8.9215, -10.5898, -6.4671],
+                        [-6.3967, -13.9114, -1.1212],
+                        [-7.7812, -13.9516, -3.7406],
+                    ]
+                ]
             )
-            torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+            )
 
     def test_inference_no_head(self):
         with torch.no_grad():
@@ -327,21 +381,37 @@ class EsmModelIntegrationTest(TestCasePlus):
             output = model(input_ids)[0]
             # compare the actual values for a slice.
             expected_slice = torch.tensor(
-                [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
+                [
+                    [
+                        [0.1444, 0.5413, 0.3248],
+                        [0.3034, 0.0053, 0.3108],
+                        [0.3228, -0.2499, 0.3415],
+                    ]
+                ]
             )
-            torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+            )
 
     @require_bitsandbytes
     def test_inference_bitsandbytes(self):
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "facebook/esm2_t36_3B_UR50D", load_in_8bit=True
+        )
 
-        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(
+            model.device
+        )
         # Just test if inference works
         with torch.no_grad():
             _ = model(input_ids)[0]
 
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "facebook/esm2_t36_3B_UR50D", load_in_4bit=True
+        )
 
-        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(
+            model.device
+        )
         # Just test if inference works
         _ = model(input_ids)[0]

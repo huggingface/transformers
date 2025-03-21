@@ -17,17 +17,11 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..utils import (
-    ExplicitEnum,
-    add_end_docstrings,
-    is_pytesseract_available,
-    is_torch_available,
-    is_vision_available,
-    logging,
-)
+from ..utils import (ExplicitEnum, add_end_docstrings,
+                     is_pytesseract_available, is_torch_available,
+                     is_vision_available, logging)
 from .base import ChunkPipeline, build_pipeline_init_args
 from .question_answering import select_starts_ends
-
 
 if is_vision_available():
     from PIL import Image
@@ -37,7 +31,8 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
+    from ..models.auto.modeling_auto import \
+        MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 
 TESSERACT_LOADED = False
 if is_pytesseract_available():
@@ -59,11 +54,21 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(
+    image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]
+):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     # apply OCR
-    data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
-    words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
+    data = pytesseract.image_to_data(
+        image, lang=lang, output_type="dict", config=tesseract_config
+    )
+    words, left, top, width, height = (
+        data["text"],
+        data["left"],
+        data["top"],
+        data["width"],
+        data["height"],
+    )
 
     # filter empty words and corresponding coordinates
     irrelevant_indices = [idx for idx, word in enumerate(words) if not word.strip()]
@@ -71,7 +76,9 @@ def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config:
     left = [coord for idx, coord in enumerate(left) if idx not in irrelevant_indices]
     top = [coord for idx, coord in enumerate(top) if idx not in irrelevant_indices]
     width = [coord for idx, coord in enumerate(width) if idx not in irrelevant_indices]
-    height = [coord for idx, coord in enumerate(height) if idx not in irrelevant_indices]
+    height = [
+        coord for idx, coord in enumerate(height) if idx not in irrelevant_indices
+    ]
 
     # turn coordinates into (left, top, left+width, top+height) format
     actual_boxes = []
@@ -98,7 +105,9 @@ class ModelType(ExplicitEnum):
     VisionEncoderDecoder = "vision_encoder_decoder"
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True, has_tokenizer=True))
+@add_end_docstrings(
+    build_pipeline_init_args(has_image_processor=True, has_tokenizer=True)
+)
 class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
     """
@@ -131,7 +140,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+        if (
+            self.tokenizer is not None
+            and not self.tokenizer.__class__.__name__.endswith("Fast")
+        ):
             raise ValueError(
                 "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
                 f"(`{self.tokenizer.__class__.__name__}`) is provided."
@@ -140,7 +152,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig":
             self.model_type = ModelType.VisionEncoderDecoder
             if self.model.config.encoder.model_type != "donut-swin":
-                raise ValueError("Currently, the only supported VisionEncoderDecoder model is Donut")
+                raise ValueError(
+                    "Currently, the only supported VisionEncoderDecoder model is Donut"
+                )
         else:
             self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES)
             if self.model.config.__class__.__name__ == "LayoutLMConfig":
@@ -184,7 +198,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
-                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+                raise ValueError(
+                    f"max_answer_len parameter should be >= 1 (got {max_answer_len}"
+                )
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
@@ -301,14 +317,20 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                image_inputs = self.image_processor(
+                    images=image, return_tensors=self.framework
+                )
                 if self.framework == "pt":
                     image_inputs = image_inputs.to(self.torch_dtype)
                 image_features.update(image_inputs)
             elif self.feature_extractor is not None:
-                image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
+                image_features.update(
+                    self.feature_extractor(images=image, return_tensors=self.framework)
+                )
             elif self.model_type == ModelType.VisionEncoderDecoder:
-                raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
+                raise ValueError(
+                    "If you are using a VisionEncoderDecoderModel, you must provide a feature extractor"
+                )
 
         words, boxes = None, None
         if not self.model_type == ModelType.VisionEncoderDecoder:
@@ -325,7 +347,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                         " but pytesseract is not available"
                     )
                 if TESSERACT_LOADED:
-                    words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
+                    words, boxes = apply_tesseract(
+                        image, lang=lang, tesseract_config=tesseract_config
+                    )
             else:
                 raise ValueError(
                     "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically"
@@ -339,7 +363,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             )
 
         if self.model_type == ModelType.VisionEncoderDecoder:
-            task_prompt = f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
+            task_prompt = (
+                f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
+            )
             # Adapted from https://huggingface.co/spaces/nielsr/donut-docvqa/blob/main/app.py
             encoding = {
                 "inputs": image_features["pixel_values"],
@@ -385,19 +411,29 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
             # This logic mirrors the logic in the question_answering pipeline
-            p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
+            p_mask = [
+                [tok != 1 for tok in encoding.sequence_ids(span_id)]
+                for span_id in range(num_spans)
+            ]
             for span_idx in range(num_spans):
                 if self.framework == "pt":
-                    span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
+                    span_encoding = {
+                        k: torch.tensor(v[span_idx : span_idx + 1])
+                        for (k, v) in encoding.items()
+                    }
                     if "pixel_values" in image_features:
                         span_encoding["image"] = image_features["pixel_values"]
                 else:
-                    raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                    raise ValueError(
+                        "Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline"
+                    )
 
                 input_ids_span_idx = encoding["input_ids"][span_idx]
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
                 if self.tokenizer.cls_token_id is not None:
-                    cls_indices = np.nonzero(np.array(input_ids_span_idx) == self.tokenizer.cls_token_id)[0]
+                    cls_indices = np.nonzero(
+                        np.array(input_ids_span_idx) == self.tokenizer.cls_token_id
+                    )[0]
                     for cls_index in cls_indices:
                         p_mask[span_idx][cls_index] = 0
 
@@ -420,7 +456,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                     if self.framework == "pt":
                         span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
                     elif self.framework == "tf":
-                        raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                        raise ValueError(
+                            "Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline"
+                        )
                 yield {
                     **span_encoding,
                     "p_mask": p_mask[span_idx],
@@ -454,9 +492,13 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
         if self.model_type == ModelType.VisionEncoderDecoder:
-            answers = [self.postprocess_encoder_decoder_single(o) for o in model_outputs]
+            answers = [
+                self.postprocess_encoder_decoder_single(o) for o in model_outputs
+            ]
         else:
-            answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
+            answers = self.postprocess_extractive_qa(
+                model_outputs, top_k=top_k, **kwargs
+            )
 
         answers = sorted(answers, key=lambda x: x.get("score", 0), reverse=True)[:top_k]
         return answers
@@ -466,8 +508,12 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
         # TODO: A lot of this logic is specific to Donut and should probably be handled in the tokenizer
         # (see https://github.com/huggingface/transformers/pull/18414/files#r961747408 for more context).
-        sequence = sequence.replace(self.tokenizer.eos_token, "").replace(self.tokenizer.pad_token, "")
-        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+        sequence = sequence.replace(self.tokenizer.eos_token, "").replace(
+            self.tokenizer.pad_token, ""
+        )
+        sequence = re.sub(
+            r"<.*?>", "", sequence, count=1
+        ).strip()  # remove first task start token
         ret = {
             "answer": None,
         }
@@ -478,25 +524,38 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         return ret
 
     def postprocess_extractive_qa(
-        self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15, **kwargs
+        self,
+        model_outputs,
+        top_k=1,
+        handle_impossible_answer=False,
+        max_answer_len=15,
+        **kwargs,
     ):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
             words = output["words"]
 
-            if self.framework == "pt" and output["start_logits"].dtype in (torch.bfloat16, torch.float16):
+            if self.framework == "pt" and output["start_logits"].dtype in (
+                torch.bfloat16,
+                torch.float16,
+            ):
                 output["start_logits"] = output["start_logits"].float()
-            if self.framework == "pt" and output["end_logits"].dtype in (torch.bfloat16, torch.float16):
+            if self.framework == "pt" and output["end_logits"].dtype in (
+                torch.bfloat16,
+                torch.float16,
+            ):
                 output["end_logits"] = output["end_logits"].float()
 
             starts, ends, scores, min_null_score = select_starts_ends(
                 start=output["start_logits"],
                 end=output["end_logits"],
                 p_mask=output["p_mask"],
-                attention_mask=output["attention_mask"].numpy()
-                if output.get("attention_mask", None) is not None
-                else None,
+                attention_mask=(
+                    output["attention_mask"].numpy()
+                    if output.get("attention_mask", None) is not None
+                    else None
+                ),
                 min_null_score=min_null_score,
                 top_k=top_k,
                 handle_impossible_answer=handle_impossible_answer,
@@ -516,6 +575,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                     )
 
         if handle_impossible_answer:
-            answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
+            answers.append(
+                {"score": min_null_score, "answer": "", "start": 0, "end": 0}
+            )
 
         return answers

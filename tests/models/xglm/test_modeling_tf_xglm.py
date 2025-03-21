@@ -21,17 +21,15 @@ from transformers import XGLMConfig, XGLMTokenizer, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_tf_common import (TFModelTesterMixin, floats_tensor,
+                                        ids_tensor, random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.xglm.modeling_tf_xglm import (
-        TFXGLMForCausalLM,
-        TFXGLMModel,
-    )
+    from transformers.models.xglm.modeling_tf_xglm import (TFXGLMForCausalLM,
+                                                           TFXGLMModel)
 
 
 @require_tf
@@ -85,7 +83,9 @@ class TFXGLMModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = tf.clip_by_value(
-            ids_tensor([self.batch_size, self.seq_length], self.vocab_size), clip_value_min=0, clip_value_max=3
+            ids_tensor([self.batch_size, self.seq_length], self.vocab_size),
+            clip_value_min=0,
+            clip_value_max=3,
         )
 
         input_mask = None
@@ -145,7 +145,9 @@ class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_model_classes = (TFXGLMModel, TFXGLMForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFXGLMForCausalLM,) if is_tf_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": TFXGLMModel, "text-generation": TFXGLMForCausalLM} if is_tf_available() else {}
+        {"feature-extraction": TFXGLMModel, "text-generation": TFXGLMForCausalLM}
+        if is_tf_available()
+        else {}
     )
     test_onnx = False
     test_missing_keys = False
@@ -164,7 +166,9 @@ class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = TFXGLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Currently, model embeddings are going to undergo a major refactor.")
+    @unittest.skip(
+        reason="Currently, model embeddings are going to undergo a major refactor."
+    )
     def test_resize_token_embeddings(self):
         super().test_resize_token_embeddings()
 
@@ -194,9 +198,7 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
             output_ids = model.generate(input_ids, do_sample=True, seed=[7, 0])
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and warm evening here over Southern Alberta!! Today when they closed schools due"
-        )
+        EXPECTED_OUTPUT_STR = "Today is a nice day and warm evening here over Southern Alberta!! Today when they closed schools due"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @slow
@@ -217,16 +219,24 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="tf", padding=True)
         input_ids = inputs["input_ids"]
 
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"], max_new_tokens=12)
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"],
+            max_new_tokens=12,
+        )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="tf").input_ids
-        output_non_padded = model.generate(input_ids=inputs_non_padded, max_new_tokens=12)
+        output_non_padded = model.generate(
+            input_ids=inputs_non_padded, max_new_tokens=12
+        )
 
         inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
         output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=12)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(
+            output_non_padded[0], skip_special_tokens=True
+        )
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
@@ -237,7 +247,9 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
             "Hello, my dog is a little bit of a shy one, but he is very friendly",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+        self.assertListEqual(
+            expected_output_sentence, [non_padded_sentence, padded_sentence]
+        )
 
     @slow
     def test_loss_with_padding(self):
@@ -252,9 +264,13 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         labels_non_padded = tokenized_non_padded.input_ids
         loss_non_padded = model(tokenized_non_padded, labels=labels_non_padded).loss
 
-        tokenized_padded = tokenizer(sequence, padding="max_length", max_length=16, return_tensors="tf")
+        tokenized_padded = tokenizer(
+            sequence, padding="max_length", max_length=16, return_tensors="tf"
+        )
         labels_padded = tokenized_padded.input_ids
-        labels_padded = tf.where(labels_padded == tokenizer.pad_token_id, -100, labels_padded)
+        labels_padded = tf.where(
+            labels_padded == tokenizer.pad_token_id, -100, labels_padded
+        )
         loss_padded = model(tokenized_padded, labels=labels_padded).loss
 
         tf.debugging.assert_near(loss_non_padded, loss_padded, atol=1e-3)

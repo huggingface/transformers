@@ -25,7 +25,6 @@ from unittest.mock import patch
 import tensorflow as tf
 from packaging.version import parse
 
-
 try:
     import tf_keras as keras
 except (ModuleNotFoundError, ImportError):
@@ -39,7 +38,6 @@ except (ModuleNotFoundError, ImportError):
         )
 
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
-
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)

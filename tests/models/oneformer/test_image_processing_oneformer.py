@@ -24,16 +24,18 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
 
     if is_vision_available():
         from transformers import OneFormerImageProcessor
-        from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle, prepare_metadata
-        from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
+        from transformers.models.oneformer.image_processing_oneformer import (
+            binary_mask_to_rle, prepare_metadata)
+        from transformers.models.oneformer.modeling_oneformer import \
+            OneFormerForUniversalSegmentationOutput
 
 if is_vision_available():
     from PIL import Image
@@ -65,7 +67,9 @@ class OneFormerImageProcessorTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
+        self.size = (
+            {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
+        )
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -133,15 +137,21 @@ class OneFormerImageProcessorTester:
     def get_fake_oneformer_outputs(self):
         return OneFormerForUniversalSegmentationOutput(
             # +1 for null class
-            class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
-            masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
+            class_queries_logits=torch.randn(
+                (self.batch_size, self.num_queries, self.num_classes + 1)
+            ),
+            masks_queries_logits=torch.randn(
+                (self.batch_size, self.num_queries, self.height, self.width)
+            ),
         )
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -156,7 +166,11 @@ class OneFormerImageProcessorTester:
 @require_torch
 @require_vision
 class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = OneFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
+    image_processing_class = (
+        OneFormerImageProcessor
+        if (is_vision_available() and is_torch_available())
+        else None
+    )
     # only for test_image_processing_common.test_image_proc_to_json_string
     image_processing_class = image_processing_class
 
@@ -183,24 +197,34 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
 
     def comm_get_image_processor_inputs(
-        self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
+        self,
+        with_segmentation_maps=False,
+        is_instance_map=False,
+        segmentation_type="np",
     ):
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # prepare image and target
         num_labels = self.image_processor_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False
+        )
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
                 labels_expanded = list(range(num_labels)) * 2
                 instance_id_to_semantic_id = dict(enumerate(labels_expanded))
             annotations = [
-                np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(np.uint8) for img in image_inputs
+                np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(
+                    np.uint8
+                )
+                for img in image_inputs
             ]
             if segmentation_type == "pil":
-                annotations = [Image.fromarray(annotation) for annotation in annotations]
+                annotations = [
+                    Image.fromarray(annotation) for annotation in annotations
+                ]
 
         inputs = image_processor(
             image_inputs,
@@ -220,7 +244,9 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
             inputs = self.comm_get_image_processor_inputs(
-                with_segmentation_maps=True, is_instance_map=is_instance_map, segmentation_type=segmentation_type
+                with_segmentation_maps=True,
+                is_instance_map=is_instance_map,
+                segmentation_type=segmentation_type,
             )
 
             mask_labels = inputs["mask_labels"]
@@ -229,7 +255,9 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             text_inputs = inputs["text_inputs"]
 
             # check the batch_size
-            for mask_label, class_label, text_input in zip(mask_labels, class_labels, text_inputs):
+            for mask_label, class_label, text_input in zip(
+                mask_labels, class_labels, text_inputs
+            ):
                 self.assertEqual(mask_label.shape[0], class_label.shape[0])
                 # this ensure padding has happened
                 self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
@@ -274,7 +302,9 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
         target_sizes = [(1, 4) for i in range(self.image_processor_tester.batch_size)]
-        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_sizes=target_sizes)
+        segmentation = fature_extractor.post_process_semantic_segmentation(
+            outputs, target_sizes=target_sizes
+        )
 
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 
@@ -288,7 +318,9 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             repo_path="shi-labs/oneformer_demo",
         )
         outputs = self.image_processor_tester.get_fake_oneformer_outputs()
-        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
+        segmentation = image_processor.post_process_instance_segmentation(
+            outputs, threshold=0
+        )
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
         for el in segmentation:
@@ -296,16 +328,21 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue("segments_info" in el)
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(
-                el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                el["segmentation"].shape,
+                (self.image_processor_tester.height, self.image_processor_tester.width),
             )
 
         segmentation_with_opts = image_processor.post_process_instance_segmentation(
             outputs,
             threshold=0,
-            target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
+            target_sizes=[
+                (1, 4) for _ in range(self.image_processor_tester.batch_size)
+            ],
             task_type="panoptic",
         )
-        self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
+        self.assertTrue(
+            len(segmentation_with_opts) == self.image_processor_tester.batch_size
+        )
         for el in segmentation_with_opts:
             self.assertTrue("segmentation" in el)
             self.assertTrue("segments_info" in el)
@@ -322,7 +359,9 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             repo_path="shi-labs/oneformer_demo",
         )
         outputs = self.image_processor_tester.get_fake_oneformer_outputs()
-        segmentation = image_processor.post_process_panoptic_segmentation(outputs, threshold=0)
+        segmentation = image_processor.post_process_panoptic_segmentation(
+            outputs, threshold=0
+        )
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
         for el in segmentation:
@@ -330,7 +369,8 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue("segments_info" in el)
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(
-                el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                el["segmentation"].shape,
+                (self.image_processor_tester.height, self.image_processor_tester.width),
             )
 
     def test_can_load_with_local_metadata(self):

@@ -18,44 +18,31 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available, logging
-from transformers.testing_utils import (
-    CaptureLogger,
-    require_deterministic_for_xpu,
-    require_torch,
-    require_torch_sdpa,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (CaptureLogger,
+                                        require_deterministic_for_xpu,
+                                        require_torch, require_torch_sdpa,
+                                        slow, torch_device)
 
 from ...test_modeling_common import ids_tensor
 from ..bart.test_modeling_bart import BartStandaloneDecoderModelTester
 from ..bert.test_modeling_bert import BertModelTester
-from ..bert_generation.test_modeling_bert_generation import BertGenerationEncoderTester
+from ..bert_generation.test_modeling_bert_generation import \
+    BertGenerationEncoderTester
 from ..gpt2.test_modeling_gpt2 import GPT2ModelTester
-from ..prophetnet.test_modeling_prophetnet import ProphetNetStandaloneDecoderModelTester
+from ..prophetnet.test_modeling_prophetnet import \
+    ProphetNetStandaloneDecoderModelTester
 from ..roberta.test_modeling_roberta import RobertaModelTester
-
 
 if is_torch_available():
     import numpy as np
     import torch
 
-    from transformers import (
-        AutoConfig,
-        AutoTokenizer,
-        BartForCausalLM,
-        BertGenerationDecoder,
-        BertGenerationEncoder,
-        BertLMHeadModel,
-        BertModel,
-        BertTokenizer,
-        EncoderDecoderConfig,
-        EncoderDecoderModel,
-        GPT2LMHeadModel,
-        ProphetNetForCausalLM,
-        RobertaForCausalLM,
-        RobertaModel,
-    )
+    from transformers import (AutoConfig, AutoTokenizer, BartForCausalLM,
+                              BertGenerationDecoder, BertGenerationEncoder,
+                              BertLMHeadModel, BertModel, BertTokenizer,
+                              EncoderDecoderConfig, EncoderDecoderModel,
+                              GPT2LMHeadModel, ProphetNetForCausalLM,
+                              RobertaForCausalLM, RobertaModel)
     from transformers.modeling_outputs import BaseModelOutput
 
 
@@ -83,7 +70,9 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            config, decoder_config
+        )
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
 
         enc_dec_model = EncoderDecoderModel(encoder_decoder_config)
@@ -100,10 +89,12 @@ class EncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_encoder_decoder_model(
@@ -117,8 +108,12 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         self.assertTrue(enc_dec_model.config.decoder.is_decoder)
         self.assertTrue(enc_dec_model.config.decoder.add_cross_attention)
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
@@ -130,10 +125,12 @@ class EncoderDecoderMixin:
             decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
         encoder_outputs = BaseModelOutput(last_hidden_state=encoder_hidden_states)
@@ -145,10 +142,12 @@ class EncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
         # Test passing encoder_outputs as tuple.
@@ -161,10 +160,12 @@ class EncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_encoder_decoder_model_from_pretrained_using_model_paths(
@@ -178,7 +179,9 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         with (
             tempfile.TemporaryDirectory() as encoder_tmp_dirname,
             tempfile.TemporaryDirectory() as decoder_tmp_dirname,
@@ -206,10 +209,12 @@ class EncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_encoder_decoder_model_from_pretrained(
@@ -224,8 +229,14 @@ class EncoderDecoderMixin:
         return_dict,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        kwargs = {
+            "encoder_model": encoder_model,
+            "decoder_model": decoder_model,
+            "return_dict": return_dict,
+        }
         enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -237,10 +248,12 @@ class EncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_save_and_load(
@@ -254,8 +267,12 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
         with torch.no_grad():
@@ -295,8 +312,12 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
         with torch.no_grad():
@@ -344,8 +365,12 @@ class EncoderDecoderMixin:
         labels,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -360,20 +385,28 @@ class EncoderDecoderMixin:
         loss.backward()
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def _check_output_with_attentions(
-        self, outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+        self,
+        outputs_encoder_decoder,
+        config,
+        input_ids,
+        decoder_config,
+        decoder_input_ids,
     ):
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
         self.assertEqual(
-            encoder_attentions[0].shape[-3:], (config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1])
+            encoder_attentions[0].shape[-3:],
+            (config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
@@ -386,7 +419,11 @@ class EncoderDecoderMixin:
 
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                decoder_input_ids.shape[-1],
+                decoder_input_ids.shape[-1],
+            ),
         )
 
         cross_attentions = outputs_encoder_decoder["cross_attentions"]
@@ -397,7 +434,11 @@ class EncoderDecoderMixin:
         )
         self.assertEqual(
             cross_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, cross_attention_input_seq_len, input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                cross_attention_input_seq_len,
+                input_ids.shape[-1],
+            ),
         )
 
     def check_encoder_decoder_model_output_attentions(
@@ -415,8 +456,12 @@ class EncoderDecoderMixin:
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -426,7 +471,11 @@ class EncoderDecoderMixin:
             output_attentions=True,
         )
         self._check_output_with_attentions(
-            outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+            outputs_encoder_decoder,
+            config,
+            input_ids,
+            decoder_config,
+            decoder_input_ids,
         )
 
     def check_encoder_decoder_model_output_attentions_from_config(
@@ -447,8 +496,12 @@ class EncoderDecoderMixin:
 
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.config.output_attentions = True  # model config -> won't work
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -460,14 +513,22 @@ class EncoderDecoderMixin:
         self.assertTrue(
             all(
                 key not in outputs_encoder_decoder
-                for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+                for key in [
+                    "encoder_attentions",
+                    "decoder_attentions",
+                    "cross_attentions",
+                ]
             )
         )
 
         config.output_attentions = True  # inner model config -> will work
         decoder_config.output_attentions = True
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -476,17 +537,29 @@ class EncoderDecoderMixin:
             decoder_attention_mask=decoder_attention_mask,
         )
         self._check_output_with_attentions(
-            outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+            outputs_encoder_decoder,
+            config,
+            input_ids,
+            decoder_config,
+            decoder_input_ids,
         )
 
-    def check_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+    def check_encoder_decoder_model_generate(
+        self, input_ids, config, decoder_config, **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = EncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         # Generate until max length
         if hasattr(enc_dec_model.config, "eos_token_id"):
             enc_dec_model.config.eos_token_id = None
-        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(
+            enc_dec_model.config.decoder, "eos_token_id"
+        ):
             enc_dec_model.config.decoder.eos_token_id = None
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
@@ -498,7 +571,9 @@ class EncoderDecoderMixin:
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
             max_length=decoder_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,)
+        )
 
     def create_and_check_encoder_decoder_shared_weights(
         self,
@@ -513,20 +588,30 @@ class EncoderDecoderMixin:
         **kwargs,
     ):
         torch.manual_seed(0)
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
         model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         model.to(torch_device)
         model.eval()
         # load state dict copies weights but does not tie them
-        decoder_state_dict = model.decoder._modules[model.decoder.base_model_prefix].state_dict()
+        decoder_state_dict = model.decoder._modules[
+            model.decoder.base_model_prefix
+        ].state_dict()
         model.encoder.load_state_dict(decoder_state_dict, strict=False)
 
         torch.manual_seed(0)
-        tied_encoder_model, tied_decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(
-            tied_encoder_model.config, tied_decoder_model.config, tie_encoder_decoder=True
+        tied_encoder_model, tied_decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
         )
-        tied_model = EncoderDecoderModel(encoder=tied_encoder_model, decoder=tied_decoder_model, config=config)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            tied_encoder_model.config,
+            tied_decoder_model.config,
+            tie_encoder_decoder=True,
+        )
+        tied_model = EncoderDecoderModel(
+            encoder=tied_encoder_model, decoder=tied_decoder_model, config=config
+        )
         tied_model.to(torch_device)
         tied_model.eval()
 
@@ -545,13 +630,18 @@ class EncoderDecoderMixin:
         )
 
         # check that models has less parameters
-        self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
+        self.assertLess(
+            sum(p.numel() for p in tied_model.parameters()),
+            sum(p.numel() for p in model.parameters()),
+        )
         random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
         # check that outputs are equal
         self.assertTrue(
             torch.allclose(
-                model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                model_result[0][0, :, random_slice_idx],
+                tied_model_result[0][0, :, random_slice_idx],
+                atol=1e-4,
             )
         )
 
@@ -564,7 +654,8 @@ class EncoderDecoderMixin:
 
             # check that models has less parameters
             self.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                sum(p.numel() for p in tied_model.parameters()),
+                sum(p.numel() for p in model.parameters()),
             )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
@@ -578,7 +669,9 @@ class EncoderDecoderMixin:
             # check that outputs are equal
             self.assertTrue(
                 torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                    model_result[0][0, :, random_slice_idx],
+                    tied_model_result[0][0, :, random_slice_idx],
+                    atol=1e-4,
                 )
             )
 
@@ -592,15 +685,21 @@ class EncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=False)
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict, return_dict=False
+        )
 
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict, return_dict=True
+        )
 
     def test_encoder_decoder_model_from_pretrained_using_model_paths(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained_using_model_paths(**input_ids_dict, return_dict=False)
+        self.check_encoder_decoder_model_from_pretrained_using_model_paths(
+            **input_ids_dict, return_dict=False
+        )
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -693,7 +792,10 @@ class EncoderDecoderMixin:
             self.skipTest("SDPA is not supported")
 
         inputs_dict = self.prepare_config_and_inputs()
-        encoder_config, decoder_config = inputs_dict["config"], inputs_dict["decoder_config"]
+        encoder_config, decoder_config = (
+            inputs_dict["config"],
+            inputs_dict["decoder_config"],
+        )
         config = EncoderDecoderConfig.from_encoder_decoder_configs(
             encoder_config=encoder_config, decoder_config=decoder_config
         )
@@ -709,20 +811,30 @@ class EncoderDecoderMixin:
             encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
             decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-            self.assertTrue(model_sdpa.encoder.config._attn_implementation == encoder_attn)
-            self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+            self.assertTrue(
+                model_sdpa.encoder.config._attn_implementation == encoder_attn
+            )
+            self.assertTrue(
+                model_sdpa.decoder.config._attn_implementation == decoder_attn
+            )
 
             # Also test that nothing break if we request SDPA explicitly, when both sub-parts support it.
             # If the model supports sdpa (i.e. all of sub-models supports it) we'll dispatch safely
             # Otherwise we should raise error that SDPA is not supported, as some of the sub-models doesn't support
             if encoder_attn == "sdpa" and decoder_attn == "sdpa":
-                model_sdpa_explicit = EncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa_explicit = EncoderDecoderModel.from_pretrained(
+                    tmpdirname, attn_implementation="sdpa"
+                )
                 model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
 
-                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
+                self.assertTrue(
+                    model_sdpa_explicit.config._attn_implementation == "sdpa"
+                )
             else:
                 with self.assertRaises(ValueError):
-                    model_sdpa_explicit = EncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                    model_sdpa_explicit = EncoderDecoderModel.from_pretrained(
+                        tmpdirname, attn_implementation="sdpa"
+                    )
 
             model_eager = EncoderDecoderModel.from_pretrained(
                 tmpdirname,
@@ -737,7 +849,9 @@ class EncoderDecoderMixin:
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
                 if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
+                    raise ValueError(
+                        "The eager model should not have SDPA attention layers"
+                    )
 
 
 @require_torch
@@ -803,20 +917,27 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         encoder_config.position_embedding_type = "relative_key_query"
         decoder_config.position_embedding_type = "relative_key_query"
 
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config, decoder_config
+        )
         model = EncoderDecoderModel(config).eval().to(torch_device)
 
         logits = model(
-            input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
+            input_ids=config_and_inputs["input_ids"],
+            decoder_input_ids=config_and_inputs["decoder_input_ids"],
         ).logits
 
         self.assertTrue(logits.shape, (13, 7))
 
     @slow
     def test_bert2bert_summarization(self):
-        model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+        model = EncoderDecoderModel.from_pretrained(
+            "patrickvonplaten/bert2bert-cnn_dailymail-fp16"
+        )
         model.to(torch_device)
-        tokenizer = BertTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+        tokenizer = BertTokenizer.from_pretrained(
+            "patrickvonplaten/bert2bert-cnn_dailymail-fp16"
+        )
 
         ARTICLE_SIGMA = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
 
@@ -834,7 +955,8 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             return_tensors="pt",
         )
         output_ids = model.generate(
-            input_dict["input_ids"].to(torch_device), attention_mask=input_dict["attention_mask"].to(torch_device)
+            input_dict["input_ids"].to(torch_device),
+            attention_mask=input_dict["attention_mask"].to(torch_device),
         )
         summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -843,19 +965,28 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def test_bert2bert_default_decoder_attention_mask(self):
         torch.manual_seed(0)
         test_dict = self.prepare_config_and_inputs()
-        encoder_config, decoder_config = test_dict["config"], test_dict["decoder_config"]
+        encoder_config, decoder_config = (
+            test_dict["config"],
+            test_dict["decoder_config"],
+        )
 
         encoder_config.pad_token_id = 5
         encoder_config.decoder_start_token_id = 2
         decoder_config.pad_token_id = 5
         decoder_config.decoder_start_token_id = 2
 
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config, decoder_config
+        )
         config.pad_token_id = 5
         config.decoder_start_token_id = 2
 
-        encoder_model, decoder_model = self.get_encoder_decoder_model(encoder_config, decoder_config)
-        model = EncoderDecoderModel(config=config, encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            encoder_config, decoder_config
+        )
+        model = EncoderDecoderModel(
+            config=config, encoder=encoder_model, decoder=decoder_model
+        )
 
         input_ids = torch.tensor(
             [
@@ -886,16 +1017,22 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         attention_mask_ignoring_padding = torch.ones(labels.shape, dtype=torch.long)
         torch.manual_seed(0)
         ignore_pad_tokens_output = model(
-            input_ids, attention_mask, labels=labels, decoder_attention_mask=attention_mask_ignoring_padding
+            input_ids,
+            attention_mask,
+            labels=labels,
+            decoder_attention_mask=attention_mask_ignoring_padding,
         )
-        self.assertNotAlmostEqual(output.loss.item(), ignore_pad_tokens_output.loss.item())
+        self.assertNotAlmostEqual(
+            output.loss.item(), ignore_pad_tokens_output.loss.item()
+        )
 
 
 @require_torch
 class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/bert_for_seq_generation_L-24_bbc_encoder", "google/bert_for_seq_generation_L-24_bbc_encoder"
+            "google/bert_for_seq_generation_L-24_bbc_encoder",
+            "google/bert_for_seq_generation_L-24_bbc_encoder",
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -951,10 +1088,14 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
         EXPECTED_SUMMARY_TOSHIBA = """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year, according to a report."""
 
         input_dict = tokenizer(
-            [ARTICLE_PS3, ARTICLE_TOSHIBA], max_length=512, padding="max_length", return_tensors="pt"
+            [ARTICLE_PS3, ARTICLE_TOSHIBA],
+            max_length=512,
+            padding="max_length",
+            return_tensors="pt",
         )
         output_ids = model.generate(
-            input_dict["input_ids"].to(torch_device), attention_mask=input_dict["attention_mask"].to(torch_device)
+            input_dict["input_ids"].to(torch_device),
+            attention_mask=input_dict["attention_mask"].to(torch_device),
         )
         summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -1029,7 +1170,9 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = BertModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -1082,7 +1225,9 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
     @slow
     def test_bert2gpt2_summarization(self):
-        model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
+        model = EncoderDecoderModel.from_pretrained(
+            "patrickvonplaten/bert2gpt2-cnn_dailymail-fp16"
+        )
 
         model.to(torch_device)
         tokenizer_in = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
@@ -1112,7 +1257,9 @@ class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             self, batch_size=13, hidden_size=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -1169,7 +1316,9 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             self, batch_size=13, d_model=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        decoder_config_and_inputs = (
+            model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -1227,7 +1376,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         return config
 
     def get_encoderdecoder_model(self):
-        return EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+        return EncoderDecoderModel.from_pretrained(
+            "patrickvonplaten/bert2bert-cnn_dailymail-fp16"
+        )
 
     def get_encoder_decoder_models(self):
         encoder_model = BertModel.from_pretrained("google-bert/bert-base-uncased")

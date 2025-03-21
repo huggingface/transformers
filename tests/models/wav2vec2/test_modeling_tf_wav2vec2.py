@@ -31,40 +31,32 @@ from datasets import load_dataset
 from huggingface_hub import snapshot_download
 
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.testing_utils import (
-    CaptureLogger,
-    is_flaky,
-    require_librosa,
-    require_pyctcdecode,
-    require_tf,
-    run_test_in_subprocess,
-    slow,
-)
+from transformers.testing_utils import (CaptureLogger, is_flaky,
+                                        require_librosa, require_pyctcdecode,
+                                        require_tf, run_test_in_subprocess,
+                                        slow)
 from transformers.utils import is_librosa_available, is_pyctcdecode_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        AutoFeatureExtractor,
-        TFWav2Vec2ForCTC,
-        TFWav2Vec2ForSequenceClassification,
-        TFWav2Vec2Model,
-        Wav2Vec2Processor,
-    )
-    from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
+    from transformers import (AutoFeatureExtractor, TFWav2Vec2ForCTC,
+                              TFWav2Vec2ForSequenceClassification,
+                              TFWav2Vec2Model, Wav2Vec2Processor)
+    from transformers.models.wav2vec2.modeling_tf_wav2vec2 import \
+        _compute_mask_indices
 
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
 
     from transformers import Wav2Vec2ProcessorWithLM
-    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
+    from transformers.models.wav2vec2_with_lm import \
+        processing_wav2vec2_with_lm
 
 
 if is_librosa_available():
@@ -80,19 +72,28 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
         file_path = glob.glob(downloaded_folder + "/*")[0]
         sample = librosa.load(file_path, sr=16_000)[0]
 
-        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        model = TFWav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        )
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        )
 
         input_values = processor(sample, return_tensors="tf").input_values
 
         logits = model(input_values).logits
 
         # use a spawn pool, which should trigger a warning if different than fork
-        with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
+        with (
+            CaptureLogger(pyctcdecode.decoder.logger) as cl,
+            multiprocessing.get_context("spawn").Pool(1) as pool,
+        ):
             transcription = processor.batch_decode(logits.numpy(), pool).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
+        unittest.TestCase().assertEqual(
+            transcription[0], "el libro ha sido escrito por cervantes"
+        )
 
         # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
         multiprocessing.set_start_method("spawn", force=True)
@@ -100,7 +101,9 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             transcription = processor.batch_decode(logits.numpy()).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
+        unittest.TestCase().assertEqual(
+            transcription[0], "el libro ha sido escrito por cervantes"
+        )
     except Exception:
         error = f"{traceback.format_exc()}"
 
@@ -170,7 +173,10 @@ class TFWav2Vec2ModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_values = tf.cast(ids_tensor([self.batch_size, self.seq_length], 32768), tf.float32) / 32768.0
+        input_values = (
+            tf.cast(ids_tensor([self.batch_size, self.seq_length], 32768), tf.float32)
+            / 32768.0
+        )
         attention_mask = tf.ones_like(input_values)
 
         config = Wav2Vec2Config(
@@ -201,7 +207,8 @@ class TFWav2Vec2ModelTester:
         model = TFWav2Vec2Model(config)
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.hidden_size),
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -220,7 +227,9 @@ class TFWav2Vec2ModelTester:
         input_values = input_values * length_mask
         attention_mask = attention_mask * length_mask
 
-        batch_outputs = model(input_values, attention_mask=attention_mask, training=False).last_hidden_state
+        batch_outputs = model(
+            input_values, attention_mask=attention_mask, training=False
+        ).last_hidden_state
 
         for i in range(input_values.shape[0]):
             input_slice = input_values[i : i + 1, : input_lengths[i]]
@@ -236,8 +245,12 @@ class TFWav2Vec2ModelTester:
         attention_mask = tf.ones_like(input_values)
 
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
-        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(
+            input_lengths
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size
+        )
 
         length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
 
@@ -246,10 +259,14 @@ class TFWav2Vec2ModelTester:
         attention_mask = attention_mask * length_mask
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        sum_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        mean_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss
 
         self.parent.assertTrue(abs(labels.shape[0] * mean_loss - sum_loss) < 1e-2)
 
@@ -260,7 +277,9 @@ class TFWav2Vec2ModelTester:
         attention_mask = tf.ones(input_values.shape, dtype=tf.int32)
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        labels = tf.random.uniform((input_values.shape[0],), maxval=len(model.config.id2label), dtype=tf.int32)
+        labels = tf.random.uniform(
+            (input_values.shape[0],), maxval=len(model.config.id2label), dtype=tf.int32
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -268,9 +287,18 @@ class TFWav2Vec2ModelTester:
             attention_mask[i, input_lengths[i] :] = 0
         training = False
         masked_loss = (
-            model(input_values, attention_mask=attention_mask, labels=labels, training=training).loss.numpy().item()
+            model(
+                input_values,
+                attention_mask=attention_mask,
+                labels=labels,
+                training=training,
+            )
+            .loss.numpy()
+            .item()
         )
-        unmasked_loss = model(input_values, labels=labels, training=training).loss.numpy().item()
+        unmasked_loss = (
+            model(input_values, labels=labels, training=training).loss.numpy().item()
+        )
 
         assert isinstance(masked_loss, float)
         assert isinstance(unmasked_loss, float)
@@ -285,8 +313,12 @@ class TFWav2Vec2ModelTester:
         input_values = input_values[:3]
 
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
-        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(
+            input_lengths
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size
+        )
 
         length_mask = tf.sequence_mask(input_lengths, dtype=tf.float32)
 
@@ -302,8 +334,13 @@ class TFWav2Vec2ModelTester:
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = TFWav2Vec2ForCTC(config)
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
-        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size + 500)
+        max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(
+            input_lengths
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1),
+            model.config.vocab_size + 500,
+        )
         with pytest.raises(ValueError):
             model(input_values, labels=labels)
 
@@ -316,10 +353,15 @@ class TFWav2Vec2ModelTester:
 @require_tf
 class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification) if is_tf_available() else ()
+        (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification)
+        if is_tf_available()
+        else ()
     )
     pipeline_model_mapping = (
-        {"audio-classification": TFWav2Vec2ForSequenceClassification, "feature-extraction": TFWav2Vec2Model}
+        {
+            "audio-classification": TFWav2Vec2ForSequenceClassification,
+            "feature-extraction": TFWav2Vec2Model,
+        }
         if is_tf_available()
         else {}
     )
@@ -329,7 +371,9 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = TFWav2Vec2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Wav2Vec2Config, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -357,7 +401,9 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
             outputs_dict = model(inputs)
 
-            inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs_keywords = copy.deepcopy(
+                self._prepare_for_class(inputs_dict, model_class)
+            )
             input_values = inputs_keywords.pop("input_values", None)
             outputs_keywords = model(input_values, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
@@ -376,7 +422,9 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
 
             hidden_states = outputs.hidden_states
@@ -425,12 +473,16 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch"
+    )
     def test_dataset_conversion(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch"
+    )
     def test_keras_fit(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
@@ -439,7 +491,9 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 @require_tf
 class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification) if is_tf_available() else ()
+        (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification)
+        if is_tf_available()
+        else ()
     )
     test_resize_embeddings = False
     test_head_masking = False
@@ -453,7 +507,9 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
             do_stable_layer_norm=True,
             scope="robust",
         )
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Wav2Vec2Config, hidden_size=37
+        )
 
     # overwrite because input_values != input_ids
     def test_forward_signature(self):
@@ -478,7 +534,9 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
             outputs_dict = model(inputs)
 
-            inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs_keywords = copy.deepcopy(
+                self._prepare_for_class(inputs_dict, model_class)
+            )
             input_values = inputs_keywords.pop("input_values", None)
             outputs_keywords = model(input_values, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
@@ -500,7 +558,9 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
 
             hidden_states = outputs.hidden_states
@@ -554,12 +614,16 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch"
+    )
     def test_dataset_conversion(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
+    @unittest.skip(
+        reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch"
+    )
     def test_keras_fit(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
@@ -573,10 +637,13 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
 
         self.assertListEqual(
-            tf.reduce_sum(mask, -1).numpy().tolist(), [mask_prob * sequence_length for _ in range(batch_size)]
+            tf.reduce_sum(mask, -1).numpy().tolist(),
+            [mask_prob * sequence_length for _ in range(batch_size)],
         )
 
     def test_compute_mask_indices_overlap(self):
@@ -585,7 +652,9 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
 
         # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
         for batch_sum in tf.reduce_sum(mask, -1):
@@ -601,7 +670,9 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -610,16 +681,22 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "anton-l/superb_dummy", task, split="test", trust_remote_code=True
+        )
 
         return ds[:num_samples]
 
     def test_inference_ctc_normal(self):
         model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-base-960h", do_lower_case=True
+        )
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="tf", sampling_rate=16000).input_values
+        input_values = processor(
+            input_speech, return_tensors="tf", sampling_rate=16000
+        ).input_values
 
         logits = model(input_values).logits
 
@@ -631,11 +708,15 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_ctc_normal_batched(self):
         model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-base-960h", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(2)
 
-        input_values = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000).input_values
+        input_values = processor(
+            input_speech, return_tensors="tf", padding=True, sampling_rate=16000
+        ).input_values
 
         logits = model(input_values).logits
 
@@ -649,12 +730,18 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_robust_batched(self):
-        model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60-self")
-        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True)
+        model = TFWav2Vec2ForCTC.from_pretrained(
+            "facebook/wav2vec2-large-960h-lv60-self"
+        )
+        processor = Wav2Vec2Processor.from_pretrained(
+            "facebook/wav2vec2-large-960h-lv60-self", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="tf", padding=True, sampling_rate=16000)
+        inputs = processor(
+            input_speech, return_tensors="tf", padding=True, sampling_rate=16000
+        )
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask
@@ -680,8 +767,12 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         file_path = glob.glob(downloaded_folder + "/*")[0]
         sample = librosa.load(file_path, sr=16_000)[0]
 
-        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        model = TFWav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        )
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        )
 
         input_values = processor(sample, return_tensors="tf").input_values
 
@@ -698,8 +789,12 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         file_path = glob.glob(downloaded_folder + "/*")[0]
         sample = librosa.load(file_path, sr=16_000)[0]
 
-        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        model = TFWav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        )
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm"
+        )
 
         input_values = processor(sample, return_tensors="tf").input_values
 
@@ -716,7 +811,9 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
             CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
             multiprocessing.get_context("fork").Pool(2) as pool,
         ):
-            transcription = processor.batch_decode(logits.numpy(), pool, num_processes=2).text
+            transcription = processor.batch_decode(
+                logits.numpy(), pool, num_processes=2
+            ).text
 
         self.assertIn("num_process", cl.out)
         self.assertIn("it will be ignored", cl.out)
@@ -726,11 +823,17 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm_invalid_pool(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None
+        )
 
     def test_inference_keyword_spotting(self):
-        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks", from_pt=True)
-        processor = AutoFeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-ks", from_pt=True
+        )
+        processor = AutoFeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-ks"
+        )
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="tf", padding=True)
         input_values = inputs.input_values
@@ -746,8 +849,12 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_intent_classification(self):
-        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ic", from_pt=True)
-        processor = AutoFeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ic")
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-ic", from_pt=True
+        )
+        processor = AutoFeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-ic"
+        )
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="tf", padding=True)
         input_values = inputs.input_values
@@ -768,21 +875,41 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_labels_action = [0, 0, 2, 3]
         expected_logits_action = tf.convert_to_tensor([0.4568, 11.0848, 1.6621, 9.3841])
         expected_labels_object = [3, 10, 3, 4]
-        expected_logits_object = tf.convert_to_tensor([1.5322, 10.7094, 5.2469, 22.1318])
+        expected_logits_object = tf.convert_to_tensor(
+            [1.5322, 10.7094, 5.2469, 22.1318]
+        )
         expected_labels_location = [0, 0, 0, 1]
-        expected_logits_location = tf.convert_to_tensor([1.5335, 6.5096, 10.5704, 11.0569])
+        expected_logits_location = tf.convert_to_tensor(
+            [1.5335, 6.5096, 10.5704, 11.0569]
+        )
 
-        self.assertListEqual(predicted_ids_action.numpy().tolist(), expected_labels_action)
-        self.assertListEqual(predicted_ids_object.numpy().tolist(), expected_labels_object)
-        self.assertListEqual(predicted_ids_location.numpy().tolist(), expected_labels_location)
+        self.assertListEqual(
+            predicted_ids_action.numpy().tolist(), expected_labels_action
+        )
+        self.assertListEqual(
+            predicted_ids_object.numpy().tolist(), expected_labels_object
+        )
+        self.assertListEqual(
+            predicted_ids_location.numpy().tolist(), expected_labels_location
+        )
 
-        self.assertTrue(np.allclose(predicted_logits_action, expected_logits_action, atol=1e-2))
-        self.assertTrue(np.allclose(predicted_logits_object, expected_logits_object, atol=1e-2))
-        self.assertTrue(np.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
+        self.assertTrue(
+            np.allclose(predicted_logits_action, expected_logits_action, atol=1e-2)
+        )
+        self.assertTrue(
+            np.allclose(predicted_logits_object, expected_logits_object, atol=1e-2)
+        )
+        self.assertTrue(
+            np.allclose(predicted_logits_location, expected_logits_location, atol=1e-2)
+        )
 
     def test_inference_speaker_identification(self):
-        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-sid", from_pt=True)
-        processor = AutoFeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-sid")
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-sid", from_pt=True
+        )
+        processor = AutoFeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-sid"
+        )
         input_data = self._load_superb("si", 4)
         output_logits = []
         for example in input_data["speech"]:
@@ -790,15 +917,21 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
             output = model(input.input_values, attention_mask=None)
             output_logits.append(output.logits[0])
         output_logits = tf.stack(output_logits)
-        predicted_logits, predicted_ids = tf.math.reduce_max(output_logits, axis=-1), tf.argmax(output_logits, axis=-1)
+        predicted_logits, predicted_ids = tf.math.reduce_max(
+            output_logits, axis=-1
+        ), tf.argmax(output_logits, axis=-1)
         expected_labels = [251, 1, 1, 3]
         expected_logits = tf.convert_to_tensor([37.5627, 71.6362, 64.2419, 31.7778])
         self.assertListEqual(predicted_ids.numpy().tolist(), expected_labels)
         self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
 
     def test_inference_emotion_recognition(self):
-        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-er", from_pt=True)
-        processor = AutoFeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-er")
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained(
+            "superb/wav2vec2-base-superb-er", from_pt=True
+        )
+        processor = AutoFeatureExtractor.from_pretrained(
+            "superb/wav2vec2-base-superb-er"
+        )
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="tf", padding=True)
 

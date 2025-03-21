@@ -19,52 +19,37 @@ import copy
 import tempfile
 import unittest
 
-from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, T5Config, TapasConfig, is_tf_available
-from transformers.testing_utils import (
-    DUMMY_UNKNOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
-    RequestCounter,
-    require_tensorflow_probability,
-    require_tf,
-    slow,
-)
+from transformers import (CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config,
+                          T5Config, TapasConfig, is_tf_available)
+from transformers.testing_utils import (DUMMY_UNKNOWN_IDENTIFIER,
+                                        SMALL_MODEL_IDENTIFIER, RequestCounter,
+                                        require_tensorflow_probability,
+                                        require_tf, slow)
 
 from ..bert.test_modeling_bert import BertModelTester
 
-
 if is_tf_available():
-    from transformers import (
-        TFAutoModel,
-        TFAutoModelForCausalLM,
-        TFAutoModelForMaskedLM,
-        TFAutoModelForPreTraining,
-        TFAutoModelForQuestionAnswering,
-        TFAutoModelForSeq2SeqLM,
-        TFAutoModelForSequenceClassification,
-        TFAutoModelForTableQuestionAnswering,
-        TFAutoModelForTokenClassification,
-        TFAutoModelWithLMHead,
-        TFBertForMaskedLM,
-        TFBertForPreTraining,
-        TFBertForQuestionAnswering,
-        TFBertForSequenceClassification,
-        TFBertModel,
-        TFFunnelBaseModel,
-        TFFunnelModel,
-        TFGPT2LMHeadModel,
-        TFRobertaForMaskedLM,
-        TFT5ForConditionalGeneration,
-        TFTapasForQuestionAnswering,
-    )
+    from transformers import (TFAutoModel, TFAutoModelForCausalLM,
+                              TFAutoModelForMaskedLM,
+                              TFAutoModelForPreTraining,
+                              TFAutoModelForQuestionAnswering,
+                              TFAutoModelForSeq2SeqLM,
+                              TFAutoModelForSequenceClassification,
+                              TFAutoModelForTableQuestionAnswering,
+                              TFAutoModelForTokenClassification,
+                              TFAutoModelWithLMHead, TFBertForMaskedLM,
+                              TFBertForPreTraining, TFBertForQuestionAnswering,
+                              TFBertForSequenceClassification, TFBertModel,
+                              TFFunnelBaseModel, TFFunnelModel,
+                              TFGPT2LMHeadModel, TFRobertaForMaskedLM,
+                              TFT5ForConditionalGeneration,
+                              TFTapasForQuestionAnswering)
     from transformers.models.auto.modeling_tf_auto import (
-        TF_MODEL_FOR_CAUSAL_LM_MAPPING,
-        TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_MAPPING,
-    )
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, TF_MODEL_MAPPING)
 
 
 class NewModelConfig(BertConfig):
@@ -109,7 +94,9 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertIsInstance(config, GPT2Config)
 
         model = TFAutoModelForCausalLM.from_pretrained(model_name)
-        model, loading_info = TFAutoModelForCausalLM.from_pretrained(model_name, output_loading_info=True)
+        model, loading_info = TFAutoModelForCausalLM.from_pretrained(
+            model_name, output_loading_info=True
+        )
         self.assertIsNotNone(model)
         self.assertIsInstance(model, TFGPT2LMHeadModel)
 
@@ -132,7 +119,9 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertIsInstance(config, BertConfig)
 
         model = TFAutoModelForMaskedLM.from_pretrained(model_name)
-        model, loading_info = TFAutoModelForMaskedLM.from_pretrained(model_name, output_loading_info=True)
+        model, loading_info = TFAutoModelForMaskedLM.from_pretrained(
+            model_name, output_loading_info=True
+        )
         self.assertIsNotNone(model)
         self.assertIsInstance(model, TFBertForMaskedLM)
 
@@ -144,7 +133,9 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertIsInstance(config, T5Config)
 
         model = TFAutoModelForSeq2SeqLM.from_pretrained(model_name)
-        model, loading_info = TFAutoModelForSeq2SeqLM.from_pretrained(model_name, output_loading_info=True)
+        model, loading_info = TFAutoModelForSeq2SeqLM.from_pretrained(
+            model_name, output_loading_info=True
+        )
         self.assertIsNotNone(model)
         self.assertIsInstance(model, TFT5ForConditionalGeneration)
 
@@ -271,13 +262,15 @@ class TFAutoModelTest(unittest.TestCase):
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+            EnvironmentError,
+            "bert-base is not a local folder and is not a valid model identifier",
         ):
             _ = TFAutoModel.from_pretrained("bert-base")
 
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
-            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+            EnvironmentError,
+            r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)",
         ):
             _ = TFAutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
@@ -289,7 +282,9 @@ class TFAutoModelTest(unittest.TestCase):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_model_from_pt_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
+        with self.assertRaisesRegex(
+            EnvironmentError, "Use `from_pt=True` to load this model"
+        ):
             _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
     def test_cached_model_has_minimum_calls_to_head(self):

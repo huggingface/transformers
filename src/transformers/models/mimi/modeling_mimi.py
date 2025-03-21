@@ -28,17 +28,12 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward,
+                      is_flash_attn_2_available,
+                      is_flash_attn_greater_or_equal_2_10, logging,
+                      replace_return_docstrings)
 from .configuration_mimi import MimiConfig
-
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -149,7 +144,13 @@ class MimiConv1d(nn.Module):
             )
 
         self.conv = nn.Conv1d(
-            in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
 
         kernel_size = self.conv.kernel_size[0]
@@ -192,7 +193,12 @@ class MimiConv1d(nn.Module):
 
     @staticmethod
     # Copied from transformers.models.encodec.modeling_encodec.EncodecConv1d._pad1d
-    def _pad1d(hidden_states: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+    def _pad1d(
+        hidden_states: torch.Tensor,
+        paddings: Tuple[int, int],
+        mode: str = "zero",
+        value: float = 0.0,
+    ):
         """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
         If this is the case, we insert extra 0 padding to the right before the reflection happens.
         """
@@ -215,10 +221,14 @@ class MimiConv1d(nn.Module):
 
         if self.causal:
             # Left padding for causal
-            hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
+            hidden_states = self._pad1d(
+                hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode
+            )
         else:
             hidden_states = self._pad1d(
-                hidden_states, (self.padding_left, self.padding_right + extra_padding), mode=self.pad_mode
+                hidden_states,
+                (self.padding_left, self.padding_right + extra_padding),
+                mode=self.pad_mode,
             )
 
         hidden_states = self.conv(hidden_states)
@@ -241,10 +251,14 @@ class MimiConvTranspose1d(nn.Module):
         super().__init__()
         self.causal = config.use_causal_conv
         self.trim_right_ratio = config.trim_right_ratio
-        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias)
+        self.conv = nn.ConvTranspose1d(
+            in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias
+        )
 
         if not (self.causal or self.trim_right_ratio == 1.0):
-            raise ValueError("`trim_right_ratio` != 1.0 only makes sense for causal convolutions")
+            raise ValueError(
+                "`trim_right_ratio` != 1.0 only makes sense for causal convolutions"
+            )
 
         kernel_size = self.conv.kernel_size[0]
         stride = self.conv.stride[0]
@@ -301,7 +315,9 @@ class MimiResnetBlock(nn.Module):
             in_chs = dim if i == 0 else hidden
             out_chs = dim if i == len(kernel_sizes) - 1 else hidden
             block += [nn.ELU()]
-            block += [MimiConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)]
+            block += [
+                MimiConv1d(config, in_chs, out_chs, kernel_size, dilation=dilation)
+            ]
         self.block = nn.ModuleList(block)
 
         if config.use_conv_shortcut:
@@ -322,7 +338,11 @@ class MimiEncoder(nn.Module):
 
     def __init__(self, config: MimiConfig):
         super().__init__()
-        model = [MimiConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
+        model = [
+            MimiConv1d(
+                config, config.audio_channels, config.num_filters, config.kernel_size
+            )
+        ]
         scaling = 1
 
         # Downsample to raw audio scale
@@ -330,14 +350,33 @@ class MimiEncoder(nn.Module):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [MimiResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])]
+                model += [
+                    MimiResnetBlock(
+                        config, current_scale, [config.dilation_growth_rate**j, 1]
+                    )
+                ]
             # Add downsampling layers
             model += [nn.ELU()]
-            model += [MimiConv1d(config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio)]
+            model += [
+                MimiConv1d(
+                    config,
+                    current_scale,
+                    current_scale * 2,
+                    kernel_size=ratio * 2,
+                    stride=ratio,
+                )
+            ]
             scaling *= 2
 
         model += [nn.ELU()]
-        model += [MimiConv1d(config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size)]
+        model += [
+            MimiConv1d(
+                config,
+                scaling * config.num_filters,
+                config.hidden_size,
+                config.last_kernel_size,
+            )
+        ]
 
         self.layers = nn.ModuleList(model)
 
@@ -357,7 +396,9 @@ class MimiLayerScale(nn.Module):
         super().__init__()
         channels = config.hidden_size
         initial_scale = config.layer_scale_initial_scale
-        self.scale = nn.Parameter(torch.full((channels,), initial_scale, requires_grad=True))
+        self.scale = nn.Parameter(
+            torch.full((channels,), initial_scale, requires_grad=True)
+        )
 
     def forward(self, x: torch.Tensor):
         return self.scale * x
@@ -369,7 +410,9 @@ class MimiRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -390,11 +433,18 @@ class MimiRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -407,13 +457,21 @@ class MimiRotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -486,7 +544,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -523,10 +583,22 @@ class MimiAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias
+        )
         self.rotary_emb = MimiRotaryEmbedding(config)
         self.sliding_window = config.sliding_window  # Ignore copy
 
@@ -546,30 +618,46 @@ class MimiAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        attn_weights = (
+            torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        )
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.attention_dropout, training=self.training
+        )
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -633,17 +721,27 @@ class MimiFlashAttention2(MimiAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -744,17 +842,27 @@ class MimiSdpaAttention(MimiAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -803,11 +911,15 @@ class MimiTransformerLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MIMI_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = MIMI_ATTENTION_CLASSES[config._attn_implementation](
+            config=config, layer_idx=layer_idx
+        )
 
         self.mlp = MimiMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.norm_eps
+        )
         self.self_attn_layer_scale = MimiLayerScale(config)
         self.mlp_layer_scale = MimiLayerScale(config)
 
@@ -821,7 +933,9 @@ class MimiTransformerLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -887,7 +1001,10 @@ class MimiTransformerModel(nn.Module):
         super().__init__()
 
         self.layers = nn.ModuleList(
-            [MimiTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                MimiTransformerLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self._attn_implementation = config._attn_implementation
 
@@ -964,13 +1081,21 @@ class MimiTransformerModel(nn.Module):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -990,9 +1115,13 @@ class MimiTransformerModel(nn.Module):
                 )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + hidden_states.shape[1], device=hidden_states.device
+                past_seen_tokens,
+                past_seen_tokens + hidden_states.shape[1],
+                device=hidden_states.device,
             )
 
         if position_ids is None:
@@ -1001,7 +1130,11 @@ class MimiTransformerModel(nn.Module):
         causal_mask = None
         if attention_mask is not None:
             causal_mask = self._update_causal_mask(
-                attention_mask, hidden_states, cache_position, past_key_values, output_attentions
+                attention_mask,
+                hidden_states,
+                cache_position,
+                past_key_values,
+                output_attentions,
             )
 
         # decoder layers
@@ -1050,7 +1183,11 @@ class MimiTransformerModel(nn.Module):
         next_cache = next_decoder_cache if use_cache else None
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1070,7 +1207,9 @@ class MimiTransformerModel(nn.Module):
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
-                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                is_padding_right = (
+                    attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                )
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
@@ -1084,7 +1223,9 @@ class MimiTransformerModel(nn.Module):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
@@ -1139,7 +1280,9 @@ class MimiTransformerModel(nn.Module):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -1186,31 +1329,41 @@ class MimiTransformerModel(nn.Module):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            diagonal_attend_mask = torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             if config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
-                if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
-                    )
+                if (
+                    not isinstance(past_key_values, SlidingWindowCache)
+                    or sequence_length > target_length
+                ):
+                    sliding_attend_mask = torch.arange(
+                        target_length, device=device
+                    ) <= (cache_position.reshape(-1, 1) - config.sliding_window)
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
         return causal_mask
 
 
@@ -1220,7 +1373,14 @@ class MimiDecoder(nn.Module):
     def __init__(self, config: MimiConfig):
         super().__init__()
         scaling = int(2 ** len(config.upsampling_ratios))
-        model = [MimiConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)]
+        model = [
+            MimiConv1d(
+                config,
+                config.hidden_size,
+                scaling * config.num_filters,
+                config.kernel_size,
+            )
+        ]
 
         # Upsample to raw audio scale
         for ratio in config.upsampling_ratios:
@@ -1228,16 +1388,33 @@ class MimiDecoder(nn.Module):
             # Add upsampling layers
             model += [nn.ELU()]
             model += [
-                MimiConvTranspose1d(config, current_scale, current_scale // 2, kernel_size=ratio * 2, stride=ratio)
+                MimiConvTranspose1d(
+                    config,
+                    current_scale,
+                    current_scale // 2,
+                    kernel_size=ratio * 2,
+                    stride=ratio,
+                )
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
-                model += [MimiResnetBlock(config, current_scale // 2, (config.dilation_growth_rate**j, 1))]
+                model += [
+                    MimiResnetBlock(
+                        config, current_scale // 2, (config.dilation_growth_rate**j, 1)
+                    )
+                ]
             scaling //= 2
 
         # Add final layers
         model += [nn.ELU()]
-        model += [MimiConv1d(config, config.num_filters, config.audio_channels, config.last_kernel_size)]
+        model += [
+            MimiConv1d(
+                config,
+                config.num_filters,
+                config.audio_channels,
+                config.last_kernel_size,
+            )
+        ]
         self.layers = nn.ModuleList(model)
 
     # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoder.forward
@@ -1265,7 +1442,9 @@ class MimiEuclideanCodebook(nn.Module):
     @property
     def embed(self) -> torch.Tensor:
         if self._embed is None:
-            self._embed = self.embed_sum / self.cluster_usage.clamp(min=self.epsilon)[:, None]
+            self._embed = (
+                self.embed_sum / self.cluster_usage.clamp(min=self.epsilon)[:, None]
+            )
         return self._embed
 
     def quantize(self, hidden_states):
@@ -1320,20 +1499,32 @@ class MimiResidualVectorQuantizer(nn.Module):
         super().__init__()
         self.codebook_size = config.codebook_size
         self.frame_rate = config.frame_rate
-        self.num_quantizers = num_quantizers if num_quantizers is not None else config.num_quantizers
-        self.layers = nn.ModuleList([MimiVectorQuantization(config) for _ in range(self.num_quantizers)])
+        self.num_quantizers = (
+            num_quantizers if num_quantizers is not None else config.num_quantizers
+        )
+        self.layers = nn.ModuleList(
+            [MimiVectorQuantization(config) for _ in range(self.num_quantizers)]
+        )
 
         self.input_proj = None
         self.output_proj = None
         if config.vector_quantization_hidden_dimension != config.hidden_size:
             self.input_proj = torch.nn.Conv1d(
-                config.hidden_size, config.vector_quantization_hidden_dimension, 1, bias=False
+                config.hidden_size,
+                config.vector_quantization_hidden_dimension,
+                1,
+                bias=False,
             )
             self.output_proj = torch.nn.Conv1d(
-                config.vector_quantization_hidden_dimension, config.hidden_size, 1, bias=False
+                config.vector_quantization_hidden_dimension,
+                config.hidden_size,
+                1,
+                bias=False,
             )
 
-    def encode(self, embeddings: torch.Tensor, num_quantizers: Optional[int] = None) -> torch.Tensor:
+    def encode(
+        self, embeddings: torch.Tensor, num_quantizers: Optional[int] = None
+    ) -> torch.Tensor:
         """
         Encode a given input tensor with the specified frame rate at the given number of quantizers / codebooks. The RVQ encode method sets
         the appropriate number of quantizers to use and returns indices for each quantizer.
@@ -1341,7 +1532,9 @@ class MimiResidualVectorQuantizer(nn.Module):
         if self.input_proj is not None:
             embeddings = self.input_proj(embeddings)
 
-        num_quantizers = num_quantizers if num_quantizers is not None else self.num_quantizers
+        num_quantizers = (
+            num_quantizers if num_quantizers is not None else self.num_quantizers
+        )
 
         residual = embeddings
         all_indices = []
@@ -1377,18 +1570,28 @@ class MimiSplitResidualVectorQuantizer(nn.Module):
         self.max_num_quantizers = config.num_quantizers
 
         self.num_semantic_quantizers = config.num_semantic_quantizers
-        self.num_acoustic_quantizers = config.num_quantizers - config.num_semantic_quantizers
+        self.num_acoustic_quantizers = (
+            config.num_quantizers - config.num_semantic_quantizers
+        )
 
-        self.semantic_residual_vector_quantizer = MimiResidualVectorQuantizer(config, self.num_semantic_quantizers)
-        self.acoustic_residual_vector_quantizer = MimiResidualVectorQuantizer(config, self.num_acoustic_quantizers)
+        self.semantic_residual_vector_quantizer = MimiResidualVectorQuantizer(
+            config, self.num_semantic_quantizers
+        )
+        self.acoustic_residual_vector_quantizer = MimiResidualVectorQuantizer(
+            config, self.num_acoustic_quantizers
+        )
 
-    def encode(self, embeddings: torch.Tensor, num_quantizers: Optional[float] = None) -> torch.Tensor:
+    def encode(
+        self, embeddings: torch.Tensor, num_quantizers: Optional[float] = None
+    ) -> torch.Tensor:
         """
         Encode a given input tensor with the specified frame rate at the given number of quantizers / codebooks. The RVQ encode method sets
         the appropriate number of quantizers to use and returns indices for each quantizer.
         """
 
-        num_quantizers = self.max_num_quantizers if num_quantizers is None else num_quantizers
+        num_quantizers = (
+            self.max_num_quantizers if num_quantizers is None else num_quantizers
+        )
 
         if num_quantizers > self.max_num_quantizers:
             raise ValueError(
@@ -1415,11 +1618,15 @@ class MimiSplitResidualVectorQuantizer(nn.Module):
         """Decode the given codes to the quantized representation."""
 
         # The first num_semantic_quantizers codebooks are decoded using the semantic RVQ
-        quantized_out = self.semantic_residual_vector_quantizer.decode(codes[:, : self.num_semantic_quantizers])
+        quantized_out = self.semantic_residual_vector_quantizer.decode(
+            codes[:, : self.num_semantic_quantizers]
+        )
 
         # The rest of the codebooks are decoded using the acoustic RVQ
         if codes.shape[1] > self.num_semantic_quantizers:
-            quantized_out += self.acoustic_residual_vector_quantizer.decode(codes[:, self.num_semantic_quantizers :])
+            quantized_out += self.acoustic_residual_vector_quantizer.decode(
+                codes[:, self.num_semantic_quantizers :]
+            )
         return quantized_out
 
 
@@ -1453,7 +1660,9 @@ class MimiPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                k = math.sqrt(
+                    module.groups / (module.in_channels * module.kernel_size[0])
+                )
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1582,7 +1791,9 @@ class MimiModel(MimiPreTrainedModel):
         """
         embeddings = self.encoder(input_values)
         encoder_outputs = self.encoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
+            embeddings.transpose(1, 2),
+            past_key_values=past_key_values,
+            return_dict=return_dict,
         )
         if return_dict:
             past_key_values = encoder_outputs.get("past_key_values")
@@ -1628,9 +1839,13 @@ class MimiModel(MimiPreTrainedModel):
         Returns:
             `codebook` of shape `[batch_size, num_codebooks, frames]`, the discrete encoded codes for the input audio waveform.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
-        num_quantizers = self.config.num_quantizers if num_quantizers is None else num_quantizers
+        num_quantizers = (
+            self.config.num_quantizers if num_quantizers is None else num_quantizers
+        )
 
         if num_quantizers > self.config.num_quantizers:
             raise ValueError(
@@ -1640,7 +1855,9 @@ class MimiModel(MimiPreTrainedModel):
         _, channels, input_length = input_values.shape
 
         if channels < 1 or channels > 2:
-            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+            raise ValueError(
+                f"Number of audio channels must be 1 or 2, but got {channels}"
+            )
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
@@ -1671,7 +1888,9 @@ class MimiModel(MimiPreTrainedModel):
 
         embeddings = self.upsample(embeddings)
         decoder_outputs = self.decoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
+            embeddings.transpose(1, 2),
+            past_key_values=past_key_values,
+            return_dict=return_dict,
         )
         if return_dict:
             past_key_values = decoder_outputs.get("past_key_values")
@@ -1712,10 +1931,14 @@ class MimiModel(MimiPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         audio_values, decoder_past_key_values = self._decode_frame(
-            audio_codes, past_key_values=decoder_past_key_values, return_dict=return_dict
+            audio_codes,
+            past_key_values=decoder_past_key_values,
+            return_dict=return_dict,
         )
 
         # truncate based on padding mask
@@ -1763,14 +1986,20 @@ class MimiModel(MimiPreTrainedModel):
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
         if audio_codes is None:
             encoder_outputs = self.encode(
-                input_values, padding_mask, num_quantizers, encoder_past_key_values, return_dict=return_dict
+                input_values,
+                padding_mask,
+                num_quantizers,
+                encoder_past_key_values,
+                return_dict=return_dict,
             )
             audio_codes = encoder_outputs[0]
             if return_dict:
@@ -1778,7 +2007,9 @@ class MimiModel(MimiPreTrainedModel):
             elif len(encoder_outputs) > 1:
                 encoder_past_key_values = encoder_outputs[1]
 
-        decoder_outputs = self.decode(audio_codes, padding_mask, decoder_past_key_values, return_dict=return_dict)
+        decoder_outputs = self.decode(
+            audio_codes, padding_mask, decoder_past_key_values, return_dict=return_dict
+        )
         audio_values = decoder_outputs[0]
         if return_dict:
             decoder_past_key_values = decoder_outputs.get("past_key_values")
@@ -1786,7 +2017,12 @@ class MimiModel(MimiPreTrainedModel):
             decoder_past_key_values = decoder_outputs[1]
 
         if not return_dict:
-            return (audio_codes, audio_values, encoder_past_key_values, decoder_past_key_values)
+            return (
+                audio_codes,
+                audio_values,
+                encoder_past_key_values,
+                decoder_past_key_values,
+            )
 
         return MimiOutput(
             audio_codes=audio_codes,

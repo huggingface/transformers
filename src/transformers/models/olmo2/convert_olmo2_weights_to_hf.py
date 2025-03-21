@@ -28,7 +28,6 @@ from tokenizers import Tokenizer
 from transformers import Olmo2Config, Olmo2ForCausalLM
 from transformers.models.gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
 
-
 """
 Sample usage:
 
@@ -52,7 +51,9 @@ come in several checkpoints they each contain a part of each weight of the model
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
+    return multiple_of * (
+        (int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of
+    )
 
 
 def read_json(path):
@@ -91,7 +92,9 @@ def write_model(
     dim = olmo2_config["d_model"]
     dims_per_head = dim // n_heads
     base = olmo2_config["rope_theta"]
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    inv_freq = 1.0 / (
+        base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head)
+    )
     max_position_embeddings = olmo2_config["max_sequence_length"]
 
     vocab_size = olmo2_config.get("embedding_size", olmo2_config["vocab_size"])
@@ -116,7 +119,11 @@ def write_model(
         # Unsharded
         # TODO: Layernorm stuff
         # TODO: multi query attention
-        fused_dims = [dim, dims_per_head * num_key_value_heads, dims_per_head * num_key_value_heads]
+        fused_dims = [
+            dim,
+            dims_per_head * num_key_value_heads,
+            dims_per_head * num_key_value_heads,
+        ]
         q_proj_weight, k_proj_weight, v_proj_weight = torch.split(
             loaded[f"transformer.blocks.{layer_i}.att_proj.weight"], fused_dims, dim=0
         )
@@ -127,11 +134,19 @@ def write_model(
             f"model.layers.{layer_i}.self_attn.q_proj.weight": q_proj_weight,
             f"model.layers.{layer_i}.self_attn.k_proj.weight": k_proj_weight,
             f"model.layers.{layer_i}.self_attn.v_proj.weight": v_proj_weight,
-            f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"transformer.blocks.{layer_i}.attn_out.weight"],
-            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[f"transformer.blocks.{layer_i}.q_norm.weight"],
-            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[f"transformer.blocks.{layer_i}.k_norm.weight"],
+            f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
+                f"transformer.blocks.{layer_i}.attn_out.weight"
+            ],
+            f"model.layers.{layer_i}.self_attn.q_norm.weight": loaded[
+                f"transformer.blocks.{layer_i}.q_norm.weight"
+            ],
+            f"model.layers.{layer_i}.self_attn.k_norm.weight": loaded[
+                f"transformer.blocks.{layer_i}.k_norm.weight"
+            ],
             f"model.layers.{layer_i}.mlp.gate_proj.weight": gate_proj_weight,
-            f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"transformer.blocks.{layer_i}.ff_out.weight"],
+            f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[
+                f"transformer.blocks.{layer_i}.ff_out.weight"
+            ],
             f"model.layers.{layer_i}.mlp.up_proj.weight": up_proj_weight,
             f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
                 f"transformer.blocks.{layer_i}.attn_norm.weight"
@@ -155,9 +170,11 @@ def write_model(
     state_dict = {
         "model.embed_tokens.weight": loaded["transformer.wte.weight"],
         "model.norm.weight": loaded["transformer.ln_f.weight"],
-        "lm_head.weight": loaded["transformer.ff_out.weight"]
-        if "transformer.ff_out.weight" in loaded
-        else loaded["transformer.wte.weight"],
+        "lm_head.weight": (
+            loaded["transformer.ff_out.weight"]
+            if "transformer.ff_out.weight" in loaded
+            else loaded["transformer.wte.weight"]
+        ),
     }
 
     for k, v in state_dict.items():
@@ -205,7 +222,9 @@ def write_model(
         _write_tokenizer(model_path, config, input_base_path, tokenizer_path)
 
     print("Loading the checkpoint in a OLMo2 model.")
-    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
+    model = Olmo2ForCausalLM.from_pretrained(
+        tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True
+    )
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
@@ -236,8 +255,14 @@ def _write_tokenizer(
         else:
             base_tokenizer = Tokenizer.from_pretrained(tokenizer_config["identifier"])
 
-    eos_token_id = config.eos_token_id if config.eos_token_id is not None else base_tokenizer.get_vocab_size() - 1
-    pad_token_id = config.pad_token_id if config.pad_token_id is not None else eos_token_id
+    eos_token_id = (
+        config.eos_token_id
+        if config.eos_token_id is not None
+        else base_tokenizer.get_vocab_size() - 1
+    )
+    pad_token_id = (
+        config.pad_token_id if config.pad_token_id is not None else eos_token_id
+    )
 
     tokenizer = GPT2TokenizerFast(
         tokenizer_object=base_tokenizer,

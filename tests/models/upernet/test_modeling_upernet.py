@@ -19,20 +19,15 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import ConvNextConfig, UperNetConfig
-from transformers.testing_utils import (
-    require_timm,
-    require_torch,
-    require_torch_multi_gpu,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import (require_timm, require_torch,
+                                        require_torch_multi_gpu,
+                                        require_vision, slow, torch_device)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -84,7 +79,9 @@ class UperNetModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -128,7 +125,8 @@ class UperNetModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+            result.logits.shape,
+            (self.batch_size, self.num_labels, self.image_size, self.image_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -149,8 +147,14 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     attention_mask and seq_length.
     """
 
-    all_model_classes = (UperNetForSemanticSegmentation,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-segmentation": UperNetForSemanticSegmentation} if is_torch_available() else {}
+    all_model_classes = (
+        (UperNetForSemanticSegmentation,) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"image-segmentation": UperNetForSemanticSegmentation}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -193,7 +197,9 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @require_torch_multi_gpu
-    @unittest.skip(reason="UperNet has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
+    @unittest.skip(
+        reason="UperNet has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
+    )
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
@@ -206,7 +212,11 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -233,7 +243,9 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
-        configs_no_init.backbone_config = _config_zero_init(configs_no_init.backbone_config)
+        configs_no_init.backbone_config = _config_zero_init(
+            configs_no_init.backbone_config
+        )
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
@@ -285,7 +297,9 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 # We will verify our results on an image of ADE20k
 def prepare_img():
     filepath = hf_hub_download(
-        repo_id="hf-internal-testing/fixtures_ade20k", repo_type="dataset", filename="ADE_val_00000001.jpg"
+        repo_id="hf-internal-testing/fixtures_ade20k",
+        repo_type="dataset",
+        filename="ADE_val_00000001.jpg",
     )
     image = Image.open(filepath).convert("RGB")
     return image
@@ -297,7 +311,9 @@ def prepare_img():
 class UperNetModelIntegrationTest(unittest.TestCase):
     def test_inference_swin_backbone(self):
         processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-swin-tiny")
-        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-tiny").to(torch_device)
+        model = UperNetForSemanticSegmentation.from_pretrained(
+            "openmmlab/upernet-swin-tiny"
+        ).to(torch_device)
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
@@ -309,13 +325,23 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
+            [
+                [-7.5958, -7.5958, -7.4302],
+                [-7.5958, -7.5958, -7.4302],
+                [-7.4797, -7.4797, -7.3068],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     def test_inference_convnext_backbone(self):
-        processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
-        model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny").to(torch_device)
+        processor = AutoImageProcessor.from_pretrained(
+            "openmmlab/upernet-convnext-tiny"
+        )
+        model = UperNetForSemanticSegmentation.from_pretrained(
+            "openmmlab/upernet-convnext-tiny"
+        ).to(torch_device)
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
@@ -327,6 +353,12 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
+            [
+                [-8.8110, -8.8110, -8.6521],
+                [-8.8110, -8.8110, -8.6521],
+                [-8.7746, -8.7746, -8.6130],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

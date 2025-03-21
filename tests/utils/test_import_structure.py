@@ -2,8 +2,8 @@ import os
 import unittest
 from pathlib import Path
 
-from transformers.utils.import_utils import define_import_structure, spread_import_structure
-
+from transformers.utils.import_utils import (define_import_structure,
+                                             spread_import_structure)
 
 import_structures = Path("import_structures")
 
@@ -19,7 +19,10 @@ def fetch__all__(file_content):
         if line.startswith("__all__ = "):
             # __all__ is defined on a single line
             if line.endswith("]"):
-                return [obj.strip("\"' ") for obj in line.split("=")[1].strip(" []").split(",")]
+                return [
+                    obj.strip("\"' ")
+                    for obj in line.split("=")[1].strip(" []").split(",")
+                ]
 
             # __all__ is defined on multiple lines
             else:
@@ -34,7 +37,9 @@ def fetch__all__(file_content):
 class TestImportStructures(unittest.TestCase):
     base_transformers_path = Path(__file__).parent.parent.parent
     models_path = base_transformers_path / "src" / "transformers" / "models"
-    models_import_structure = spread_import_structure(define_import_structure(models_path))
+    models_import_structure = spread_import_structure(
+        define_import_structure(models_path)
+    )
 
     # TODO: Lysandre
     # See https://app.circleci.com/pipelines/github/huggingface/transformers/104762/workflows/7ba9c6f7-a3b2-44e6-8eaf-749c7b7261f7/jobs/1393260/tests
@@ -48,10 +53,26 @@ class TestImportStructures(unittest.TestCase):
             },
             frozenset(("tf", "torch")): {
                 "import_structure_raw_register": {"A1", "a1", "A2", "a2", "A3", "a3"},
-                "import_structure_register_with_comments": {"B1", "b1", "B2", "b2", "B3", "b3"},
+                "import_structure_register_with_comments": {
+                    "B1",
+                    "b1",
+                    "B2",
+                    "b2",
+                    "B3",
+                    "b3",
+                },
             },
             frozenset(("torch",)): {
-                "import_structure_register_with_duplicates": {"C0", "c0", "C1", "c1", "C2", "c2", "C3", "c3"},
+                "import_structure_register_with_duplicates": {
+                    "C0",
+                    "c0",
+                    "C1",
+                    "c1",
+                    "C2",
+                    "c2",
+                    "C3",
+                    "c3",
+                },
             },
         }
 
@@ -73,7 +94,9 @@ class TestImportStructures(unittest.TestCase):
                 continue
 
             with self.subTest(f"Testing arch {architecture}"):
-                import_structure = define_import_structure(self.models_path / architecture)
+                import_structure = define_import_structure(
+                    self.models_path / architecture
+                )
                 backend_agnostic_import_structure = {}
                 for requirement, module_object_mapping in import_structure.items():
                     for module, objects in module_object_mapping.items():
@@ -94,11 +117,15 @@ class TestImportStructures(unittest.TestCase):
                             f"self.models_path / architecture / f'{module}.py doesn't seem to be defined correctly:\n"
                             f"Defined in __all__: {sorted(_all)}\nDefined with register: {sorted(objects)}"
                         )
-                        self.assertListEqual(sorted(objects), sorted(_all), msg=error_message)
+                        self.assertListEqual(
+                            sorted(objects), sorted(_all), msg=error_message
+                        )
 
     # TODO: Lysandre
     # See https://app.circleci.com/pipelines/github/huggingface/transformers/104762/workflows/7ba9c6f7-a3b2-44e6-8eaf-749c7b7261f7/jobs/1393260/tests
     @unittest.skip(reason="failing")
     def test_export_backend_should_be_defined(self):
-        with self.assertRaisesRegex(ValueError, "Backend should be defined in the BACKENDS_MAPPING"):
+        with self.assertRaisesRegex(
+            ValueError, "Backend should be defined in the BACKENDS_MAPPING"
+        ):
             pass

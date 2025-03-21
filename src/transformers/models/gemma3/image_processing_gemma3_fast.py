@@ -21,33 +21,16 @@ from typing import List, Optional, Union
 
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    BatchFeature,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    SizeDict,
-    get_image_size,
-    make_nested_list_of_images,
-)
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, BaseImageProcessorFast,
+    BatchFeature, DefaultFastImageProcessorKwargs, group_images_by_shape,
+    reorder_images)
+from ...image_utils import (IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD,
+                            ChannelDimension, ImageInput, SizeDict,
+                            get_image_size, make_nested_list_of_images)
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-    logging,
-)
-
+from ...utils import (TensorType, add_start_docstrings, is_torch_available,
+                      is_torchvision_available, is_torchvision_v2_available,
+                      is_vision_available, logging)
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
@@ -176,8 +159,12 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
                 return []
 
             # Select ideal number of crops close to the image aspect ratio and such that crop_size > min_crop_size.
-            num_crops_w = int(math.floor(width / height + 0.5))  # Half round up rounding.
-            num_crops_w = min(int(math.floor(width / pan_and_scan_min_crop_size)), num_crops_w)
+            num_crops_w = int(
+                math.floor(width / height + 0.5)
+            )  # Half round up rounding.
+            num_crops_w = min(
+                int(math.floor(width / pan_and_scan_min_crop_size)), num_crops_w
+            )
 
             # Make sure the number of crops is in range [2, pan_and_scan_max_num_crops].
             num_crops_w = max(2, num_crops_w)
@@ -192,7 +179,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
 
             # Select ideal number of crops close to the image aspect ratio and such that crop_size > min_crop_size.
             num_crops_h = int(math.floor(height / width + 0.5))
-            num_crops_h = min(int(math.floor(height / pan_and_scan_min_crop_size)), num_crops_h)
+            num_crops_h = min(
+                int(math.floor(height / pan_and_scan_min_crop_size)), num_crops_h
+            )
 
             # Make sure the number of crops is in range [2, pan_and_scan_max_num_crops].
             num_crops_h = max(2, num_crops_h)
@@ -291,7 +280,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(images_list)
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
+                images_list
+            )
             for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(
@@ -301,19 +292,31 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
                     )
                 # Fused rescale and normalize
                 stacked_image_patches = self.rescale_and_normalize(
-                    stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                    stacked_image_patches,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
+                    image_mean,
+                    image_std,
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
+            processed_image_patches = reorder_images(
+                processed_image_patches_grouped, grouped_image_patches_index
+            )
             processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
+                torch.stack(processed_image_patches, dim=0)
+                if return_tensors
+                else processed_image_patches
             )
             processed_images.extend(processed_image_patches)
             batch_num_crops.extend(num_crops)
 
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        processed_images = (
+            torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        )
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_crops": batch_num_crops}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_crops": batch_num_crops},
+            tensor_type=return_tensors,
         )
 
 

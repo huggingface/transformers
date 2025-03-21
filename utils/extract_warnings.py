@@ -8,7 +8,6 @@ from get_ci_error_statistics import download_artifact, get_artifacts_links
 
 from transformers import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -69,7 +68,11 @@ def extract_warnings(artifact_dir, targets):
 
     selected_warnings = set()
 
-    paths = [os.path.join(artifact_dir, p) for p in os.listdir(artifact_dir) if (p.endswith(".zip") or from_gh)]
+    paths = [
+        os.path.join(artifact_dir, p)
+        for p in os.listdir(artifact_dir)
+        if (p.endswith(".zip") or from_gh)
+    ]
     for p in paths:
         selected_warnings.update(extract_warnings_from_single_artifact(p, targets))
 
@@ -83,14 +86,24 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--workflow_run_id", type=str, required=True, help="A GitHub Actions workflow run id.")
+    parser.add_argument(
+        "--workflow_run_id",
+        type=str,
+        required=True,
+        help="A GitHub Actions workflow run id.",
+    )
     parser.add_argument(
         "--output_dir",
         type=str,
         required=True,
         help="Where to store the downloaded artifacts and other result files.",
     )
-    parser.add_argument("--token", default=None, type=str, help="A token that has actions:read permission.")
+    parser.add_argument(
+        "--token",
+        default=None,
+        type=str,
+        help="A token that has actions:read permission.",
+    )
     # optional parameters
     parser.add_argument(
         "--targets",
@@ -115,7 +128,9 @@ if __name__ == "__main__":
 
         # get download links
         artifacts = get_artifacts_links(args.workflow_run_id, token=args.token)
-        with open(os.path.join(args.output_dir, "artifacts.json"), "w", encoding="UTF-8") as fp:
+        with open(
+            os.path.join(args.output_dir, "artifacts.json"), "w", encoding="UTF-8"
+        ) as fp:
             json.dump(artifacts, fp, ensure_ascii=False, indent=4)
 
         # download artifacts
@@ -130,5 +145,7 @@ if __name__ == "__main__":
     # extract warnings from artifacts
     selected_warnings = extract_warnings(args.output_dir, args.targets)
     selected_warnings = sorted(selected_warnings)
-    with open(os.path.join(args.output_dir, "selected_warnings.json"), "w", encoding="UTF-8") as fp:
+    with open(
+        os.path.join(args.output_dir, "selected_warnings.json"), "w", encoding="UTF-8"
+    ) as fp:
         json.dump(selected_warnings, fp, ensure_ascii=False, indent=4)

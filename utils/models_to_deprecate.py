@@ -26,7 +26,6 @@ from pathlib import Path
 from git import Repo
 from huggingface_hub import HfApi
 
-
 api = HfApi()
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -86,9 +85,13 @@ def get_list_of_models_to_deprecate(
     max_num_models=-1,
 ):
     if thresh_date is None:
-        thresh_date = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year - 1)
+        thresh_date = datetime.now(timezone.utc).replace(
+            year=datetime.now(timezone.utc).year - 1
+        )
     else:
-        thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
+        )
 
     models_dir = PATH_TO_REPO / "src/transformers/models"
     model_paths = get_list_of_repo_model_paths(models_dir=models_dir)
@@ -98,7 +101,9 @@ def get_list_of_models_to_deprecate(
             models_info = json.load(f)
         # Convert datetimes back to datetime objects
         for model, info in models_info.items():
-            info["first_commit_datetime"] = datetime.fromisoformat(info["first_commit_datetime"])
+            info["first_commit_datetime"] = datetime.fromisoformat(
+                info["first_commit_datetime"]
+            )
 
     else:
         # Build a dictionary of model info: first commit datetime, commit hash, model path
@@ -124,7 +129,9 @@ def get_list_of_models_to_deprecate(
 
         # Filter out models which were added less than a year ago
         models_info = {
-            model: info for model, info in models_info.items() if info["first_commit_datetime"] < thresh_date
+            model: info
+            for model, info in models_info.items()
+            if info["first_commit_datetime"] < thresh_date
         }
 
         # We make successive calls to the hub, filtering based on the model tags
@@ -162,14 +169,22 @@ def get_list_of_models_to_deprecate(
             print(f"Date: {info['first_commit_datetime']}")
     print("\nModels to deprecate: ", "\n" + "\n".join(models_to_deprecate.keys()))
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
-    print("Before deprecating make sure to verify the models, including if they're used as a module in other models.")
+    print(
+        "Before deprecating make sure to verify the models, including if they're used as a module in other models."
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--save_model_info", action="store_true", help="Save the retrieved model info to a json file.")
     parser.add_argument(
-        "--use_cache", action="store_true", help="Use the cached model info instead of calling the hub."
+        "--save_model_info",
+        action="store_true",
+        help="Save the retrieved model info to a json file.",
+    )
+    parser.add_argument(
+        "--use_cache",
+        action="store_true",
+        help="Use the cached model info instead of calling the hub.",
     )
     parser.add_argument(
         "--thresh_num_downloads",

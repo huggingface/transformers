@@ -22,9 +22,10 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
 if is_vision_available():
-    from transformers import AutoProcessor, Blip2Processor, BlipImageProcessor, GPT2Tokenizer, PreTrainedTokenizerFast
+    from transformers import (AutoProcessor, Blip2Processor,
+                              BlipImageProcessor, GPT2Tokenizer,
+                              PreTrainedTokenizerFast)
 
 
 @require_vision
@@ -35,7 +36,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = BlipImageProcessor()
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-GPT2Model"
+        )
 
         processor = Blip2Processor(image_processor, tokenizer)
 
@@ -51,20 +54,33 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Blip2Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = Blip2Processor(
+            tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = Blip2Processor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        image_processor_add_kwargs = self.get_image_processor(
+            do_normalize=False, padding_value=1.0
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = Blip2Processor.from_pretrained(
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_normalize=False,
+            padding_value=1.0,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.image_processor.to_json_string(),
+            image_processor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.image_processor, BlipImageProcessor)
 
     def test_image_processor(self):
@@ -79,7 +95,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
@@ -107,7 +125,9 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
+        self.assertCountEqual(
+            list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"]
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -138,4 +158,6 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
+        self.assertCountEqual(
+            list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"]
+        )

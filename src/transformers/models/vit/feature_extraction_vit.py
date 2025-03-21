@@ -19,7 +19,6 @@ import warnings
 from ...utils import logging
 from .image_processing_vit import ViTImageProcessor
 
-
 logger = logging.get_logger(__name__)
 
 

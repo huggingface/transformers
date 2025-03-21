@@ -19,7 +19,6 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 

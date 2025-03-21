@@ -18,12 +18,13 @@ import unittest
 
 from transformers import DepthProConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (require_torch, require_vision, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -112,11 +113,15 @@ class DepthProModelTester:
         self.expected_depth_size = 2 ** (n_fusion_blocks + 1) * self.out_size
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -143,7 +148,10 @@ class DepthProModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -152,7 +160,8 @@ class DepthProModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.predicted_depth.shape, (self.batch_size, self.expected_depth_size, self.expected_depth_size)
+            result.predicted_depth.shape,
+            (self.batch_size, self.expected_depth_size, self.expected_depth_size),
         )
 
     def create_and_check_for_fov(self, config, pixel_values, labels):
@@ -182,7 +191,9 @@ class DepthProModelTester:
         model_name = model.__class__.__name__
         self.parent.assertTrue(
             diff <= 1e-03,
-            msg=(f"Batched and Single row outputs are not equal in {model_name} for fov. Difference={diff}."),
+            msg=(
+                f"Batched and Single row outputs are not equal in {model_name} for fov. Difference={diff}."
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -199,7 +210,9 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DepthProModel, DepthProForDepthEstimation) if is_torch_available() else ()
+    all_model_classes = (
+        (DepthProModel, DepthProForDepthEstimation) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "depth-estimation": DepthProForDepthEstimation,
@@ -216,7 +229,9 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = DepthProModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=DepthProConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -251,7 +266,9 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             if model_class.__name__ == "DepthProForDepthEstimation":
                 continue
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             if model_class.__name__ in MODEL_MAPPING_NAMES.values():
@@ -260,7 +277,9 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -269,17 +288,24 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             if model_class.__name__ == "DepthProForDepthEstimation":
                 continue
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.use_cache = False
             config.return_dict = True
 
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_gradient_checkpointing
+            ):
                 continue
             model = model_class(config)
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -319,7 +345,9 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                         )
                     else:
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
@@ -359,24 +387,36 @@ class DepthProModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the predicted depth
-        n_fusion_blocks = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
-        out_size = config.image_model_config.image_size // config.image_model_config.patch_size
+        n_fusion_blocks = len(config.intermediate_hook_ids) + len(
+            config.scaled_images_ratios
+        )
+        out_size = (
+            config.image_model_config.image_size // config.image_model_config.patch_size
+        )
         expected_depth_size = 2 ** (n_fusion_blocks + 1) * out_size
 
         expected_shape = torch.Size((1, expected_depth_size, expected_depth_size))
         self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.0582, 1.1225, 1.1335], [1.1154, 1.1398, 1.1486], [1.1434, 1.1500, 1.1643]]
+            [
+                [1.0582, 1.1225, 1.1335],
+                [1.1154, 1.1398, 1.1486],
+                [1.1434, 1.1500, 1.1643],
+            ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4, rtol=1e-4
+        )
 
         # verify the predicted fov
         expected_shape = torch.Size((1,))
         self.assertEqual(outputs.field_of_view.shape, expected_shape)
 
         expected_slice = torch.tensor([47.2459]).to(torch_device)
-        torch.testing.assert_close(outputs.field_of_view, expected_slice, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            outputs.field_of_view, expected_slice, atol=1e-4, rtol=1e-4
+        )
 
     def test_post_processing_depth_estimation(self):
         model_path = "apple/DepthPro-hf"

@@ -18,30 +18,18 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    get_resize_output_image_size,
-    pad,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
+from ...image_processing_utils import (BaseImageProcessor, BatchFeature,
+                                       get_size_dict)
+from ...image_transforms import (get_resize_output_image_size, pad, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD,
+                            ChannelDimension, ImageInput, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            is_scaled_image, make_list_of_images,
+                            to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.import_utils import is_vision_available
-
 
 logger = logging.get_logger(__name__)
 
@@ -121,7 +109,9 @@ class DonutImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def align_long_axis(
@@ -156,7 +146,9 @@ class DonutImageProcessor(BaseImageProcessor):
             image = np.rot90(image, 3)
 
         if data_format is not None:
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
 
         return image
 
@@ -200,10 +192,14 @@ class DonutImageProcessor(BaseImageProcessor):
         pad_right = delta_width - pad_left
 
         padding = ((pad_top, pad_bottom), (pad_left, pad_right))
-        return pad(image, padding, data_format=data_format, input_data_format=input_data_format)
+        return pad(
+            image, padding, data_format=data_format, input_data_format=input_data_format
+        )
 
     def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
+        logger.info(
+            "pad is deprecated and will be removed in version 4.27. Please use pad_image instead."
+        )
         return self.pad_image(*args, **kwargs)
 
     def thumbnail(
@@ -283,7 +279,10 @@ class DonutImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         shortest_edge = min(size["height"], size["width"])
         output_size = get_resize_output_image_size(
-            image, size=shortest_edge, default_to_square=False, input_data_format=input_data_format
+            image,
+            size=shortest_edge,
+            default_to_square=False,
+            input_data_format=input_data_format,
         )
         resized_image = resize(
             image,
@@ -378,10 +377,16 @@ class DonutImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         resample = resample if resample is not None else self.resample
         do_thumbnail = do_thumbnail if do_thumbnail is not None else self.do_thumbnail
-        do_align_long_axis = do_align_long_axis if do_align_long_axis is not None else self.do_align_long_axis
+        do_align_long_axis = (
+            do_align_long_axis
+            if do_align_long_axis is not None
+            else self.do_align_long_axis
+        )
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -420,39 +425,69 @@ class DonutImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_align_long_axis:
-            images = [self.align_long_axis(image, size=size, input_data_format=input_data_format) for image in images]
+            images = [
+                self.align_long_axis(
+                    image, size=size, input_data_format=input_data_format
+                )
+                for image in images
+            ]
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_thumbnail:
-            images = [self.thumbnail(image=image, size=size, input_data_format=input_data_format) for image in images]
+            images = [
+                self.thumbnail(
+                    image=image, size=size, input_data_format=input_data_format
+                )
+                for image in images
+            ]
 
         if do_pad:
             images = [
                 self.pad_image(
-                    image=image, size=size, random_padding=random_padding, input_data_format=input_data_format
+                    image=image,
+                    size=size,
+                    random_padding=random_padding,
+                    input_data_format=input_data_format,
                 )
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}

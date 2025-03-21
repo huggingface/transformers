@@ -21,22 +21,16 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    VideoInput,
-    make_batched_videos,
-    make_nested_list_of_images,
-)
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...image_utils import (ImageInput, VideoInput, make_batched_videos,
+                            make_nested_list_of_images)
+from ...processing_utils import (ImagesKwargs, ProcessingKwargs,
+                                 ProcessorMixin, Unpack)
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, logging
-from .video_processing_smolvlm import (
-    DEFAULT_MEDIA_OUTTRO,
-    DEFAULT_VIDEO_INTRO,
-    FRAME_TIMESTAMP_MESSAGE,
-    smolvlm_sample_indices_fn,
-)
-
+from .video_processing_smolvlm import (DEFAULT_MEDIA_OUTTRO,
+                                       DEFAULT_VIDEO_INTRO,
+                                       FRAME_TIMESTAMP_MESSAGE,
+                                       smolvlm_sample_indices_fn)
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
@@ -51,14 +45,21 @@ else:
 
 
 def _prompt_split_image(
-    image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
+    image_seq_len,
+    image_rows,
+    image_cols,
+    fake_token_around_image,
+    image_token,
+    global_image_token,
 ):
     """Prompt with expanded image tokens for when the image is split into patches."""
     text_split_images = ""
     for n_h in range(image_rows):
         for n_w in range(image_cols):
             text_split_images += (
-                f"{fake_token_around_image}" + f"<row_{n_h + 1}_col_{n_w + 1}>" + f"{image_token}" * image_seq_len
+                f"{fake_token_around_image}"
+                + f"<row_{n_h + 1}_col_{n_w + 1}>"
+                + f"{image_token}" * image_seq_len
             )
         text_split_images += "\n"
 
@@ -71,7 +72,9 @@ def _prompt_split_image(
     return text_split_images
 
 
-def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_image_token):
+def _prompt_single_image(
+    image_seq_len, fake_token_around_image, image_token, global_image_token
+):
     """Prompt with expanded image tokens for a single image."""
     return (
         f"{fake_token_around_image}"
@@ -82,7 +85,12 @@ def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, gl
 
 
 def get_image_prompt_string(
-    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_image_token
+    image_rows,
+    image_cols,
+    image_seq_len,
+    fake_token_around_image,
+    image_token,
+    global_image_token,
 ):
     if image_rows == 0 and image_cols == 0:
         return _prompt_single_image(
@@ -92,7 +100,12 @@ def get_image_prompt_string(
             global_image_token=global_image_token,
         )
     return _prompt_split_image(
-        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
+        image_seq_len,
+        image_rows,
+        image_cols,
+        fake_token_around_image,
+        image_token,
+        global_image_token,
     )
 
 
@@ -141,18 +154,33 @@ class SmolVLMProcessor(ProcessorMixin):
     image_processor_class = "SmolVLMImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str = None, **kwargs):
-        self.fake_image_token = getattr(tokenizer, "fake_image_token", "<fake_token_around_image>")
+    def __init__(
+        self,
+        image_processor,
+        tokenizer=None,
+        image_seq_len: int = 169,
+        chat_template: str = None,
+        **kwargs,
+    ):
+        self.fake_image_token = getattr(
+            tokenizer, "fake_image_token", "<fake_token_around_image>"
+        )
         self.image_token = getattr(tokenizer, "image_token", "<image>")
-        self.end_of_utterance_token = getattr(tokenizer, "end_of_utterance_token", "<end_of_utterance>")
-        self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
+        self.end_of_utterance_token = getattr(
+            tokenizer, "end_of_utterance_token", "<end_of_utterance>"
+        )
+        self.global_image_token = getattr(
+            tokenizer, "global_image_token", "<global-img>"
+        )
         self.image_seq_len = image_seq_len
 
         self.video_size = image_processor.video_sampling["video_size"]
         self.image_size = image_processor.size
 
         self.do_image_splitting = image_processor.do_image_splitting
-        self.do_video_splitting = image_processor.video_sampling.get("do_image_splitting", False)
+        self.do_video_splitting = image_processor.video_sampling.get(
+            "do_image_splitting", False
+        )
 
         self.default_max_frames = image_processor.video_sampling["max_frames"]
         self.default_fps = image_processor.video_sampling["fps"]
@@ -164,15 +192,27 @@ class SmolVLMProcessor(ProcessorMixin):
                 "Package `num2words` is required to run SmolVLM processor. Install it with `pip install num2words`."
             )
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(
+            image_processor, tokenizer, chat_template=chat_template, **kwargs
+        )
 
-    def process_vision(self, text, images, output_kwargs, do_image_splitting=False, image_processor_size=None):
+    def process_vision(
+        self,
+        text,
+        images,
+        output_kwargs,
+        do_image_splitting=False,
+        image_processor_size=None,
+    ):
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
         n_images_in_images = [len(sublist) for sublist in images]
         image_inputs = self.image_processor(
-            images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"]
+            images,
+            do_image_splitting=do_image_splitting,
+            size=image_processor_size,
+            **output_kwargs["images_kwargs"],
         )
 
         if text is None:
@@ -215,7 +255,9 @@ class SmolVLMProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        text: Union[
+            TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]
+        ] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
@@ -280,10 +322,14 @@ class SmolVLMProcessor(ProcessorMixin):
             if isinstance(text, str):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
             n_images_in_text = sum([sample.count(self.image_token) for sample in text])
             if n_images_in_text > 0 and (images is None and videos is None):
-                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
+                raise ValueError(
+                    f"We detected {n_images_in_text} tokens in the text but no images/videos were passed"
+                )
 
         inputs = BatchFeature()
         # Images and videos are mutually exclusive, so process one which is present
@@ -380,18 +426,28 @@ class SmolVLMProcessor(ProcessorMixin):
                             {
                                 "type": "text",
                                 "text": DEFAULT_VIDEO_INTRO.format(
-                                    frame_count=num2words(curr_num_frames), video_duration=str(td)
+                                    frame_count=num2words(curr_num_frames),
+                                    video_duration=str(td),
                                 ),
                             }
                         )
 
                         # 2) Insert per-frame lines: "Frame from {timestamp}:", then an "image" block
                         for i, ts in enumerate(curr_timestamps):
-                            new_content.append({"type": "text", "text": FRAME_TIMESTAMP_MESSAGE.format(timestamp=ts)})
+                            new_content.append(
+                                {
+                                    "type": "text",
+                                    "text": FRAME_TIMESTAMP_MESSAGE.format(
+                                        timestamp=ts
+                                    ),
+                                }
+                            )
                             new_content.append({"type": "image"})
 
                         # 3) Optionally add an outro (e.g. "Now answer the question:")
-                        new_content.append({"type": "text", "text": DEFAULT_MEDIA_OUTTRO})
+                        new_content.append(
+                            {"type": "text", "text": DEFAULT_MEDIA_OUTTRO}
+                        )
                         # Do NOT add the original block => we skip it (since we've replaced it)
                     else:
                         # keep original block
@@ -439,7 +495,11 @@ class SmolVLMProcessor(ProcessorMixin):
 
         def sample_indices_fn_func(metadata, **fn_kwargs):
             return smolvlm_sample_indices_fn(
-                metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs, **fn_kwargs
+                metadata,
+                max_frames=max_frames,
+                target_fps=target_fps,
+                skip_secs=skip_secs,
+                **fn_kwargs,
             )
 
         # word of caution- we are blindly overriding a callable kwarg here.
@@ -447,7 +507,10 @@ class SmolVLMProcessor(ProcessorMixin):
         if not sample_indices_fn:
             sample_indices_fn = sample_indices_fn_func
         return super().apply_chat_template(
-            conversation, video_load_backend=video_load_backend, sample_indices_fn=sample_indices_fn, **kwargs
+            conversation,
+            video_load_backend=video_load_backend,
+            sample_indices_fn=sample_indices_fn,
+            **kwargs,
         )
 
 

@@ -19,31 +19,14 @@ from typing import Dict, List, Optional, Union
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-    logging,
-)
-from .image_processing_pixtral import (
-    get_resize_output_image_size,
-)
-
+from ...utils import (TensorType, add_start_docstrings, is_torch_available,
+                      is_torchvision_available, is_torchvision_v2_available,
+                      is_vision_available, logging)
+from .image_processing_pixtral import get_resize_output_image_size
 
 logger = logging.get_logger(__name__)
 
@@ -95,7 +78,9 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -120,20 +105,28 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use when resiizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        )
         if size.longest_edge:
             size = (size.longest_edge, size.longest_edge)
         elif size.height and size.width:
             size = (size.height, size.width)
         else:
-            raise ValueError("size must contain either 'longest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "size must contain either 'longest_edge' or 'height' and 'width'."
+            )
 
         if patch_size.height and patch_size.width:
             patch_size = (patch_size.height, patch_size.width)
         else:
-            raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "patch_size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
-        output_size = get_resize_output_image_size(image, size=size, patch_size=patch_size)
+        output_size = get_resize_output_image_size(
+            image, size=size, patch_size=patch_size
+        )
         return F.resize(image, size=output_size, interpolation=interpolation, **kwargs)
 
     # Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessor._pad_for_batching
@@ -153,9 +146,14 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             List[`torch.Tensor`]: The padded images.
         """
 
-        max_shape = (max([size[0] for size in image_sizes]), max([size[1] for size in image_sizes]))
+        max_shape = (
+            max([size[0] for size in image_sizes]),
+            max([size[1] for size in image_sizes]),
+        )
         pixel_values = [
-            torch.nn.functional.pad(image, pad=(0, max_shape[1] - size[1], 0, max_shape[0] - size[0]))
+            torch.nn.functional.pad(
+                image, pad=(0, max_shape[1] - size[1], 0, max_shape[0] - size[0])
+            )
             for image, size in zip(pixel_values, image_sizes)
         ]
         return torch.stack(pixel_values)
@@ -184,7 +182,10 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(
-                    image=stacked_images, size=size, patch_size=patch_size, interpolation=interpolation
+                    image=stacked_images,
+                    size=size,
+                    patch_size=patch_size,
+                    interpolation=interpolation,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -192,25 +193,35 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images)
-        batch_image_sizes = [grouped_images_index[i][0] for i in range(len(grouped_images_index))]
+        batch_image_sizes = [
+            grouped_images_index[i][0] for i in range(len(grouped_images_index))
+        ]
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                stacked_images,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
             )
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(
+            processed_images_grouped, grouped_images_index
+        )
         padded_images = self._pad_for_batching(
             pixel_values=processed_images,
             image_sizes=batch_image_sizes,
         )
 
         return BatchFeature(
-            data={"pixel_values": padded_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": padded_images, "image_sizes": batch_image_sizes},
+            tensor_type=return_tensors,
         )
 
 

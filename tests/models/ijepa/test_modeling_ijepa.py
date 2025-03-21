@@ -17,25 +17,16 @@
 import unittest
 
 from transformers import IJepaConfig
-from transformers.testing_utils import (
-    require_accelerate,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_vision,
-    slow,
-    torch_device,
-)
-from transformers.utils import (
-    cached_property,
-    is_torch_available,
-    is_vision_available,
-)
+from transformers.testing_utils import (require_accelerate, require_torch,
+                                        require_torch_accelerator,
+                                        require_torch_fp16, require_vision,
+                                        slow, torch_device)
+from transformers.utils import (cached_property, is_torch_available,
+                                is_vision_available)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -164,7 +155,9 @@ class IJepaModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
         self.parent.assertEqual(
             result.logits.shape,
@@ -198,7 +191,10 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": IJepaModel, "image-classification": IJepaForImageClassification}
+        {
+            "image-feature-extraction": IJepaModel,
+            "image-classification": IJepaForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -267,7 +263,11 @@ def prepare_img():
 class IJepaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/ijepa_vith14_1k") if is_vision_available() else None
+        return (
+            ViTImageProcessor.from_pretrained("facebook/ijepa_vith14_1k")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):
@@ -286,10 +286,16 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.Tensor(
-            [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+            [
+                [-0.0621, -0.0054, -2.7513],
+                [-0.1952, 0.0909, -3.9536],
+                [0.0942, -0.0331, -1.2833],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     @require_accelerate
@@ -336,7 +342,13 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+            [
+                [-0.0621, -0.0054, -2.7513],
+                [-0.1952, 0.0909, -3.9536],
+                [0.0942, -0.0331, -1.2833],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

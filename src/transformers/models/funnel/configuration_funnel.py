@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -112,7 +111,9 @@ class FunnelConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
-        self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats
+        self.block_repeats = (
+            [1] * len(block_sizes) if block_repeats is None else block_repeats
+        )
         assert len(block_sizes) == len(
             self.block_repeats
         ), "`block_sizes` and `block_repeats` should have the same length."
@@ -160,7 +161,9 @@ class FunnelConfig(PretrainedConfig):
 
     @num_blocks.setter
     def num_blocks(self, value):
-        raise NotImplementedError("This model does not support the setting of `num_blocks`. Please set `block_sizes`.")
+        raise NotImplementedError(
+            "This model does not support the setting of `num_blocks`. Please set `block_sizes`."
+        )
 
 
 __all__ = ["FunnelConfig"]

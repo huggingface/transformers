@@ -24,12 +24,18 @@ from transformers.utils import direct_transformers_import
 
 from .utils.test_configuration_utils import config_common_kwargs
 
-
 transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
 class ConfigTester:
-    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
+    def __init__(
+        self,
+        parent,
+        config_class=None,
+        has_text_modality=True,
+        common_properties=None,
+        **kwargs,
+    ):
         self.parent = parent
         self.config_class = config_class
         self.has_text_modality = has_text_modality
@@ -51,14 +57,18 @@ class ConfigTester:
 
         # Test that config has the common properties as getters
         for prop in common_properties:
-            self.parent.assertTrue(hasattr(config, prop), msg=f"`{prop}` does not exist")
+            self.parent.assertTrue(
+                hasattr(config, prop), msg=f"`{prop}` does not exist"
+            )
 
         # Test that config has the common properties as setter
         for idx, name in enumerate(common_properties):
             try:
                 setattr(config, name, idx)
                 self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                    getattr(config, name),
+                    idx,
+                    msg=f"`{name} value {idx} expected, but was {getattr(config, name)}",
                 )
             except NotImplementedError:
                 # Some models might not be able to implement setters for common_properties
@@ -70,7 +80,9 @@ class ConfigTester:
             try:
                 config = self.config_class(**{name: idx})
                 self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                    getattr(config, name),
+                    idx,
+                    msg=f"`{name} value {idx} expected, but was {getattr(config, name)}",
                 )
             except NotImplementedError:
                 # Some models might not be able to implement setters for common_properties
@@ -112,7 +124,9 @@ class ConfigTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             sub_tmpdirname = os.path.join(tmpdirname, subfolder)
             config_first.save_pretrained(sub_tmpdirname)
-            config_second = self.config_class.from_pretrained(tmpdirname, subfolder=subfolder)
+            config_second = self.config_class.from_pretrained(
+                tmpdirname, subfolder=subfolder
+            )
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
@@ -133,7 +147,9 @@ class ConfigTester:
             sub_configs = general_config_loaded.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
                 if sub_class.__name__ == "AutoConfig":
-                    sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
+                    sub_class = sub_class.for_model(
+                        **general_config_dict[sub_config_key]
+                    ).__class__
                     sub_config_loaded = sub_class.from_pretrained(tmpdirname)
                 else:
                     sub_config_loaded = sub_class.from_pretrained(tmpdirname)
@@ -142,17 +158,25 @@ class ConfigTester:
                 # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
                 sub_config_loaded_dict = sub_config_loaded.to_dict()
                 sub_config_loaded_dict.pop("transformers_version", None)
-                self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
+                self.parent.assertEqual(
+                    sub_config_loaded_dict, general_config_dict[sub_config_key]
+                )
 
                 # Verify that the loaded config type is same as in the general config
-                type_from_general_config = type(getattr(general_config_loaded, sub_config_key))
-                self.parent.assertTrue(isinstance(sub_config_loaded, type_from_general_config))
+                type_from_general_config = type(
+                    getattr(general_config_loaded, sub_config_key)
+                )
+                self.parent.assertTrue(
+                    isinstance(sub_config_loaded, type_from_general_config)
+                )
 
                 # Now save only the sub-config and load it back to make sure the whole load-save-load pipeline works
                 with tempfile.TemporaryDirectory() as tmpdirname2:
                     sub_config_loaded.save_pretrained(tmpdirname2)
                     sub_config_loaded_2 = sub_class.from_pretrained(tmpdirname2)
-                    self.parent.assertEqual(sub_config_loaded.to_dict(), sub_config_loaded_2.to_dict())
+                    self.parent.assertEqual(
+                        sub_config_loaded.to_dict(), sub_config_loaded_2.to_dict()
+                    )
 
     def create_and_test_config_with_num_labels(self):
         config = self.config_class(**self.inputs_dict, num_labels=5)
@@ -186,13 +210,19 @@ class ConfigTester:
                     import torch
 
                     if config.torch_dtype != torch.float16:
-                        wrong_values.append(("torch_dtype", config.torch_dtype, torch.float16))
+                        wrong_values.append(
+                            ("torch_dtype", config.torch_dtype, torch.float16)
+                        )
             elif getattr(config, key) != value:
                 wrong_values.append((key, getattr(config, key), value))
 
         if len(wrong_values) > 0:
-            errors = "\n".join([f"- {v[0]}: got {v[1]} instead of {v[2]}" for v in wrong_values])
-            raise ValueError(f"The following keys were not properly set in the config:\n{errors}")
+            errors = "\n".join(
+                [f"- {v[0]}: got {v[1]} instead of {v[2]}" for v in wrong_values]
+            )
+            raise ValueError(
+                f"The following keys were not properly set in the config:\n{errors}"
+            )
 
     def run_common_tests(self):
         self.create_and_test_config_common_properties()

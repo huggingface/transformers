@@ -4,7 +4,8 @@ from typing import Any, Dict
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.quantizers import HfQuantizer, register_quantization_config, register_quantizer
+from transformers.quantizers import (HfQuantizer, register_quantization_config,
+                                     register_quantizer)
 from transformers.utils.quantization_config import QuantizationConfigMixin
 
 
@@ -44,7 +45,9 @@ class CustomQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
         self.quantization_config = quantization_config
         self.scale_map = {}
-        self.device = kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu")
+        self.device = kwargs.get(
+            "device", "cuda" if torch.cuda.is_available() else "cpu"
+        )
         self.torch_dtype = kwargs.get("torch_dtype", torch.float32)
 
     def _process_model_before_weight_loading(self, model, **kwargs):

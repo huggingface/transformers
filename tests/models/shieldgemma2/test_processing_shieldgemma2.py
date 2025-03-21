@@ -27,7 +27,6 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
 if is_vision_available():
     from transformers import Gemma3ImageProcessor
 
@@ -74,17 +73,23 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        image_processor = Gemma3ImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor = Gemma3ImageProcessor.from_pretrained(
+            "google/siglip-so400m-patch14-384"
+        )
 
         extra_special_tokens = {
             "image_token": "<image_soft_token>",
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
+        tokenizer = GemmaTokenizer(
+            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
+        )
 
         processor_kwargs = self.prepare_processor_dict()
-        processor = ShieldGemma2Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
+        processor = ShieldGemma2Processor(
+            image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
@@ -121,13 +126,21 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         images = self.prepare_image_inputs()
         processed_inputs = processor(images=images, policies=policies)
-        self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
+        self.assertEqual(
+            len(processed_inputs[self.text_input_name]), expected_batch_size
+        )
+        self.assertEqual(
+            len(processed_inputs[self.images_input_name]), expected_batch_size
+        )
 
     @parameterized.expand(
         [
             ("all_policies", None, 6),
-            ("selected_policies_from_both", ["cbrne", "dangerous", "specialized_advice", "violence"], 4),
+            (
+                "selected_policies_from_both",
+                ["cbrne", "dangerous", "specialized_advice", "violence"],
+                4,
+            ),
             ("selected_policies_from_custom", ["cbrne", "specialized_advice"], 2),
             ("selected_policies_from_default", ["dangerous", "violence"], 2),
             ("single_policy_from_custom", ["ip"], 1),
@@ -148,9 +161,15 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
         images = self.prepare_image_inputs()
-        processed_inputs = processor(images=images, custom_policies=custom_policies, policies=policies)
-        self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
-        self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
+        processed_inputs = processor(
+            images=images, custom_policies=custom_policies, policies=policies
+        )
+        self.assertEqual(
+            len(processed_inputs[self.text_input_name]), expected_batch_size
+        )
+        self.assertEqual(
+            len(processed_inputs[self.images_input_name]), expected_batch_size
+        )
 
     def test_with_multiple_images(self):
         processor = self.get_processor()
@@ -165,22 +184,30 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
+    @unittest.skip(
+        "ShieldGemma 2 chat template requires different message structure from parent."
+    )
     def test_chat_template_accepts_processing_kwargs(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
+    @unittest.skip(
+        "ShieldGemma 2 chat template requires different message structure from parent."
+    )
     def test_chat_template_batched(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
+    @unittest.skip(
+        "ShieldGemma 2 chat template requires different message structure from parent."
+    )
     def test_chat_template_dict_torch(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
+    @unittest.skip(
+        "ShieldGemma 2 chat template requires different message structure from parent."
+    )
     def test_chat_template_single(self):
         pass
 

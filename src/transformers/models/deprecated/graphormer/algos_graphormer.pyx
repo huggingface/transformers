@@ -8,7 +8,6 @@ from cython.parallel cimport parallel, prange
 
 import numpy as np
 
-
 # Reduce this number if matrices are too big for large graphs
 UNREACHABLE_NODE_DISTANCE = 510 
 

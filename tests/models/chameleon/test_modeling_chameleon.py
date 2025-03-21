@@ -19,20 +19,16 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
-from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_read_token,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers import (ChameleonConfig, is_torch_available,
+                          is_vision_available, set_seed)
+from transformers.testing_utils import (require_bitsandbytes,
+                                        require_read_token, require_torch,
+                                        slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_vision_available():
     from PIL import Image
@@ -40,11 +36,8 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from transformers import (
-        ChameleonForConditionalGeneration,
-        ChameleonModel,
-        ChameleonProcessor,
-    )
+    from transformers import (ChameleonForConditionalGeneration,
+                              ChameleonModel, ChameleonProcessor)
 
 
 class ChameleonModelTester:
@@ -119,13 +112,24 @@ class ChameleonModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         # create dummy vocab map for image2bpe mapping if it needs remapping
@@ -138,7 +142,9 @@ class ChameleonModelTester:
         start = self.vq_img_token_start_id
         end = self.vq_img_token_start_id + self.vq_num_embeds
         for i in range(start, end):
-            vocab_map[i] = f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
+            vocab_map[i] = (
+                f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
+            )
 
         return ChameleonConfig(
             vocab_size=self.vocab_size,
@@ -169,13 +175,24 @@ class ChameleonModelTester:
             "channel_multiplier": self.vq_channel_multiplier,
         }
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
         model = ChameleonModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -192,7 +209,9 @@ class ChameleonModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -246,13 +265,17 @@ class ChameleonModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -269,8 +292,14 @@ class ChameleonModelTester:
 
 
 @require_torch
-class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
+class ChameleonModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (ChameleonModel, ChameleonForConditionalGeneration)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": ChameleonModel,
@@ -286,7 +315,9 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=ChameleonConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -299,16 +330,22 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = ChameleonModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = ChameleonModel(config)
         scaled_model.to(torch_device)
@@ -319,12 +356,18 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
@@ -343,11 +386,16 @@ class ChameleonIntegrationTest(unittest.TestCase):
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            model.device, torch.float16
+        )
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in']  # fmt: skip
@@ -365,19 +413,25 @@ class ChameleonIntegrationTest(unittest.TestCase):
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image>Describe what do you see here and tell me about the history behind it?",
             "What constellation is this image showing?<image>",
         ]
 
-        inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
-        )
+        inputs = processor(
+            images=[image, image_2], text=prompts, padding=True, return_tensors="pt"
+        ).to(model.device, torch.float16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
@@ -398,14 +452,22 @@ class ChameleonIntegrationTest(unittest.TestCase):
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images have in common?<image><image>"
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(
+            images=[image, image_2], text=prompt, return_tensors="pt"
+        ).to(model.device, torch.float16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip

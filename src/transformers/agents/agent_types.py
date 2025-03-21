@@ -19,8 +19,8 @@ import uuid
 
 import numpy as np
 
-from ..utils import is_soundfile_available, is_torch_available, is_vision_available, logging
-
+from ..utils import (is_soundfile_available, is_torch_available,
+                     is_vision_available, logging)
 
 logger = logging.get_logger(__name__)
 
@@ -107,7 +107,9 @@ class AgentImage(AgentType, ImageType):
         elif isinstance(value, np.ndarray):
             self._tensor = torch.from_numpy(value)
         else:
-            raise TypeError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
+            raise TypeError(
+                f"Unsupported type for {self.__class__.__name__}: {type(value)}"
+            )
 
     def _ipython_display_(self, include=None, exclude=None):
         """
@@ -243,7 +245,9 @@ if is_torch_available():
 
 def handle_agent_inputs(*args, **kwargs):
     args = [(arg.to_raw() if isinstance(arg, AgentType) else arg) for arg in args]
-    kwargs = {k: (v.to_raw() if isinstance(v, AgentType) else v) for k, v in kwargs.items()}
+    kwargs = {
+        k: (v.to_raw() if isinstance(v, AgentType) else v) for k, v in kwargs.items()
+    }
     return args, kwargs
 
 

@@ -19,31 +19,17 @@ import unittest
 
 import requests
 
-from transformers import (
-    AutoProcessor,
-    Qwen2_5_VLConfig,
-    Qwen2_5_VLForConditionalGeneration,
-    is_torch_available,
-    is_vision_available,
-)
-from transformers.testing_utils import (
-    is_flaky,
-    require_flash_attn,
-    require_torch,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers import (AutoProcessor, Qwen2_5_VLConfig,
+                          Qwen2_5_VLForConditionalGeneration,
+                          is_torch_available, is_vision_available)
+from transformers.testing_utils import (is_flaky, require_flash_attn,
+                                        require_torch, require_torch_gpu, slow,
+                                        torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-)
-
+from ...test_modeling_common import (ModelTesterMixin, _config_zero_init,
+                                     floats_tensor, ids_tensor)
 
 if is_torch_available():
     import torch
@@ -167,7 +153,9 @@ class Qwen2_5_VLVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            input_ids.shape, dtype=torch.long, device=torch_device
+        )
 
         input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
@@ -229,13 +217,17 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     Model tester for `Qwen2_5_VLForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
+    )
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen2_5_VLConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Qwen2_5_VLConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -268,7 +260,9 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            input_dict["pixel_values"] = input_dict["pixel_values"][-one_img_length:, ...]
+            input_dict["pixel_values"] = input_dict["pixel_values"][
+                -one_img_length:, ...
+            ]
             input_dict["image_grid_thw"] = input_dict["image_grid_thw"][-1:, ...]
             with self.assertRaises(ValueError):
                 _ = model(**input_dict)
@@ -304,15 +298,21 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    @unittest.skip(
+        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
+    )
     def test_model_parallelism(self):
         pass
 
@@ -338,7 +338,9 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
+    @unittest.skip(
+        reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`"
+    )
     def test_generate_compile_fullgraph(self):
         pass
 
@@ -373,11 +375,15 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
         )
 
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
+        )
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
 
         expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
-        assert torch.allclose(expected_input_ids, inputs.input_ids[0].tolist()[:17], atol=3e-3)
+        assert torch.allclose(
+            expected_input_ids, inputs.input_ids[0].tolist()[:17], atol=3e-3
+        )
 
         expected_pixel_slice = torch.tensor(
             [
@@ -391,7 +397,9 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
+        assert torch.allclose(
+            expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3
+        )
 
         # verify generation
         inputs = inputs.to(torch_device)
@@ -409,10 +417,12 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
         )
+        inputs = self.processor(
+            text=[text, text], images=[self.image, self.image], return_tensors="pt"
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -431,8 +441,12 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=[text], images=[self.image], return_tensors="pt"
+        ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
 
@@ -451,15 +465,19 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
+        )
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Who are you?"},
         ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
+        text2 = self.processor.apply_chat_template(
+            messages2, tokenize=False, add_generation_prompt=True
         )
+        inputs = self.processor(
+            text=[text, text2], images=[self.image], padding=True, return_tensors="pt"
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -478,8 +496,12 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
+        )
+        text2 = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
+        )
         image2 = self.image.resize((224, 224))
         inputs = self.processor(
             text=[text, text2],
@@ -510,10 +532,12 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
         )
+        inputs = self.processor(
+            text=[text, text], images=[self.image, self.image], return_tensors="pt"
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
@@ -542,15 +566,19 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        text = self.processor.apply_chat_template(
+            self.messages, tokenize=False, add_generation_prompt=True
+        )
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Who are you?"},
         ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
+        text2 = self.processor.apply_chat_template(
+            messages2, tokenize=False, add_generation_prompt=True
         )
+        inputs = self.processor(
+            text=[text, text2], images=[self.image], padding=True, return_tensors="pt"
+        ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)

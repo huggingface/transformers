@@ -17,16 +17,17 @@ import unittest
 
 import numpy as np
 
-from transformers import LlamaConfig, is_flax_available, is_tokenizers_available
+from transformers import (LlamaConfig, is_flax_available,
+                          is_tokenizers_available)
 from transformers.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
-
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
+    from transformers.models.llama.modeling_flax_llama import (
+        FlaxLlamaForCausalLM, FlaxLlamaModel)
 
 
 if is_tokenizers_available():
@@ -108,7 +109,9 @@ class FlaxLlamaModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
@@ -116,7 +119,8 @@ class FlaxLlamaModelTester:
         attention_mask = jnp.ones((input_ids.shape[0], max_decoder_length), dtype="i4")
 
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
         outputs_cache = model(
             input_ids[:, :-1],
@@ -125,7 +129,9 @@ class FlaxLlamaModelTester:
             position_ids=position_ids,
         )
 
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             attention_mask=attention_mask,
@@ -135,21 +141,34 @@ class FlaxLlamaModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, input_ids, attention_mask
+    ):
         max_decoder_length = 20
         model = model_class_name(config)
 
         attention_mask_cache = jnp.concatenate(
-            [attention_mask, jnp.zeros((attention_mask.shape[0], max_decoder_length - attention_mask.shape[1]))],
+            [
+                attention_mask,
+                jnp.zeros(
+                    (
+                        attention_mask.shape[0],
+                        max_decoder_length - attention_mask.shape[1],
+                    )
+                ),
+            ],
             axis=-1,
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1)
+            jnp.arange(input_ids.shape[-1] - 1)[None, :],
+            (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
         outputs_cache = model(
@@ -158,7 +177,9 @@ class FlaxLlamaModelTester:
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        position_ids = jnp.array(input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4")
+        position_ids = jnp.array(
+            input_ids.shape[0] * [[input_ids.shape[-1] - 1]], dtype="i4"
+        )
         outputs_cache_next = model(
             input_ids[:, -1:],
             past_key_values=outputs_cache.past_key_values,
@@ -168,25 +189,35 @@ class FlaxLlamaModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
 class FlaxLlamaModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxLlamaModel, FlaxLlamaForCausalLM) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxLlamaModel, FlaxLlamaForCausalLM) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxLlamaModelTester(self)
 
     def test_use_cache_forward(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
-            self.model_tester.check_use_cache_forward(model_class_name, config, input_ids, attention_mask)
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
+            self.model_tester.check_use_cache_forward(
+                model_class_name, config, input_ids, attention_mask
+            )
 
     def test_use_cache_forward_with_attn_mask(self):
         for model_class_name in self.all_model_classes:
-            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            config, input_ids, attention_mask = (
+                self.model_tester.prepare_config_and_inputs()
+            )
             self.model_tester.check_use_cache_forward_with_attn_mask(
                 model_class_name, config, input_ids, attention_mask
             )
@@ -194,7 +225,9 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("openlm-research/open_llama_3b_v2", from_pt=True)
+            model = model_class_name.from_pretrained(
+                "openlm-research/open_llama_3b_v2", from_pt=True
+            )
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
@@ -217,13 +250,17 @@ class FlaxLlamaIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = -65.0608
         # fmt: on
 
-        self.assertTrue(np.allclose(flax_logits[0, :3, :3].flatten(), EXPECTED_LOGITS, atol=1e-4))
+        self.assertTrue(
+            np.allclose(flax_logits[0, :3, :3].flatten(), EXPECTED_LOGITS, atol=1e-4)
+        )
         self.assertAlmostEqual(flax_logits.min(), EXPECTED_MIN, places=3)
         self.assertAlmostEqual(flax_logits.max(), EXPECTED_MAX, places=3)
         self.assertAlmostEqual(flax_logits.mean(), EXPECTED_MEAN, places=3)
 
     def test_model_hidden_states(self):
-        flax_hidden_states = self.model(self.test_batch, output_hidden_states=True).hidden_states
+        flax_hidden_states = self.model(
+            self.test_batch, output_hidden_states=True
+        ).hidden_states
         flax_hidden_means = [h.mean() for h in flax_hidden_states]
 
         # fmt: off
@@ -236,14 +273,23 @@ class FlaxLlamaIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        self.assertTrue(np.allclose(flax_hidden_means, EXPECTED_HIDDEN_MEANS, atol=1e-4))
+        self.assertTrue(
+            np.allclose(flax_hidden_means, EXPECTED_HIDDEN_MEANS, atol=1e-4)
+        )
 
     def test_generated_text(self):
         tokenizer = LlamaTokenizerFast.from_pretrained(self.model_id)
         tokenizer.pad_token_id = 2
-        test_batch = ["Aloha, World! ", "2 + 2 = ", "Paris is the capital of ", "我很高興認識"]
+        test_batch = [
+            "Aloha, World! ",
+            "2 + 2 = ",
+            "Paris is the capital of ",
+            "我很高興認識",
+        ]
 
-        inputs = tokenizer(test_batch, return_tensors="np", truncation=True, padding=True)
+        inputs = tokenizer(
+            test_batch, return_tensors="np", truncation=True, padding=True
+        )
         generated_ids = self.model.generate(**inputs, max_length=15).sequences
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 

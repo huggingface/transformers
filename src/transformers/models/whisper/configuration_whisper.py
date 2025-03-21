@@ -21,7 +21,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
-
 if TYPE_CHECKING:
     from ...feature_extraction_utils import FeatureExtractionMixin
     from ...tokenization_utils_base import PreTrainedTokenizerBase
@@ -254,7 +253,9 @@ class WhisperConfig(PretrainedConfig):
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = (
+            scale_embedding  # scale factor will be sqrt(d_model) if True
+        )
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
 
@@ -290,7 +291,10 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict(
             [
-                ("input_features", {0: "batch", 1: "feature_size", 2: "encoder_sequence"}),
+                (
+                    "input_features",
+                    {0: "batch", 1: "feature_size", 2: "encoder_sequence"},
+                ),
             ]
         )
         if self.use_past:

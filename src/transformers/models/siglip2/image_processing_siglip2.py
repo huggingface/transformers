@@ -21,24 +21,14 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
+from ...image_transforms import (convert_to_rgb, resize,
+                                 to_channel_dimension_format)
+from ...image_utils import (ChannelDimension, ImageInput, PILImageResampling,
+                            infer_channel_dimension_format, is_scaled_image,
+                            make_flat_list_of_images, to_numpy_array,
+                            valid_images, validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs,
+                      is_vision_available, logging)
 
 logger = logging.get_logger(__name__)
 
@@ -49,7 +39,11 @@ if is_vision_available():
 
 @lru_cache(maxsize=256)
 def get_image_size_for_max_num_patches(
-    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
+    image_height: int,
+    image_width: int,
+    patch_size: int,
+    max_num_patches: int,
+    eps: float = 1e-5,
 ) -> Tuple[int, int]:
     """
     Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
@@ -72,7 +66,9 @@ def get_image_size_for_max_num_patches(
 
     def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
         scaled_size = size * scale
-        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
+        scaled_size = (
+            math.ceil(scaled_size / patch_size) * patch_size
+        )  # make divisible by patch_size
         scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
         return int(scaled_size)
 
@@ -103,13 +99,17 @@ def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     image_height, image_width, num_channels = image.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_image = image.reshape(num_patches_height, patch_size, num_patches_width, patch_size, num_channels)
+    patched_image = image.reshape(
+        num_patches_height, patch_size, num_patches_width, patch_size, num_channels
+    )
     patched_image = patched_image.transpose(0, 2, 1, 3, 4)
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
 
 
-def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+def pad_along_first_dim(
+    array: np.ndarray, target_length: int, pad_value: int = 0
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Pad the array along the first dimension.
     """
@@ -255,13 +255,19 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         patch_size = patch_size if patch_size is not None else self.patch_size
-        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
+        max_num_patches = (
+            max_num_patches if max_num_patches is not None else self.max_num_patches
+        )
 
         # Explicitly specify data format to be channels last for image preprocessing.
         # Image processor does not support different output formats, because it returns patches.
@@ -302,7 +308,9 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         spatial_shapes = []
 
         for image in images:
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
 
             if do_resize:
                 height, width = get_image_size_for_max_num_patches(
@@ -311,13 +319,25 @@ class Siglip2ImageProcessor(BaseImageProcessor):
                     patch_size=patch_size,
                     max_num_patches=max_num_patches,
                 )
-                image = resize(image=image, size=(height, width), resample=resample, input_data_format=data_format)
+                image = resize(
+                    image=image,
+                    size=(height, width),
+                    resample=resample,
+                    input_data_format=data_format,
+                )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=data_format)
+                image = self.rescale(
+                    image=image, scale=rescale_factor, input_data_format=data_format
+                )
 
             if do_normalize:
-                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=data_format)
+                image = self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=data_format,
+                )
 
             patches = convert_image_to_patches(image, patch_size)
             patches, mask = pad_along_first_dim(patches, max_num_patches)

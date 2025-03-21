@@ -19,14 +19,14 @@ import unittest
 from typing import Dict, List, Tuple
 
 from transformers import MaskFormerSwinConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
+from transformers.testing_utils import (require_torch, require_torch_multi_gpu,
+                                        torch_device)
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -94,7 +94,9 @@ class MaskFormerSwinModelTester:
         self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -134,10 +136,15 @@ class MaskFormerSwinModelTester:
         model.eval()
         result = model(pixel_values)
 
-        expected_seq_len = ((config.image_size // config.patch_size) ** 2) // (4 ** (len(config.depths) - 1))
+        expected_seq_len = ((config.image_size // config.patch_size) ** 2) // (
+            4 ** (len(config.depths) - 1)
+        )
         expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, expected_seq_len, expected_dim),
+        )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
         model = MaskFormerSwinBackbone(config=config)
@@ -147,7 +154,9 @@ class MaskFormerSwinModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [13, 16, 16, 16])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [13, 16, 16, 16]
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -175,7 +184,9 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"feature-extraction": MaskFormerSwinModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": MaskFormerSwinModel} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_torchscript = False
     test_pruning = False
@@ -231,7 +242,9 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    @unittest.skip(reason="MaskFormerSwin is only used as backbone and doesn't support output_attentions")
+    @unittest.skip(
+        reason="MaskFormerSwin is only used as backbone and doesn't support output_attentions"
+    )
     def test_attention_outputs(self):
         pass
 
@@ -250,7 +263,9 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         hidden_states = outputs.hidden_states
 
         expected_num_layers = getattr(
-            self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
+            self.model_tester,
+            "expected_num_hidden_layers",
+            len(self.model_tester.depths) + 1,
         )
         self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -261,7 +276,9 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             else (config.patch_size, config.patch_size)
         )
 
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
 
         self.assertListEqual(
             list(hidden_states[0].shape[-2:]),
@@ -279,13 +296,17 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+            self.check_hidden_states_output(
+                inputs_dict, config, model_class, image_size
+            )
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
 
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+            self.check_hidden_states_output(
+                inputs_dict, config, model_class, image_size
+            )
 
     def test_hidden_states_output_with_padding(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -307,22 +328,30 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
+            self.check_hidden_states_output(
+                inputs_dict, config, model_class, (padded_height, padded_width)
+            )
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
+            self.check_hidden_states_output(
+                inputs_dict, config, model_class, (padded_height, padded_width)
+            )
 
     @unittest.skip(reason="MaskFormerSwin doesn't have pretrained checkpoints")
     def test_model_from_pretrained(self):
         pass
 
-    @unittest.skip(reason="This will be fixed once MaskFormerSwin is replaced by native Swin")
+    @unittest.skip(
+        reason="This will be fixed once MaskFormerSwin is replaced by native Swin"
+    )
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="This will be fixed once MaskFormerSwin is replaced by native Swin")
+    @unittest.skip(
+        reason="This will be fixed once MaskFormerSwin is replaced by native Swin"
+    )
     def test_gradient_checkpointing_backward_compatibility(self):
         pass
 
@@ -335,12 +364,18 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -352,7 +387,9 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                     else:
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -373,17 +410,29 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
 
 @require_torch
@@ -419,11 +468,15 @@ class MaskFormerSwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
             self.assertIsNotNone(outputs.hidden_states)
             self.assertTrue(len(outputs.hidden_states), len(backbone.stage_names))
             # We skip the stem layer
-            for hidden_states, n_channels in zip(outputs.hidden_states[1:], backbone.channels):
+            for hidden_states, n_channels in zip(
+                outputs.hidden_states[1:], backbone.channels
+            ):
                 for hidden_state in hidden_states:
                     # Hidden states are in the format (batch_size, (height * width), n_channels)
                     h_batch_size, _, h_n_channels = hidden_state.shape
-                    self.assertTrue((h_batch_size, h_n_channels), (batch_size, n_channels))
+                    self.assertTrue(
+                        (h_batch_size, h_n_channels), (batch_size, n_channels)
+                    )
 
             # Test output_attentions=True
             if self.has_attentions:

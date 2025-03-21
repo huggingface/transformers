@@ -5,7 +5,6 @@ from transformers.tokenization_utils import AddedToken
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -80,7 +79,9 @@ class ArlowTokenizer(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         """
         Save the tokenizer vocabulary + merges to `save_directory`.
         Returns a tuple of (vocab_file_path, merges_file_path).

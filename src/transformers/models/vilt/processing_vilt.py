@@ -20,7 +20,9 @@ import warnings
 from typing import List, Optional, Union
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (BatchEncoding, PaddingStrategy,
+                                        PreTokenizedInput, TextInput,
+                                        TruncationStrategy)
 from ...utils import TensorType
 
 
@@ -52,7 +54,9 @@ class ViltProcessor(ProcessorMixin):
             )
             feature_extractor = kwargs.pop("feature_extractor")
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
+        image_processor = (
+            image_processor if image_processor is not None else feature_extractor
+        )
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -64,7 +68,9 @@ class ViltProcessor(ProcessorMixin):
     def __call__(
         self,
         images,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -106,7 +112,9 @@ class ViltProcessor(ProcessorMixin):
             **kwargs,
         )
         # add pixel_values + pixel_mask
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        encoding_image_processor = self.image_processor(
+            images, return_tensors=return_tensors
+        )
         encoding.update(encoding_image_processor)
 
         return encoding

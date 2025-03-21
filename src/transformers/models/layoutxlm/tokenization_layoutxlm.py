@@ -21,20 +21,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_base import (
-    BatchEncoding,
-    EncodedInput,
-    PreTokenizedInput,
-    TextInput,
-    TextInputPair,
-    TruncationStrategy,
-)
+from ...tokenization_utils_base import (BatchEncoding, EncodedInput,
+                                        PreTokenizedInput, TextInput,
+                                        TextInputPair, TruncationStrategy)
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
-from ..xlm_roberta.tokenization_xlm_roberta import (
-    SPIECE_UNDERLINE,
-    VOCAB_FILES_NAMES,
-)
-
+from ..xlm_roberta.tokenization_xlm_roberta import (SPIECE_UNDERLINE,
+                                                    VOCAB_FILES_NAMES)
 
 logger = logging.get_logger(__name__)
 
@@ -243,7 +235,11 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -264,7 +260,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self.fairseq_offset = 1
 
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.fairseq_ids_to_tokens = {
+            v: k for k, v in self.fairseq_tokens_to_ids.items()
+        }
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -333,7 +331,10 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -353,7 +354,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is None:
@@ -417,15 +420,21 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -437,7 +446,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -500,7 +511,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError(
+                    "text input must of type `str` (single example) or `List[str]` (batch of examples). "
+                )
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
                     "words must of type `List[str]` (single pretokenized example), "
@@ -517,20 +530,30 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             is_batched = isinstance(text, (list, tuple))
         else:
-            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            is_batched = (
+                isinstance(text, (list, tuple))
+                and text
+                and isinstance(text[0], (list, tuple))
+            )
 
         words = text if text_pair is None else text_pair
         if boxes is None:
             raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
             if len(words) != len(boxes):
-                raise ValueError("You must provide words and boxes for an equal amount of examples")
+                raise ValueError(
+                    "You must provide words and boxes for an equal amount of examples"
+                )
             for words_example, boxes_example in zip(words, boxes):
                 if len(words_example) != len(boxes_example):
-                    raise ValueError("You must provide as many words as there are bounding boxes")
+                    raise ValueError(
+                        "You must provide as many words as there are bounding boxes"
+                    )
         else:
             if len(words) != len(boxes):
-                raise ValueError("You must provide as many words as there are bounding boxes")
+                raise ValueError(
+                    "You must provide as many words as there are bounding boxes"
+                )
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -538,7 +561,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
                     f" {len(text_pair)}."
                 )
-            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            batch_text_or_text_pairs = (
+                list(zip(text, text_pair)) if text_pair is not None else text
+            )
             is_pair = bool(text_pair is not None)
             return self.batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
@@ -814,13 +839,15 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         tokens = []
@@ -848,7 +875,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
                     token_boxes.extend([box] * len(word_tokens))
                     if self.only_label_first_subword:
                         # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                        labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
+                        labels.extend(
+                            [label] + [self.pad_token_label] * (len(word_tokens) - 1)
+                        )
                     else:
                         labels.extend([label] * len(word_tokens))
         else:
@@ -856,7 +885,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             # text = question
             # text_pair = words
             tokens = self.tokenize(text)
-            token_boxes = [self.pad_token_box for _ in range(len(tokens))] + [self.sep_token_box]
+            token_boxes = [self.pad_token_box for _ in range(len(tokens))] + [
+                self.sep_token_box
+            ]
 
             for word, box in zip(text_pair, boxes):
                 if len(word) < 1:  # skip empty words
@@ -873,13 +904,21 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         pair = bool(pair_ids is not None)
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
-        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        total_len = (
+            len_ids
+            + len_pair_ids
+            + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        )
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
         overflowing_token_boxes = []
         overflowing_labels = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and max_length
+            and total_len > max_length
+        ):
             (
                 ids,
                 token_boxes,
@@ -941,7 +980,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
             if add_special_tokens:
-                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(
+                    ids, pair_ids
+                )
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
@@ -949,7 +990,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             encoded_inputs["labels"] = labels
 
         # Check lengths
-        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            encoded_inputs["input_ids"], max_length, verbose
+        )
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -966,7 +1009,9 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs,
+            tensor_type=return_tensors,
+            prepend_batch_axis=prepend_batch_axis,
         )
 
         return batch_outputs
@@ -1070,7 +1115,10 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     "for instance 'longest_first' or 'only_second'."
                 )
-        elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+        elif (
+            truncation_strategy == TruncationStrategy.ONLY_SECOND
+            and pair_ids is not None
+        ):
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 overflowing_tokens = pair_ids[-window_len:]
@@ -1140,10 +1188,17 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = (
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(required_input) != max_length
+        )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
@@ -1151,35 +1206,58 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [self.pad_token_type_id] * difference
                     )
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    encoded_inputs["bbox"] = (
+                        encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    )
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    encoded_inputs["labels"] = (
+                        encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs[self.model_input_names[0]] = (
+                    required_input + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        self.pad_token_type_id
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = [self.pad_token_box] * difference + encoded_inputs["bbox"]
+                    encoded_inputs["bbox"] = [
+                        self.pad_token_box
+                    ] * difference + encoded_inputs["bbox"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
+                    encoded_inputs["labels"] = [
+                        self.pad_token_label
+                    ] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [
+                    self.pad_token_id
+                ] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 

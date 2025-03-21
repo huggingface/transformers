@@ -21,11 +21,9 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...processing_utils import (ImagesKwargs, ProcessingKwargs,
+                                 ProcessorMixin, Unpack)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
@@ -42,7 +40,9 @@ class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) -> List[List[int]]:
+def get_cross_attention_token_mask(
+    input_ids: List[int], image_token_id: int
+) -> List[List[int]]:
     """
     Generate a cross-attention token mask for image tokens in the input sequence.
 
@@ -64,7 +64,9 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
         - Consecutive image tokens are treated as a group and attend to all subsequent tokens together.
     """
 
-    image_token_locations = [i for i, token in enumerate(input_ids) if token == image_token_id]
+    image_token_locations = [
+        i for i, token in enumerate(input_ids) if token == image_token_id
+    ]
 
     if len(image_token_locations) == 0:
         return []
@@ -73,7 +75,10 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
     if len(image_token_locations) == 1:
         return [[image_token_locations[0], -1]]
 
-    vision_masks = [[loc1, loc2] for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])]
+    vision_masks = [
+        [loc1, loc2]
+        for loc1, loc2 in zip(image_token_locations[:-1], image_token_locations[1:])
+    ]
 
     # last image will attend to all subsequent text
     vision_masks.append([image_token_locations[-1], len(input_ids)])
@@ -127,14 +132,20 @@ def convert_sparse_cross_attention_mask_to_dense(
         dtype=np.int64,
     )
 
-    for sample_idx, (sample_masks, sample_num_tiles) in enumerate(zip(cross_attention_token_mask, num_tiles)):
-        for mask_idx, (locations, mask_num_tiles) in enumerate(zip(sample_masks, sample_num_tiles)):
+    for sample_idx, (sample_masks, sample_num_tiles) in enumerate(
+        zip(cross_attention_token_mask, num_tiles)
+    ):
+        for mask_idx, (locations, mask_num_tiles) in enumerate(
+            zip(sample_masks, sample_num_tiles)
+        ):
             if len(locations) == 2:
                 start, end = locations
                 end = min(end, length)
                 if end == -1:
                     end = length
-                cross_attention_mask[sample_idx, start:end, mask_idx, :mask_num_tiles] = 1
+                cross_attention_mask[
+                    sample_idx, start:end, mask_idx, :mask_num_tiles
+                ] = 1
     return cross_attention_mask
 
 
@@ -228,7 +239,11 @@ class MllamaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],
@@ -281,11 +296,21 @@ class MllamaProcessor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            elif not (
+                isinstance(text, (list, tuple))
+                and all(isinstance(t, str) for t in text)
+            ):
+                raise ValueError(
+                    "Invalid input text. Please provide a string, or a list of strings"
+                )
             n_images_in_text = [t.count(self.image_token) for t in text]
-            text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
-            _ = text_kwargs.pop("padding_side", None)  # hack until padding-side is an accepted kwarg by tokenizers
+            text = [
+                build_string_from_input(text_item, self.bos_token, self.image_token)
+                for text_item in text
+            ]
+            _ = text_kwargs.pop(
+                "padding_side", None
+            )  # hack until padding-side is an accepted kwarg by tokenizers
             encoding = self.tokenizer(text, **text_kwargs)
             data.update(encoding)
 
@@ -303,7 +328,9 @@ class MllamaProcessor(ProcessorMixin):
                 )
             if sum(n_images_in_text) > 0 and n_images_in_images != n_images_in_text:
                 if images is None:
-                    raise ValueError("No image were provided, but there are image tokens in the prompt")
+                    raise ValueError(
+                        "No image were provided, but there are image tokens in the prompt"
+                    )
                 else:
                     add_message = ""
                     if sum(n_images_in_images) == sum(n_images_in_text):
@@ -321,7 +348,8 @@ class MllamaProcessor(ProcessorMixin):
         # Create cross attention mask
         if images is not None and text is not None:
             cross_attention_token_mask = [
-                get_cross_attention_token_mask(token_ids, self.image_token_id) for token_ids in encoding["input_ids"]
+                get_cross_attention_token_mask(token_ids, self.image_token_id)
+                for token_ids in encoding["input_ids"]
             ]
             cross_attention_mask = convert_sparse_cross_attention_mask_to_dense(
                 cross_attention_token_mask,
@@ -351,7 +379,11 @@ class MllamaProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     def post_process_image_text_to_text(
-        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+        self,
+        generated_outputs,
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+        **kwargs,
     ):
         """
         Post-process the output of the model to decode the text.
@@ -384,8 +416,14 @@ class MllamaProcessor(ProcessorMixin):
 
         # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when remocing
         # otherwise `self.image_processor.model_input_names` is also modified
-        image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
-        return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])
+        image_processor_input_names = [
+            name for name in image_processor_input_names if name != "num_tiles"
+        ]
+        return list(
+            tokenizer_input_names
+            + image_processor_input_names
+            + ["cross_attention_mask"]
+        )
 
 
 __all__ = ["MllamaProcessor"]

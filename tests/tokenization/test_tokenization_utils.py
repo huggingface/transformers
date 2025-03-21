@@ -67,7 +67,9 @@ class TokenizerUtilsTest(unittest.TestCase):
                 special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
                 self.assertIsInstance(special_tok_id, int)
 
-    def assert_dump_and_restore(self, be_original: BatchEncoding, equal_op: Optional[Callable] = None):
+    def assert_dump_and_restore(
+        self, be_original: BatchEncoding, equal_op: Optional[Callable] = None
+    ):
         batch_encoding_str = pickle.dumps(be_original)
         self.assertIsNotNone(batch_encoding_str)
 
@@ -111,7 +113,8 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("BatchEncoding (Python, return_tensors=NUMPY)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
+                tokenizer_p("Small example to encode", return_tensors=TensorType.NUMPY),
+                np.array_equal,
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=None)"):
@@ -119,7 +122,8 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("BatchEncoding (Rust, return_tensors=NUMPY)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
+                tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY),
+                np.array_equal,
             )
 
     @require_tf
@@ -135,12 +139,18 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("BatchEncoding (Python, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf_array_equals
+                tokenizer_p(
+                    "Small example to encode", return_tensors=TensorType.TENSORFLOW
+                ),
+                tf_array_equals,
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf_array_equals
+                tokenizer_r(
+                    "Small example to encode", return_tensors=TensorType.TENSORFLOW
+                ),
+                tf_array_equals,
             )
 
     @require_torch
@@ -153,12 +163,18 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("BatchEncoding (Python, return_tensors=PYTORCH)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
+                tokenizer_p(
+                    "Small example to encode", return_tensors=TensorType.PYTORCH
+                ),
+                torch.equal,
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=PYTORCH)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
+                tokenizer_r(
+                    "Small example to encode", return_tensors=TensorType.PYTORCH
+                ),
+                torch.equal,
             )
 
     @require_tokenizers
@@ -192,7 +208,9 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="np", prepend_batch_axis=True)
+        tensor_batch = batch.convert_to_tensors(
+            tensor_type="np", prepend_batch_axis=True
+        )
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
@@ -208,7 +226,9 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
+        tensor_batch = batch.convert_to_tensors(
+            tensor_type="pt", prepend_batch_axis=True
+        )
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
@@ -224,7 +244,9 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="tf", prepend_batch_axis=True)
+        tensor_batch = batch.convert_to_tensors(
+            tensor_type="tf", prepend_batch_axis=True
+        )
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
@@ -240,26 +262,39 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertFalse(len(cs.err), msg=f"should have no warning, but got {cs.err}")
 
         batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
-        tensor_batch = batch.convert_to_tensors(tensor_type="jax", prepend_batch_axis=True)
+        tensor_batch = batch.convert_to_tensors(
+            tensor_type="jax", prepend_batch_axis=True
+        )
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
     def test_padding_accepts_tensors(self):
-        features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
+        features = [
+            {"input_ids": np.array([0, 1, 2])},
+            {"input_ids": np.array([0, 1, 2, 3])},
+        ]
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
         batch = tokenizer.pad(features, padding=True, return_tensors="np")
         self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
 
     @require_tokenizers
     def test_decoding_single_token(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
             with self.subTest(f"{tokenizer_class}"):
-                tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+                tokenizer = tokenizer_class.from_pretrained(
+                    "google-bert/bert-base-cased"
+                )
 
                 token_id = 2300
                 decoded_flat = tokenizer.decode(token_id)
@@ -299,23 +334,37 @@ class TokenizerUtilsTest(unittest.TestCase):
             "eoi_token": "<image_end>",
             "image_token": "<image>",
         }
-        self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
+        self.assertListEqual(
+            llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list
+        )
         with tempfile.TemporaryDirectory() as tmpdirname:
             llama_tokenizer.save_pretrained(tmpdirname)
 
             # load back and check we have extra special tokens set
             loaded_tokenizer = LlamaTokenizerFast.from_pretrained(tmpdirname)
-            multimodal_special_tokens_list = special_tokens_list + ["boi_token", "eoi_token", "image_token"]
-            self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
+            multimodal_special_tokens_list = special_tokens_list + [
+                "boi_token",
+                "eoi_token",
+                "image_token",
+            ]
+            self.assertListEqual(
+                loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES,
+                multimodal_special_tokens_list,
+            )
 
             # We set an image_token_id before, so we can get an "image_token" as str that matches the id
             self.assertTrue(loaded_tokenizer.image_token == "<image>")
-            self.assertTrue(loaded_tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+            self.assertTrue(
+                loaded_tokenizer.image_token_id
+                == loaded_tokenizer.convert_tokens_to_ids("<image>")
+            )
 
         # save one more time and make sure the image token can get loaded back
         with tempfile.TemporaryDirectory() as tmpdirname:
             loaded_tokenizer.save_pretrained(tmpdirname)
-            loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(
+                tmpdirname
+            )
             self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "<image>")
 
         # test that we can also indicate extra tokens during load time
@@ -328,13 +377,18 @@ class TokenizerUtilsTest(unittest.TestCase):
             "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
         )
         self.assertTrue(tokenizer.image_token == "<image>")
-        self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+        self.assertTrue(
+            tokenizer.image_token_id
+            == loaded_tokenizer.convert_tokens_to_ids("<image>")
+        )
 
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
             with self.subTest(f"{tokenizer_class}"):
-                tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
+                tokenizer = tokenizer_class.from_pretrained(
+                    "google-bert/bert-base-cased"
+                )
                 tokenizer.add_tokens(["ஐ"], special_tokens=True)
 
                 # test special token with other tokens, skip the special tokens
@@ -346,7 +400,9 @@ class TokenizerUtilsTest(unittest.TestCase):
                 # test special token with other tokens, do not skip the special tokens
                 ids = tokenizer(sentence)["input_ids"]
                 decoded_sent = tokenizer.decode(ids, skip_special_tokens=False)
-                self.assertEqual(decoded_sent, "[CLS] This is a beautiful flower ஐ [SEP]")
+                self.assertEqual(
+                    decoded_sent, "[CLS] This is a beautiful flower ஐ [SEP]"
+                )
 
                 # test special token stand alone, skip the special tokens
                 sentence = "ஐ"
@@ -372,29 +428,47 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_padding_accepts_tensors_pt(self):
         import torch
 
-        features = [{"input_ids": torch.tensor([0, 1, 2])}, {"input_ids": torch.tensor([0, 1, 2, 3])}]
+        features = [
+            {"input_ids": torch.tensor([0, 1, 2])},
+            {"input_ids": torch.tensor([0, 1, 2, 3])},
+        ]
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
         batch = tokenizer.pad(features, padding=True, return_tensors="pt")
         self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
-        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
 
     @require_tf
     def test_padding_accepts_tensors_tf(self):
         import tensorflow as tf
 
-        features = [{"input_ids": tf.constant([0, 1, 2])}, {"input_ids": tf.constant([0, 1, 2, 3])}]
+        features = [
+            {"input_ids": tf.constant([0, 1, 2])},
+            {"input_ids": tf.constant([0, 1, 2, 3])},
+        ]
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         batch = tokenizer.pad(features, padding=True)
         self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
-        self.assertEqual(batch["input_ids"].numpy().tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].numpy().tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
         batch = tokenizer.pad(features, padding=True, return_tensors="tf")
         self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
-        self.assertEqual(batch["input_ids"].numpy().tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        self.assertEqual(
+            batch["input_ids"].numpy().tolist(),
+            [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]],
+        )
 
     @require_tokenizers
     def test_instantiation_from_tokenizers(self):
@@ -406,7 +480,9 @@ class TokenizerUtilsTest(unittest.TestCase):
         bert_tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
-            PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+            PreTrainedTokenizerFast(
+                tokenizer_file=os.path.join(tmpdirname, "tokenizer.json")
+            )
 
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
@@ -417,12 +493,18 @@ class TokenizerUtilsTest(unittest.TestCase):
 
                 tokenizer.add_tokens(["<test_token>"])
                 self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
-                self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
-                self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)
+                self.assertEqual(
+                    len(tokenizer.added_tokens_decoder), added_tokens_size + 1
+                )
+                self.assertEqual(
+                    len(tokenizer.added_tokens_encoder), added_tokens_size + 1
+                )
 
     @require_sentencepiece
     def test_sentencepiece_cohabitation(self):
-        from sentencepiece import sentencepiece_model_pb2 as _original_protobuf  # noqa: F401
+        from sentencepiece import (
+            sentencepiece_model_pb2 as _original_protobuf,
+        )  # noqa: F401
 
         from transformers.convert_slow_tokenizer import import_protobuf  # noqa: F401
 
@@ -431,19 +513,27 @@ class TokenizerUtilsTest(unittest.TestCase):
         import_protobuf()
 
     def test_training_new_tokenizer_edge_cases(self):
-        _tokenizer = Tokenizer(tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")]))
+        _tokenizer = Tokenizer(
+            tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")])
+        )
         _tokenizer.pre_tokenizer = None
 
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )
 
         _tokenizer.normalizer = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )
 
         _tokenizer.post_processor = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(
+            text_iterator=toy_text_iterator, length=1000, vocab_size=50
+        )

@@ -13,14 +13,9 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ....utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_sentencepiece_available,
-    is_speech_available,
-    is_torch_available,
-)
-
+from ....utils import (OptionalDependencyNotAvailable, _LazyModule,
+                       is_sentencepiece_available, is_speech_available,
+                       is_torch_available)
 
 _import_structure = {
     "configuration_speech_to_text_2": ["Speech2Text2Config"],
@@ -52,12 +47,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_speech_to_text_2 import (
-            Speech2Text2ForCausalLM,
-            Speech2Text2PreTrainedModel,
-        )
+        from .modeling_speech_to_text_2 import (Speech2Text2ForCausalLM,
+                                                Speech2Text2PreTrainedModel)
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -13,13 +13,8 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-    is_torchaudio_available,
-)
-
+from ...utils import (OptionalDependencyNotAvailable, _LazyModule,
+                      is_torch_available, is_torchaudio_available)
 
 _import_structure = {
     "configuration_musicgen_melody": [
@@ -47,15 +42,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
+    _import_structure["feature_extraction_musicgen_melody"] = [
+        "MusicgenMelodyFeatureExtractor"
+    ]
     _import_structure["processing_musicgen_melody"] = ["MusicgenMelodyProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_musicgen_melody import (
-        MusicgenMelodyConfig,
-        MusicgenMelodyDecoderConfig,
-    )
+    from .configuration_musicgen_melody import (MusicgenMelodyConfig,
+                                                MusicgenMelodyDecoderConfig)
 
     try:
         if not is_torch_available():
@@ -64,11 +59,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_musicgen_melody import (
-            MusicgenMelodyForCausalLM,
-            MusicgenMelodyForConditionalGeneration,
-            MusicgenMelodyModel,
-            MusicgenMelodyPreTrainedModel,
-        )
+            MusicgenMelodyForCausalLM, MusicgenMelodyForConditionalGeneration,
+            MusicgenMelodyModel, MusicgenMelodyPreTrainedModel)
 
     try:
         if not is_torchaudio_available():
@@ -76,11 +68,14 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
+        from .feature_extraction_musicgen_melody import \
+            MusicgenMelodyFeatureExtractor
         from .processing_musicgen_melody import MusicgenMelodyProcessor
 
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

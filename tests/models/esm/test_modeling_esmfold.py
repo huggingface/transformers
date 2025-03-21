@@ -17,12 +17,13 @@
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import (TestCasePlus, is_flaky, require_torch,
+                                        slow, torch_device)
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (ModelTesterMixin, ids_tensor,
+                                     random_attention_mask)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -90,13 +91,24 @@ class EsmFoldModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         esmfold_config = {
@@ -139,7 +151,15 @@ class EsmFoldModelTester:
         )
         return config
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
         model = EsmForProteinFolding(config=config).float()
         model.to(torch_device)
         model.eval()
@@ -147,8 +167,12 @@ class EsmFoldModelTester:
         result = model(input_ids)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.positions.shape, (2, self.batch_size, self.seq_length, 14, 3))
-        self.parent.assertEqual(result.angles.shape, (2, self.batch_size, self.seq_length, 7, 2))
+        self.parent.assertEqual(
+            result.positions.shape, (2, self.batch_size, self.seq_length, 14, 3)
+        )
+        self.parent.assertEqual(
+            result.angles.shape, (2, self.batch_size, self.seq_length, 7, 2)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -241,7 +265,9 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="This test doesn't work for ESMFold and doesn't test core functionality")
+    @unittest.skip(
+        reason="This test doesn't work for ESMFold and doesn't test core functionality"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -281,4 +307,6 @@ class EsmModelIntegrationTest(TestCasePlus):
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]
         expected_slice = torch.tensor([2.5828, 0.7993, -10.9334], dtype=torch.float32)
-        torch.testing.assert_close(position_outputs[0, 0, 0, 0], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            position_outputs[0, 0, 0, 0], expected_slice, rtol=1e-4, atol=1e-4
+        )

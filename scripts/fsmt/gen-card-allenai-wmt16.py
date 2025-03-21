@@ -147,10 +147,13 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py allenai/{m
     with open(path, "w", encoding="utf-8") as f:
         f.write(readme)
 
+
 # make sure we are under the root of the project
 repo_dir = Path(__file__).resolve().parent.parent.parent
 model_cards_dir = repo_dir / "model_cards"
 
 for model_name in ["wmt16-en-de-dist-12-1", "wmt16-en-de-dist-6-1", "wmt16-en-de-12-1"]:
     model_card_dir = model_cards_dir / "allenai" / model_name
-    write_model_card(model_card_dir, src_lang="en", tgt_lang="de", model_name=model_name)
+    write_model_card(
+        model_card_dir, src_lang="en", tgt_lang="de", model_name=model_name
+    )

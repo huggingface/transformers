@@ -32,36 +32,34 @@ import tensorflow as tf
 from datasets import load_dataset
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForSeq2Seq,
-    HfArgumentParser,
-    KerasMetricCallback,
-    M2M100Tokenizer,
-    MBart50Tokenizer,
-    MBart50TokenizerFast,
-    MBartTokenizer,
-    MBartTokenizerFast,
-    PushToHubCallback,
-    TFAutoModelForSeq2SeqLM,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoTokenizer, DataCollatorForSeq2Seq,
+                          HfArgumentParser, KerasMetricCallback,
+                          M2M100Tokenizer, MBart50Tokenizer,
+                          MBart50TokenizerFast, MBartTokenizer,
+                          MBartTokenizerFast, PushToHubCallback,
+                          TFAutoModelForSeq2SeqLM, TFTrainingArguments,
+                          create_optimizer, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 
 # region Dependencies and constants
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.51.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/summarization/requirements.txt",
+)
 
 logger = logging.getLogger(__name__)
-MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer]
+MULTILINGUAL_TOKENIZERS = [
+    MBartTokenizer,
+    MBartTokenizerFast,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
+    M2M100Tokenizer,
+]
 # endregion
 
 
@@ -73,25 +71,39 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where to store the pretrained models downloaded from huggingface.co"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -120,16 +132,25 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    source_lang: str = field(default=None, metadata={"help": "Source language id for translation."})
-    target_lang: str = field(default=None, metadata={"help": "Target language id for translation."})
+    source_lang: str = field(
+        default=None, metadata={"help": "Source language id for translation."}
+    )
+    target_lang: str = field(
+        default=None, metadata={"help": "Target language id for translation."}
+    )
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines or csv file)."}
+        default=None,
+        metadata={"help": "The input training data file (a jsonlines or csv file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
@@ -146,7 +167,8 @@ class DataTrainingArguments:
         },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -234,7 +256,10 @@ class DataTrainingArguments:
         },
     )
     source_prefix: Optional[str] = field(
-        default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
+        default=None,
+        metadata={
+            "help": "A prefix to add before every source text (useful for T5 models)."
+        },
     )
     forced_bos_token: Optional[str] = field(
         default=None,
@@ -248,15 +273,27 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -270,17 +307,23 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_translation", model_args, data_args, framework="tensorflow")
+    send_example_telemetry(
+        "run_translation", model_args, data_args, framework="tensorflow"
+    )
     # endregion
 
     # region Logging
@@ -299,14 +342,20 @@ def main():
 
     # region Detecting last checkpoint
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -360,14 +409,22 @@ def main():
     # download model & vocab.
 
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        (
+            model_args.config_name
+            if model_args.config_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (
+            model_args.tokenizer_name
+            if model_args.tokenizer_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -393,14 +450,18 @@ def main():
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
     if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
-        assert data_args.target_lang is not None and data_args.source_lang is not None, (
+        assert (
+            data_args.target_lang is not None and data_args.source_lang is not None
+        ), (
             f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --source_lang and "
             "--target_lang arguments."
         )
         tokenizer.src_lang = data_args.source_lang
         tokenizer.tgt_lang = data_args.target_lang
         forced_bos_token_id = (
-            tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
+            tokenizer.lang_code_to_id[data_args.forced_bos_token]
+            if data_args.forced_bos_token is not None
+            else None
         )
 
     # Get the language codes for input/target.
@@ -417,16 +478,27 @@ def main():
         inputs = [ex[source_lang] for ex in examples["translation"]]
         targets = [ex[target_lang] for ex in examples["translation"]]
         inputs = [prefix + inp for inp in inputs]
-        model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+        model_inputs = tokenizer(
+            inputs,
+            max_length=data_args.max_source_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # Tokenize targets with the `text_target` keyword argument
-        labels = tokenizer(text_target=targets, max_length=max_target_length, padding=padding, truncation=True)
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
         if padding == "max_length" and data_args.ignore_pad_token_for_loss:
             labels["input_ids"] = [
-                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+                [(l if l != tokenizer.pad_token_id else -100) for l in label]
+                for label in labels["input_ids"]
             ]
 
         model_inputs["labels"] = labels["input_ids"]
@@ -500,21 +572,31 @@ def main():
         # endregion
 
         # region Set decoder_start_token_id
-        if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+        if model.config.decoder_start_token_id is None and isinstance(
+            tokenizer, (MBartTokenizer, MBartTokenizerFast)
+        ):
             assert (
                 data_args.target_lang is not None and data_args.source_lang is not None
             ), "mBart requires --target_lang and --source_lang"
             if isinstance(tokenizer, MBartTokenizer):
-                model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+                model.config.decoder_start_token_id = tokenizer.lang_code_to_id[
+                    data_args.target_lang
+                ]
             else:
-                model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.target_lang)
+                model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(
+                    data_args.target_lang
+                )
 
         if model.config.decoder_start_token_id is None:
-            raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
+            raise ValueError(
+                "Make sure that `config.decoder_start_token_id` is correctly defined"
+            )
         # endregion
 
         # region Prepare TF Dataset objects
-        label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+        label_pad_token_id = (
+            -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+        )
         data_collator = DataCollatorForSeq2Seq(
             tokenizer,
             model=model,
@@ -523,11 +605,15 @@ def main():
             return_tensors="np",
         )
         num_replicas = training_args.strategy.num_replicas_in_sync
-        total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
+        total_train_batch_size = (
+            training_args.per_device_train_batch_size * num_replicas
+        )
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
 
         dataset_options = tf.data.Options()
-        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        dataset_options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.OFF
+        )
 
         # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
         # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
@@ -545,7 +631,10 @@ def main():
             shuffle=True,
         ).with_options(dataset_options)
         tf_eval_dataset = model.prepare_tf_dataset(
-            eval_dataset, collate_fn=data_collator, batch_size=total_eval_batch_size, shuffle=False
+            eval_dataset,
+            collate_fn=data_collator,
+            batch_size=total_eval_batch_size,
+            shuffle=False,
         ).with_options(dataset_options)
         # endregion
 
@@ -595,11 +684,19 @@ def main():
                 predictions, labels = preds
                 if isinstance(predictions, tuple):
                     predictions = predictions[0]
-                decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+                decoded_preds = tokenizer.batch_decode(
+                    predictions, skip_special_tokens=True
+                )
                 labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-                decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-                decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                metrics = metric.compute(predictions=decoded_preds, references=decoded_labels)
+                decoded_labels = tokenizer.batch_decode(
+                    labels, skip_special_tokens=True
+                )
+                decoded_preds, decoded_labels = postprocess_text(
+                    decoded_preds, decoded_labels
+                )
+                metrics = metric.compute(
+                    predictions=decoded_preds, references=decoded_labels
+                )
                 return {"bleu": metrics["score"]}
 
             # The KerasMetricCallback allows metrics that are too complex to write as standard Keras metrics
@@ -627,16 +724,23 @@ def main():
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "translation"}
+        model_card_kwargs = {
+            "finetuned_from": model_args.model_name_or_path,
+            "tasks": "translation",
+        }
         if data_args.dataset_name is not None:
             model_card_kwargs["dataset_tags"] = data_args.dataset_name
             if data_args.dataset_config_name is not None:
                 model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+                model_card_kwargs["dataset"] = (
+                    f"{data_args.dataset_name} {data_args.dataset_config_name}"
+                )
             else:
                 model_card_kwargs["dataset"] = data_args.dataset_name
 
-        languages = [l for l in [data_args.source_lang, data_args.target_lang] if l is not None]
+        languages = [
+            l for l in [data_args.source_lang, data_args.target_lang] if l is not None
+        ]
         if len(languages) > 0:
             model_card_kwargs["language"] = languages
 
@@ -663,7 +767,9 @@ def main():
             logger.info("***** Running training *****")
             logger.info(f"  Num examples = {len(train_dataset)}")
             logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
-            logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+            logger.info(
+                f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}"
+            )
             logger.info(f"  Total train batch size = {total_train_batch_size}")
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
@@ -673,7 +779,11 @@ def main():
                     "until all possible shapes have been compiled."
                 )
 
-            history = model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            history = model.fit(
+                tf_train_dataset,
+                epochs=int(training_args.num_train_epochs),
+                callbacks=callbacks,
+            )
             eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
@@ -691,19 +801,29 @@ def main():
                     generated_tokens = generate(**batch)
                     if isinstance(generated_tokens, tuple):
                         generated_tokens = generated_tokens[0]
-                    decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+                    decoded_preds = tokenizer.batch_decode(
+                        generated_tokens, skip_special_tokens=True
+                    )
                     labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-                    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-                    decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+                    decoded_labels = tokenizer.batch_decode(
+                        labels, skip_special_tokens=True
+                    )
+                    decoded_preds, decoded_labels = postprocess_text(
+                        decoded_preds, decoded_labels
+                    )
 
-                    metric.add_batch(predictions=decoded_preds, references=decoded_labels)
+                    metric.add_batch(
+                        predictions=decoded_preds, references=decoded_labels
+                    )
 
                 eval_metrics = metric.compute()
                 logger.info({"bleu": eval_metrics["score"]})
         # endregion
 
         if training_args.output_dir is not None and eval_metrics is not None:
-            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            output_eval_file = os.path.join(
+                training_args.output_dir, "all_results.json"
+            )
             with open(output_eval_file, "w") as writer:
                 writer.write(json.dumps(eval_metrics))
 

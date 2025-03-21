@@ -36,7 +36,9 @@ class FeatureExtractionSavingTestMixin:
         with tempfile.TemporaryDirectory() as tmpdirname:
             json_file_path = os.path.join(tmpdirname, "feat_extract.json")
             feat_extract_first.to_json_file(json_file_path)
-            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(
+                json_file_path
+            )
 
         self.assertEqual(feat_extract_second.to_dict(), feat_extract_first.to_dict())
 
@@ -46,7 +48,9 @@ class FeatureExtractionSavingTestMixin:
         with tempfile.TemporaryDirectory() as tmpdirname:
             saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
             check_json_file_has_correct_format(saved_file)
-            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(
+                tmpdirname
+            )
 
         self.assertEqual(feat_extract_second.to_dict(), feat_extract_first.to_dict())
 

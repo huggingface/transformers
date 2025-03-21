@@ -17,7 +17,6 @@ import importlib
 import os
 import sys
 
-
 # This is required to make the module import works (when the python process is running from the root of the repo)
 sys.path.append(".")
 
@@ -158,7 +157,10 @@ def get_test_to_tester_mapping(test_file):
     This uses `get_test_classes` which may return classes that are NOT subclasses of `unittest.TestCase`.
     """
     test_classes = get_test_classes(test_file)
-    test_tester_mapping = {test_class: get_model_tester_from_test_class(test_class) for test_class in test_classes}
+    test_tester_mapping = {
+        test_class: get_model_tester_from_test_class(test_class)
+        for test_class in test_classes
+    }
     return test_tester_mapping
 
 
@@ -166,7 +168,8 @@ def get_model_to_test_mapping(test_file):
     """Get a mapping from model classes to test classes in `test_file`."""
     model_classes = get_model_classes(test_file)
     model_test_mapping = {
-        model_class: get_test_classes_for_model(test_file, model_class) for model_class in model_classes
+        model_class: get_test_classes_for_model(test_file, model_class)
+        for model_class in model_classes
     }
     return model_test_mapping
 
@@ -175,7 +178,8 @@ def get_model_to_tester_mapping(test_file):
     """Get a mapping from model classes to model tester classes in `test_file`."""
     model_classes = get_model_classes(test_file)
     model_to_tester_mapping = {
-        model_class: get_tester_classes_for_model(test_file, model_class) for model_class in model_classes
+        model_class: get_tester_classes_for_model(test_file, model_class)
+        for model_class in model_classes
     }
     return model_to_tester_mapping
 

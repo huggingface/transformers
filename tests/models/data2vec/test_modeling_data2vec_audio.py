@@ -20,27 +20,26 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from tests.test_modeling_common import (floats_tensor, ids_tensor,
+                                        random_attention_mask)
 from transformers import Data2VecAudioConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import (require_soundfile, require_torch, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Data2VecAudioForAudioFrameClassification,
-        Data2VecAudioForCTC,
-        Data2VecAudioForSequenceClassification,
-        Data2VecAudioForXVector,
-        Data2VecAudioModel,
-        Wav2Vec2Processor,
-    )
-    from transformers.models.data2vec.modeling_data2vec_audio import _compute_mask_indices
+    from transformers import (Data2VecAudioForAudioFrameClassification,
+                              Data2VecAudioForCTC,
+                              Data2VecAudioForSequenceClassification,
+                              Data2VecAudioForXVector, Data2VecAudioModel,
+                              Wav2Vec2Processor)
+    from transformers.models.data2vec.modeling_data2vec_audio import \
+        _compute_mask_indices
 
 
 class Data2VecAudioModelTester:
@@ -114,7 +113,9 @@ class Data2VecAudioModelTester:
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
 
-        self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
+        self.adapter_output_seq_length = (
+            self.output_seq_length - 1
+        ) // adapter_stride + 1
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
@@ -159,7 +160,8 @@ class Data2VecAudioModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.output_seq_length, self.hidden_size),
         )
 
     def create_and_check_model_with_adapter(self, config, input_values, attention_mask):
@@ -169,10 +171,13 @@ class Data2VecAudioModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, self.hidden_size),
         )
 
-    def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
+    def create_and_check_model_with_adapter_proj_dim(
+        self, config, input_values, attention_mask
+    ):
         config.add_adapter = True
         config.output_hidden_size = 8
         model = Data2VecAudioModel(config=config)
@@ -181,7 +186,11 @@ class Data2VecAudioModelTester:
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+            (
+                self.batch_size,
+                self.adapter_output_seq_length,
+                config.output_hidden_size,
+            ),
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
@@ -192,7 +201,9 @@ class Data2VecAudioModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.bool
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
 
@@ -201,7 +212,9 @@ class Data2VecAudioModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0.0
 
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
+        batch_outputs = model(
+            input_values, attention_mask=attention_mask
+        ).last_hidden_state
 
         for i in range(input_values.shape[0]):
             input_slice = input_values[i : i + 1, : input_lengths[i]]
@@ -218,11 +231,17 @@ class Data2VecAudioModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.long
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -230,10 +249,14 @@ class Data2VecAudioModelTester:
             attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        sum_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        mean_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
 
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
@@ -246,7 +269,9 @@ class Data2VecAudioModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            input_values.shape, device=torch_device, dtype=torch.long
+        )
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
         labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
@@ -256,7 +281,9 @@ class Data2VecAudioModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0
 
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        masked_loss = model(
+            input_values, attention_mask=attention_mask, labels=labels
+        ).loss.item()
         unmasked_loss = model(input_values, labels=labels).loss.item()
 
         self.parent.assertTrue(isinstance(masked_loss, float))
@@ -275,8 +302,12 @@ class Data2VecAudioModelTester:
         input_values = input_values[:3]
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size
+        )
 
         # pad input
         for i in range(len(input_lengths)):
@@ -346,8 +377,13 @@ class Data2VecAudioModelTester:
         input_values = input_values[:3]
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
+        max_length_labels = model._get_feat_extract_output_lengths(
+            torch.tensor(input_lengths)
+        )
+        labels = ids_tensor(
+            (input_values.shape[0], max(max_length_labels) - 2),
+            model.config.vocab_size + 100,
+        )
 
         with self.parent.assertRaises(ValueError):
             model(input_values, labels=labels)
@@ -385,7 +421,9 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = Data2VecAudioModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecAudioConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Data2VecAudioConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -400,7 +438,9 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
+        self.model_tester.create_and_check_model_with_adapter_proj_dim(
+            *config_and_inputs
+        )
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -458,11 +498,15 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         input_values = inputs_dict["input_values"]
 
         input_lengths = torch.tensor(
-            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+            [input_values.shape[1] for _ in range(input_values.shape[0])],
+            dtype=torch.long,
+            device=torch_device,
         )
         output_lengths = model._get_feat_extract_output_lengths(input_lengths)
 
-        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        labels = ids_tensor(
+            (input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size
+        )
         inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
         inputs_dict["labels"] = labels
 
@@ -505,7 +549,9 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -527,12 +573,17 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             module.bias.data.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
-        if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
+        if (
+            hasattr(module, "masked_spec_embed")
+            and module.masked_spec_embed is not None
+        ):
             module.masked_spec_embed.data.fill_(3)
 
     def test_mask_feature_prob_ctc(self):
         model = Data2VecAudioForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-data2vec-seq-class", mask_feature_prob=0.2, mask_feature_length=2
+            "hf-internal-testing/tiny-random-data2vec-seq-class",
+            mask_feature_prob=0.2,
+            mask_feature_length=2,
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -540,10 +591,15 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -563,10 +619,15 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
+        input_features = [
+            np.random.random(16_000 * s) for s in batch_duration_in_seconds
+        ]
 
         batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
+            input_features,
+            padding=True,
+            sampling_rate=processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
 
         logits = model(
@@ -594,10 +655,15 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 1
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
         mask = torch.from_numpy(mask).to(torch_device)
 
-        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
+        self.assertListEqual(
+            mask.sum(axis=-1).tolist(),
+            [mask_prob * sequence_length for _ in range(batch_size)],
+        )
 
     def test_compute_mask_indices_low_prob(self):
         # with these settings num_masked_spans=0.5, which means probabilistic rounding
@@ -613,7 +679,9 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
         count_dimensions_not_masked = 0
 
         for _ in range(n_trials):
-            mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+            mask = _compute_mask_indices(
+                (batch_size, sequence_length), mask_prob, mask_length
+            )
             mask = torch.from_numpy(mask).to(torch_device)
 
             num_masks = torch.sum(mask).item()
@@ -635,7 +703,9 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length
+        )
         mask = torch.from_numpy(mask).to(torch_device)
 
         # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
@@ -648,11 +718,16 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
         mask_prob = 0.5
         mask_length = 4
 
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            (batch_size, sequence_length), dtype=torch.long, device=torch_device
+        )
         attention_mask[:2, sequence_length // 2 :] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+            (batch_size, sequence_length),
+            mask_prob,
+            mask_length,
+            attention_mask=attention_mask,
         )
         mask = torch.from_numpy(mask).to(torch_device)
 
@@ -667,12 +742,18 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
         mask_prob = 0.05
         mask_length = 10
 
-        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            (batch_size, sequence_length), dtype=torch.long, device=torch_device
+        )
         # force one example to be heavily padded
         attention_mask[0, 5:] = 0
 
         mask = _compute_mask_indices(
-            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, min_masks=2
+            (batch_size, sequence_length),
+            mask_prob,
+            mask_length,
+            attention_mask=attention_mask,
+            min_masks=2,
         )
 
         # make sure that non-padded examples cannot be padded
@@ -684,7 +765,9 @@ class Data2VecAudioUtilsTest(unittest.TestCase):
 @slow
 class Data2VecAudioModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
@@ -693,17 +776,23 @@ class Data2VecAudioModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "anton-l/superb_dummy", task, split="test", trust_remote_code=True
+        )
 
         return ds[:num_samples]
 
     def test_inference_ctc_normal(self):
         model = Data2VecAudioForCTC.from_pretrained("facebook/data2vec-audio-base-960h")
         model.to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", do_lower_case=True)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", do_lower_case=True
+        )
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(
+            torch_device
+        )
 
         with torch.no_grad():
             logits = model(input_values).logits
@@ -715,8 +804,12 @@ class Data2VecAudioModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_ctc_batched(self):
-        model = Data2VecAudioForCTC.from_pretrained("facebook/data2vec-audio-base-960h").to(torch_device)
-        processor = Wav2Vec2Processor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", do_lower_case=True)
+        model = Data2VecAudioForCTC.from_pretrained(
+            "facebook/data2vec-audio-base-960h"
+        ).to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", do_lower_case=True
+        )
 
         input_speech = self._load_datasamples(4)
 

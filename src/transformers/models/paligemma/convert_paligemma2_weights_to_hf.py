@@ -22,17 +22,11 @@ import ml_dtypes
 import numpy as np
 import torch
 
-from transformers import (
-    AutoTokenizer,
-    Gemma2Config,
-    PaliGemmaConfig,
-    PaliGemmaForConditionalGeneration,
-    PaliGemmaProcessor,
-    SiglipImageProcessor,
-)
+from transformers import (AutoTokenizer, Gemma2Config, PaliGemmaConfig,
+                          PaliGemmaForConditionalGeneration,
+                          PaliGemmaProcessor, SiglipImageProcessor)
 from transformers.tokenization_utils_base import AddedToken
 from transformers.utils import logging
-
 
 device = "cpu"
 
@@ -41,7 +35,17 @@ logger = logging.get_logger(__name__)
 
 # TODO add sequence length variations here
 
-PALIGEMMA2_VARIANTS = ["2b-224", "2b-448", "2b-896", "9b-224", "9b-448", "9b-896", "27b-224", "27b-448", "27b-896"]
+PALIGEMMA2_VARIANTS = [
+    "2b-224",
+    "2b-448",
+    "2b-896",
+    "9b-224",
+    "9b-448",
+    "9b-896",
+    "27b-224",
+    "27b-448",
+    "27b-896",
+]
 VARIANT_CONFIGS = {
     "2b": {
         "num_positions": 256,
@@ -75,7 +79,11 @@ VARIANT_CONFIGS = {
     },
 }
 
-DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
+DTYPES = {
+    "float32": torch.float32,
+    "bfloat16": torch.bfloat16,
+    "float16": torch.float16,
+}
 
 
 def get_paligemma2_config(variant: str, precision: str):
@@ -94,7 +102,9 @@ def get_paligemma2_config(variant: str, precision: str):
         num_image_tokens = (image_size**2) // (patch_size**2)
         config["projection_dim"] = variant_config["hidden_size"]
         config["image_token_index"] = 257152
-        config["num_hidden_layers"] = variant_config["num_hidden_layers"]  # For generate
+        config["num_hidden_layers"] = variant_config[
+            "num_hidden_layers"
+        ]  # For generate
         text_config = Gemma2Config.from_pretrained("google/gemma-2-2b-it").to_dict()
         sup_text_config = {
             "model_type": "gemma2",
@@ -126,9 +136,13 @@ def get_paligemma2_config(variant: str, precision: str):
             "hidden_act": "gelu_pytorch_tanh",
             "vision_use_head": False,
         }
-        final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
+        final_config = PaliGemmaConfig(
+            text_config=text_config, vision_config=vision_config, **config
+        )
     else:
-        raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA2_VARIANTS}")
+        raise ValueError(
+            f"Identifier {variant} not supported. Available: {PALIGEMMA2_VARIANTS}"
+        )
     return final_config
 
 
@@ -275,7 +289,9 @@ def slice_state_dict(state_dict, config):
                 else:
                     state_dict[key] = torch.from_numpy(value)
             except Exception as initial_exception:
-                raise ValueError(f"Conversion failed from jax weights with {initial_exception}. Check your inputs.")
+                raise ValueError(
+                    f"Conversion failed from jax weights with {initial_exception}. Check your inputs."
+                )
     return state_dict
 
 
@@ -287,13 +303,19 @@ def flatten_nested_dict(params, parent_key="", sep="/", precision: int = "float3
         new_key = parent_key + sep + k if parent_key else k
 
         if isinstance(v, collections.abc.MutableMapping):
-            items.extend(flatten_nested_dict(v, parent_key=new_key, sep=sep, precision=precision).items())
+            items.extend(
+                flatten_nested_dict(
+                    v, parent_key=new_key, sep=sep, precision=precision
+                ).items()
+            )
         else:
             if precision == "bfloat16":
                 try:
                     v = v.view(ml_dtypes.bfloat16)
                 except Exception as initial_exception:
-                    raise ValueError(f"Conversion failed from bfloat16 with {initial_exception}, check your inputs.")
+                    raise ValueError(
+                        f"Conversion failed from bfloat16 with {initial_exception}, check your inputs."
+                    )
             items.append((new_key, v))
     return dict(items)
 
@@ -319,11 +341,18 @@ def convert_paligemma2_checkpoint(
 
         # tokenizer.padding_side = 'right' # uncomment for testing purposes only.
 
-        image_processor = SiglipImageProcessor.from_pretrained("google/paligemma-3b-pt-224")
-        image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
+        image_processor = SiglipImageProcessor.from_pretrained(
+            "google/paligemma-3b-pt-224"
+        )
+        image_processor.size = {
+            "width": config.vision_config.image_size,
+            "height": config.vision_config.image_size,
+        }
         image_processor.image_seq_length = config.vision_config.num_image_tokens
 
-        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor = PaliGemmaProcessor(
+            image_processor=image_processor, tokenizer=tokenizer
+        )
         data = jnp.load(checkpoint_path)
         state_dict = flatten_nested_dict(data, precision=precision)
         del data
@@ -340,19 +369,37 @@ def convert_paligemma2_checkpoint(
         pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
         mu = torch.mean(pre_expansion_embeddings, dim=0).float()
         n = pre_expansion_embeddings.size()[0]
-        sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-        dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+        sigma = (
+            (pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)
+        ) / n
+        dist = torch.distributions.multivariate_normal.MultivariateNormal(
+            mu, covariance_matrix=1e-5 * sigma
+        )
 
         # We add an image token so we resize the model
         model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
         model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
             tuple(
-                (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))
+                (
+                    dist.sample()
+                    for _ in range(
+                        model.language_model.model.embed_tokens.weight.data[
+                            257152:
+                        ].shape[0]
+                    )
+                )
             ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[257152:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
+            tuple(
+                (
+                    dist.sample()
+                    for _ in range(
+                        model.language_model.lm_head.weight.data[257152:].shape[0]
+                    )
+                )
+            ),
             dim=0,
         )
         # convert to needed precision
@@ -362,9 +409,13 @@ def convert_paligemma2_checkpoint(
         processor.save_pretrained(pytorch_dump_folder_path)
 
     else:
-        processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path, do_rescale=False)
+        processor = PaliGemmaProcessor.from_pretrained(
+            pytorch_dump_folder_path, do_rescale=False
+        )
         model = (
-            PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa")
+            PaliGemmaForConditionalGeneration.from_pretrained(
+                pytorch_dump_folder_path, attn_implementation="sdpa"
+            )
             .to(device)
             .eval()
         )
@@ -402,7 +453,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
+        "--do_convert_weights",
+        action="store_true",
+        help="Whether or not to reload and convert the weights.",
     )
 
     args = parser.parse_args()

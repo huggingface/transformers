@@ -19,8 +19,8 @@ import unittest
 from transformers.testing_utils import require_pytesseract, require_torch
 from transformers.utils import is_pytesseract_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_pytesseract_available():
     from PIL import Image
@@ -53,12 +53,18 @@ class LayoutLMv2ImageProcessingTester:
         self.apply_ocr = apply_ocr
 
     def prepare_image_processor_dict(self):
-        return {"do_resize": self.do_resize, "size": self.size, "apply_ocr": self.apply_ocr}
+        return {
+            "do_resize": self.do_resize,
+            "size": self.size,
+            "apply_ocr": self.apply_ocr,
+        }
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -73,7 +79,9 @@ class LayoutLMv2ImageProcessingTester:
 @require_torch
 @require_pytesseract
 class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = LayoutLMv2ImageProcessor if is_pytesseract_available() else None
+    image_processing_class = (
+        LayoutLMv2ImageProcessor if is_pytesseract_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -90,10 +98,14 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertTrue(hasattr(image_processing, "apply_ocr"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     @unittest.skip(reason="Tesseract version is not correct in ci. @Arthur FIXME")
@@ -103,7 +115,9 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
+        ds = load_dataset(
+            "hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True
+        )
 
         image = Image.open(ds[0]["file"]).convert("RGB")
 

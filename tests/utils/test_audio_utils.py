@@ -18,21 +18,13 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers.audio_utils import (
-    amplitude_to_db,
-    amplitude_to_db_batch,
-    chroma_filter_bank,
-    hertz_to_mel,
-    mel_filter_bank,
-    mel_to_hertz,
-    power_to_db,
-    power_to_db_batch,
-    spectrogram,
-    spectrogram_batch,
-    window_function,
-)
+from transformers.audio_utils import (amplitude_to_db, amplitude_to_db_batch,
+                                      chroma_filter_bank, hertz_to_mel,
+                                      mel_filter_bank, mel_to_hertz,
+                                      power_to_db, power_to_db_batch,
+                                      spectrogram, spectrogram_batch,
+                                      window_function)
 from transformers.testing_utils import is_librosa_available, require_librosa
-
 
 if is_librosa_available():
     from librosa.filters import chroma
@@ -55,7 +47,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         self.assertTrue(np.allclose(hertz_to_mel(inputs, "slaney"), expected))
 
         inputs = np.array([60, 100, 200, 1000, 1001, 2000])
-        expected = np.array([92.6824, 150.4899, 283.2313, 999.9907, 1000.6534, 1521.3674])
+        expected = np.array(
+            [92.6824, 150.4899, 283.2313, 999.9907, 1000.6534, 1521.3674]
+        )
         self.assertTrue(np.allclose(hertz_to_mel(inputs, "kaldi"), expected))
 
         with pytest.raises(ValueError):
@@ -262,7 +256,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
         return [x["array"] for x in speech_samples]
 
@@ -282,7 +278,9 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         )
         self.assertEqual(spec.shape, (9, 11))
 
-        expected = np.array([[0.0, 0.0669873, 0.9330127, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        expected = np.array(
+            [[0.0, 0.0669873, 0.9330127, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+        )
         self.assertTrue(np.allclose(spec, expected))
 
     def test_spectrogram_batch_impulse(self):
@@ -312,9 +310,13 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         self.assertEqual(spec_list[1].shape, (9, 8))
         self.assertEqual(spec_list[2].shape, (9, 13))
 
-        expected1 = np.array([[0.0, 0.0669873, 0.9330127, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        expected1 = np.array(
+            [[0.0, 0.0669873, 0.9330127, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+        )
         expected2 = np.array([[0.0, 0.0, 0.75, 3.0, 0.75, 0.0, 0.0, 0.0]])
-        expected3 = np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.375, 3.375, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        expected3 = np.array(
+            [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.375, 3.375, 0.0, 0.0, 0.0, 0.0, 0.0]]
+        )
 
         self.assertTrue(np.allclose(spec_list[0], expected1))
         self.assertTrue(np.allclose(spec_list[1], expected2))
@@ -1461,27 +1463,42 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         spectrogram[1, 1] = 1.0
 
         output = power_to_db(spectrogram, reference=1.0)
-        expected = np.array([[3.01029996, -3.01029996, -1.50580586], [-100.0, 0.0, -100.0]])
+        expected = np.array(
+            [[3.01029996, -3.01029996, -1.50580586], [-100.0, 0.0, -100.0]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = power_to_db(spectrogram, reference=2.0)
-        expected = np.array([[0.0, -6.02059991, -4.51610582], [-103.01029996, -3.01029996, -103.01029996]])
+        expected = np.array(
+            [
+                [0.0, -6.02059991, -4.51610582],
+                [-103.01029996, -3.01029996, -103.01029996],
+            ]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = power_to_db(spectrogram, min_value=1e-6)
-        expected = np.array([[3.01029996, -3.01029996, -1.50580586], [-60.0, 0.0, -60.0]])
+        expected = np.array(
+            [[3.01029996, -3.01029996, -1.50580586], [-60.0, 0.0, -60.0]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = power_to_db(spectrogram, db_range=80)
-        expected = np.array([[3.01029996, -3.01029996, -1.50580586], [-76.98970004, 0.0, -76.98970004]])
+        expected = np.array(
+            [[3.01029996, -3.01029996, -1.50580586], [-76.98970004, 0.0, -76.98970004]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = power_to_db(spectrogram, reference=2.0, db_range=80)
-        expected = np.array([[0.0, -6.02059991, -4.51610582], [-80.0, -3.01029996, -80.0]])
+        expected = np.array(
+            [[0.0, -6.02059991, -4.51610582], [-80.0, -3.01029996, -80.0]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = power_to_db(spectrogram, reference=2.0, min_value=1e-6, db_range=80)
-        expected = np.array([[0.0, -6.02059991, -4.51610582], [-63.01029996, -3.01029996, -63.01029996]])
+        expected = np.array(
+            [[0.0, -6.02059991, -4.51610582], [-63.01029996, -3.01029996, -63.01029996]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         with pytest.raises(ValueError):
@@ -1515,9 +1532,18 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         output = power_to_db_batch(batch_spectrogram, reference=2.0)
         expected = np.array(
             [
-                [[0, -6.02059991, -4.51610582], [-103.01029996, -3.01029996, -103.01029996]],
-                [[1.76091259, -4.25968732, -103.01029996], [-103.01029996, -1.24938737, -103.01029996]],
-                [[-3.01029996, -103.01029996, -103.01029996], [-103.01029996, -103.01029996, -103.01029996]],
+                [
+                    [0, -6.02059991, -4.51610582],
+                    [-103.01029996, -3.01029996, -103.01029996],
+                ],
+                [
+                    [1.76091259, -4.25968732, -103.01029996],
+                    [-103.01029996, -1.24938737, -103.01029996],
+                ],
+                [
+                    [-3.01029996, -103.01029996, -103.01029996],
+                    [-103.01029996, -103.01029996, -103.01029996],
+                ],
             ]
         )
         self.assertTrue(np.allclose(output, expected))
@@ -1535,8 +1561,14 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         output = power_to_db_batch(batch_spectrogram, db_range=80)
         expected = np.array(
             [
-                [[3.01029996, -3.01029996, -1.50580586], [-76.98970004, 0, -76.98970004]],
-                [[4.77121255, -1.24938737, -75.22878745], [-75.22878745, 1.76091259, -75.22878745]],
+                [
+                    [3.01029996, -3.01029996, -1.50580586],
+                    [-76.98970004, 0, -76.98970004],
+                ],
+                [
+                    [4.77121255, -1.24938737, -75.22878745],
+                    [-75.22878745, 1.76091259, -75.22878745],
+                ],
                 [[0, -80, -80], [-80, -80, -80]],
             ]
         )
@@ -1546,18 +1578,35 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         expected = np.array(
             [
                 [[0, -6.02059991, -4.51610582], [-80, -3.01029996, -80]],
-                [[1.76091259, -4.25968732, -78.23908741], [-78.23908741, -1.24938737, -78.23908741]],
-                [[-3.01029996, -83.01029996, -83.01029996], [-83.01029996, -83.01029996, -83.01029996]],
+                [
+                    [1.76091259, -4.25968732, -78.23908741],
+                    [-78.23908741, -1.24938737, -78.23908741],
+                ],
+                [
+                    [-3.01029996, -83.01029996, -83.01029996],
+                    [-83.01029996, -83.01029996, -83.01029996],
+                ],
             ]
         )
         self.assertTrue(np.allclose(output, expected))
 
-        output = power_to_db_batch(batch_spectrogram, reference=2.0, min_value=1e-6, db_range=80)
+        output = power_to_db_batch(
+            batch_spectrogram, reference=2.0, min_value=1e-6, db_range=80
+        )
         expected = np.array(
             [
-                [[0, -6.02059991, -4.51610582], [-63.01029996, -3.01029996, -63.01029996]],
-                [[1.76091259, -4.25968732, -63.01029996], [-63.01029996, -1.24938737, -63.01029996]],
-                [[-3.01029996, -63.01029996, -63.01029996], [-63.01029996, -63.01029996, -63.01029996]],
+                [
+                    [0, -6.02059991, -4.51610582],
+                    [-63.01029996, -3.01029996, -63.01029996],
+                ],
+                [
+                    [1.76091259, -4.25968732, -63.01029996],
+                    [-63.01029996, -1.24938737, -63.01029996],
+                ],
+                [
+                    [-3.01029996, -63.01029996, -63.01029996],
+                    [-63.01029996, -63.01029996, -63.01029996],
+                ],
             ]
         )
         self.assertTrue(np.allclose(output, expected))
@@ -1577,27 +1626,47 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         spectrogram[1, 1] = 1.0
 
         output = amplitude_to_db(spectrogram, reference=1.0)
-        expected = np.array([[6.02059991, -6.02059991, -3.01161172], [-100.0, 0.0, -100.0]])
+        expected = np.array(
+            [[6.02059991, -6.02059991, -3.01161172], [-100.0, 0.0, -100.0]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = amplitude_to_db(spectrogram, reference=2.0)
-        expected = np.array([[0.0, -12.04119983, -9.03221164], [-106.02059991, -6.02059991, -106.02059991]])
+        expected = np.array(
+            [
+                [0.0, -12.04119983, -9.03221164],
+                [-106.02059991, -6.02059991, -106.02059991],
+            ]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = amplitude_to_db(spectrogram, min_value=1e-3)
-        expected = np.array([[6.02059991, -6.02059991, -3.01161172], [-60.0, 0.0, -60.0]])
+        expected = np.array(
+            [[6.02059991, -6.02059991, -3.01161172], [-60.0, 0.0, -60.0]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = amplitude_to_db(spectrogram, db_range=80)
-        expected = np.array([[6.02059991, -6.02059991, -3.01161172], [-73.97940009, 0.0, -73.97940009]])
+        expected = np.array(
+            [[6.02059991, -6.02059991, -3.01161172], [-73.97940009, 0.0, -73.97940009]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         output = amplitude_to_db(spectrogram, reference=2.0, db_range=80)
-        expected = np.array([[0.0, -12.04119983, -9.03221164], [-80.0, -6.02059991, -80.0]])
+        expected = np.array(
+            [[0.0, -12.04119983, -9.03221164], [-80.0, -6.02059991, -80.0]]
+        )
         self.assertTrue(np.allclose(output, expected))
 
-        output = amplitude_to_db(spectrogram, reference=2.0, min_value=1e-3, db_range=80)
-        expected = np.array([[0.0, -12.04119983, -9.03221164], [-66.02059991, -6.02059991, -66.02059991]])
+        output = amplitude_to_db(
+            spectrogram, reference=2.0, min_value=1e-3, db_range=80
+        )
+        expected = np.array(
+            [
+                [0.0, -12.04119983, -9.03221164],
+                [-66.02059991, -6.02059991, -66.02059991],
+            ]
+        )
         self.assertTrue(np.allclose(output, expected))
 
         with pytest.raises(ValueError):
@@ -1631,9 +1700,18 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         output = amplitude_to_db_batch(batch_spectrogram, reference=2.0)
         expected = np.array(
             [
-                [[0, -12.04119983, -9.03221164], [-106.02059991, -6.02059991, -106.02059991]],
-                [[3.52182518, -8.51937465, -106.02059991], [-106.02059991, -2.49877473, -106.02059991]],
-                [[-6.02059991, -106.02059991, -106.02059991], [-106.02059991, -106.02059991, -106.02059991]],
+                [
+                    [0, -12.04119983, -9.03221164],
+                    [-106.02059991, -6.02059991, -106.02059991],
+                ],
+                [
+                    [3.52182518, -8.51937465, -106.02059991],
+                    [-106.02059991, -2.49877473, -106.02059991],
+                ],
+                [
+                    [-6.02059991, -106.02059991, -106.02059991],
+                    [-106.02059991, -106.02059991, -106.02059991],
+                ],
             ]
         )
         self.assertTrue(np.allclose(output, expected))
@@ -1651,8 +1729,14 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         output = amplitude_to_db_batch(batch_spectrogram, db_range=80)
         expected = np.array(
             [
-                [[6.02059991, -6.02059991, -3.01161172], [-73.97940009, 0, -73.97940009]],
-                [[9.54242509, -2.49877473, -70.45757491], [-70.45757491, 3.52182518, -70.45757491]],
+                [
+                    [6.02059991, -6.02059991, -3.01161172],
+                    [-73.97940009, 0, -73.97940009],
+                ],
+                [
+                    [9.54242509, -2.49877473, -70.45757491],
+                    [-70.45757491, 3.52182518, -70.45757491],
+                ],
                 [[0, -80, -80], [-80, -80, -80]],
             ]
         )
@@ -1662,18 +1746,35 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         expected = np.array(
             [
                 [[0, -12.04119983, -9.03221164], [-80, -6.02059991, -80]],
-                [[3.52182518, -8.51937465, -76.47817482], [-76.47817482, -2.49877473, -76.47817482]],
-                [[-6.02059991, -86.02059991, -86.02059991], [-86.02059991, -86.02059991, -86.02059991]],
+                [
+                    [3.52182518, -8.51937465, -76.47817482],
+                    [-76.47817482, -2.49877473, -76.47817482],
+                ],
+                [
+                    [-6.02059991, -86.02059991, -86.02059991],
+                    [-86.02059991, -86.02059991, -86.02059991],
+                ],
             ]
         )
         self.assertTrue(np.allclose(output, expected))
 
-        output = amplitude_to_db_batch(batch_spectrogram, reference=2.0, min_value=1e-3, db_range=80)
+        output = amplitude_to_db_batch(
+            batch_spectrogram, reference=2.0, min_value=1e-3, db_range=80
+        )
         expected = np.array(
             [
-                [[0, -12.04119983, -9.03221164], [-66.02059991, -6.02059991, -66.02059991]],
-                [[3.52182518, -8.51937465, -66.02059991], [-66.02059991, -2.49877473, -66.02059991]],
-                [[-6.02059991, -66.02059991, -66.02059991], [-66.02059991, -66.02059991, -66.02059991]],
+                [
+                    [0, -12.04119983, -9.03221164],
+                    [-66.02059991, -6.02059991, -66.02059991],
+                ],
+                [
+                    [3.52182518, -8.51937465, -66.02059991],
+                    [-66.02059991, -2.49877473, -66.02059991],
+                ],
+                [
+                    [-6.02059991, -66.02059991, -66.02059991],
+                    [-66.02059991, -66.02059991, -66.02059991],
+                ],
             ]
         )
         self.assertTrue(np.allclose(output, expected))
@@ -1692,15 +1793,24 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         sampling_rate = 24000
 
         # test default parameters
-        original_chroma = chroma(sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins)
+        original_chroma = chroma(
+            sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins
+        )
         utils_chroma = chroma_filter_bank(
-            num_frequency_bins=num_frequency_bins, num_chroma=num_chroma, sampling_rate=sampling_rate
+            num_frequency_bins=num_frequency_bins,
+            num_chroma=num_chroma,
+            sampling_rate=sampling_rate,
         )
 
         self.assertTrue(np.allclose(original_chroma, utils_chroma))
 
         # test no weighting_parameters
-        original_chroma = chroma(sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins, octwidth=None)
+        original_chroma = chroma(
+            sr=sampling_rate,
+            n_chroma=num_chroma,
+            n_fft=num_frequency_bins,
+            octwidth=None,
+        )
         utils_chroma = chroma_filter_bank(
             num_frequency_bins=num_frequency_bins,
             num_chroma=num_chroma,
@@ -1711,9 +1821,14 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         self.assertTrue(np.allclose(original_chroma, utils_chroma))
 
         # test with L1 norm
-        original_chroma = chroma(sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins, norm=1.0)
+        original_chroma = chroma(
+            sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins, norm=1.0
+        )
         utils_chroma = chroma_filter_bank(
-            num_frequency_bins=num_frequency_bins, num_chroma=num_chroma, sampling_rate=sampling_rate, power=1.0
+            num_frequency_bins=num_frequency_bins,
+            num_chroma=num_chroma,
+            sampling_rate=sampling_rate,
+            power=1.0,
         )
 
         self.assertTrue(np.allclose(original_chroma, utils_chroma))

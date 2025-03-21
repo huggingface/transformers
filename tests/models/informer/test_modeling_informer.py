@@ -22,24 +22,23 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import (is_flaky, require_torch, slow,
+                                        torch_device)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
 
-    from transformers import InformerConfig, InformerForPrediction, InformerModel
+    from transformers import (InformerConfig, InformerForPrediction,
+                              InformerModel)
     from transformers.models.informer.modeling_informer import (
-        InformerDecoder,
-        InformerEncoder,
-        InformerSinusoidalPositionalEmbedding,
-    )
+        InformerDecoder, InformerEncoder,
+        InformerSinusoidalPositionalEmbedding)
 
 
 @require_torch
@@ -83,10 +82,12 @@ class InformerModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
         self.encoder_seq_length = min(
-            sampling_factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length
+            sampling_factor * np.ceil(np.log1p(context_length)).astype("int").item(),
+            context_length,
         )
         self.decoder_seq_length = min(
-            sampling_factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
+            sampling_factor * np.ceil(np.log1p(prediction_length)).astype("int").item(),
+            prediction_length,
         )
         self.sampling_factor = sampling_factor
         self.distil = distil
@@ -117,15 +118,21 @@ class InformerModelTester:
     def prepare_informer_inputs_dict(self, config):
         _past_length = config.context_length + max(config.lags_sequence)
 
-        static_categorical_features = ids_tensor([self.batch_size, 1], config.cardinality[0])
+        static_categorical_features = ids_tensor(
+            [self.batch_size, 1], config.cardinality[0]
+        )
         static_real_features = floats_tensor([self.batch_size, 1])
 
-        past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
+        past_time_features = floats_tensor(
+            [self.batch_size, _past_length, config.num_time_features]
+        )
         past_values = floats_tensor([self.batch_size, _past_length])
         past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
 
         # decoder inputs
-        future_time_features = floats_tensor([self.batch_size, config.prediction_length, config.num_time_features])
+        future_time_features = floats_tensor(
+            [self.batch_size, config.prediction_length, config.num_time_features]
+        )
         future_values = floats_tensor([self.batch_size, config.prediction_length])
 
         inputs_dict = {
@@ -166,13 +173,20 @@ class InformerModelTester:
 
         encoder_last_hidden_state_2 = encoder(inputs_embeds=enc_input)[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         ).to(torch_device)
-        self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
-        self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
+        self.parent.assertTrue(
+            torch.equal(model.encoder.embed_positions.weight, embed_positions.weight)
+        )
+        self.parent.assertTrue(
+            torch.equal(model.decoder.embed_positions.weight, embed_positions.weight)
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -184,13 +198,19 @@ class InformerModelTester:
             encoder_hidden_states=encoder_last_hidden_state,
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
 class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
+    all_model_classes = (
+        (InformerModel, InformerForPrediction) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": InformerModel} if is_torch_available() else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -217,7 +237,9 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_encoder_decoder_model_standalone(self):
@@ -233,16 +255,25 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.context_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                if (
+                    hasattr(self.model_tester, "chunk_length")
+                    and self.model_tester.chunk_length > 1
+                ):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
                 seq_length = self.model_tester.seq_length
@@ -258,7 +289,9 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "prediction_length", seq_len)
+                decoder_seq_length = getattr(
+                    self.model_tester, "prediction_length", seq_len
+                )
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -366,7 +399,9 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 ]
             )
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -387,7 +422,11 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -403,7 +442,11 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, context_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    context_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -426,10 +469,16 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(decoder_attentions), self.model_tester.num_hidden_layers
+            )
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, prediction_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    prediction_length,
+                ],
             )
 
             # cross attentions
@@ -456,7 +505,11 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         self.assertEqual(out_len + 2, len(outputs))
 
-        self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+        self_attentions = (
+            outputs.encoder_attentions
+            if config.is_encoder_decoder
+            else outputs.attentions
+        )
 
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
@@ -474,7 +527,11 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 
 def prepare_batch(filename="train-batch.pt"):
-    file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
+    file = hf_hub_download(
+        repo_id="hf-internal-testing/tourism-monthly-batch",
+        filename=filename,
+        repo_type="dataset",
+    )
     batch = torch.load(file, map_location=torch_device)
     return batch
 
@@ -483,7 +540,9 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class InformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = InformerModel.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
+        model = InformerModel.from_pretrained(
+            "huggingface/informer-tourism-monthly"
+        ).to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -496,17 +555,27 @@ class InformerModelIntegrationTests(unittest.TestCase):
                 future_values=batch["future_values"],
                 future_time_features=batch["future_time_features"],
             ).last_hidden_state
-        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
+        expected_shape = torch.Size(
+            (64, model.config.context_length, model.config.d_model)
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.4699, 0.7295, 0.8967], [0.4858, 0.3810, 0.9641], [-0.0233, 0.3608, 1.0303]],
+            [
+                [0.4699, 0.7295, 0.8967],
+                [0.4858, 0.3810, 0.9641],
+                [-0.0233, 0.3608, 1.0303],
+            ],
             device=torch_device,
         )
-        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_inference_head(self):
-        model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
+        model = InformerForPrediction.from_pretrained(
+            "huggingface/informer-tourism-monthly"
+        ).to(torch_device)
         batch = prepare_batch("val-batch.pt")
 
         torch.manual_seed(0)
@@ -520,16 +589,27 @@ class InformerModelIntegrationTests(unittest.TestCase):
             ).encoder_last_hidden_state
 
         # encoder distils the context length to 1/8th of the original length
-        expected_shape = torch.Size((64, model.config.context_length // 8, model.config.d_model))
+        expected_shape = torch.Size(
+            (64, model.config.context_length // 8, model.config.d_model)
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.4170, 0.9067, 0.8153], [0.3004, 0.7574, 0.7066], [0.6803, -0.6323, 1.2802]], device=torch_device
+            [
+                [0.4170, 0.9067, 0.8153],
+                [0.3004, 0.7574, 0.7066],
+                [0.6803, -0.6323, 1.2802],
+            ],
+            device=torch_device,
         )
-        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_seq_to_seq_generation(self):
-        model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
+        model = InformerForPrediction.from_pretrained(
+            "huggingface/informer-tourism-monthly"
+        ).to(torch_device)
         batch = prepare_batch("val-batch.pt")
 
         torch.manual_seed(0)
@@ -541,9 +621,15 @@ class InformerModelIntegrationTests(unittest.TestCase):
                 future_time_features=batch["future_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
             )
-        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
+        expected_shape = torch.Size(
+            (64, model.config.num_parallel_samples, model.config.prediction_length)
+        )
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
+        expected_slice = torch.tensor(
+            [3400.8005, 4289.2637, 7101.9209], device=torch_device
+        )
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1)
+        torch.testing.assert_close(
+            mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1
+        )

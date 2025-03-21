@@ -25,7 +25,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ...utils.versions import require_version
 
-
 require_version("tokenizers>=0.13.3")
 
 logger = logging.get_logger(__name__)
@@ -147,7 +146,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         self.update_post_processor()
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
-        self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
+        self.grounded_generation_template = kwargs.pop(
+            "grounded_generation_template", None
+        )
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
         # TODO @ArthurZucker this can only work one way for now, to update later-on. Tests should also properly
@@ -156,8 +157,12 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         decoder_state = pickle.dumps(self.backend_tokenizer.decoder)
 
         if add_prefix_space:
-            pre_tok_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-            decoder_state = decoder_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
+            pre_tok_state = pre_tok_state.replace(
+                b'"add_prefix_space":false', b'"add_prefix_space": true'
+            )
+            decoder_state = decoder_state.replace(
+                b'"add_prefix_space":false', b'"add_prefix_space": true'
+            )
         self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
         self.backend_tokenizer.decoder = pickle.loads(decoder_state)
 

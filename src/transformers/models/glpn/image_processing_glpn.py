@@ -16,7 +16,6 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
-
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
@@ -25,20 +24,13 @@ import PIL.Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import resize, to_channel_dimension_format
-from ...image_utils import (
-    ChannelDimension,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    is_torch_available,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
-
+from ...image_utils import (ChannelDimension, PILImageResampling,
+                            get_image_size, infer_channel_dimension_format,
+                            is_scaled_image, is_torch_available,
+                            make_list_of_images, to_numpy_array, valid_images,
+                            validate_preprocess_arguments)
+from ...utils import (TensorType, filter_out_non_signature_kwargs, logging,
+                      requires_backends)
 
 if is_torch_available():
     import torch
@@ -134,7 +126,9 @@ class GLPNImageProcessor(BaseImageProcessor):
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
+        images: Union[
+            "PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]
+        ],
         do_resize: Optional[bool] = None,
         size_divisor: Optional[int] = None,
         resample=None,
@@ -214,15 +208,26 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image, size_divisor=size_divisor, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image,
+                    size_divisor=size_divisor,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_rescale:
-            images = [self.rescale(image, scale=1 / 255, input_data_format=input_data_format) for image in images]
+            images = [
+                self.rescale(image, scale=1 / 255, input_data_format=input_data_format)
+                for image in images
+            ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}
@@ -258,11 +263,15 @@ class GLPNImageProcessor(BaseImageProcessor):
             )
 
         results = []
-        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        target_sizes = (
+            [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        )
         for depth, target_size in zip(predicted_depth, target_sizes):
             if target_size is not None:
                 depth = depth[None, None, ...]
-                depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
+                depth = torch.nn.functional.interpolate(
+                    depth, size=target_size, mode="bicubic", align_corners=False
+                )
                 depth = depth.squeeze()
 
             results.append({"predicted_depth": depth})

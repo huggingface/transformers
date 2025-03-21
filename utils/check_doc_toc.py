@@ -37,7 +37,6 @@ from typing import List
 
 import yaml
 
-
 PATH_TO_TOC = "docs/source/en/_toctree.yml"
 
 
@@ -60,7 +59,9 @@ def clean_model_doc_toc(model_doc: List[dict]) -> List[dict]:
 
     new_doc = []
     for duplicate_key in duplicates:
-        titles = list({doc["title"] for doc in model_doc if doc["local"] == duplicate_key})
+        titles = list(
+            {doc["title"] for doc in model_doc if doc["local"] == duplicate_key}
+        )
         if len(titles) > 1:
             raise ValueError(
                 f"{duplicate_key} is present several times in the documentation table of content at "
@@ -103,7 +104,9 @@ def check_model_doc(overwrite: bool = False):
     model_doc = api_doc[model_idx]["sections"]
 
     # Extract the modalities and clean them one by one.
-    modalities_docs = [(idx, section) for idx, section in enumerate(model_doc) if "sections" in section]
+    modalities_docs = [
+        (idx, section) for idx, section in enumerate(model_doc) if "sections" in section
+    ]
     diff = False
     for idx, modality_doc in modalities_docs:
         old_modality_doc = modality_doc["sections"]
@@ -128,7 +131,11 @@ def check_model_doc(overwrite: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--fix_and_overwrite",
+        action="store_true",
+        help="Whether to fix inconsistencies.",
+    )
     args = parser.parse_args()
 
     check_model_doc(args.fix_and_overwrite)

@@ -21,7 +21,6 @@ import torch
 
 from transformers import SpeechT5HifiGan, SpeechT5HifiGanConfig, logging
 
-
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
@@ -40,13 +39,25 @@ def load_weights(checkpoint, hf_model, config):
 
     for i in range(len(config.upsample_rates) * len(config.resblock_kernel_sizes)):
         for j in range(len(config.resblock_dilation_sizes)):
-            hf_model.resblocks[i].convs1[j].weight_g.data = checkpoint[f"blocks.{i}.convs1.{j}.1.weight_g"]
-            hf_model.resblocks[i].convs1[j].weight_v.data = checkpoint[f"blocks.{i}.convs1.{j}.1.weight_v"]
-            hf_model.resblocks[i].convs1[j].bias.data = checkpoint[f"blocks.{i}.convs1.{j}.1.bias"]
+            hf_model.resblocks[i].convs1[j].weight_g.data = checkpoint[
+                f"blocks.{i}.convs1.{j}.1.weight_g"
+            ]
+            hf_model.resblocks[i].convs1[j].weight_v.data = checkpoint[
+                f"blocks.{i}.convs1.{j}.1.weight_v"
+            ]
+            hf_model.resblocks[i].convs1[j].bias.data = checkpoint[
+                f"blocks.{i}.convs1.{j}.1.bias"
+            ]
 
-            hf_model.resblocks[i].convs2[j].weight_g.data = checkpoint[f"blocks.{i}.convs2.{j}.1.weight_g"]
-            hf_model.resblocks[i].convs2[j].weight_v.data = checkpoint[f"blocks.{i}.convs2.{j}.1.weight_v"]
-            hf_model.resblocks[i].convs2[j].bias.data = checkpoint[f"blocks.{i}.convs2.{j}.1.bias"]
+            hf_model.resblocks[i].convs2[j].weight_g.data = checkpoint[
+                f"blocks.{i}.convs2.{j}.1.weight_g"
+            ]
+            hf_model.resblocks[i].convs2[j].weight_v.data = checkpoint[
+                f"blocks.{i}.convs2.{j}.1.weight_v"
+            ]
+            hf_model.resblocks[i].convs2[j].bias.data = checkpoint[
+                f"blocks.{i}.convs2.{j}.1.bias"
+            ]
 
     hf_model.conv_post.weight_g.data = checkpoint["output_conv.1.weight_g"]
     hf_model.conv_post.weight_v.data = checkpoint["output_conv.1.weight_v"]
@@ -88,14 +99,38 @@ def convert_hifigan_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--stats_path", required=True, default=None, type=str, help="Path to stats.npy file")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--stats_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to stats.npy file",
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

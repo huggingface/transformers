@@ -18,13 +18,13 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from transformers.processing_utils import (ImagesKwargs, ProcessingKwargs,
+                                           ProcessorMixin, TextKwargs, Unpack)
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...utils import is_vision_available, logging
-
 
 if is_vision_available():
     from ...image_utils import load_images
@@ -64,7 +64,9 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, int]) -> List:
+def preprocess_box_annotation(
+    box: Union[List, Tuple], image_size: Tuple[int, int]
+) -> List:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -75,7 +77,9 @@ def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, in
         box[2] = int(box[2] / width * 1000)
         box[3] = int(box[3] / height * 1000)
     else:
-        raise ValueError("Box must be a list or tuple of lists in the form [x1, y1, x2, y2].")
+        raise ValueError(
+            "Box must be a list or tuple of lists in the form [x1, y1, x2, y2]."
+        )
 
     return list(box)
 
@@ -99,7 +103,9 @@ class GotOcr2Processor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self, image_processor=None, tokenizer=None, chat_template=None, **kwargs
+    ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.message_start_token = "<|im_start|>"
@@ -113,10 +119,14 @@ class GotOcr2Processor(ProcessorMixin):
         if not isinstance(images, (list, tuple)):
             images = [images]
             if multi_page:
-                logger.warning("Multi-page inference is enabled but only one image is passed.")
+                logger.warning(
+                    "Multi-page inference is enabled but only one image is passed."
+                )
                 images = [images]
         elif isinstance(images[0], (list, tuple)) and not multi_page:
-            raise ValueError("Nested images are only supported with `multi_page` set to `True`.")
+            raise ValueError(
+                "Nested images are only supported with `multi_page` set to `True`."
+            )
         elif not isinstance(images[0], (list, tuple)) and multi_page:
             images = [images]
 
@@ -134,7 +144,11 @@ class GotOcr2Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
@@ -203,7 +217,9 @@ class GotOcr2Processor(ProcessorMixin):
         multi_page = output_kwargs["images_kwargs"].pop("multi_page")
 
         crop_to_patches = output_kwargs["images_kwargs"].get("crop_to_patches")
-        images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
+        images, text, box, color = self._make_list_of_inputs(
+            images, text, box, color, multi_page
+        )
         if multi_page:
             # save the number of pages per batch
             num_pages_per_batch = [len(image_group) for image_group in images]
@@ -214,16 +230,26 @@ class GotOcr2Processor(ProcessorMixin):
         # Load images as we need to know the image size
         images = load_images(images)
         image_sizes = [image.size for image in images]
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        image_inputs = self.image_processor(
+            images=images, **output_kwargs["images_kwargs"]
+        )
         num_patches_array = image_inputs.pop("num_patches")
         if text is None:
             text = []
             patch_indices = np.cumsum(num_pages_per_batch)
-            for index, (num_pages, box_single, color_single) in enumerate(zip(num_pages_per_batch, box, color)):
+            for index, (num_pages, box_single, color_single) in enumerate(
+                zip(num_pages_per_batch, box, color)
+            ):
                 current_patch_index = patch_indices[index - 1] if index > 0 else 0
-                num_patches = sum(num_patches_array[current_patch_index : current_patch_index + num_pages])
+                num_patches = sum(
+                    num_patches_array[
+                        current_patch_index : current_patch_index + num_pages
+                    ]
+                )
                 if box_single[0] is not None:
-                    box_single = preprocess_box_annotation(box_single, image_sizes[index])
+                    box_single = preprocess_box_annotation(
+                        box_single, image_sizes[index]
+                    )
                 query = (
                     f"{f'[{color_single}] ' if color_single is not None else ''}"
                     f"{str(box_single) if box_single[0] is not None else ''} "

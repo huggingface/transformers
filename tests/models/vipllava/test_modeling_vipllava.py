@@ -19,25 +19,15 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from transformers import (
-    AutoProcessor,
-    VipLlavaConfig,
-    VipLlavaForConditionalGeneration,
-    is_torch_available,
-    is_vision_available,
-)
-from transformers.testing_utils import (
-    cleanup,
-    require_bitsandbytes,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers import (AutoProcessor, VipLlavaConfig,
+                          VipLlavaForConditionalGeneration, is_torch_available,
+                          is_vision_available)
+from transformers.testing_utils import (cleanup, require_bitsandbytes,
+                                        require_torch, slow, torch_device)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-
 
 if is_torch_available():
     import torch
@@ -115,7 +105,9 @@ class VipLlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
+        self.num_image_tokens = (
+            self.vision_config["image_size"] // self.vision_config["patch_size"]
+        ) ** 2
         self.seq_length = seq_length + self.num_image_tokens
         self.encoder_seq_length = self.seq_length
 
@@ -146,7 +138,12 @@ class VipLlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 1
+            )
+            + 1
+        )
         attention_mask = input_ids.ne(1).to(torch_device)
 
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
@@ -161,13 +158,21 @@ class VipLlavaVisionText2TextModelTester:
 
 @require_torch
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest with Llava->VipLlava
-class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VipLlavaForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     """
     Model tester for `VipLlavaForConditionalGeneration`.
     """
 
-    all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
+    all_model_classes = (
+        (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"image-text-to-text": VipLlavaForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -176,9 +181,16 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layers", "image_seq_length"]
+        common_properties = [
+            "image_token_index",
+            "vision_feature_layers",
+            "image_seq_length",
+        ]
         self.config_tester = ConfigTester(
-            self, config_class=VipLlavaConfig, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=VipLlavaConfig,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_config(self):
@@ -277,7 +289,9 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.vision_feature_layers = vision_feature_layers
 
-        num_feature_layers = 1 if isinstance(vision_feature_layers, int) else len(vision_feature_layers)
+        num_feature_layers = (
+            1 if isinstance(vision_feature_layers, int) else len(vision_feature_layers)
+        )
         hidden_size = config.vision_config.hidden_size
         expected_features = hidden_size * num_feature_layers
 
@@ -330,7 +344,9 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model_id = "llava-hf/vip-llava-7b-hf"
 
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = VipLlavaForConditionalGeneration.from_pretrained(
+            model_id, load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
@@ -338,9 +354,13 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
 
-        inputs = processor(prompt, image, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(prompt, image, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
 
         outputs = model.generate(**inputs, max_new_tokens=10)
 
         EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
-        self.assertEqual(processor.decode(outputs[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+        self.assertEqual(
+            processor.decode(outputs[0], skip_special_tokens=True), EXPECTED_OUTPUT
+        )

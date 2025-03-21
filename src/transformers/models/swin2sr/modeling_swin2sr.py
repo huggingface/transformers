@@ -26,17 +26,13 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...pytorch_utils import (find_pruneable_heads_and_indices, meshgrid,
+                              prune_linear_layer)
+from ...utils import (ModelOutput, add_code_sample_docstrings,
+                      add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_swin2sr import Swin2SRConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -81,9 +77,18 @@ def window_partition(input_feature, window_size):
     """
     batch_size, height, width, num_channels = input_feature.shape
     input_feature = input_feature.view(
-        batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
+        batch_size,
+        height // window_size,
+        window_size,
+        width // window_size,
+        window_size,
+        num_channels,
     )
-    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    windows = (
+        input_feature.permute(0, 1, 3, 2, 4, 5)
+        .contiguous()
+        .view(-1, window_size, window_size, num_channels)
+    )
     return windows
 
 
@@ -93,13 +98,26 @@ def window_reverse(windows, window_size, height, width):
     Merges windows to produce higher resolution features.
     """
     num_channels = windows.shape[-1]
-    windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    windows = windows.view(
+        -1,
+        height // window_size,
+        width // window_size,
+        window_size,
+        window_size,
+        num_channels,
+    )
+    windows = (
+        windows.permute(0, 1, 3, 2, 4, 5)
+        .contiguous()
+        .view(-1, height, width, num_channels)
+    )
     return windows
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -112,8 +130,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -146,7 +168,9 @@ class Swin2SREmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
 
         if config.use_absolute_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
+            self.position_embeddings = nn.Parameter(
+                torch.zeros(1, num_patches + 1, config.embed_dim)
+            )
         else:
             self.position_embeddings = None
 
@@ -170,16 +194,31 @@ class Swin2SRPatchEmbeddings(nn.Module):
         num_channels = config.embed_dim
         image_size, patch_size = config.image_size, config.patch_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        patches_resolution = [image_size[0] // patch_size[0], image_size[1] // patch_size[1]]
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        patches_resolution = [
+            image_size[0] // patch_size[0],
+            image_size[1] // patch_size[1],
+        ]
         self.patches_resolution = patches_resolution
         self.num_patches = patches_resolution[0] * patches_resolution[1]
 
-        self.projection = nn.Conv2d(num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(
+            num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size
+        )
         self.layernorm = nn.LayerNorm(config.embed_dim) if normalize_patches else None
 
-    def forward(self, embeddings: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
+    def forward(
+        self, embeddings: Optional[torch.FloatTensor]
+    ) -> Tuple[torch.Tensor, Tuple[int]]:
         embeddings = self.projection(embeddings)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
@@ -201,7 +240,9 @@ class Swin2SRPatchUnEmbeddings(nn.Module):
 
     def forward(self, embeddings, x_size):
         batch_size, height_width, num_channels = embeddings.shape
-        embeddings = embeddings.transpose(1, 2).view(batch_size, self.embed_dim, x_size[0], x_size[1])  # B Ph*Pw C
+        embeddings = embeddings.transpose(1, 2).view(
+            batch_size, self.embed_dim, x_size[0], x_size[1]
+        )  # B Ph*Pw C
         return embeddings
 
 
@@ -219,7 +260,12 @@ class Swin2SRPatchMerging(nn.Module):
             Normalization layer class.
     """
 
-    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
+    def __init__(
+        self,
+        input_resolution: Tuple[int],
+        dim: int,
+        norm_layer: nn.Module = nn.LayerNorm,
+    ) -> None:
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
@@ -234,7 +280,9 @@ class Swin2SRPatchMerging(nn.Module):
 
         return input_feature
 
-    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+    def forward(
+        self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]
+    ) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
@@ -251,8 +299,12 @@ class Swin2SRPatchMerging(nn.Module):
         # [batch_size, height/2, width/2, num_channels]
         input_feature_3 = input_feature[:, 1::2, 1::2, :]
         # [batch_size, height/2 * width/2, 4*num_channels]
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # [batch_size, height/2 * width/2, 4*C]
+        input_feature = torch.cat(
+            [input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1
+        )
+        input_feature = input_feature.view(
+            batch_size, -1, 4 * num_channels
+        )  # [batch_size, height/2 * width/2, 4*C]
 
         input_feature = self.reduction(input_feature)
         input_feature = self.norm(input_feature)
@@ -262,7 +314,9 @@ class Swin2SRPatchMerging(nn.Module):
 
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2SelfAttention with Swinv2->Swin2SR
 class Swin2SRSelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads, window_size, pretrained_window_size=[0, 0]):
+    def __init__(
+        self, config, dim, num_heads, window_size, pretrained_window_size=[0, 0]
+    ):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
@@ -273,18 +327,26 @@ class Swin2SRSelfAttention(nn.Module):
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.window_size = (
-            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+            window_size
+            if isinstance(window_size, collections.abc.Iterable)
+            else (window_size, window_size)
         )
         self.pretrained_window_size = pretrained_window_size
         self.logit_scale = nn.Parameter(torch.log(10 * torch.ones((num_heads, 1, 1))))
         # mlp to generate continuous relative position bias
         self.continuous_position_bias_mlp = nn.Sequential(
-            nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True), nn.Linear(512, num_heads, bias=False)
+            nn.Linear(2, 512, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, num_heads, bias=False),
         )
 
         # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
+        relative_coords_h = torch.arange(
+            -(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64
+        ).float()
+        relative_coords_w = torch.arange(
+            -(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64
+        ).float()
         relative_coords_table = (
             torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
@@ -299,11 +361,17 @@ class Swin2SRSelfAttention(nn.Module):
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8
         relative_coords_table = (
-            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
+            torch.sign(relative_coords_table)
+            * torch.log2(torch.abs(relative_coords_table) + 1.0)
+            / math.log2(8)
         )
         # set to same dtype as mlp weight
-        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
+        relative_coords_table = relative_coords_table.to(
+            next(self.continuous_position_bias_mlp.parameters()).dtype
+        )
+        self.register_buffer(
+            "relative_coords_table", relative_coords_table, persistent=False
+        )
 
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
@@ -316,15 +384,24 @@ class Swin2SRSelfAttention(nn.Module):
         relative_coords[:, :, 1] += self.window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
         relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.register_buffer(
+            "relative_position_index", relative_position_index, persistent=False
+        )
 
-        self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(
+            self.all_head_size, self.all_head_size, bias=config.qkv_bias
+        )
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
-        self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(
+            self.all_head_size, self.all_head_size, bias=config.qkv_bias
+        )
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -343,20 +420,26 @@ class Swin2SRSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # cosine attention
-        attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(
-            key_layer, dim=-1
-        ).transpose(-2, -1)
+        attention_scores = nn.functional.normalize(
+            query_layer, dim=-1
+        ) @ nn.functional.normalize(key_layer, dim=-1).transpose(-2, -1)
         logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
         attention_scores = attention_scores * logit_scale
-        relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
-            -1, self.num_attention_heads
-        )
+        relative_position_bias_table = self.continuous_position_bias_mlp(
+            self.relative_coords_table
+        ).view(-1, self.num_attention_heads)
         # [window_height*window_width,window_height*window_width,num_attention_heads]
-        relative_position_bias = relative_position_bias_table[self.relative_position_index.view(-1)].view(
-            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
+        relative_position_bias = relative_position_bias_table[
+            self.relative_position_index.view(-1)
+        ].view(
+            self.window_size[0] * self.window_size[1],
+            self.window_size[0] * self.window_size[1],
+            -1,
         )
         # [num_attention_heads,window_height*window_width,window_height*window_width]
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        relative_position_bias = relative_position_bias.permute(
+            2, 0, 1
+        ).contiguous()  # nH, Wh*Ww, Wh*Ww
         relative_position_bias = 16 * torch.sigmoid(relative_position_bias)
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
@@ -366,8 +449,12 @@ class Swin2SRSelfAttention(nn.Module):
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
             ) + attention_mask.unsqueeze(1).unsqueeze(0)
-            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
-            attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
+            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(
+                0
+            )
+            attention_scores = attention_scores.view(
+                -1, self.num_attention_heads, dim, dim
+            )
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -385,7 +472,9 @@ class Swin2SRSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -397,7 +486,9 @@ class Swin2SRSelfOutput(nn.Module):
         self.dense = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -413,9 +504,11 @@ class Swin2SRAttention(nn.Module):
             dim=dim,
             num_heads=num_heads,
             window_size=window_size,
-            pretrained_window_size=pretrained_window_size
-            if isinstance(pretrained_window_size, collections.abc.Iterable)
-            else (pretrained_window_size, pretrained_window_size),
+            pretrained_window_size=(
+                pretrained_window_size
+                if isinstance(pretrained_window_size, collections.abc.Iterable)
+                else (pretrained_window_size, pretrained_window_size)
+            ),
         )
         self.output = Swin2SRSelfOutput(config, dim)
         self.pruned_heads = set()
@@ -424,7 +517,10 @@ class Swin2SRAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -435,7 +531,9 @@ class Swin2SRAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -445,9 +543,13 @@ class Swin2SRAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.self(
+            hidden_states, attention_mask, head_mask, output_attentions
+        )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -483,7 +585,14 @@ class Swin2SROutput(nn.Module):
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->Swin2SR
 class Swin2SRLayer(nn.Module):
     def __init__(
-        self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0, pretrained_window_size=0
+        self,
+        config,
+        dim,
+        input_resolution,
+        num_heads,
+        drop_path_rate=0.0,
+        shift_size=0,
+        pretrained_window_size=0,
     ):
         super().__init__()
         self.input_resolution = input_resolution
@@ -497,19 +606,31 @@ class Swin2SRLayer(nn.Module):
             dim=dim,
             num_heads=num_heads,
             window_size=self.window_size,
-            pretrained_window_size=pretrained_window_size
-            if isinstance(pretrained_window_size, collections.abc.Iterable)
-            else (pretrained_window_size, pretrained_window_size),
+            pretrained_window_size=(
+                pretrained_window_size
+                if isinstance(pretrained_window_size, collections.abc.Iterable)
+                else (pretrained_window_size, pretrained_window_size)
+            ),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swin2SRDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = (
+            Swin2SRDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        )
         self.intermediate = Swin2SRIntermediate(config, dim)
         self.output = Swin2SROutput(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
-    def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-        window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
-        shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
+    def _compute_window_shift(
+        self, target_window_size, target_shift_size
+    ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        window_size = [
+            r if r <= w else w
+            for r, w in zip(self.input_resolution, target_window_size)
+        ]
+        shift_size = [
+            0 if r <= w else s
+            for r, w, s in zip(self.input_resolution, window_size, target_shift_size)
+        ]
         return window_size, shift_size
 
     def get_attn_mask(self, height, width, dtype):
@@ -535,7 +656,9 @@ class Swin2SRLayer(nn.Module):
             mask_windows = window_partition(img_mask, self.window_size)
             mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+            attn_mask = attn_mask.masked_fill(
+                attn_mask != 0, float(-100.0)
+            ).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
         return attn_mask
@@ -564,29 +687,44 @@ class Swin2SRLayer(nn.Module):
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
         if self.shift_size > 0:
-            shifted_hidden_states = torch.roll(hidden_states, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
+            shifted_hidden_states = torch.roll(
+                hidden_states, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2)
+            )
         else:
             shifted_hidden_states = hidden_states
 
         # partition windows
-        hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
-        hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
+        hidden_states_windows = window_partition(
+            shifted_hidden_states, self.window_size
+        )
+        hidden_states_windows = hidden_states_windows.view(
+            -1, self.window_size * self.window_size, channels
+        )
         attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
         attention_outputs = self.attention(
-            hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
+            hidden_states_windows,
+            attn_mask,
+            head_mask,
+            output_attentions=output_attentions,
         )
 
         attention_output = attention_outputs[0]
 
-        attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
+        attention_windows = attention_output.view(
+            -1, self.window_size, self.window_size, channels
+        )
+        shifted_windows = window_reverse(
+            attention_windows, self.window_size, height_pad, width_pad
+        )
 
         # reverse cyclic shift
         if self.shift_size > 0:
-            attention_windows = torch.roll(shifted_windows, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+            attention_windows = torch.roll(
+                shifted_windows, shifts=(self.shift_size, self.shift_size), dims=(1, 2)
+            )
         else:
             attention_windows = shifted_windows
 
@@ -600,9 +738,15 @@ class Swin2SRLayer(nn.Module):
 
         layer_output = self.intermediate(hidden_states)
         layer_output = self.output(layer_output)
-        layer_output = hidden_states + self.drop_path(self.layernorm_after(layer_output))
+        layer_output = hidden_states + self.drop_path(
+            self.layernorm_after(layer_output)
+        )
 
-        layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
+        layer_outputs = (
+            (layer_output, attention_outputs[1])
+            if output_attentions
+            else (layer_output,)
+        )
         return layer_outputs
 
 
@@ -611,7 +755,16 @@ class Swin2SRStage(nn.Module):
     This corresponds to the Residual Swin Transformer Block (RSTB) in the original implementation.
     """
 
-    def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, pretrained_window_size=0):
+    def __init__(
+        self,
+        config,
+        dim,
+        input_resolution,
+        depth,
+        num_heads,
+        drop_path,
+        pretrained_window_size=0,
+    ):
         super().__init__()
         self.config = config
         self.dim = dim
@@ -658,7 +811,9 @@ class Swin2SRStage(nn.Module):
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -682,7 +837,10 @@ class Swin2SREncoder(nn.Module):
         super().__init__()
         self.num_stages = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
+        ]
         self.stages = nn.ModuleList(
             [
                 Swin2SRStage(
@@ -691,7 +849,11 @@ class Swin2SREncoder(nn.Module):
                     input_resolution=(grid_size[0], grid_size[1]),
                     depth=config.depths[stage_idx],
                     num_heads=config.num_heads[stage_idx],
-                    drop_path=dpr[sum(config.depths[:stage_idx]) : sum(config.depths[: stage_idx + 1])],
+                    drop_path=dpr[
+                        sum(config.depths[:stage_idx]) : sum(
+                            config.depths[: stage_idx + 1]
+                        )
+                    ],
                     pretrained_window_size=0,
                 )
                 for stage_idx in range(self.num_stages)
@@ -721,10 +883,16 @@ class Swin2SREncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    stage_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
+                    stage_module.__call__,
+                    hidden_states,
+                    input_dimensions,
+                    layer_head_mask,
+                    output_attentions,
                 )
             else:
-                layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                layer_outputs = stage_module(
+                    hidden_states, input_dimensions, layer_head_mask, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -739,7 +907,11 @@ class Swin2SREncoder(nn.Module):
                 all_self_attentions += layer_outputs[2:]
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
 
         return Swin2SREncoderOutput(
             last_hidden_state=hidden_states,
@@ -762,7 +934,9 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            torch.nn.init.trunc_normal_(module.weight.data, std=self.config.initializer_range)
+            torch.nn.init.trunc_normal_(
+                module.weight.data, std=self.config.initializer_range
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -820,9 +994,13 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         self.img_range = config.img_range
 
-        self.first_convolution = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
+        self.first_convolution = nn.Conv2d(
+            config.num_channels, config.embed_dim, 3, 1, 1
+        )
         self.embeddings = Swin2SREmbeddings(config)
-        self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
+        self.encoder = Swin2SREncoder(
+            config, grid_size=self.embeddings.patch_embeddings.patches_resolution
+        )
 
         self.layernorm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
         self.patch_unembed = Swin2SRPatchUnEmbeddings(config)
@@ -849,7 +1027,9 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         window_size = self.config.window_size
         modulo_pad_height = (window_size - height % window_size) % window_size
         modulo_pad_width = (window_size - width % window_size) % window_size
-        pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
+        pixel_values = nn.functional.pad(
+            pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect"
+        )
 
         # 2. normalize
         mean = self.mean.type_as(pixel_values)
@@ -873,11 +1053,19 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -938,13 +1126,18 @@ class Upsample(nn.Module):
         if (scale & (scale - 1)) == 0:
             # scale = 2^n
             for i in range(int(math.log(scale, 2))):
-                self.add_module(f"convolution_{i}", nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
+                self.add_module(
+                    f"convolution_{i}",
+                    nn.Conv2d(num_features, 4 * num_features, 3, 1, 1),
+                )
                 self.add_module(f"pixelshuffle_{i}", nn.PixelShuffle(2))
         elif scale == 3:
             self.convolution = nn.Conv2d(num_features, 9 * num_features, 3, 1, 1)
             self.pixelshuffle = nn.PixelShuffle(3)
         else:
-            raise ValueError(f"Scale {scale} is not supported. Supported scales: 2^n and 3.")
+            raise ValueError(
+                f"Scale {scale} is not supported. Supported scales: 2^n and 3."
+            )
 
     def forward(self, hidden_state):
         if (self.scale & (self.scale - 1)) == 0:
@@ -992,7 +1185,9 @@ class PixelShuffleUpsampler(nn.Module):
         self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
         self.activation = nn.LeakyReLU(inplace=True)
         self.upsample = Upsample(config.upscale, num_features)
-        self.final_convolution = nn.Conv2d(num_features, config.num_channels_out, 3, 1, 1)
+        self.final_convolution = nn.Conv2d(
+            num_features, config.num_channels_out, 3, 1, 1
+        )
 
     def forward(self, sequence_output):
         x = self.conv_before_upsample(sequence_output)
@@ -1007,26 +1202,40 @@ class NearestConvUpsampler(nn.Module):
     def __init__(self, config, num_features):
         super().__init__()
         if config.upscale != 4:
-            raise ValueError("The nearest+conv upsampler only supports an upscale factor of 4 at the moment.")
+            raise ValueError(
+                "The nearest+conv upsampler only supports an upscale factor of 4 at the moment."
+            )
 
         self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
         self.activation = nn.LeakyReLU(inplace=True)
         self.conv_up1 = nn.Conv2d(num_features, num_features, 3, 1, 1)
         self.conv_up2 = nn.Conv2d(num_features, num_features, 3, 1, 1)
         self.conv_hr = nn.Conv2d(num_features, num_features, 3, 1, 1)
-        self.final_convolution = nn.Conv2d(num_features, config.num_channels_out, 3, 1, 1)
+        self.final_convolution = nn.Conv2d(
+            num_features, config.num_channels_out, 3, 1, 1
+        )
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
     def forward(self, sequence_output):
         sequence_output = self.conv_before_upsample(sequence_output)
         sequence_output = self.activation(sequence_output)
         sequence_output = self.lrelu(
-            self.conv_up1(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
+            self.conv_up1(
+                torch.nn.functional.interpolate(
+                    sequence_output, scale_factor=2, mode="nearest"
+                )
+            )
         )
         sequence_output = self.lrelu(
-            self.conv_up2(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
+            self.conv_up2(
+                torch.nn.functional.interpolate(
+                    sequence_output, scale_factor=2, mode="nearest"
+                )
+            )
         )
-        reconstruction = self.final_convolution(self.lrelu(self.conv_hr(sequence_output)))
+        reconstruction = self.final_convolution(
+            self.lrelu(self.conv_hr(sequence_output))
+        )
         return reconstruction
 
 
@@ -1039,9 +1248,13 @@ class PixelShuffleAuxUpsampler(nn.Module):
         self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
         self.activation = nn.LeakyReLU(inplace=True)
         self.conv_aux = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
-        self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
+        self.conv_after_aux = nn.Sequential(
+            nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
+        )
         self.upsample = Upsample(config.upscale, num_features)
-        self.final_convolution = nn.Conv2d(num_features, config.num_channels_out, 3, 1, 1)
+        self.final_convolution = nn.Conv2d(
+            num_features, config.num_channels_out, 3, 1, 1
+        )
 
     def forward(self, sequence_output, bicubic, height, width):
         bicubic = self.conv_bicubic(bicubic)
@@ -1050,7 +1263,9 @@ class PixelShuffleAuxUpsampler(nn.Module):
         aux = self.conv_aux(sequence_output)
         sequence_output = self.conv_after_aux(aux)
         sequence_output = (
-            self.upsample(sequence_output)[:, :, : height * self.upscale, : width * self.upscale]
+            self.upsample(sequence_output)[
+                :, :, : height * self.upscale, : width * self.upscale
+            ]
             + bicubic[:, :, : height * self.upscale, : width * self.upscale]
         )
         reconstruction = self.final_convolution(sequence_output)
@@ -1080,19 +1295,25 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             self.upsample = PixelShuffleAuxUpsampler(config, num_features)
         elif self.upsampler == "pixelshuffledirect":
             # for lightweight SR (to save parameters)
-            self.upsample = UpsampleOneStep(config.upscale, config.embed_dim, config.num_channels_out)
+            self.upsample = UpsampleOneStep(
+                config.upscale, config.embed_dim, config.num_channels_out
+            )
         elif self.upsampler == "nearest+conv":
             # for real-world SR (less artifacts)
             self.upsample = NearestConvUpsampler(config, num_features)
         else:
             # for image denoising and JPEG compression artifact reduction
-            self.final_convolution = nn.Conv2d(config.embed_dim, config.num_channels_out, 3, 1, 1)
+            self.final_convolution = nn.Conv2d(
+                config.embed_dim, config.num_channels_out, 3, 1, 1
+            )
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1131,7 +1352,9 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
          >>> # you can visualize `output` with `Image.fromarray`
          ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         loss = None
         if labels is not None:
@@ -1166,7 +1389,9 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             reconstruction = pixel_values + self.final_convolution(sequence_output)
 
         reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
-        reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
+        reconstruction = reconstruction[
+            :, :, : height * self.upscale, : width * self.upscale
+        ]
 
         if not return_dict:
             output = (reconstruction,) + outputs[1:]

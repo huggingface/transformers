@@ -19,10 +19,10 @@ import unittest
 import pytest
 
 from transformers import WhisperTokenizer, is_speech_available
-from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+from transformers.testing_utils import (require_sentencepiece, require_torch,
+                                        require_torchaudio)
 
 from .test_feature_extraction_whisper import floats_list
-
 
 if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
@@ -53,7 +53,9 @@ class WhisperProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         processor.save_pretrained(self.tmpdirname)
         processor = WhisperProcessor.from_pretrained(self.tmpdirname)
@@ -61,31 +63,50 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, WhisperTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
-
-        processor = WhisperProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        feature_extractor_add_kwargs = self.get_feature_extractor(
+            do_normalize=False, padding_value=1.0
         )
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        processor = WhisperProcessor.from_pretrained(
+            self.tmpdirname,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_normalize=False,
+            padding_value=1.0,
+        )
+
+        self.assertEqual(
+            processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab()
+        )
         self.assertIsInstance(processor.tokenizer, WhisperTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertEqual(
+            processor.feature_extractor.to_json_string(),
+            feature_extractor_add_kwargs.to_json_string(),
+        )
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         raw_speech = floats_list((3, 1000))
 
@@ -93,13 +114,17 @@ class WhisperProcessorTest(unittest.TestCase):
         input_processor = processor(raw_speech, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(
+                input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2
+            )
 
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         input_str = "This is a test string"
 
@@ -114,7 +139,9 @@ class WhisperProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -127,7 +154,9 @@ class WhisperProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
         self.assertListEqual(
             processor.model_input_names,
@@ -139,8 +168,12 @@ class WhisperProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-        forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", no_timestamps=True)
+        processor = WhisperProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+        forced_decoder_ids = processor.get_decoder_prompt_ids(
+            task="transcribe", no_timestamps=True
+        )
 
         self.assertIsInstance(forced_decoder_ids, list)
         for ids in forced_decoder_ids:
@@ -150,7 +183,10 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)
 
     def test_get_prompt_ids(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+        )
         prompt_ids = processor.get_prompt_ids("Mr. Quilter")
         decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
@@ -158,7 +194,10 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(decoded_prompt, "<|startofprev|> Mr. Quilter")
 
     def test_empty_get_prompt_ids(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+        )
         prompt_ids = processor.get_prompt_ids("")
         decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
@@ -166,7 +205,10 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(decoded_prompt, "<|startofprev|> ")
 
     def test_get_prompt_ids_with_special_tokens(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(
+            tokenizer=self.get_tokenizer(),
+            feature_extractor=self.get_feature_extractor(),
+        )
 
         def _test_prompt_error_raised_helper(prompt, special_token):
             with pytest.raises(ValueError) as excinfo:

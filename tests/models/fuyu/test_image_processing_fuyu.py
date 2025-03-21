@@ -3,12 +3,8 @@ import unittest
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import (
-    require_torch,
-    require_torchvision,
-    require_vision,
-)
-
+from transformers.testing_utils import (require_torch, require_torchvision,
+                                        require_vision)
 
 if is_torch_available() and is_vision_available():
     import torch
@@ -31,7 +27,9 @@ class TestFuyuImageProcessor(unittest.TestCase):
         self.height = 300
         self.width = 300
 
-        self.image_input = torch.rand(self.batch_size, self.channels, self.height, self.width)
+        self.image_input = torch.rand(
+            self.batch_size, self.channels, self.height, self.width
+        )
 
         self.image_patch_dim_h = 30
         self.image_patch_dim_w = 30
@@ -39,7 +37,9 @@ class TestFuyuImageProcessor(unittest.TestCase):
         self.sample_image_pil = Image.fromarray(self.sample_image)
 
     def test_patches(self):
-        expected_num_patches = self.processor.get_num_patches(image_height=self.height, image_width=self.width)
+        expected_num_patches = self.processor.get_num_patches(
+            image_height=self.height, image_width=self.width
+        )
 
         patches_final = self.processor.patchify_image(image=self.image_input)
         assert (
@@ -58,6 +58,8 @@ class TestFuyuImageProcessor(unittest.TestCase):
         self.assertEqual(transformed_image.shape[2], 320)
 
     def test_apply_transformation_pil(self):
-        transformed_image = self.processor.preprocess(self.sample_image_pil).images[0][0]
+        transformed_image = self.processor.preprocess(self.sample_image_pil).images[0][
+            0
+        ]
         self.assertEqual(transformed_image.shape[1], 160)
         self.assertEqual(transformed_image.shape[2], 320)

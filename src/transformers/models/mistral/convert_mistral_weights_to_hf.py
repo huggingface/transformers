@@ -19,9 +19,9 @@ import re
 import torch
 from safetensors.torch import load_file
 
-from transformers import AutoTokenizer, LlamaTokenizerFast, MistralConfig, MistralForCausalLM
+from transformers import (AutoTokenizer, LlamaTokenizerFast, MistralConfig,
+                          MistralForCausalLM)
 from transformers.integrations.mistral import convert_tekken_tokenizer
-
 
 # fmt: off
 STATE_DICT_MAPPING = {
@@ -87,13 +87,23 @@ def convert_state_dict(original_state_dict: dict, config: MistralConfig):
         new_key = map_old_key_to_new(old_key)
 
         if "q_proj" in new_key:
-            tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(query_dim, hidden_size)
-            tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
+            tensor = tensor.view(num_attention_heads, head_dim, hidden_size).reshape(
+                query_dim, hidden_size
+            )
+            tensor = permute_for_rope(
+                tensor, num_attention_heads, query_dim, hidden_size
+            )
         elif "k_proj" in new_key:
-            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
-            tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
+            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(
+                key_value_dim, hidden_size
+            )
+            tensor = permute_for_rope(
+                tensor, num_key_value_heads, key_value_dim, hidden_size
+            )
         elif "v_proj" in new_key:
-            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(key_value_dim, hidden_size)
+            tensor = tensor.view(num_key_value_heads, head_dim, hidden_size).reshape(
+                key_value_dim, hidden_size
+            )
 
         new_dict[new_key] = tensor
     return new_dict
@@ -123,7 +133,11 @@ def convert_state_dict_sharded(loaded_shards: list[dict], config: MistralConfig)
     num_key_value_heads = config.num_key_value_heads
     n_heads_per_shard = n_heads // num_shards
     num_local_key_value_heads = num_key_value_heads // num_shards
-    key_value_dim = dim if n_heads == num_key_value_heads else dims_per_head * num_local_key_value_heads
+    key_value_dim = (
+        dim
+        if n_heads == num_key_value_heads
+        else dims_per_head * num_local_key_value_heads
+    )
 
     original_keys = loaded_shards[0].keys()
     for old_key in original_keys:
@@ -132,19 +146,32 @@ def convert_state_dict_sharded(loaded_shards: list[dict], config: MistralConfig)
 
         if "q_proj" in new_key:
             tensor = torch.cat(
-                [shard.pop(old_key).view(n_heads_per_shard, dims_per_head, dim) for shard in loaded_shards],
+                [
+                    shard.pop(old_key).view(n_heads_per_shard, dims_per_head, dim)
+                    for shard in loaded_shards
+                ],
                 dim=cat_dim,
             ).reshape(dim, dim)
             tensor = permute_for_rope(tensor, n_heads, dim, dim)
         elif "k_proj" in new_key:
             tensor = torch.cat(
-                [shard.pop(old_key).view(num_local_key_value_heads, dims_per_head, dim) for shard in loaded_shards],
+                [
+                    shard.pop(old_key).view(
+                        num_local_key_value_heads, dims_per_head, dim
+                    )
+                    for shard in loaded_shards
+                ],
                 dim=cat_dim,
             ).reshape(key_value_dim, dim)
             tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, dim)
         elif "v_proj" in new_key:
             tensor = torch.cat(
-                [shard.pop(old_key).view(num_local_key_value_heads, dims_per_head, dim) for shard in loaded_shards],
+                [
+                    shard.pop(old_key).view(
+                        num_local_key_value_heads, dims_per_head, dim
+                    )
+                    for shard in loaded_shards
+                ],
                 dim=cat_dim,
             ).reshape(key_value_dim, dim)
         elif "input_layernorm" in new_key or "post_attention_layernorm" in new_key:
@@ -152,7 +179,9 @@ def convert_state_dict_sharded(loaded_shards: list[dict], config: MistralConfig)
         elif "model.norm.weight" in new_key:
             tensor = loaded_shards[0][old_key]
         else:
-            tensor = torch.cat([shard.pop(old_key) for shard in loaded_shards], dim=cat_dim)
+            tensor = torch.cat(
+                [shard.pop(old_key) for shard in loaded_shards], dim=cat_dim
+            )
 
         new_dict[new_key] = tensor
 
@@ -173,7 +202,9 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
     ]
 
     new_config_kwargs = {k: original_config[v] for k, v in key_mapping.items()}
-    new_config_kwargs.update({k: v for k, v in original_config.items() if k in similar_keys_to_keep})
+    new_config_kwargs.update(
+        {k: v for k, v in original_config.items() if k in similar_keys_to_keep}
+    )
 
     # These are not always defined depending on `params.json`
     new_config_kwargs["sliding_window"] = original_config.get("sliding_window", None)
@@ -181,7 +212,9 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
         "n_kv_heads", new_config_kwargs["num_attention_heads"]
     )
     new_config_kwargs["rope_theta"] = original_config.get("rope_theta", 10000.0)
-    new_config_kwargs["max_position_embeddings"] = original_config.get("max_seq_len", max_position_embeddings)
+    new_config_kwargs["max_position_embeddings"] = original_config.get(
+        "max_seq_len", max_position_embeddings
+    )
 
     # This may sometimes be a string in `params.json`
     if new_config_kwargs["sliding_window"] is not None:
@@ -191,7 +224,12 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
     return new_config
 
 
-def convert_and_write_model(input_dir: str, output_dir: str, max_position_embeddings: int, modules_are_split: bool):
+def convert_and_write_model(
+    input_dir: str,
+    output_dir: str,
+    max_position_embeddings: int,
+    modules_are_split: bool,
+):
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
     config = convert_config(params, max_position_embeddings)
@@ -199,16 +237,25 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     full_state_dict = {}
     # The model may be split between different files, but a single nn.Module is always fully present in a single file
     if not modules_are_split:
-        shards = [file for file in os.listdir(input_dir) if file.endswith(".safetensors")]
+        shards = [
+            file for file in os.listdir(input_dir) if file.endswith(".safetensors")
+        ]
         for shard_file in shards:
             original_state_dict = load_file(os.path.join(input_dir, shard_file))
             new_dict = convert_state_dict(original_state_dict, config)
             full_state_dict.update(new_dict)
     # A single nn.Module is split between different checkpoint files
     else:
-        shards = [file for file in os.listdir(input_dir) if re.match(r"consolidated.\d+.pth", file)]
+        shards = [
+            file
+            for file in os.listdir(input_dir)
+            if re.match(r"consolidated.\d+.pth", file)
+        ]
         shards = sorted(shards, key=lambda x: int(x.split(".")[1]))
-        loaded_shards = [torch.load(os.path.join(input_dir, file), map_location="cpu") for file in shards]
+        loaded_shards = [
+            torch.load(os.path.join(input_dir, file), map_location="cpu")
+            for file in shards
+        ]
         full_state_dict = convert_state_dict_sharded(loaded_shards, config)
 
     # Load weights into model and resave them
@@ -218,7 +265,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     model.save_pretrained(output_dir)
 
 
-def convert_and_write_tokenizer(input_dir: str, output_dir: str, tokenizer_template_name: str = ""):
+def convert_and_write_tokenizer(
+    input_dir: str, output_dir: str, tokenizer_template_name: str = ""
+):
     """Convert the tokenizer and save it."""
     # Tekken format
     if "tekken.json" in os.listdir(input_dir):
@@ -226,7 +275,9 @@ def convert_and_write_tokenizer(input_dir: str, output_dir: str, tokenizer_templ
         tokenizer = convert_tekken_tokenizer(tokenizer_file)
     else:
         # May have .v3 or .v7 at the end
-        tokenizer_file = [file for file in os.listdir(input_dir) if "tokenizer.model" in file][0]
+        tokenizer_file = [
+            file for file in os.listdir(input_dir) if "tokenizer.model" in file
+        ][0]
         tokenizer = LlamaTokenizerFast(os.path.join(input_dir, tokenizer_file))
 
     # Load a chat template from another model
@@ -274,7 +325,12 @@ def main():
     args = parser.parse_args()
 
     if not args.tokenizer_only:
-        convert_and_write_model(args.input_dir, args.output_dir, args.max_position_embeddings, args.modules_are_split)
+        convert_and_write_model(
+            args.input_dir,
+            args.output_dir,
+            args.max_position_embeddings,
+            args.modules_are_split,
+        )
     convert_and_write_tokenizer(args.input_dir, args.output_dir, args.template_name)
 
 

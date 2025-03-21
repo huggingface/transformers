@@ -18,13 +18,8 @@ import argparse
 
 import torch
 
-from transformers import (
-    EncodecConfig,
-    EncodecFeatureExtractor,
-    EncodecModel,
-    logging,
-)
-
+from transformers import (EncodecConfig, EncodecFeatureExtractor, EncodecModel,
+                          logging)
 
 # checkpoints downloaded from:
 # https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th
@@ -187,7 +182,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
+    logger.info(
+        f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}."
+    )
 
 
 def should_ignore(name, ignore_keys):
@@ -346,13 +343,31 @@ if __name__ == "__main__":
         type=str,
         help="The model to convert. Should be one of 'encodec_24khz', 'encodec_32khz', 'encodec_48khz'.",
     )
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

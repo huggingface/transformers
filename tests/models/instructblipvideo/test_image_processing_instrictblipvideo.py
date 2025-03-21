@@ -21,8 +21,8 @@ from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import (ImageProcessingTestMixin,
+                                             prepare_image_inputs)
 
 if is_torch_available():
     import torch
@@ -78,7 +78,9 @@ class InstructBlipVideoProcessingTester:
     def expected_output_image_shape(self, images):
         return self.frames, self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         images = prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -109,7 +111,9 @@ class InstructBlipVideoProcessingTester:
 @require_torch
 @require_vision
 class InstructBlipVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = InstructBlipVideoImageProcessor if is_vision_available() else None
+    image_processing_class = (
+        InstructBlipVideoImageProcessor if is_vision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -130,27 +134,37 @@ class InstructBlipVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict
+        )
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_call_pil(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+        video_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True
+        )
         for video in video_inputs:
             self.assertIsInstance(video[0], Image.Image)
 
         # Test not batched input (pass as `videos` arg to test that ImageProcessor can handle videos in absence of images!)
-        encoded_videos = image_processing(images=video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs[0], return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (1, 4, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
-        encoded_videos = image_processing(images=video_inputs, return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs, return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (5, 4, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
@@ -158,17 +172,23 @@ class InstructBlipVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+        video_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, numpify=True
+        )
         for video in video_inputs:
             self.assertIsInstance(video, np.ndarray)
 
         # Test not batched input (pass as `videos` arg to test that ImageProcessor can handle videos in absence of images!)
-        encoded_videos = image_processing(images=video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs[0], return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (1, 4, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
-        encoded_videos = image_processing(images=video_inputs, return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs, return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (5, 4, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
@@ -176,16 +196,22 @@ class InstructBlipVideoProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        video_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        video_inputs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=True, torchify=True
+        )
         for video in video_inputs:
             self.assertIsInstance(video, torch.Tensor)
 
         # Test not batched input
-        encoded_videos = image_processing(images=video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs[0], return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (1, 4, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
         # Test batched
-        encoded_videos = image_processing(images=video_inputs, return_tensors="pt").pixel_values
+        encoded_videos = image_processing(
+            images=video_inputs, return_tensors="pt"
+        ).pixel_values
         expected_output_video_shape = (5, 4, 3, 18, 18)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)

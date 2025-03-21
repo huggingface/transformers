@@ -18,14 +18,13 @@ import os
 import unittest
 
 from transformers import BatchEncoding
-from transformers.models.bert.tokenization_bert import (
-    BasicTokenizer,
-    WordpieceTokenizer,
-    _is_control,
-    _is_punctuation,
-    _is_whitespace,
-)
-from transformers.models.prophetnet.tokenization_prophetnet import VOCAB_FILES_NAMES, ProphetNetTokenizer
+from transformers.models.bert.tokenization_bert import (BasicTokenizer,
+                                                        WordpieceTokenizer,
+                                                        _is_control,
+                                                        _is_punctuation,
+                                                        _is_whitespace)
+from transformers.models.prophetnet.tokenization_prophetnet import (
+    VOCAB_FILES_NAMES, ProphetNetTokenizer)
 from transformers.testing_utils import require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -70,18 +69,23 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11]
+        )
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()
 
-        self.assertListEqual(tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"])
+        self.assertListEqual(
+            tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"]
+        )
 
     def test_basic_tokenizer_lower(self):
         tokenizer = BasicTokenizer(do_lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["hello", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "),
+            ["hello", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
@@ -89,7 +93,8 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["hällo", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["h\u00e9llo"])
 
@@ -97,7 +102,8 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["hallo", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
@@ -105,7 +111,8 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["hallo", "!", "how", "are", "you", "?"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
@@ -113,32 +120,47 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BasicTokenizer(do_lower_case=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
+            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "),
+            ["HeLLo", "!", "how", "Are", "yoU", "?"],
         )
 
     def test_basic_tokenizer_no_lower_strip_accents_false(self):
         tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HäLLo", "!", "how", "Are", "yoU", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["HäLLo", "!", "how", "Are", "yoU", "?"],
         )
 
     def test_basic_tokenizer_no_lower_strip_accents_true(self):
         tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HaLLo", "!", "how", "Are", "yoU", "?"]
+            tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "),
+            ["HaLLo", "!", "how", "Are", "yoU", "?"],
         )
 
     def test_basic_tokenizer_respects_never_split_tokens(self):
         tokenizer = BasicTokenizer(do_lower_case=False, never_split=["[UNK]"])
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
+            tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"),
+            ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"],
         )
 
     def test_wordpiece_tokenizer(self):
-        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
+        vocab_tokens = [
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "want",
+            "##want",
+            "##ed",
+            "wa",
+            "un",
+            "runn",
+            "##ing",
+        ]
 
         vocab = {}
         for i, token in enumerate(vocab_tokens):
@@ -147,15 +169,25 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokenizer.tokenize(""), [])
 
-        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
+        self.assertListEqual(
+            tokenizer.tokenize("unwanted running"),
+            ["un", "##want", "##ed", "runn", "##ing"],
+        )
 
-        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
+        self.assertListEqual(
+            tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"]
+        )
 
     @require_torch
     def test_prepare_batch(self):
-        tokenizer = self.tokenizer_class.from_pretrained("microsoft/prophetnet-large-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "microsoft/prophetnet-large-uncased"
+        )
 
-        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        src_text = [
+            "A long paragraph for summarization.",
+            "Another paragraph for summarization.",
+        ]
         expected_src_tokens = [1037, 2146, 20423, 2005, 7680, 7849, 3989, 1012, 102]
         batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
@@ -194,7 +226,9 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("microsoft/prophetnet-large-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained(
+            "microsoft/prophetnet-large-uncased"
+        )
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)

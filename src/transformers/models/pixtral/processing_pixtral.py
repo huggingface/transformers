@@ -20,10 +20,10 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (ProcessingKwargs, ProcessorMixin, Unpack,
+                                 _validate_images_text_input_order)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -110,7 +110,9 @@ class PixtralProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[PixtralProcessorKwargs],
@@ -172,14 +174,18 @@ class PixtralProcessor(ProcessorMixin):
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             images = [load_image(im) if isinstance(im, str) else im for im in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(
+                images, patch_size=self.patch_size, **output_kwargs["images_kwargs"]
+            )
         else:
             image_inputs = {}
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
@@ -192,13 +198,19 @@ class PixtralProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
-                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
+                    num_height_tokens = height // (
+                        self.patch_size * self.spatial_merge_size
+                    )
+                    num_width_tokens = width // (
+                        self.patch_size * self.spatial_merge_size
+                    )
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
                     # Flatten list
-                    replace_tokens = [item for sublist in replace_tokens for item in sublist]
+                    replace_tokens = [
+                        item for sublist in replace_tokens for item in sublist
+                    ]
                     replace_tokens[-1] = self.image_end_token
                     replace_str = "".join(replace_tokens)
                     replace_strings.append(replace_str)
@@ -211,7 +223,8 @@ class PixtralProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
         return BatchFeature(
-            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
+            data={**text_inputs, **image_inputs},
+            tensor_type=output_kwargs["common_kwargs"]["return_tensors"],
         )
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama

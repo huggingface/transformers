@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -79,7 +78,9 @@ class RegNetConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
-            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
+            raise ValueError(
+                f"layer_type={layer_type} is not one of {','.join(self.layer_types)}"
+            )
         self.num_channels = num_channels
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes

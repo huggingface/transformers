@@ -34,28 +34,23 @@ from datasets import load_dataset
 from filelock import FileLock
 
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    DataCollatorForSeq2Seq,
-    HfArgumentParser,
-    KerasMetricCallback,
-    PushToHubCallback,
-    TFAutoModelForSeq2SeqLM,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
-)
+from transformers import (AutoConfig, AutoTokenizer, DataCollatorForSeq2Seq,
+                          HfArgumentParser, KerasMetricCallback,
+                          PushToHubCallback, TFAutoModelForSeq2SeqLM,
+                          TFTrainingArguments, create_optimizer, set_seed)
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, is_offline_mode, send_example_telemetry
+from transformers.utils import (check_min_version, is_offline_mode,
+                                send_example_telemetry)
 from transformers.utils.versions import require_version
-
 
 # region Checking dependencies
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.51.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/summarization/requirements.txt",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,25 +74,39 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where to store the pretrained models downloaded from huggingface.co"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -127,21 +136,30 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     text_column: Optional[str] = field(
         default=None,
-        metadata={"help": "The name of the column in the datasets containing the full texts (for summarization)."},
+        metadata={
+            "help": "The name of the column in the datasets containing the full texts (for summarization)."
+        },
     )
     summary_column: Optional[str] = field(
         default=None,
-        metadata={"help": "The name of the column in the datasets containing the summaries (for summarization)."},
+        metadata={
+            "help": "The name of the column in the datasets containing the summaries (for summarization)."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines or csv file)."}
+        default=None,
+        metadata={"help": "The input training data file (a jsonlines or csv file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
@@ -158,7 +176,8 @@ class DataTrainingArguments:
         },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -246,19 +265,34 @@ class DataTrainingArguments:
         },
     )
     source_prefix: Optional[str] = field(
-        default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
+        default=None,
+        metadata={
+            "help": "A prefix to add before every source text (useful for T5 models)."
+        },
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -289,17 +323,23 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_summarization", model_args, data_args, framework="tensorflow")
+    send_example_telemetry(
+        "run_summarization", model_args, data_args, framework="tensorflow"
+    )
     # endregion
 
     # region Logging
@@ -332,14 +372,20 @@ def main():
 
     # region Detecting last checkpoint
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -396,14 +442,22 @@ def main():
     # download model & vocab.
 
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        (
+            model_args.config_name
+            if model_args.config_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (
+            model_args.tokenizer_name
+            if model_args.tokenizer_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -427,7 +481,9 @@ def main():
     # Get the column names for input/target.
     dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
     if data_args.text_column is None:
-        text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
+        text_column = (
+            dataset_columns[0] if dataset_columns is not None else column_names[0]
+        )
     else:
         text_column = data_args.text_column
         if text_column not in column_names:
@@ -435,7 +491,9 @@ def main():
                 f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
             )
     if data_args.summary_column is None:
-        summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
+        summary_column = (
+            dataset_columns[1] if dataset_columns is not None else column_names[1]
+        )
     else:
         summary_column = data_args.summary_column
         if summary_column not in column_names:
@@ -451,16 +509,27 @@ def main():
         inputs = examples[text_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
-        model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+        model_inputs = tokenizer(
+            inputs,
+            max_length=data_args.max_source_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # Tokenize targets with the `text_target` keyword argument
-        labels = tokenizer(text_target=targets, max_length=max_target_length, padding=padding, truncation=True)
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
         if padding == "max_length" and data_args.ignore_pad_token_for_loss:
             labels["input_ids"] = [
-                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+                [(l if l != tokenizer.pad_token_id else -100) for l in label]
+                for label in labels["input_ids"]
             ]
 
         model_inputs["labels"] = labels["input_ids"]
@@ -545,9 +614,13 @@ def main():
 
         # region Prepare TF Dataset objects
         if model.config.decoder_start_token_id is None:
-            raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
+            raise ValueError(
+                "Make sure that `config.decoder_start_token_id` is correctly defined"
+            )
 
-        label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+        label_pad_token_id = (
+            -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+        )
         data_collator = DataCollatorForSeq2Seq(
             tokenizer,
             model=model,
@@ -557,10 +630,14 @@ def main():
         )
 
         dataset_options = tf.data.Options()
-        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        dataset_options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.OFF
+        )
 
         num_replicas = training_args.strategy.num_replicas_in_sync
-        total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
+        total_train_batch_size = (
+            training_args.per_device_train_batch_size * num_replicas
+        )
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
 
         # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
@@ -618,7 +695,11 @@ def main():
                 data_args.val_max_target_length = data_args.max_target_length
 
             gen_kwargs = {
-                "max_length": data_args.val_max_target_length if data_args is not None else config.max_length,
+                "max_length": (
+                    data_args.val_max_target_length
+                    if data_args is not None
+                    else config.max_length
+                ),
                 "num_beams": data_args.num_beams,
                 "no_repeat_ngram_size": 0,  # Not supported under XLA right now, and some models set it by default
             }
@@ -627,13 +708,26 @@ def main():
                 predictions, labels = preds
                 if isinstance(predictions, tuple):
                     predictions = predictions[0]
-                decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+                decoded_preds = tokenizer.batch_decode(
+                    predictions, skip_special_tokens=True
+                )
                 labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-                decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-                decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                metrics = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+                decoded_labels = tokenizer.batch_decode(
+                    labels, skip_special_tokens=True
+                )
+                decoded_preds, decoded_labels = postprocess_text(
+                    decoded_preds, decoded_labels
+                )
+                metrics = metric.compute(
+                    predictions=decoded_preds,
+                    references=decoded_labels,
+                    use_stemmer=True,
+                )
                 # Only print the mid f-measures, but there are a lot of other statistics in there too!
-                metrics = {key: round(val.mid.fmeasure * 100, 4) for key, val in metrics.items()}
+                metrics = {
+                    key: round(val.mid.fmeasure * 100, 4)
+                    for key, val in metrics.items()
+                }
                 return metrics
 
             # The KerasMetricCallback allows metrics that are too complex to write as standard Keras metrics
@@ -659,16 +753,23 @@ def main():
         model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             if data_args.dataset_name is not None:
-                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+                push_to_hub_model_id = (
+                    f"{model_name}-finetuned-{data_args.dataset_name}"
+                )
             else:
                 push_to_hub_model_id = f"{model_name}-finetuned-summarization"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        model_card_kwargs = {
+            "finetuned_from": model_args.model_name_or_path,
+            "tasks": "summarization",
+        }
         if data_args.dataset_name is not None:
             model_card_kwargs["dataset_tags"] = data_args.dataset_name
             if data_args.dataset_config_name is not None:
                 model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+                model_card_kwargs["dataset"] = (
+                    f"{data_args.dataset_name} {data_args.dataset_config_name}"
+                )
             else:
                 model_card_kwargs["dataset"] = data_args.dataset_name
 
@@ -694,7 +795,9 @@ def main():
             logger.info("***** Running training *****")
             logger.info(f"  Num examples = {len(train_dataset)}")
             logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
-            logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+            logger.info(
+                f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}"
+            )
             logger.info(f"  Total train batch size = {total_train_batch_size}")
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
@@ -703,7 +806,11 @@ def main():
                     "XLA training may be slow at first when --pad_to_max_length is not set "
                     "until all possible shapes have been compiled."
                 )
-            history = model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            history = model.fit(
+                tf_train_dataset,
+                epochs=int(training_args.num_train_epochs),
+                callbacks=callbacks,
+            )
             eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
@@ -723,21 +830,32 @@ def main():
                 generated_tokens = generate(**batch)
                 if isinstance(generated_tokens, tuple):
                     generated_tokens = generated_tokens[0]
-                decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+                decoded_preds = tokenizer.batch_decode(
+                    generated_tokens, skip_special_tokens=True
+                )
                 labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-                decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-                decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+                decoded_labels = tokenizer.batch_decode(
+                    labels, skip_special_tokens=True
+                )
+                decoded_preds, decoded_labels = postprocess_text(
+                    decoded_preds, decoded_labels
+                )
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
 
             eval_metrics = metric.compute(use_stemmer=True)
 
-            result = {key: round(val.mid.fmeasure * 100, 4) for key, val in eval_metrics.items()}
+            result = {
+                key: round(val.mid.fmeasure * 100, 4)
+                for key, val in eval_metrics.items()
+            }
             logger.info(result)
         # endregion
 
         if training_args.output_dir is not None and eval_metrics is not None:
-            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            output_eval_file = os.path.join(
+                training_args.output_dir, "all_results.json"
+            )
             with open(output_eval_file, "w") as writer:
                 writer.write(json.dumps(eval_metrics))
 

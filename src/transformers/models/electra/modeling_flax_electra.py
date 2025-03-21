@@ -28,25 +28,17 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
 from ...modeling_flax_outputs import (
-    FlaxBaseModelOutput,
-    FlaxBaseModelOutputWithPastAndCrossAttentions,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxMaskedLMOutput,
-    FlaxMultipleChoiceModelOutput,
-    FlaxQuestionAnsweringModelOutput,
-    FlaxSequenceClassifierOutput,
-    FlaxTokenClassifierOutput,
-)
-from ...modeling_flax_utils import (
-    ACT2FN,
-    FlaxPreTrainedModel,
-    append_call_sample_docstring,
-    append_replace_return_docstrings,
-    overwrite_call_docstring,
-)
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+    FlaxBaseModelOutput, FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions, FlaxMaskedLMOutput,
+    FlaxMultipleChoiceModelOutput, FlaxQuestionAnsweringModelOutput,
+    FlaxSequenceClassifierOutput, FlaxTokenClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring,
+                                    append_replace_return_docstrings,
+                                    overwrite_call_docstring)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging)
 from .configuration_electra import ElectraConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -153,23 +145,38 @@ class FlaxElectraEmbeddings(nn.Module):
         self.word_embeddings = nn.Embed(
             self.config.vocab_size,
             self.config.embedding_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.embedding_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.embedding_size,
-            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            embedding_init=jax.nn.initializers.normal(
+                stddev=self.config.initializer_range
+            ),
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings.__call__
-    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
+    def __call__(
+        self,
+        input_ids,
+        token_type_ids,
+        position_ids,
+        attention_mask,
+        deterministic: bool = True,
+    ):
         # Embed
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
         position_embeds = self.position_embeddings(position_ids.astype("i4"))
@@ -216,14 +223,19 @@ class FlaxElectraSelfAttention(nn.Module):
 
         if self.causal:
             self.causal_mask = make_causal_mask(
-                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"), dtype="bool"
+                jnp.ones((1, self.config.max_position_embeddings), dtype="bool"),
+                dtype="bool",
             )
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.config.num_attention_heads, self.head_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, self.head_dim)
+        )
 
     def _merge_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.config.hidden_size,))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.config.hidden_size,)
+        )
 
     @nn.compact
     # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention._concatenate_to_cache
@@ -235,9 +247,15 @@ class FlaxElectraSelfAttention(nn.Module):
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
-        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+        cached_key = self.variable(
+            "cache", "cached_key", jnp.zeros, key.shape, key.dtype
+        )
+        cached_value = self.variable(
+            "cache", "cached_value", jnp.zeros, value.shape, value.dtype
+        )
+        cache_index = self.variable(
+            "cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32)
+        )
 
         if is_initialized:
             *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
@@ -296,15 +314,21 @@ class FlaxElectraSelfAttention(nn.Module):
                 mask_shift = self.variables["cache"]["cache_index"]
                 max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
                 causal_mask = lax.dynamic_slice(
-                    self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
+                    self.causal_mask,
+                    (0, 0, mask_shift, 0),
+                    (1, 1, query_length, max_decoder_length),
                 )
             else:
                 causal_mask = self.causal_mask[:, :, :query_length, :key_length]
-            causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+            causal_mask = jnp.broadcast_to(
+                causal_mask, (batch_size,) + causal_mask.shape[1:]
+            )
 
         # combine masks if needed
         if attention_mask is not None and self.causal:
-            attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+            attention_mask = jnp.broadcast_to(
+                jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape
+            )
             attention_mask = combine_masks(attention_mask, causal_mask)
         elif self.causal:
             attention_mask = causal_mask
@@ -324,7 +348,9 @@ class FlaxElectraSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(
+                    self.dtype
+                ),
             )
         else:
             attention_bias = None
@@ -367,7 +393,9 @@ class FlaxElectraSelfOutput(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
@@ -384,7 +412,9 @@ class FlaxElectraAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.self = FlaxElectraSelfAttention(self.config, causal=self.causal, dtype=self.dtype)
+        self.self = FlaxElectraSelfAttention(
+            self.config, causal=self.causal, dtype=self.dtype
+        )
         self.output = FlaxElectraSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(
@@ -410,7 +440,9 @@ class FlaxElectraAttention(nn.Module):
             output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
-        hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
+        hidden_states = self.output(
+            attn_output, hidden_states, deterministic=deterministic
+        )
 
         outputs = (hidden_states,)
 
@@ -451,7 +483,9 @@ class FlaxElectraOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -466,11 +500,15 @@ class FlaxElectraLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.attention = FlaxElectraAttention(self.config, causal=self.config.is_decoder, dtype=self.dtype)
+        self.attention = FlaxElectraAttention(
+            self.config, causal=self.config.is_decoder, dtype=self.dtype
+        )
         self.intermediate = FlaxElectraIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxElectraOutput(self.config, dtype=self.dtype)
         if self.config.add_cross_attention:
-            self.crossattention = FlaxElectraAttention(self.config, causal=False, dtype=self.dtype)
+            self.crossattention = FlaxElectraAttention(
+                self.config, causal=False, dtype=self.dtype
+            )
 
     def __call__(
         self,
@@ -507,7 +545,9 @@ class FlaxElectraLayer(nn.Module):
             attention_output = cross_attention_outputs[0]
 
         hidden_states = self.intermediate(attention_output)
-        hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
+        hidden_states = self.output(
+            hidden_states, attention_output, deterministic=deterministic
+        )
 
         outputs = (hidden_states,)
 
@@ -526,7 +566,9 @@ class FlaxElectraLayerCollection(nn.Module):
 
     def setup(self):
         if self.gradient_checkpointing:
-            FlaxElectraCheckpointLayer = remat(FlaxElectraLayer, static_argnums=(5, 6, 7))
+            FlaxElectraCheckpointLayer = remat(
+                FlaxElectraLayer, static_argnums=(5, 6, 7)
+            )
             self.layers = [
                 FlaxElectraCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
                 for i in range(self.config.num_hidden_layers)
@@ -552,7 +594,9 @@ class FlaxElectraLayerCollection(nn.Module):
     ):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = (
+            () if (output_attentions and encoder_hidden_states is not None) else None
+        )
 
         # Check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
@@ -588,7 +632,12 @@ class FlaxElectraLayerCollection(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        outputs = (hidden_states, all_hidden_states, all_attentions, all_cross_attentions)
+        outputs = (
+            hidden_states,
+            all_hidden_states,
+            all_attentions,
+            all_cross_attentions,
+        )
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
@@ -646,7 +695,9 @@ class FlaxElectraGeneratorPredictions(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.dense = nn.Dense(self.config.embedding_size, dtype=self.dtype)
 
     def __call__(self, hidden_states):
@@ -693,8 +744,20 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         gradient_checkpointing: bool = False,
         **kwargs,
     ):
-        module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        module = self.module_class(
+            config=config,
+            dtype=dtype,
+            gradient_checkpointing=gradient_checkpointing,
+            **kwargs,
+        )
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.enable_gradient_checkpointing
     def enable_gradient_checkpointing(self):
@@ -705,13 +768,19 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_weights
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape
+        )
         attention_mask = jnp.ones_like(input_ids)
-        head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+        head_mask = jnp.ones(
+            (self.config.num_hidden_layers, self.config.num_attention_heads)
+        )
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
@@ -732,7 +801,13 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
             )
         else:
             module_init_outputs = self.module.init(
-                rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+                rngs,
+                input_ids,
+                attention_mask,
+                token_type_ids,
+                position_ids,
+                head_mask,
+                return_dict=False,
             )
 
         random_params = module_init_outputs["params"]
@@ -760,14 +835,23 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         # init input variables to retrieve cache
         input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         attention_mask = jnp.ones_like(input_ids, dtype="i4")
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+        )
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0),
+            input_ids,
+            attention_mask,
+            position_ids,
+            return_dict=False,
+            init_cache=True,
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     def __call__(
         self,
         input_ids,
@@ -785,24 +869,36 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
         past_key_values: dict = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         # init input tensors if not passed
         if token_type_ids is None:
             token_type_ids = jnp.ones_like(input_ids)
 
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
 
         if head_mask is None:
-            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+            head_mask = jnp.ones(
+                (self.config.num_hidden_layers, self.config.num_attention_heads)
+            )
 
         # Handle any PRNG if needed
         rngs = {}
@@ -845,7 +941,9 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
                 return outputs
             elif past_key_values is not None and not return_dict:
                 outputs, past_key_values = outputs
-                outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+                outputs = (
+                    outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
+                )
 
         else:
             outputs = self.module.apply(
@@ -873,9 +971,13 @@ class FlaxElectraModule(nn.Module):
     def setup(self):
         self.embeddings = FlaxElectraEmbeddings(self.config, dtype=self.dtype)
         if self.config.embedding_size != self.config.hidden_size:
-            self.embeddings_project = nn.Dense(self.config.hidden_size, dtype=self.dtype)
+            self.embeddings_project = nn.Dense(
+                self.config.hidden_size, dtype=self.dtype
+            )
         self.encoder = FlaxElectraEncoder(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
     def __call__(
@@ -894,7 +996,11 @@ class FlaxElectraModule(nn.Module):
         return_dict: bool = True,
     ):
         embeddings = self.embeddings(
-            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
+            input_ids,
+            token_type_ids,
+            position_ids,
+            attention_mask,
+            deterministic=deterministic,
         )
         if hasattr(self, "embeddings_project"):
             embeddings = self.embeddings_project(embeddings)
@@ -921,7 +1027,9 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
 
 
-append_call_sample_docstring(FlaxElectraModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxElectraModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
+)
 
 
 class FlaxElectraTiedDense(nn.Module):
@@ -953,11 +1061,17 @@ class FlaxElectraForMaskedLMModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config, dtype=self.dtype)
+        self.generator_predictions = FlaxElectraGeneratorPredictions(
+            config=self.config, dtype=self.dtype
+        )
         if self.config.tie_word_embeddings:
-            self.generator_lm_head = FlaxElectraTiedDense(self.config.vocab_size, dtype=self.dtype)
+            self.generator_lm_head = FlaxElectraTiedDense(
+                self.config.vocab_size, dtype=self.dtype
+            )
         else:
             self.generator_lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
 
@@ -988,8 +1102,12 @@ class FlaxElectraForMaskedLMModule(nn.Module):
         prediction_scores = self.generator_predictions(hidden_states)
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.electra.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
-            prediction_scores = self.generator_lm_head(prediction_scores, shared_embedding.T)
+            shared_embedding = self.electra.variables["params"]["embeddings"][
+                "word_embeddings"
+            ]["embedding"]
+            prediction_scores = self.generator_lm_head(
+                prediction_scores, shared_embedding.T
+            )
         else:
             prediction_scores = self.generator_lm_head(prediction_scores)
 
@@ -1003,12 +1121,16 @@ class FlaxElectraForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""Electra Model with a `language modeling` head on top.""", ELECTRA_START_DOCSTRING)
+@add_start_docstrings(
+    """Electra Model with a `language modeling` head on top.""", ELECTRA_START_DOCSTRING
+)
 class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMaskedLMModule
 
 
-append_call_sample_docstring(FlaxElectraForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxElectraForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
+)
 
 
 class FlaxElectraForPreTrainingModule(nn.Module):
@@ -1018,9 +1140,13 @@ class FlaxElectraForPreTrainingModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.discriminator_predictions = FlaxElectraDiscriminatorPredictions(config=self.config, dtype=self.dtype)
+        self.discriminator_predictions = FlaxElectraDiscriminatorPredictions(
+            config=self.config, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -1092,10 +1218,13 @@ FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxElectraForPreTraining,
-    ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length") + FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING,
+    ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    + FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING,
 )
 append_replace_return_docstrings(
-    FlaxElectraForPreTraining, output_type=FlaxElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    FlaxElectraForPreTraining,
+    output_type=FlaxElectraForPreTrainingOutput,
+    config_class=_CONFIG_FOR_DOC,
 )
 
 
@@ -1106,7 +1235,9 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         classifier_dropout = (
             self.config.classifier_dropout
@@ -1214,14 +1345,22 @@ class FlaxElectraSequenceSummary(nn.Module):
             self.summary = nn.Dense(num_classes, dtype=self.dtype)
 
         activation_string = getattr(self.config, "summary_activation", None)
-        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x  # noqa F407
+        self.activation = (
+            ACT2FN[activation_string] if activation_string else lambda x: x
+        )  # noqa F407
 
         self.first_dropout = identity
-        if hasattr(self.config, "summary_first_dropout") and self.config.summary_first_dropout > 0:
+        if (
+            hasattr(self.config, "summary_first_dropout")
+            and self.config.summary_first_dropout > 0
+        ):
             self.first_dropout = nn.Dropout(self.config.summary_first_dropout)
 
         self.last_dropout = identity
-        if hasattr(self.config, "summary_last_dropout") and self.config.summary_last_dropout > 0:
+        if (
+            hasattr(self.config, "summary_last_dropout")
+            and self.config.summary_last_dropout > 0
+        ):
             self.last_dropout = nn.Dropout(self.config.summary_last_dropout)
 
     def __call__(self, hidden_states, cls_index=None, deterministic: bool = True):
@@ -1253,9 +1392,13 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.sequence_summary = FlaxElectraSequenceSummary(config=self.config, dtype=self.dtype)
+        self.sequence_summary = FlaxElectraSequenceSummary(
+            config=self.config, dtype=self.dtype
+        )
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
     def __call__(
@@ -1271,10 +1414,26 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
         return_dict: bool = True,
     ):
         num_choices = input_ids.shape[1]
-        input_ids = input_ids.reshape(-1, input_ids.shape[-1]) if input_ids is not None else None
-        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1]) if attention_mask is not None else None
-        token_type_ids = token_type_ids.reshape(-1, token_type_ids.shape[-1]) if token_type_ids is not None else None
-        position_ids = position_ids.reshape(-1, position_ids.shape[-1]) if position_ids is not None else None
+        input_ids = (
+            input_ids.reshape(-1, input_ids.shape[-1])
+            if input_ids is not None
+            else None
+        )
+        attention_mask = (
+            attention_mask.reshape(-1, attention_mask.shape[-1])
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.reshape(-1, token_type_ids.shape[-1])
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.reshape(-1, position_ids.shape[-1])
+            if position_ids is not None
+            else None
+        )
 
         # Model
         outputs = self.electra(
@@ -1289,7 +1448,9 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]
-        pooled_output = self.sequence_summary(hidden_states, deterministic=deterministic)
+        pooled_output = self.sequence_summary(
+            hidden_states, deterministic=deterministic
+        )
         logits = self.classifier(pooled_output)
 
         reshaped_logits = logits.reshape(-1, num_choices)
@@ -1317,7 +1478,8 @@ class FlaxElectraForMultipleChoice(FlaxElectraPreTrainedModel):
 
 # adapt docstring slightly for FlaxElectraForMultipleChoice
 overwrite_call_docstring(
-    FlaxElectraForMultipleChoice, ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    FlaxElectraForMultipleChoice,
+    ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"),
 )
 append_call_sample_docstring(
     FlaxElectraForMultipleChoice,
@@ -1334,7 +1496,9 @@ class FlaxElectraForQuestionAnsweringModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
@@ -1418,7 +1582,9 @@ class FlaxElectraClassificationHead(nn.Module):
         x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x, deterministic=deterministic)
         x = self.dense(x)
-        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu
+        x = ACT2FN["gelu"](
+            x
+        )  # although BERT uses tanh here, it seems Electra authors used gelu
         x = self.dropout(x, deterministic=deterministic)
         x = self.out_proj(x)
         return x
@@ -1431,9 +1597,13 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.classifier = FlaxElectraClassificationHead(config=self.config, dtype=self.dtype)
+        self.classifier = FlaxElectraClassificationHead(
+            config=self.config, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -1498,11 +1668,17 @@ class FlaxElectraForCausalLMModule(nn.Module):
 
     def setup(self):
         self.electra = FlaxElectraModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.generator_predictions = FlaxElectraGeneratorPredictions(config=self.config, dtype=self.dtype)
+        self.generator_predictions = FlaxElectraGeneratorPredictions(
+            config=self.config, dtype=self.dtype
+        )
         if self.config.tie_word_embeddings:
-            self.generator_lm_head = FlaxElectraTiedDense(self.config.vocab_size, dtype=self.dtype)
+            self.generator_lm_head = FlaxElectraTiedDense(
+                self.config.vocab_size, dtype=self.dtype
+            )
         else:
             self.generator_lm_head = nn.Dense(self.config.vocab_size, dtype=self.dtype)
 
@@ -1539,8 +1715,12 @@ class FlaxElectraForCausalLMModule(nn.Module):
         prediction_scores = self.generator_predictions(hidden_states)
 
         if self.config.tie_word_embeddings:
-            shared_embedding = self.electra.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
-            prediction_scores = self.generator_lm_head(prediction_scores, shared_embedding.T)
+            shared_embedding = self.electra.variables["params"]["embeddings"][
+                "word_embeddings"
+            ]["embedding"]
+            prediction_scores = self.generator_lm_head(
+                prediction_scores, shared_embedding.T
+            )
         else:
             prediction_scores = self.generator_lm_head(prediction_scores)
 
@@ -1566,7 +1746,9 @@ class FlaxElectraForCausalLMModule(nn.Module):
 class FlaxElectraForCausalLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
+    def prepare_inputs_for_generation(
+        self, input_ids, max_length, attention_mask: Optional[jax.Array] = None
+    ):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -1577,9 +1759,13 @@ class FlaxElectraForCausalLM(FlaxElectraPreTrainedModel):
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(axis=-1) - 1
-            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+            extended_attention_mask = lax.dynamic_update_slice(
+                extended_attention_mask, attention_mask, (0, 0)
+            )
         else:
-            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+            position_ids = jnp.broadcast_to(
+                jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length)
+            )
 
         return {
             "past_key_values": past_key_values,

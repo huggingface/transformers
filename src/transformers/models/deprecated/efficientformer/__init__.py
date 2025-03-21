@@ -13,14 +13,9 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ....utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_tf_available,
-    is_torch_available,
-    is_vision_available,
-)
-
+from ....utils import (OptionalDependencyNotAvailable, _LazyModule,
+                       is_tf_available, is_torch_available,
+                       is_vision_available)
 
 _import_structure = {"configuration_efficientformer": ["EfficientFormerConfig"]}
 
@@ -30,7 +25,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_efficientformer"] = ["EfficientFormerImageProcessor"]
+    _import_structure["image_processing_efficientformer"] = [
+        "EfficientFormerImageProcessor"
+    ]
 
 try:
     if not is_torch_available():
@@ -67,7 +64,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_efficientformer import EfficientFormerImageProcessor
+        from .image_processing_efficientformer import \
+            EfficientFormerImageProcessor
 
     try:
         if not is_torch_available():
@@ -78,9 +76,7 @@ if TYPE_CHECKING:
         from .modeling_efficientformer import (
             EfficientFormerForImageClassification,
             EfficientFormerForImageClassificationWithTeacher,
-            EfficientFormerModel,
-            EfficientFormerPreTrainedModel,
-        )
+            EfficientFormerModel, EfficientFormerPreTrainedModel)
     try:
         if not is_tf_available():
             raise OptionalDependencyNotAvailable()
@@ -90,11 +86,11 @@ if TYPE_CHECKING:
         from .modeling_tf_efficientformer import (
             TFEfficientFormerForImageClassification,
             TFEfficientFormerForImageClassificationWithTeacher,
-            TFEfficientFormerModel,
-            TFEfficientFormerPreTrainedModel,
-        )
+            TFEfficientFormerModel, TFEfficientFormerPreTrainedModel)
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

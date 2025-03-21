@@ -22,33 +22,22 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
-from ...modeling_tf_outputs import (
-    TFBaseModelOutputWithPast,
-    TFCausalLMOutputWithPast,
-    TFQuestionAnsweringModelOutput,
-    TFSequenceClassifierOutputWithPast,
-)
-from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
-    TFModelInputType,
-    TFPreTrainedModel,
-    TFQuestionAnsweringLoss,
-    TFSequenceClassificationLoss,
-    TFSharedEmbeddings,
-    get_initializer,
-    keras,
-    keras_serializable,
-    unpack_inputs,
-)
-from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
+from ...file_utils import (add_code_sample_docstrings, add_start_docstrings,
+                           add_start_docstrings_to_model_forward)
+from ...modeling_tf_outputs import (TFBaseModelOutputWithPast,
+                                    TFCausalLMOutputWithPast,
+                                    TFQuestionAnsweringModelOutput,
+                                    TFSequenceClassifierOutputWithPast)
+from ...modeling_tf_utils import (TFCausalLanguageModelingLoss,
+                                  TFModelInputType, TFPreTrainedModel,
+                                  TFQuestionAnsweringLoss,
+                                  TFSequenceClassificationLoss,
+                                  TFSharedEmbeddings, get_initializer, keras,
+                                  keras_serializable, unpack_inputs)
+from ...tf_utils import (check_embeddings_within_bounds, shape_list,
+                         stable_softmax)
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -58,7 +47,10 @@ _CONFIG_FOR_DOC = "GPTJConfig"
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
     inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
-    sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", tf.range(num_pos, dtype=tf.float32), inv_freq), tf.float32)
+    sinusoid_inp = tf.cast(
+        tf.einsum("i , j -> i j", tf.range(num_pos, dtype=tf.float32), inv_freq),
+        tf.float32,
+    )
     sin, cos = tf.sin(sinusoid_inp), tf.cos(sinusoid_inp)
     out = tf.concat((sin, cos), axis=1)
     return out
@@ -66,7 +58,9 @@ def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((-x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
-    new_shape = shape_list(rotate_half_tensor)[:-2] + [tf.math.reduce_prod(shape_list(rotate_half_tensor)[-2:])]
+    new_shape = shape_list(rotate_half_tensor)[:-2] + [
+        tf.math.reduce_prod(shape_list(rotate_half_tensor)[-2:])
+    ]
     rotate_half_tensor = tf.reshape(rotate_half_tensor, new_shape)
     return rotate_half_tensor
 
@@ -123,14 +117,26 @@ class TFGPTJAttention(keras.layers.Layer):
 
         self.max_positions = config.max_position_embeddings
         self.lower_triangle_mask = tf.reshape(
-            tf.cast(tf.experimental.numpy.tril(tf.ones((self.max_positions, self.max_positions))), tf.int8),
+            tf.cast(
+                tf.experimental.numpy.tril(
+                    tf.ones((self.max_positions, self.max_positions))
+                ),
+                tf.int8,
+            ),
             (1, 1, self.max_positions, self.max_positions),
         )
         pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = create_sinusoidal_positions(self.max_positions, pos_embd_dim)
+        self.embed_positions = create_sinusoidal_positions(
+            self.max_positions, pos_embd_dim
+        )
 
     def get_causal_mask(self, key_length, query_length) -> tf.Tensor:
-        return tf.cast(self.lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
+        return tf.cast(
+            self.lower_triangle_mask[
+                :, :, key_length - query_length : key_length, :key_length
+            ],
+            tf.bool,
+        )
 
     @staticmethod
     def get_masked_bias(dtype: tf.DType) -> tf.Tensor:
@@ -140,15 +146,24 @@ class TFGPTJAttention(keras.layers.Layer):
         """
         Splits hidden dim into attn_head_size and num_attention_heads
         """
-        new_shape = shape_list(hidden_states)[:-1] + [self.num_attention_heads, self.head_dim]
+        new_shape = shape_list(hidden_states)[:-1] + [
+            self.num_attention_heads,
+            self.head_dim,
+        ]
         hidden_states = tf.reshape(hidden_states, new_shape)
         if rotary:
             return hidden_states
         if len(shape_list(hidden_states)) == 4:
-            return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
+            return tf.transpose(
+                hidden_states, (0, 2, 1, 3)
+            )  # (batch, head, seq_length, head_features)
         if len(shape_list(hidden_states)) == 5:
-            return tf.transpose(hidden_states, (0, 1, 3, 2, 4))  # (batch, blocks, head, block_length, head_features)
-        raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}")
+            return tf.transpose(
+                hidden_states, (0, 1, 3, 2, 4)
+            )  # (batch, blocks, head, block_length, head_features)
+        raise ValueError(
+            f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}"
+        )
 
     def _merge_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
         """
@@ -159,8 +174,12 @@ class TFGPTJAttention(keras.layers.Layer):
         elif len(shape_list(hidden_states)) == 5:
             hidden_states = tf.transpose(hidden_states, (0, 1, 3, 2, 4))
         else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}")
-        new_shape = shape_list(hidden_states)[:-2] + [self.num_attention_heads * self.head_dim]
+            raise ValueError(
+                f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}"
+            )
+        new_shape = shape_list(hidden_states)[:-2] + [
+            self.num_attention_heads * self.head_dim
+        ]
         return tf.reshape(hidden_states, new_shape)
 
     def _attn(
@@ -180,7 +199,9 @@ class TFGPTJAttention(keras.layers.Layer):
         key = tf.cast(key, tf.float32)
 
         attn_weights = tf.matmul(query, key, transpose_b=True)
-        attn_weights = tf.where(causal_mask, attn_weights, self.get_masked_bias(attn_weights.dtype))
+        attn_weights = tf.where(
+            causal_mask, attn_weights, self.get_masked_bias(attn_weights.dtype)
+        )
 
         attn_weights = attn_weights / self.scale_attn
 
@@ -218,7 +239,9 @@ class TFGPTJAttention(keras.layers.Layer):
         key = self._split_heads(key, True)
         value = self._split_heads(value, False)
 
-        sincos = tf.cast(tf.gather(self.embed_positions, position_ids, axis=0), hidden_states.dtype)
+        sincos = tf.cast(
+            tf.gather(self.embed_positions, position_ids, axis=0), hidden_states.dtype
+        )
         sincos = tf.split(sincos, 2, axis=-1)
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
@@ -251,7 +274,9 @@ class TFGPTJAttention(keras.layers.Layer):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(
+            query, key, value, attention_mask, head_mask
+        )
 
         attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
@@ -287,10 +312,14 @@ class TFGPTJMLP(keras.layers.Layer):
         embed_dim = config.n_embd
 
         self.fc_in = keras.layers.Dense(
-            intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="fc_in"
+            intermediate_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="fc_in",
         )
         self.fc_out = keras.layers.Dense(
-            embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="fc_out"
+            embed_dim,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="fc_out",
         )
 
         self.act = get_tf_activation(config.activation_function)
@@ -321,7 +350,9 @@ class TFGPTJBlock(keras.layers.Layer):
     def __init__(self, config: GPTJConfig, **kwargs):
         super().__init__(**kwargs)
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
-        self.ln_1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
+        self.ln_1 = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_epsilon, name="ln_1"
+        )
         self.attn = TFGPTJAttention(config, name="attn")
         self.mlp = TFGPTJMLP(inner_dim, config, name="mlp")
         self.config = config
@@ -393,11 +424,16 @@ class TFGPTJMainLayer(keras.layers.Layer):
         self.initializer_range = config.initializer_range
 
         self.wte = TFSharedEmbeddings(
-            config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
+            config.vocab_size,
+            config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="wte",
         )
         self.drop = keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFGPTJBlock(config, name=f"h_._{i}") for i in range(config.n_layer)]
-        self.ln_f = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+        self.ln_f = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_epsilon, name="ln_f"
+        )
         self.embed_dim = config.n_embd
 
     def get_input_embeddings(self):
@@ -430,7 +466,9 @@ class TFGPTJMainLayer(keras.layers.Layer):
         training=False,
     ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = shape_list(input_ids)
             input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
@@ -446,7 +484,9 @@ class TFGPTJMainLayer(keras.layers.Layer):
             past_length = shape_list(past_key_values[0][0])[-2]
 
         if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(past_length, input_shape[-1] + past_length), axis=0)
+            position_ids = tf.expand_dims(
+                tf.range(past_length, input_shape[-1] + past_length), axis=0
+            )
 
         if attention_mask is not None:
             # We create a 3D attention mask from a 2D tensor mask.
@@ -455,7 +495,9 @@ class TFGPTJMainLayer(keras.layers.Layer):
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask_shape = shape_list(attention_mask)
-            attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
+            attention_mask = tf.reshape(
+                attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+            )
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
@@ -464,7 +506,9 @@ class TFGPTJMainLayer(keras.layers.Layer):
             # effectively the same as removing these entirely.
             one_cst = tf.constant(1.0)
             attention_mask = tf.cast(attention_mask, dtype=one_cst.dtype)
-            attention_mask = tf.multiply(tf.subtract(one_cst, attention_mask), tf.constant(-10000.0))
+            attention_mask = tf.multiply(
+                tf.subtract(one_cst, attention_mask), tf.constant(-10000.0)
+            )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -484,7 +528,9 @@ class TFGPTJMainLayer(keras.layers.Layer):
             inputs_embeds = self.wte(input_ids, mode="embedding")
 
         if token_type_ids is not None:
-            token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
+            token_type_ids = tf.reshape(
+                token_type_ids, [-1, shape_list(token_type_ids)[-1]]
+            )
             token_type_embeds = self.wte(token_type_ids, mode="embedding")
         else:
             token_type_embeds = tf.constant(0.0)
@@ -500,7 +546,9 @@ class TFGPTJMainLayer(keras.layers.Layer):
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
+                all_hidden_states = all_hidden_states + (
+                    tf.reshape(hidden_states, output_shape),
+                )
 
             outputs = block(
                 hidden_states=hidden_states,
@@ -529,11 +577,19 @@ class TFGPTJMainLayer(keras.layers.Layer):
 
         if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
-            attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
-            all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
+            attention_output_shape = (
+                input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
+            )
+            all_attentions = tuple(
+                tf.reshape(t, attention_output_shape) for t in all_attentions
+            )
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, presents, all_hidden_states, all_attentions]
+                if v is not None
+            )
 
         return TFBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -749,7 +805,9 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPTJMainLayer(config, name="transformer")
         self.lm_head = keras.layers.Dense(
-            config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
+            config.vocab_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="lm_head",
         )
         self.config = config
 
@@ -759,7 +817,9 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, inputs, past_key_values=None, use_cache=None, **kwargs
+    ):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
@@ -785,7 +845,9 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         }
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
@@ -877,8 +939,14 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     """,
     GPTJ_START_DOCSTRING,
 )
-class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassificationLoss):
-    _keys_to_ignore_on_load_missing = [r"h.\d+.attn.masked_bias", r"h.\d+.attn.bias", r"lm_head.weight"]
+class TFGPTJForSequenceClassification(
+    TFGPTJPreTrainedModel, TFSequenceClassificationLoss
+):
+    _keys_to_ignore_on_load_missing = [
+        r"h.\d+.attn.masked_bias",
+        r"h.\d+.attn.bias",
+        r"lm_head.weight",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -893,7 +961,9 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutputWithPast,
@@ -921,8 +991,14 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        if labels is not None and self.config.pad_token_id is None and input_ids.shape[0] != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+        if (
+            labels is not None
+            and self.config.pad_token_id is None
+            and input_ids.shape[0] != 1
+        ):
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
 
         transformer_outputs = self.transformer(
             input_ids=input_ids,
@@ -948,8 +1024,12 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         else:
             if input_ids is not None:
                 token_indices = tf.range(shape_list(input_ids)[-1])
-                non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
-                last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
+                non_pad_mask = tf.cast(
+                    input_ids != self.config.pad_token_id, token_indices.dtype
+                )
+                last_non_pad_token = tf.reduce_max(
+                    token_indices * non_pad_mask, axis=-1
+                )
             else:
                 last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
                 logger.warning_once(
@@ -962,9 +1042,14 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
 
         if labels is not None:
             if self.config.pad_token_id is None and logits_shape[0] != 1:
-                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+                raise ValueError(
+                    "Cannot handle batch sizes > 1 if no padding token is defined."
+                )
 
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(pooled_logits, [-1, self.num_labels]))
+            loss = self.hf_compute_loss(
+                tf.reshape(labels, [-1]),
+                tf.reshape(pooled_logits, [-1, self.num_labels]),
+            )
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -998,19 +1083,27 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
     GPTJ_START_DOCSTRING,
 )
 class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss):
-    _keys_to_ignore_on_load_missing = [r"h.\d+.attn.masked_bias", r"h.\d+.attn.bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [
+        r"h.\d+.attn.masked_bias",
+        r"h.\d+.attn.bias",
+        r"lm_head.weight",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.transformer = TFGPTJMainLayer(config, name="transformer")
         self.qa_outputs = keras.layers.Dense(
-            self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+            self.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="qa_outputs",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
