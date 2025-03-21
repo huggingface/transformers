@@ -567,7 +567,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
@@ -598,6 +598,11 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         generation_config = GenerationConfig(max_new_tokens=5, min_new_tokens=5)
         out = model.generate(**inputs, generation_config=generation_config)
+
+        out = model.generate(**inputs, generation_config=generation_config, do_sample=False)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
         # Generation works beyond sliding window
         self.assertGreater(out.shape[1], model.config.sliding_window)
