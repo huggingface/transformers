@@ -1009,6 +1009,49 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        pixel_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        use_cache=True,
+        logits_to_keep=None,
+        labels=None,
+        **kwargs,
+    ):
+        # Overwritten -- custom `position_ids` and `pixel_values` handling
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cache_position=cache_position,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            token_type_ids=token_type_ids,
+            **kwargs,
+        )
+
+        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
+        if cache_position[0] == 0:
+            model_inputs["pixel_values"] = pixel_values
+        is_training = token_type_ids is not None and labels is not None
+        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+            input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
+            causal_mask = self._update_causal_mask(
+                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
+            )
+            model_inputs["attention_mask"] = causal_mask
+
+        return model_inputs
+
 
 __all__ = [
     "Gemma3Config",
