@@ -148,7 +148,7 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "deepseek_vl"
 
 
-class DeepseekVLModel(DeepseekVLPreTrainedModel):
+class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
@@ -204,8 +204,6 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             images_embeds = images_embeds.to(inputs_embeds)
             inputs_embeds[images_seq_mask] = images_embeds
 
-        show_tensor(inputs_embeds, name="inputs_embeds")
-
         return self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -217,46 +215,4 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-
-
-class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.config = config
-        self.model = DeepseekVLModel(config)
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        images_seq_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ):
-        self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            images_seq_mask=images_seq_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-        )
-
-
-
 
