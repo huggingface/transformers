@@ -711,8 +711,8 @@ class TrainingArguments:
             Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
-        hub_revision (`str`, *optional*):
-            TODO: message here
+        gradient_checkpointing (`bool`, *optional*, defaults to `False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
@@ -1387,10 +1387,6 @@ class TrainingArguments:
     hub_always_push: bool = field(
         default=False,
         metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
-    )
-    hub_always_push: Optional[str] = field(
-        default=None,
-        metadata={"help": "TODO: message here"},
     )
     gradient_checkpointing: bool = field(
         default=False,
@@ -2911,7 +2907,6 @@ class TrainingArguments:
         token: Optional[str] = None,
         private_repo: Optional[bool] = None,
         always_push: bool = False,
-        revision: Optional[str] = None,
     ):
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
@@ -2955,8 +2950,6 @@ class TrainingArguments:
             always_push (`bool`, *optional*, defaults to `False`):
                 Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
                 finished.
-            revision (`str`, *optional*):
-                TODO: message here
 
         Example:
 
@@ -2975,7 +2968,6 @@ class TrainingArguments:
         self.hub_token = token
         self.hub_private_repo = private_repo
         self.hub_always_push = always_push
-        self.revision = revision
         return self
 
     def set_optimizer(

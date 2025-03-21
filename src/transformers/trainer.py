@@ -3895,7 +3895,7 @@ class Trainer:
 
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
-            self.push_to_hub(commit_message="Model save", revision=self.args.revision)
+            self.push_to_hub(commit_message="Model save")
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -4734,7 +4734,6 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
-            revision=self.args.revision
         )
 
         push_jobs = [model_push_job]
@@ -4750,7 +4749,6 @@ class Trainer:
                 commit_message=commit_message + ", checkpoint",
                 token=self.args.hub_token,
                 run_as_future=True,
-                revision=self.args.revision
             )
             push_jobs.append(checkpoint_push)
 
@@ -4830,12 +4828,8 @@ class Trainer:
 
         self.create_model_card(model_name=model_name, **kwargs)
 
-        if revision is None:
-            revision = self.args.revision
-
         # Wait for the current upload to be finished.
         self._finish_current_push()
-
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
