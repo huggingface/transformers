@@ -239,9 +239,8 @@ class Qwen3MoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        if self.config.use_qk_norm:
-            self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,

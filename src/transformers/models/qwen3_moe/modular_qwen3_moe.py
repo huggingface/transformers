@@ -139,9 +139,8 @@ class Qwen3MoeMLP(LlamaMLP):
 class Qwen3MoeAttention(LlamaAttention):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        if self.config.use_qk_norm:
-            self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
