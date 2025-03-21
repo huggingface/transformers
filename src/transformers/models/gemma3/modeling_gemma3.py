@@ -1360,7 +1360,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             **lm_kwargs,
         )
 
-        logits = outputs.logits
+        logits = outputs[0]
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
