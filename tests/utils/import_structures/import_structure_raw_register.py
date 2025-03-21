@@ -28,13 +28,13 @@ def a0():
     pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch", "tf"))
 class A1:
     def __init__(self):
         pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch", "tf"))
 def a1():
     pass
 
@@ -74,7 +74,7 @@ class A3:
 def a3():
     pass
 
-@export(backends=())
+@requires(backends=())
 class A4:
     def __init__(self):
         pass

@@ -1645,6 +1645,11 @@ SCIPY_IMPORT_ERROR = """
 `pip install scipy`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+KERAS_NLP_IMPORT_ERROR = """
+{0} requires the keras_nlp library but it was not found in your environment. You can install it with pip. 
+Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
 SPEECH_IMPORT_ERROR = """
@@ -1805,6 +1810,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
         ("rich", (is_rich_available, RICH_IMPORT_ERROR)),
+        ("keras_nlp", (is_keras_nlp_available, KERAS_NLP_IMPORT_ERROR)),
     ]
 )
 
@@ -1910,7 +1916,7 @@ class _LazyModule(ModuleType):
             self._name = name
             self._import_structure = _import_structure
 
-        # This can be removed once every exportable object has a `export()` export.
+        # This can be removed once every exportable object has a `require()` require.
         else:
             self._modules = set(import_structure.keys())
             self._class_to_module = {}
@@ -1999,12 +2005,12 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
-def export(*, backends=()):
+def requires(*, backends=()):
     """
     This decorator enables two things:
     - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
       to execute correctly without instantiating it
-    - The '@export' string is used to dynamically import objects
+    - The '@requires' string is used to dynamically import objects
     """
     for backend in backends:
         if backend not in BACKENDS_MAPPING:
@@ -2077,13 +2083,13 @@ def create_import_structure_from_path(module_path):
     If a file is given, it will return the import structure of the parent folder.
 
     Import structures are designed to be digestible by `_LazyModule` objects. They are
-    created from the __all__ definitions in each files as well as the `@export` decorators
+    created from the __all__ definitions in each files as well as the `@require` decorators
     above methods and objects.
 
     The import structure allows explicit display of the required backends for a given object.
     These backends are specified in two ways:
 
-    1. Through their `@export`, if they are exported with that decorator. This `@export` decorator
+    1. Through their `@require`, if they are exported with that decorator. This `@require` decorator
        accepts a `backend` tuple kwarg mentioning which backends are required to run this object.
 
     2. If an object is defined in a file with "default" backends, it will have, at a minimum, this
@@ -2141,7 +2147,7 @@ def create_import_structure_from_path(module_path):
         adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
 
     # We're only taking a look at files different from __init__.py
-    # We could theoretically export things directly from the __init__.py
+    # We could theoretically require things directly from the __init__.py
     # files, but this is not supported at this time.
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
@@ -2177,15 +2183,15 @@ def create_import_structure_from_path(module_path):
                 base_requirements = requirements
                 break
 
-        # Objects that have a `@export` assigned to them will get exported
+        # Objects that have a `@require` assigned to them will get exported
         # with the backends specified in the decorator as well as the file backends.
         exported_objects = set()
-        if "@export" in file_content:
+        if "@requires" in file_content:
             lines = file_content.split("\n")
             for index, line in enumerate(lines):
                 # This allows exporting items with other decorators. We'll take a look
                 # at the line that follows at the same indentation level.
-                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@export"):
+                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@requires"):
                     continue
 
                 # Skipping line enables putting whatever we want between the
@@ -2193,7 +2199,7 @@ def create_import_structure_from_path(module_path):
                 # This is what enables having # Copied from statements, docs, etc.
                 skip_line = False
 
-                if "@export" in previous_line:
+                if "@requires" in previous_line:
                     skip_line = False
 
                     # Backends are defined on the same line as export

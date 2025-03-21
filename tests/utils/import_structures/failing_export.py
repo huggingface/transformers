@@ -17,7 +17,7 @@
 from transformers.utils.import_utils import export
 
 
-@export(backends=("random_item_that_should_not_exist",))
+@requires(backends=("random_item_that_should_not_exist",))
 class A0:
     def __init__(self):
         pass

@@ -30,27 +30,27 @@ def b0():
     pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch", "tf"))
 # That's a statement
 class B1:
     def __init__(self):
         pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch", "tf"))
 # That's a statement
 def b1():
     pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch", "tf"))
 # That's a statement
 class B2:
     def __init__(self):
         pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch", "tf"))
 # That's a statement
 def b2():
     pass

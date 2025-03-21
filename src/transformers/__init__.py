@@ -51,6 +51,7 @@ from .utils import (
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+from transformers.models import *
 
 # Base objects, independent of any specific backend
 _import_structure = {
@@ -1212,19 +1213,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.bert"].append("TFBertTokenizer")
-
-# keras-nlp-specific objects
-try:
-    if not is_keras_nlp_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_keras_nlp_objects
-
-    _import_structure["utils.dummy_keras_nlp_objects"] = [
-        name for name in dir(dummy_keras_nlp_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
 
 # Vision-specific objects
 try:
