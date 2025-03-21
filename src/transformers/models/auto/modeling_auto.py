@@ -321,6 +321,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
+        ("peft", "PeftModel"),
     ]
 )
 
@@ -609,6 +610,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
         ("zamba2", "Zamba2ForCausalLM"),
+        ("peft", "PeftModelForCausalLM"),
     ]
 )
 
@@ -991,6 +993,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
+        ("peft", "PeftModelForSeq2SeqLM"),
     ]
 )
 
@@ -1108,6 +1111,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoForSequenceClassification"),
         ("zamba", "ZambaForSequenceClassification"),
         ("zamba2", "Zamba2ForSequenceClassification"),
+        ("peft", "PeftModelForSequenceClassification"),
     ]
 )
 
@@ -1186,6 +1190,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
         ("xmod", "XmodForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
+        ("peft", "PeftModelForQuestionAnswering"),
     ]
 )
 
@@ -1293,6 +1298,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetForTokenClassification"),
         ("xmod", "XmodForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
+        ("peft", "PeftModelForTokenClassification"),
     ]
 )
 
