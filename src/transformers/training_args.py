@@ -712,9 +712,7 @@ class TrainingArguments:
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         hub_revision (`str`, *optional*):
-            The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash.
-        gradient_checkpointing (`bool`, *optional*, defaults to `False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+            TODO: message here
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
@@ -1390,11 +1388,9 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
     )
-    hub_revision: Optional[str] = field(
+    hub_always_push: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash."
-        },
+        metadata={"help": "TODO: message here"},
     )
     gradient_checkpointing: bool = field(
         default=False,
@@ -2960,7 +2956,7 @@ class TrainingArguments:
                 Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
                 finished.
             revision (`str`, *optional*):
-                The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash.
+                TODO: message here
 
         Example:
 
@@ -2979,7 +2975,7 @@ class TrainingArguments:
         self.hub_token = token
         self.hub_private_repo = private_repo
         self.hub_always_push = always_push
-        self.hub_revision = revision
+        self.revision = revision
         return self
 
     def set_optimizer(
