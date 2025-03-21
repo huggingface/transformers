@@ -2156,9 +2156,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                         nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
                         nn.init.constant_(input_projection.bias, 0)
 
-            # Special case: level_embed is initialized with zeros
+            # Special case: level_embed is initialized with small non-zero values
+            # to avoid division by zero in mean calculations during testing
             if hasattr(module, 'level_embed'):
-                nn.init.zeros_(module.level_embed.weight)
+                # Initialize with small values instead of zeros to avoid -inf in mean calculations
+                nn.init.constant_(module.level_embed.weight, 1e-6)
 
             # Other embeddings use standard initialization
             if hasattr(module, 'queries_embedder'):
