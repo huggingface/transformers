@@ -735,7 +735,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
         elif _re_parse_description.search(description) is None:
             idx = description.find(OPTIONAL_KEYWORD)
             len_optional = len(OPTIONAL_KEYWORD)
-            description = f"{description[:idx + len_optional]}, defaults to {str_default}"
+            description = f"{description[: idx + len_optional]}, defaults to {str_default}"
         else:
             description = _re_parse_description.sub(rf"*optional*, defaults to {str_default}", description)
 
