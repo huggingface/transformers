@@ -2156,6 +2156,16 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                         nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
                         nn.init.constant_(input_projection.bias, 0)
 
+            # Special case: level_embed is initialized with zeros
+            if hasattr(module, 'level_embed'):
+                nn.init.zeros_(module.level_embed.weight)
+
+            # Other embeddings use standard initialization
+            if hasattr(module, 'queries_embedder'):
+                nn.init.normal_(module.queries_embedder.weight, mean=0.0, std=1.0)
+            if hasattr(module, 'queries_features'):
+                nn.init.normal_(module.queries_features.weight, mean=0.0, std=1.0)
+
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
             # Keep this initialization block first to prevent overwriting
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
@@ -2172,8 +2182,8 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             # Use torch.no_grad() to ensure exact values
             with torch.no_grad():
                 # Convert to exact float values to avoid floating point precision issues
-                grid_init = grid_init.to(torch.float32)
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+                grid_init = grid_init.view(-1)
+                module.sampling_offsets.bias = nn.Parameter(grid_init)
 
             nn.init.constant_(module.attention_weights.weight.data, 0.0)
             nn.init.constant_(module.attention_weights.bias.data, 0.0)
@@ -2190,10 +2200,12 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                     nn.init.uniform_(p, -0.1, 0.1)  # Initialize biases with small non-zero values
 
         elif isinstance(module, nn.Embedding):
-            # Use PyTorch default initialization (std=1.0)
-            module.weight.data.normal_(mean=0.0, std=1.0)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            # Default embedding initialization (std=1.0)
+            # But skip level_embed which is handled separately
+            if not any(name in str(module) for name in ['level_embed']):
+                module.weight.data.normal_(mean=0.0, std=1.0)
+                if module.padding_idx is not None:
+                    module.weight.data[module.padding_idx].zero_()
 
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=std)

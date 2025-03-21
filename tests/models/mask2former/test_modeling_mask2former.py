@@ -527,6 +527,9 @@ class TestMask2FormerModelInitialization(unittest.TestCase):
         """Test that embeddings are initialized with std=1.0 (PyTorch default)"""
         for name, module in self.model.named_modules():
             if isinstance(module, torch.nn.Embedding):
+                # Skip level_embed which is intentionally initialized to zeros
+                if 'level_embed' in name:
+                    continue
                 std = torch.std(module.weight.data).item()
                 self.assertAlmostEqual(std, 1.0, places=1)
     
