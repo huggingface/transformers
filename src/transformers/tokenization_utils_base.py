@@ -868,7 +868,7 @@ class SpecialTokensMixin:
     def __init__(self, verbose=False, **kwargs):
         self._pad_token_type_id = 0
         self.verbose = verbose
-        self._special_tokens_map = {attr: None for attr in self.SPECIAL_TOKENS_ATTRIBUTES}
+        self._special_tokens_map = dict.fromkeys(self.SPECIAL_TOKENS_ATTRIBUTES)
         self._special_tokens_map["additional_special_tokens"] = []  # for BC where it defaults to empty list
 
         # We directly set the hidden value to allow initialization with special tokens

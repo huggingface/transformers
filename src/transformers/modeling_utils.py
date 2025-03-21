@@ -3558,7 +3558,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Please upgrade accelerate with `pip install -U accelerate`"
                     )
                 # init state_dict for this shard
-                shard_state_dict = {name: "" for name in shard}
+                shard_state_dict = dict.fromkeys(shard, "")
                 for module_name in shard:
                     # skip to collect this weight again
                     if shard_state_dict.get(module_name) != "":
@@ -4790,7 +4790,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 param_device_map = expand_device_map(device_map, checkpoint_keys)
                 str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
                 if sharded_metadata is None:
-                    weight_map = {p: checkpoint_files[0] for p in checkpoint_keys}
+                    weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
                 else:
                     folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
                     # Fix the weight map keys according to the key mapping
