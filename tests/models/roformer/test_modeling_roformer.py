@@ -534,6 +534,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6).to(torch_device)
+        emb1.weight = emb1._init_weight(emb1.weight)
         emb = emb1(input_ids.shape)
         desired_weights = torch.tensor(
             [[0.0000, 0.0000, 0.0000, 1.0000, 1.0000, 1.0000], [0.8415, 0.0464, 0.0022, 0.5403, 0.9989, 1.0000]]
@@ -552,6 +553,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
             ]
         ).to(torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
+        emb1.weight = emb1._init_weight(emb1.weight)
         weights = emb1.weight.data[:3, :5].to(torch_device)
 
         self.assertTrue(
