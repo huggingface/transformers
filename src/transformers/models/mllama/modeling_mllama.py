@@ -2056,6 +2056,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2157,15 +2158,31 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
-            labels=labels,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **loss_kwargs,
         )
 
-        return outputs
+        # Temporary fix to calculate the loss in main class, as the model's vocab size may be resized
+        loss = None
+        logits = outputs[0]
+
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **loss_kwargs)
+
+        if not return_dict:
+            return (loss,) + outputs if loss is not None else outputs
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=outputs.logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(
         self,

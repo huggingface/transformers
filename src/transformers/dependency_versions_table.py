@@ -35,6 +35,7 @@ deps = {
     "kenlm": "kenlm",
     "keras": "keras>2.9,<2.16",
     "keras-nlp": "keras-nlp>=0.3.1,<0.14.0",
+    "kernels": "kernels>=0.3.2,<0.4",
     "librosa": "librosa",
     "natten": "natten>=0.14.6,<0.15.0",
     "nltk": "nltk<=3.8.1",
