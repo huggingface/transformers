@@ -236,7 +236,7 @@ class Llama4Processor(ProcessorMixin):
         tokenizer=None,
         patch_size: int = 14,
         pixel_shuffle_ratio: float = 0.5,
-        fake_image_token="<image>",
+        fake_image_token="<|image|>",
         image_token="<|image|>",
         start_of_image_token="<|image_start|>",
         end_of_image_token="<|image_end|>",
