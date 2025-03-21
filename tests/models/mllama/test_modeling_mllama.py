@@ -414,7 +414,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
-            # some models have diffent num-head for query vs key/value so we need to assign correct value
+            # some models have different num-head for query vs key/value so we need to assign correct value
             # BUT only after `per_head_embed_dim` is set
             num_attention_heads = (
                 text_config.num_key_value_heads
