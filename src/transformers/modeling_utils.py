@@ -1909,11 +1909,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Make sure the modules correctly exist if the flag is active
         if self._keep_in_fp32_modules is not None:
-            all_modules = {name for name, _ in self.named_modules() if len(name) > 0}
+            all_parameters = {name for name, _ in self.named_parameters() if len(name) > 0}
             unique_module_names = set()
             # Get all unique module names in the module graph, without the prefixes
-            for module in all_modules:
-                unique_module_names.update([name for name in module.split(".") if not name.isnumeric()])
+            for param in all_parameters:
+                unique_module_names.update(
+                    [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
+                )
             # Check that every module in the keep_in_fp32 list is part of the module graph
             for module in self._keep_in_fp32_modules:
                 if module not in unique_module_names:
