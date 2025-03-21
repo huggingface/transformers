@@ -15,8 +15,10 @@
 """
 Processor class for Speech Granite.
 """
+from collections.abc import Sequence
 from typing import List, Union
 
+import numpy as np
 import torch
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.processing_utils import ProcessorMixin
@@ -110,18 +112,24 @@ class GraniteSpeechProcessor(ProcessorMixin):
         raise TypeError("Invalid text provided! Text should be a string or list of strings.")
 
     def _get_validated_audios(self, audios):
-        # todo: if this is a list, collate and keep track of audio lengths
+        # Coerce to PyTorch tensors if we have numpy arrays, since
+        # currently we have a dependency on torch/torchaudio anyway
+        if isinstance(audios, np.ndarray):
+            audios = torch.from_numpy(audios)
+        elif isinstance(audios, Sequence) and isinstance(audios[0], np.ndarray):
+            audios = [torch.from_numpy(arr) for arr in audios]
+
         if isinstance(audios, torch.Tensor):
             lengths = [audios.shape[-1]] * audios.shape[0]
             return audios, lengths
-        elif isinstance(audios, list) and isinstance(audios[0], torch.Tensor):
+        elif isinstance(audios, Sequence) and isinstance(audios[0], torch.Tensor):
             lengths = [audio.shape[-1] for audio in audios]
             padding = [max(lengths) - length for length in lengths]
             padded = [torch.nn.functional.pad(audio, (0, pad)) for audio, pad in zip(audios, padding)]
             audios = torch.cat(padded, dim=0)
             return audios, lengths
         
-        raise TypeError("Invalid audio provided. Audio should be a Tensor or a list of Tensors.")
+        raise TypeError("Invalid audio provided. Audio should be a one or more torch tensors or numpy arrays.")
 
 
 __all__ = ["GraniteSpeechProcessor"]
