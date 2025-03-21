@@ -418,13 +418,15 @@ class Gemma3Attention(Gemma2Attention):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        if attention_mask is not None:
+            # backwards compatibility
+            attention_mask = attention_mask.to(query_states)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask.to(query_states),
+            attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
@@ -974,7 +976,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             **lm_kwargs,
         )
 
-        logits = outputs.logits
+        logits = outputs[0]
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
