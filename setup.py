@@ -302,8 +302,9 @@ extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
+extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
@@ -412,7 +413,6 @@ extras["torchhub"] = deps_list(
     "filelock",
     "huggingface-hub",
     "importlib_metadata",
-    "kernels",
     "numpy",
     "packaging",
     "protobuf",
@@ -434,7 +434,6 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
-    deps["kernels"],  # download kernels from the Hub
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata

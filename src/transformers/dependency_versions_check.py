@@ -29,7 +29,6 @@ pkgs_to_check_at_runtime = [
     "requests",
     "packaging",
     "filelock",
-    "kernels",
     "numpy",
     "tokenizers",
     "huggingface-hub",

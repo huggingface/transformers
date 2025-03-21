@@ -13,28 +13,60 @@
 # limitations under the License.
 from typing import Dict, Union
 
-from kernels import (
-    Device,
-    LayerRepository,
-    register_kernel_mapping,
-    replace_kernel_forward_from_hub,
-    use_kernel_forward_from_hub,
-)
 
+try:
+    from kernels import (
+        Device,
+        LayerRepository,
+        register_kernel_mapping,
+        replace_kernel_forward_from_hub,
+        use_kernel_forward_from_hub,
+    )
 
-_KERNEL_MAPPING: Dict[str, Dict[Union[Device, str], LayerRepository]] = {
-    "MultiScaleDeformableAttention": {
-        "cuda": LayerRepository(
-            repo_id="kernels-community/deformable-detr",
-            layer_name="MultiScaleDeformableAttention",
-        )
+    _hub_kernels_available = True
+
+    _KERNEL_MAPPING: Dict[str, Dict[Union[Device, str], LayerRepository]] = {
+        "MultiScaleDeformableAttention": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/deformable-detr",
+                layer_name="MultiScaleDeformableAttention",
+            )
+        }
     }
-}
 
-register_kernel_mapping(_KERNEL_MAPPING)
+    register_kernel_mapping(_KERNEL_MAPPING)
+
+except ImportError:
+    # Stub to make decorators int transformers work when `kernels`
+    # is not installed.
+    def use_kernel_forward_from_hub(*args, **kwargs):
+        def decorator(cls):
+            return cls
+
+        return decorator
+
+    class LayerRepository:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
+
+    def replace_kernel_forward_from_hub(*args, **kwargs):
+        raise RuntimeError(
+            "replace_kernel_forward_from_hub requires `kernels` to be installed. Run `pip install kernels`."
+        )
+
+    def register_kernel_mapping(*args, **kwargs):
+        raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
+
+    _hub_kernels_available = False
+
+
+def is_hub_kernels_available():
+    return _hub_kernels_available
+
 
 __all__ = [
     "LayerRepository",
+    "is_hub_kernels_available",
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
