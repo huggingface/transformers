@@ -2212,7 +2212,7 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        # Resolve resume_from_checkpoint to an absolute path
+        # Resolve resume_from_checkpoint to an absolute path (assuming args.output_dir is absolute)
         if resume_from_checkpoint is not None and not os.path.isabs(resume_from_checkpoint):
             # Look inside self.output_dir
             candidate = os.path.join(args.output_dir, resume_from_checkpoint)
