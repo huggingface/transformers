@@ -278,15 +278,18 @@ class ValidationDecoratorTester(unittest.TestCase):
 
 @require_torch
 class CanReturnTupleDecoratorTester(unittest.TestCase):
-    def _get_model(self, config):
+    def _get_model(self, config, store_config=True, raise_in_forward=False):
         # Simple model class for testing can_return_tuple decorator.
         class SimpleTestModel(torch.nn.Module):
             def __init__(self, config):
                 super().__init__()
-                self.config = config
+                if store_config:
+                    self.config = config
 
             @can_return_tuple
             def forward(self, x):
+                if raise_in_forward:
+                    raise ValueError("Test error")
                 return BaseModelOutput(
                     last_hidden_state=x,
                     hidden_states=None,
@@ -296,10 +299,13 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         return SimpleTestModel(config)
 
     def test_decorator_eager(self):
+        """Test that the can_return_tuple decorator works with eager mode."""
+
         # test nothing is set
         config = PretrainedConfig()
         model = self._get_model(config)
-        output = model.forward(10)
+        inputs = torch.tensor(10)
+        output = model(inputs)
         self.assertIsInstance(
             output, BaseModelOutput, "output should be a BaseModelOutput when return_dict is not set"
         )
@@ -309,13 +315,14 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
             for return_dict in [True, False, None]:
                 config = PretrainedConfig(return_dict=config_return_dict)
                 model = self._get_model(config)
-                output = model(10, return_dict=return_dict)
+                output = model(torch.tensor(10), return_dict=return_dict)
 
                 expected_type = tuple if config_return_dict is False or return_dict is False else BaseModelOutput
                 message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
 
     def test_decorator_compiled(self):
+        """Test that the can_return_tuple decorator works with compiled mode."""
         config = PretrainedConfig()
         model = self._get_model(config)
         compiled_model = torch.compile(model)
@@ -323,14 +330,55 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         self.assertIsInstance(output, BaseModelOutput)
 
     def test_decorator_torch_export(self):
+        """Test that the can_return_tuple decorator works with torch.export."""
         config = PretrainedConfig()
         model = self._get_model(config)
         torch.export.export(model, args=(torch.tensor(10),))
 
     def test_decorator_torchscript(self):
+        """Test that the can_return_tuple decorator works with torch.jit.trace."""
         config = PretrainedConfig(return_dict=False)
         model = self._get_model(config)
         inputs = torch.tensor(10)
         traced_module = torch.jit.trace(model, inputs)
         output = traced_module(inputs)
         self.assertIsInstance(output, tuple)
+
+    def test_attribute_cleanup(self):
+        """Test that the `_is_top_level_module` attribute is removed after the forward call."""
+
+        config = PretrainedConfig(return_dict=False)
+        inputs = torch.tensor(10)
+
+        # working case
+        model = self._get_model(config)
+        output = model(inputs)
+
+        self.assertIsInstance(output, tuple)
+        for name, module in model.named_modules():
+            self.assertFalse(
+                hasattr(module, "_is_top_level_module"),
+                f"Module `{name}` should not have `_is_top_level_module` attribute",
+            )
+
+        # model without config
+        no_config_model = self._get_model(config, store_config=False)
+        output = no_config_model(inputs)
+
+        self.assertIsInstance(output, BaseModelOutput)
+        for name, module in no_config_model.named_modules():
+            self.assertFalse(
+                hasattr(module, "_is_top_level_module"),
+                f"Module `{name}` should not have `_is_top_level_module` attribute",
+            )
+
+        # model with raise in forward
+        model_with_raise = self._get_model(config, raise_in_forward=True)
+        with self.assertRaises(ValueError):
+            model_with_raise(inputs)
+
+        for name, module in model_with_raise.named_modules():
+            self.assertFalse(
+                hasattr(module, "_is_top_level_module"),
+                f"Module `{name}` should not have `_is_top_level_module` attribute",
+            )
