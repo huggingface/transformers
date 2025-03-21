@@ -17,9 +17,11 @@ Hub utilities: utilities related to download and cache models
 
 import json
 import os
+import queue
 import re
 import sys
 import tempfile
+import threading
 import warnings
 from concurrent import futures
 from pathlib import Path
@@ -1108,15 +1110,101 @@ def get_checkpoint_shard_files(
     sharded_metadata["weight_map"] = index["weight_map"].copy()
 
     # First, let's deal with local folder.
-    if os.path.isdir(pretrained_model_name_or_path):
+    if checkpoint_exists(pretrained_model_name_or_path):
         shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
 
-    # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,
-    # or download the files
-    cached_filenames = cached_files(
+    args_list = [
+        (
+            pretrained_model_name_or_path,
+            shard_filename,
+            cache_dir,
+            force_download,
+            proxies,
+            resume_download,
+            local_files_only,
+            token,
+            user_agent,
+            revision,
+            subfolder,
+            _commit_hash,
+        )
+        for shard_filename in shard_filenames
+    ]
+
+    cached_filenames = []
+
+    if json.loads(os.environ.get("HF_ENABLE_PARALLEL_DOWNLOADING", "false")):
+        num_workers = json.loads(os.environ.get("HF_PARALLEL_DOWNLOADING_WORKERS", "8"))
+
+        # make sure you don't have excessive workers
+        num_workers = min(len(args_list), num_workers)
+
+        print(f"Downloading model weights in parallel with {num_workers} workers...")
+
+        cached_filenames += download_shards_with_threads(num_workers, args_list)
+
+        # reorder after the out of order execution that threads will produce
+        cached_filenames.sort()
+    else:
+        for args in args_list:
+            cached_filename = download_shard(args)
+            cached_filenames.append(cached_filename)
+
+    return cached_filenames, sharded_metadata
+
+
+# NOTE makes testing easier to control get_checkpoint_shard_files when testing via a monkey patch
+def checkpoint_exists(pretrained_model_name_or_path):
+    return os.path.isdir(pretrained_model_name_or_path)
+
+
+def worker(q, cached_filenames):
+    while not q.empty():
+        args = q.get()
+        filename = download_shard(args)
+        cached_filenames.append(filename)
+        q.task_done()
+
+
+def download_shards_with_threads(num_workers, args_list):
+    q = queue.Queue()
+    cached_filenames = []
+
+    for args in args_list:
+        q.put(args)
+
+    threads = []
+    for _ in range(num_workers):
+        t = threading.Thread(target=worker, args=(q, cached_filenames))
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
+
+    return cached_filenames
+
+
+def download_shard(args):
+    (
         pretrained_model_name_or_path,
-        shard_filenames,
+        shard_filename,
+        cache_dir,
+        force_download,
+        proxies,
+        resume_download,
+        local_files_only,
+        token,
+        user_agent,
+        revision,
+        subfolder,
+        _commit_hash,
+    ) = args
+
+    cached_filename = cached_file(
+        pretrained_model_name_or_path,
+        shard_filename,
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
@@ -1129,7 +1217,7 @@ def get_checkpoint_shard_files(
         _commit_hash=_commit_hash,
     )
 
-    return cached_filenames, sharded_metadata
+    return cached_filename
 
 
 def create_and_tag_model_card(
