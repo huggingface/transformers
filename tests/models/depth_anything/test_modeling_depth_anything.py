@@ -214,7 +214,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 model.to(torch_device)
                 model.eval()
 
-                # Confirm out_indices propogated to backbone
+                # Confirm out_indices propagated to backbone
                 self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

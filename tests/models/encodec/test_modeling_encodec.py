@@ -492,7 +492,7 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
 
                 audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
@@ -548,7 +548,7 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
                 )
@@ -608,7 +608,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         input_values = inputs["input_values"].to(torch_device)
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
                 audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
                 audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
