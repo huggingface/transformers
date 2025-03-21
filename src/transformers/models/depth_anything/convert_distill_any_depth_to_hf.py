@@ -114,14 +114,9 @@ def convert_keys(state_dict, config):
         match = re.match(qkv_pattern, old_key)
         _, _, _, layer, attr = match.groups()
         hidden_size = config.backbone_config.hidden_size
-        if attr == "weight":
-            q = value[:hidden_size, :]
-            k = value[hidden_size : hidden_size * 2, :]
-            v = value[-hidden_size:, :]
-        else:  # bias
-            q = value[:hidden_size]
-            k = value[hidden_size : hidden_size * 2]
-            v = value[-hidden_size:]
+        q = value[:hidden_size]
+        k = value[hidden_size : hidden_size * 2]
+        v = value[-hidden_size:]
 
         for proj, tensor in zip(["query", "key", "value"], [q, k, v]):
             new_key = f"backbone.encoder.layer.{layer}.attention.attention.{proj}.{attr}"
