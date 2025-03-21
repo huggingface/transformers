@@ -1388,7 +1388,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
     )
-    hub_always_push: Optional[str] = field(
+    hub_revision: Optional[str] = field(
         default=None,
         metadata={
             "help": "The revision to use when pushing to the Hub. Can be a branch name, a tag, or a commit hash."
