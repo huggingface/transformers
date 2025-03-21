@@ -5919,7 +5919,7 @@ class AttentionInterface(object):
         self._local_mapping.update({key: value})
 
     def valid_keys(self):
-        return set(self._global_mapping.keys()) + set(self._local_mapping.keys())
+        return set(self._global_mapping.keys()) | set(self._local_mapping.keys())
 
 
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
