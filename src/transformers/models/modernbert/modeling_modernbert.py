@@ -1177,7 +1177,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
-
+            
         if self.config._attn_implementation == "flash_attention_2":
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
@@ -1466,7 +1466,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         loss = None
         if start_positions is not None and end_positions is not None:
             loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
-            
+
         if not return_dict:
             output = (start_logits, end_logits) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
