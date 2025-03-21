@@ -14,36 +14,25 @@ VOCAB_FILES_NAMES = {
     "tokenizer_file": "tokenizer.json",  # If you have a full fast tokenizer JSON
 }
 
+
 class ArlowTokenizer(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Arlow tokenizer (backed by HuggingFace's *tokenizers* library).
+    ArlowTokenizer is a custom tokenizer used for the ArlowGPT model.
 
-    This tokenizer is designed for GPT-like usage with BPE merges, plus specialized tokens
-    (e.g., <|startoftext|>, <|endoftext|>, <|mask|>, etc.).
+    This tokenizer is based on the PreTrainedTokenizer class and supports
+    both subword tokenization and special token handling.
 
-    It inherits from `PreTrainedTokenizerFast`, so most methods (encode, decode, etc.)
-    are available. If you provide `tokenizer_file`, it will load your full fast tokenizer
-    from that JSON. Otherwise, it will fall back to `vocab_file` + `merges_file`.
+    Example usage:
+        ```python
+        from transformers import ArlowTokenizer
 
-    Args:
-        vocab_file (str, *optional*):
-            Path to the BPE vocabulary JSON file.
-        merges_file (str, *optional*):
-            Path to the BPE merges file.
-        tokenizer_file (str, *optional*):
-            Path to a *tokenizers* library JSON file (usually named "tokenizer.json").
-        bos_token (str, *optional*, defaults to "<|startoftext|>"):
-            Beginning-of-sequence token.
-        eos_token (str, *optional*, defaults to "<|endoftext|>"):
-            End-of-sequence token.
-        unk_token (str, *optional*, defaults to "<|unk|>"):
-            Unknown token.
-        pad_token (str, *optional*, defaults to "<|pad|>"):
-            Padding token.
-        mask_token (str, *optional*, defaults to "<|mask|>"):
-            Mask token for masked language modeling.
-        additional_special_tokens (list of str, *optional*):
-            Additional special tokens, e.g. ["<|im_start|>", "<|im_end|>"].
+        tokenizer = ArlowTokenizer.from_pretrained("path/to/tokenizer")
+        tokens = tokenizer("Hello, world!")
+        print(tokens)
+        ```
+
+    Attributes:
+        vocab_size (int): The size of the vocabulary.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -91,11 +80,7 @@ class ArlowTokenizer(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    def save_vocabulary(
-        self,
-        save_directory: str,
-        filename_prefix: Optional[str] = None
-    ) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
         Save the tokenizer vocabulary + merges to `save_directory`.
         Returns a tuple of (vocab_file_path, merges_file_path).

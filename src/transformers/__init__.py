@@ -1526,7 +1526,7 @@ else:
         [
             # Empty for future release
         ]
-   )
+    )
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "ASTForAudioClassification",
@@ -9735,4 +9735,3 @@ if not is_tf_available() and not is_torch_available() and not is_flax_available(
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
-

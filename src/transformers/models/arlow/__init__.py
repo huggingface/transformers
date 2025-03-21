@@ -6,7 +6,6 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_tokenizers_available,
-    # is_torch_available,  # Commented out for now since we have no model
 )
 
 
@@ -14,7 +13,7 @@ from ...utils import (
 # _import_structure - Only references the tokenizer for now.
 ######################################################################
 _import_structure = {
-    "tokenization_arlow": ["ArlowTokenizer"],   # We have a real fast tokenizer here.
+    "tokenization_arlow": ["ArlowTokenizer"],  # We have a real fast tokenizer here.
 }
 
 ######################################################################
