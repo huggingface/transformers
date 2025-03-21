@@ -983,13 +983,17 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(ConversationalSpeechModel
 
 
 class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
-    def __init__(self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, padding_idx, codebook_padding_idx):
+    def __init__(
+        self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, text_padding_idx, codebook_padding_idx
+    ):
         super().__init__()
+        # we do not set them as padding idx for the embeddings
+        # indeed, embed_audio_tokens is tied to the depth decoder that might use them
+        # nevertheless for the backbone model, they are used to zeros out the padding tokens
+        self.text_padding_idx = text_padding_idx
         self.codebook_padding_idx = codebook_padding_idx
-        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size, padding_idx)
-        self.embed_audio_tokens = nn.Embedding(
-            (num_codebooks * codebook_vocab_size), hidden_size, codebook_padding_idx
-        )
+        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size)
+        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), hidden_size)
         self.audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
 
     def forward(self, input_ids):
@@ -1002,17 +1006,19 @@ class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
                 Embedded tokens, summed over the last dimension according to input_ids_mask.
         """
         text_tokens = input_ids[:, :, -1:]
+        text_tokens_mask = text_tokens != self.text_padding_idx
 
         audio_tokens = input_ids[:, :, :-1]
-        # apply the offset only to the non-padded codebook tokens
         audio_tokens_mask = audio_tokens != self.codebook_padding_idx
-        audio_tokens = audio_tokens + self.audio_tokens_offsets
-        audio_tokens *= audio_tokens_mask
+        audio_tokens = audio_tokens + self.audio_tokens_offsets.to(audio_tokens.device)
 
         text_embeds = self.embed_text_tokens(text_tokens)
-        audio_embeds = self.embed_audio_tokens(audio_tokens)
+        text_embeds *= text_tokens_mask.unsqueeze(-1)
 
-        inputs_embeds = torch.cat([text_embeds, audio_embeds], dim=-2)
+        audio_embeds = self.embed_audio_tokens(audio_tokens)
+        audio_embeds *= audio_tokens_mask.unsqueeze(-1)
+
+        inputs_embeds = torch.cat([audio_embeds, text_embeds], dim=-2)
         inputs_embeds = inputs_embeds.sum(dim=-2)
 
         return inputs_embeds

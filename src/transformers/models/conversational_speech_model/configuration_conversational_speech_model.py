@@ -178,17 +178,24 @@ class ConversationalSpeechModelDepthDecoderConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=0,
+        pad_token_id=2050,
         bos_token_id=None,
         eos_token_id=None,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
-        rope_scaling=None,  # TODO: to change
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3",
+        },
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        attn_implementation="sdpa",
         **kwargs,
     ):
         super().__init__(
@@ -407,18 +414,25 @@ class ConversationalSpeechModelBackboneConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=None,
-        codebook_pad_token_id=0,
-        bos_token_id=None,
-        eos_token_id=0,
+        pad_token_id=128002,
+        codebook_pad_token_id=2050,
+        bos_token_id=128000,
+        eos_token_id=128001,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
-        rope_scaling=None,  # TODO: to change
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3",
+        },
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        attn_implementation="sdpa",
         **kwargs,
     ):
         super().__init__(
@@ -538,6 +552,7 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
 
         # disable tie_word_embeddings as it does not apply here
         kwargs["tie_word_embeddings"] = False
+        self.max_position_embeddings = 2048
 
         super().__init__(**kwargs)
 

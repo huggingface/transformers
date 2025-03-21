@@ -77,11 +77,18 @@ class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
-        rope_scaling=None, #TODO: to change
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3"
+        },
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        attn_implementation="sdpa",
         **kwargs,
     ):
         self.num_codebooks = num_codebooks
@@ -120,6 +127,7 @@ class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
+            attn_implementation=attn_implementation,
             **kwargs,
         )
 
@@ -140,18 +148,25 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=None,
+        pad_token_id=0,
         codebook_pad_token_id=0,
         bos_token_id=None,
         eos_token_id=0,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
-        rope_scaling=None, #TODO: to change
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3"
+        },
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        attn_implementation="sdpa",
         **kwargs,
     ):
         self.num_codebooks = num_codebooks
@@ -191,6 +206,7 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
+            attn_implementation=attn_implementation,
             **kwargs,
         )
 
@@ -244,6 +260,7 @@ class ConversationalSpeechModelConfig(PretrainedConfig):
 
         # disable tie_word_embeddings as it does not apply here
         kwargs["tie_word_embeddings"] = False
+        self.max_position_embeddings = 2048
 
         super().__init__(**kwargs)
      
@@ -527,13 +544,15 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
 
 
 class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
-    def __init__(self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, padding_idx, codebook_padding_idx):
+    def __init__(self, hidden_size, vocab_size, num_codebooks, codebook_vocab_size, text_padding_idx, codebook_padding_idx):
         super().__init__()
+        # we do not set them as padding idx for the embeddings
+        # indeed, embed_audio_tokens is tied to the depth decoder that might use them
+        # nevertheless for the backbone model, they are used to zeros out the padding tokens
+        self.text_padding_idx = text_padding_idx
         self.codebook_padding_idx = codebook_padding_idx
-        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size, padding_idx)
-        self.embed_audio_tokens = nn.Embedding(
-            (num_codebooks * codebook_vocab_size), hidden_size, codebook_padding_idx
-        )
+        self.embed_text_tokens = nn.Embedding(vocab_size, hidden_size)
+        self.embed_audio_tokens = nn.Embedding((num_codebooks * codebook_vocab_size), hidden_size)
         self.audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
 
     def forward(self, input_ids):
@@ -546,17 +565,19 @@ class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
                 Embedded tokens, summed over the last dimension according to input_ids_mask.
         """
         text_tokens = input_ids[:, :, -1:]
+        text_tokens_mask = text_tokens != self.text_padding_idx
 
         audio_tokens = input_ids[:, :, :-1]
-        # apply the offset only to the non-padded codebook tokens
-        audio_tokens_mask = (audio_tokens != self.codebook_padding_idx)
-        audio_tokens = audio_tokens + self.audio_tokens_offsets
-        audio_tokens *= audio_tokens_mask 
+        audio_tokens_mask = audio_tokens != self.codebook_padding_idx
+        audio_tokens = audio_tokens + self.audio_tokens_offsets.to(audio_tokens.device)
 
         text_embeds = self.embed_text_tokens(text_tokens)
-        audio_embeds = self.embed_audio_tokens(audio_tokens)
+        text_embeds *= text_tokens_mask.unsqueeze(-1)
 
-        inputs_embeds = torch.cat([text_embeds, audio_embeds], dim=-2)
+        audio_embeds = self.embed_audio_tokens(audio_tokens)
+        audio_embeds *= audio_tokens_mask.unsqueeze(-1)
+
+        inputs_embeds = torch.cat([audio_embeds, text_embeds], dim=-2)
         inputs_embeds = inputs_embeds.sum(dim=-2)
 
         return inputs_embeds
