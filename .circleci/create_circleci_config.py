@@ -30,7 +30,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PIPELINE_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "vvv": None, "rsfE":None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 # Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
@@ -269,6 +269,7 @@ examples_torch_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
+    pytest_num_workers=4,
 )
 
 
@@ -276,6 +277,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
+    pytest_num_workers=2,
 )
 
 
