@@ -1195,7 +1195,7 @@ class MT5Stack(MT5PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
