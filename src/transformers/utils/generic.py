@@ -271,7 +271,7 @@ def to_py_obj(obj):
     elif isinstance(obj, (list, tuple)):
         # shortcut for 1d list and tuple
         if obj and is_py_number(obj[0]):
-            return obj
+            return list(obj)
         return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {
