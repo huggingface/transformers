@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import pytest
-import json
 import tempfile
 import unittest
 import shutil
 from parameterized import parameterized
 
+import numpy as np
 import torch
 from transformers import AutoTokenizer, GPT2TokenizerFast
 
@@ -128,13 +128,15 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             processor(text=None, audios=["foo"])
 
     @parameterized.expand([
-        ([1, 269920], [171]),
-        ([2, 269920], [171, 171]),
+        ([1, 269920], [171], torch.rand),
+        ([2, 269920], [171, 171], torch.rand),
+        ([1, 269920], [171], np.random.rand),
+        ([2, 269920], [171, 171], np.random.rand),
     ])
-    def test_audio_token_filling_same_len_feature_tensors(self, vec_dims, num_expected_features):
+    def test_audio_token_filling_same_len_feature_tensors(self, vec_dims, num_expected_features, random_func):
         """Ensure audio token filling is handled correctly when we have
         one or more audio inputs whose features are all the same length
-        stacked into a tensor.
+        stacked into a tensor / numpy array.
         """
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -142,7 +144,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
         )
-        audios = torch.rand(vec_dims) - .5
+        audios = random_func(*vec_dims) - .5
 
         audio_tokens = processor.audio_token * vec_dims[0]
         inputs = processor(
