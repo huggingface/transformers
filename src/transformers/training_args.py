@@ -700,7 +700,7 @@ class TrainingArguments:
               finished. A last push is made with the final model at the end of training.
             - `"checkpoint"`: like `"every_save"` but the latest checkpoint is also pushed in a subfolder named
               last-checkpoint, allowing you to resume training easily with
-              `trainer.train(resume_from_checkpoint=True)`.
+              `trainer.train(resume_from_checkpoint="last-checkpoint")`.
             - `"all_checkpoints"`: like `"checkpoint"` but all checkpoints are pushed like they appear in the output
               folder (so you will get one checkpoint folder per folder in your final repository)
 
@@ -2946,7 +2946,7 @@ class TrainingArguments:
                 finished. A last push is made with the final model at the end of training.
                 - `"checkpoint"`: like `"every_save"` but the latest checkpoint is also pushed in a subfolder named
                 last-checkpoint, allowing you to resume training easily with
-                `trainer.train(resume_from_checkpoint=True)`.
+                `trainer.train(resume_from_checkpoint="last-checkpoint")`.
                 - `"all_checkpoints"`: like `"checkpoint"` but all checkpoints are pushed like they appear in the
                   output
                 folder (so you will get one checkpoint folder per folder in your final repository)
