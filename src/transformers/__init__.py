@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.50.0.dev0"
+__version__ = "4.51.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -1376,6 +1376,10 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["model_debugging_utils"] = [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
         "Cache",
@@ -6605,6 +6609,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
+        # Debugging
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6689,6 +6694,10 @@ if TYPE_CHECKING:
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
+        )
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
