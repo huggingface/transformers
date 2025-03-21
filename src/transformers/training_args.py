@@ -2977,7 +2977,7 @@ class TrainingArguments:
         self.hub_token = token
         self.hub_private_repo = private_repo
         self.hub_always_push = always_push
-        self.revision = revision
+        self.hub_revision = revision
         return self
 
     def set_optimizer(
