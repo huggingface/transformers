@@ -104,13 +104,6 @@ class AutoConfigTest(unittest.TestCase):
         ):
             _ = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_configuration_not_found(self):
-        with self.assertRaisesRegex(
-            EnvironmentError,
-            "hf-internal-testing/no-config-test-repo does not appear to have a file named config.json.",
-        ):
-            _ = AutoConfig.from_pretrained("hf-internal-testing/no-config-test-repo")
-
     def test_from_pretrained_dynamic_config(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
@@ -122,11 +115,26 @@ class AutoConfigTest(unittest.TestCase):
         config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
+        # Test the dynamic module is loaded only once.
+        reloaded_config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+        self.assertIs(config.__class__, reloaded_config.__class__)
+
         # Test config can be reloaded.
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
             reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
+
+        # The configuration file is cached in the snapshot directory. So the module file is not changed after dumping
+        # to a temp dir. Because the revision of the configuration file is not changed.
+        # Test the dynamic module is loaded only once if the configuration file is not changed.
+        self.assertIs(config.__class__, reloaded_config.__class__)
+
+        # Test the dynamic module is reloaded if we force it.
+        reloaded_config = AutoConfig.from_pretrained(
+            "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
+        )
+        self.assertIsNot(config.__class__, reloaded_config.__class__)
 
     def test_from_pretrained_dynamic_config_conflict(self):
         class NewModelConfigLocal(BertConfig):

@@ -381,3 +381,7 @@ The following auto classes are available for the following multimodal tasks.
 ### FlaxAutoModelForVision2Seq
 
 [[autodoc]] FlaxAutoModelForVision2Seq
+
+### AutoModelForImageTextToText
+
+[[autodoc]] AutoModelForImageTextToText

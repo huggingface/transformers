@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # FalconMamba
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The FalconMamba model was proposed by TII UAE (Technology Innovation Institute) in their release.
@@ -27,7 +31,7 @@ Due to its architecture, FalconMamba is significantly faster at inference and re
 
 Tips:
 
-- FalconMamba is mostly based on Mamba architecutre, the same [tips and best practices](./mamba) would be relevant here.
+- FalconMamba is mostly based on Mamba architecture, the same [tips and best practices](./mamba) would be relevant here.
 
 The model has been trained on approximtely 6T tokens consisting a mixture of many data sources such as RefineWeb, Cosmopedia and Math data.
 

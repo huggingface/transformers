@@ -30,7 +30,7 @@ if is_flax_available():
     from transformers.models.vit.modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel
 
 
-class FlaxViTModelTester(unittest.TestCase):
+class FlaxViTModelTester:
     def __init__(
         self,
         parent,

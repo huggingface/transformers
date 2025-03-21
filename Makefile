@@ -36,7 +36,7 @@ autogenerate_code: deps_table_update
 
 repo-consistency:
 	python utils/check_copies.py
-	python utils/check_table.py
+	python utils/check_modular_conversion.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
@@ -45,7 +45,6 @@ repo-consistency:
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_docstrings.py
-	python utils/check_support_list.py
 
 # this target runs checks on all files
 
@@ -53,7 +52,6 @@ quality:
 	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 	python utils/check_doc_toc.py
 	python utils/check_docstrings.py --check_all
@@ -62,7 +60,6 @@ quality:
 # Format source code automatically and check is there are any problems left that need manual fixing
 
 extra_style_checks:
-	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
 	python utils/check_doc_toc.py --fix_and_overwrite
 
@@ -82,7 +79,7 @@ fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
-	python utils/check_table.py --fix_and_overwrite
+	python utils/check_modular_conversion.py  --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite

@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Mamba 2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Mamba2 model was proposed in [Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality](https://arxiv.org/abs/2405.21060) by Tri Dao and Albert Gu. It is a State Space Model similar to Mamba 1, with better performances in a simplified architecture. 
@@ -39,11 +43,11 @@ The original code can be found [here](https://github.com/state-spaces/mamba).
 
 ### A simple generation example: 
 ```python 
-from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
+from transformers import Mamba2Config, Mamba2ForCausalLM, AutoTokenizer
 import torch
 model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
-model = MambaForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
+model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
 input_ids = tokenizer("Hey how are you doing?", return_tensors= "pt")["input_ids"]
 
 out = model.generate(input_ids, max_new_tokens=10)

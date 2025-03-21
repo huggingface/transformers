@@ -37,7 +37,7 @@ class CLIPProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -151,3 +151,6 @@ class CLIPProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+
+__all__ = ["CLIPProcessor"]

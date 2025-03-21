@@ -83,6 +83,7 @@ class EfficientNetModelTester:
 
     def get_config(self):
         return EfficientNetConfig(
+            image_size=self.image_size,
             num_channels=self.num_channels,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
@@ -138,6 +139,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
@@ -258,4 +260,4 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-0.2962, 0.4487, 0.4499]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

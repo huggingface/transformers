@@ -40,8 +40,8 @@ class SiglipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "SiglipImageProcessor"
-    tokenizer_class = "SiglipTokenizer"
+    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -113,7 +113,7 @@ class SiglipProcessor(ProcessorMixin):
             image_features = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
+            encoding.update(image_features)
             return encoding
         elif text is not None:
             return encoding
@@ -140,3 +140,6 @@ class SiglipProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["SiglipProcessor"]

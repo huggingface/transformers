@@ -12,6 +12,10 @@ specific language governing permissions and limitations under the License.
 
 # VITS
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The VITS model was proposed in [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) by Jaehyeon Kim, Jungil Kong, Juhee Son.
@@ -93,11 +97,32 @@ from transformers import VitsTokenizer
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 print(tokenizer.is_uroman)
 ```
+If the is_uroman attribute is `True`, the tokenizer will automatically apply the `uroman` package to your text inputs, but you need to install uroman if not already installed using:  
+```
+pip install --upgrade uroman
+```
+Note: Python version required to use `uroman` as python package should be >= `3.10`. 
+You can use the tokenizer as usual without any additional preprocessing steps:
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+import os
+import subprocess
 
-If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
-since currently the tokenizer does not support performing the pre-processing itself.  
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
+model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+text = "이봐 무슨 일이야"
+inputs = tokenizer(text=text, return_tensors="pt")
 
+set_seed(555)  # make deterministic
+with torch.no_grad():
+   outputs = model(inputs["input_ids"])
+
+waveform = outputs.waveform[0]
+```
+If you don't want to upgrade to python >= `3.10`, then you can use the `uroman` perl package to pre-process the text inputs to the Roman alphabet.
 To do this, first clone the uroman repository to your local machine and set the bash variable `UROMAN` to the local path:
+
 
 ```bash
 git clone https://github.com/isi-nlp/uroman.git
@@ -106,7 +131,7 @@ export UROMAN=$(pwd)
 ```
 
 You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable 
-`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromaize` function:
+`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromanize` function:
 
 ```python
 import torch
@@ -134,9 +159,9 @@ def uromanize(input_string, uroman_path):
     return stdout.decode()[:-1]
 
 text = "이봐 무슨 일이야"
-uromaized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
+uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-inputs = tokenizer(text=uromaized_text, return_tensors="pt")
+inputs = tokenizer(text=uromanized_text, return_tensors="pt")
 
 set_seed(555)  # make deterministic
 with torch.no_grad():

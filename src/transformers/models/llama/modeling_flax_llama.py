@@ -214,12 +214,6 @@ class FlaxLlamaAttention(nn.Module):
         self.k_proj = dense(self.num_key_value_heads * self.head_dim)
         self.v_proj = dense(self.num_key_value_heads * self.head_dim)
         self.o_proj = dense(self.embed_dim)
-        if (self.head_dim * self.num_heads) != self.embed_dim:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.embed_dim}"
-                f" and `num_heads`: {self.num_heads})."
-            )
-
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
 
@@ -234,7 +228,7 @@ class FlaxLlamaAttention(nn.Module):
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
+        states from previous steps. This function is slightly adapted from the official Flax repository:
         https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
@@ -748,3 +742,6 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
+
+
+__all__ = ["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"]

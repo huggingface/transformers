@@ -358,6 +358,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
         forward_params = {}
         if sequential is not None:
             forward_params["sequential"] = sequential
+
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, {}
 
     def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
@@ -385,6 +392,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs

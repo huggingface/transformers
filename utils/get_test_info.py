@@ -53,7 +53,15 @@ def get_module_path(test_file):
 def get_test_module(test_file):
     """Get the module of a model test file."""
     test_module_path = get_module_path(test_file)
-    test_module = importlib.import_module(test_module_path)
+    try:
+        test_module = importlib.import_module(test_module_path)
+    except AttributeError as exc:
+        # e.g. if you have a `tests` folder in `site-packages`, created by another package, when trying to import
+        # `tests.models...`
+        raise ValueError(
+            f"Could not import module {test_module_path}. Confirm that you don't have a package with the same root "
+            "name installed or in your environment's `site-packages`."
+        ) from exc
 
     return test_module
 

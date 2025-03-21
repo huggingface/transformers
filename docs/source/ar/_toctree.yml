@@ -1,0 +1,898 @@
+- sections:
+  - local: index
+    title: 🤗 المحولات
+  - local: quicktour
+    title: جولة سريعة
+  - local: installation
+    title: التثبيت
+  title: البدء
+- sections:
+  - local: pipeline_tutorial
+    title: تشغيل الاستنتاج باستخدام خطوط الأنابيب
+  - local: autoclass_tutorial
+    title: كتابة تعليمات برمجية متكيفه باستخدام AutoClass
+  - local: preprocessing
+    title: معالجة البيانات مسبقًا
+  - local: training
+    title: ضبط نموذج مسبق التدريب
+  - local: run_scripts
+    title: التدريب باستخدام نص برمجي
+  - local: accelerate
+    title: إعداد تدريب موزع باستخدام 🤗 Accelerate
+  - local: peft
+    title: تحميل النماذج المخصصة وتدريبها باستخدام 🤗 PEFT
+  - local: model_sharing
+    title: مشاركة نموذجك
+  - local: agents
+    title: الوكلاء
+  - local: llm_tutorial
+    title: التوليد باستخدام LLMs
+  - local: conversations
+    title: الدردشة مع المحولات
+  title: البرامج التعليمية
+- sections:
+  - isExpanded: false
+    sections:
+    - local: tasks/sequence_classification
+      title: تصنيف النصوص
+    - local: tasks/token_classification
+      title: تصنيف الرموز
+    - local: tasks/question_answering
+      title: الإجابة على الأسئلة
+    - local: tasks/language_modeling
+      title: نمذجة اللغة السببية
+    - local: tasks/masked_language_modeling
+      title: نمذجة اللغة المقنعة
+    - local: tasks/translation
+      title: الترجمة
+    - local: tasks/summarization
+      title: التلخيص
+    - local: tasks/multiple_choice
+      title: الاختيار المتعدد
+    title: معالجة اللغات الطبيعية
+#   - isExpanded: false
+#     sections:
+#     - local: tasks/audio_classification
+#       title: تصنيف الصوت
+#     - local: tasks/asr
+#       title: التعرف التلقائي على الكلام
+#     title: الصوت
+#   - isExpanded: false
+#     sections:
+#     - local: tasks/image_classification
+#       title: تصنيف الصور
+#     - local: tasks/semantic_segmentation
+#       title: تجزئة الصور
+#     - local: tasks/video_classification
+#       title: تصنيف الفيديو
+#     - local: tasks/object_detection
+#       title: اكتشاف الأشياء
+#     - local: tasks/zero_shot_object_detection
+#       title: اكتشاف الأشياء بدون تدريب
+#     - local: tasks/zero_shot_image_classification
+#       title: تصنيف الصور بدون تدريب
+#     - local: tasks/monocular_depth_estimation
+#       title: تقدير العمق
+#     - local: tasks/image_to_image
+#       title: صورة إلى صورة
+#     - local: tasks/image_feature_extraction
+#       title: استخراج ميزات الصورة
+#     - local: tasks/mask_generation
+#       title: توليد القناع
+#     - local: tasks/knowledge_distillation_for_image_classification
+#       title: التقليل المعرفي للرؤية الحاسوبية
+#     title: الرؤية الحاسوبية
+#   - isExpanded: false
+#     sections:
+#     - local: tasks/image_captioning
+#       title: وصف الصور Image captioning
+#     - local: tasks/document_question_answering
+#       title: الإجابة على أسئلة المستندات
+#     - local: tasks/visual_question_answering
+#       title: الإجابة على الأسئلة المرئية
+#     - local: tasks/text-to-speech
+#       title: تحويل النص إلى كلام
+#     title: المتعددة الوسائط
+#   - isExpanded: false
+#     sections:
+#     - local: generation_strategies
+#       title: تخصيص استراتيجية التوليد
+#     - local: kv_cache
+#       title: أفضل الممارسات للتوليد باستخدام ذاكرة التخزين المؤقت
+#     title: التوليد
+#   - isExpanded: false
+#     sections:
+#     - local: tasks/idefics
+#       title: مهام الصور مع IDEFICS
+#     - local: tasks/prompting
+#       title: دليل إرشادي لمحفزات النماذج اللغوية الكبيرة
+#     title: الإرشاد
+  title: أدلة المهام
+- sections:
+  - local: fast_tokenizers
+    title: استخدم مجزئيات النصوص السريعة من 🤗 Tokenizers
+  - local: multilingual
+    title: الاستدلال باستخدام نماذج متعددة اللغات
+  - local: create_a_model
+    title: استخدام واجهات برمجة التطبيقات الخاصة بالنموذج
+  - local: custom_models
+    title: مشاركة نموذج مخصص
+  - local: chat_templating
+    title: قوالب لنماذج الدردشة
+  - local: trainer
+    title: المدرب
+  - local: sagemaker
+    title: تشغيل التدريب على Amazon SageMaker
+  - local: serialization
+    title: التصدير إلى ONNX
+  - local: tflite
+    title: التصدير إلى TFLite
+  - local: torchscript
+    title: التصدير إلى TorchScript
+  - local: notebooks
+    title: دفاتر الملاحظات مع الأمثلة
+  - local: community
+    title: موارد المجتمع
+  - local: troubleshooting
+    title: استكشاف الأخطاء وإصلاحها
+  - local: gguf
+    title: التوافق مع ملفات GGUF
+  - local: tiktoken
+    title: التوافق مع ملفات TikToken
+  - local: modular_transformers
+    title: الوحدات النمطية في `transformers`
+  - local: how_to_hack_models
+    title: اختراق النموذج (الكتابة فوق فئة لاستخدامك)
+  title: أدلة المطورين
+# - sections:
+#   - local: quantization/overview
+#     title: نظرة عامة
+#   - local: quantization/bitsandbytes
+#     title: bitsandbytes
+#   - local: quantization/gptq
+#     title: GPTQ
+#   - local: quantization/awq
+#     title: AWQ
+#   - local: quantization/aqlm
+#     title: AQLM
+#   - local: quantization/vptq
+#     title: VPTQ
+#   - local: quantization/quanto
+#     title: Quanto
+#   - local: quantization/eetq
+#     title: EETQ
+#   - local: quantization/hqq
+#     title: HQQ
+#   - local: quantization/optimum
+#     title: Optimum
+#   - local: quantization/contribute
+#     title: المساهمة بطريقة جديدة للتكميم
+#   title: أساليب التكميم
+# - sections:
+#   - local: performance
+#     title: الأداء-نظرة عامة
+#   - local: llm_optims
+#     title: تحسين الاستدلال LLM
+#   - sections:
+#     - local: perf_train_gpu_one
+#       title: استخدام عدة وحدات معالجة رسوميات (GPUs) بشكل متوازٍ
+#     - local: perf_train_gpu_many
+#       title: وحدات معالجة الرسومات (GPU) متعددة والتوازي
+#     - local: fsdp
+#       title: Fully Sharded Data Parallel
+#     - local: deepspeed
+#       title: DeepSpeed
+#     - local: perf_train_cpu
+#       title: التدريب الفعال على وحدة المعالجة المركزية (CPU)
+#     - local: perf_train_cpu_many
+#       title: التدريب الموزع لوحدة المعالجة المركزية (CPU)
+#     - local: perf_train_tpu_tf
+#       title: التدريب على (TPU) باستخدام TensorFlow
+#     - local: perf_train_special
+#       title: تدريب PyTorch على Apple silicon
+#     - local: perf_hardware
+#       title: الأجهزة المخصصة للتدريب
+#     - local: hpo_train
+#       title: البحث عن المعاملات المثلى باستخدام واجهة برمجة تطبيقات المدرب
+#     title: تقنيات التدريب الفعال
+#   - sections:
+#     - local: perf_infer_cpu
+#       title: الإستدلال على وحدة المعالجة المركزية (CPU)
+#     - local: perf_infer_gpu_one
+#       title: الإستدلال على وحدة معالجة الرسومات (GPU)
+#     title: تحسين الاستدلال
+#   - local: big_models
+#     title: إنشاء نموذج كبير
+#   - local: debugging
+#     title: تصحيح الأخطاء البرمجية
+#   - local: tf_xla
+#     title: تكامل XLA لنماذج TensorFlow
+#   - local: perf_torch_compile
+#     title: تحسين الاستدلال باستخدام `torch.compile()`
+#   title: الأداء وقابلية التوسع
+# - sections:
+#   - local: contributing
+#     title: كيفية المساهمة في 🤗 المحولات؟
+#   - local: add_new_model
+#     title: كيفية إضافة نموذج إلى 🤗 المحولات؟
+#   - local: add_new_pipeline
+#     title: كيفية إضافة خط أنابيب إلى 🤗 المحولات؟
+#   - local: testing
+#     title: الاختبار
+#   - local: pr_checks
+#     title: التحقق من طلب السحب
+#   title: المساهمة
+- sections:
+  - local: philosophy
+    title: الفلسفة
+  - local: glossary
+    title: (قاموس المصطلحات (قائمة الكلمات
+  - local: task_summary
+    title: ما الذي يمكن أن تفعله 🤗 المحولات
+  - local: tasks_explained
+    title: كيف تحل المحولات المهام
+  - local: model_summary
+    title: عائلة نماذج المحول
+  - local: tokenizer_summary
+    title: ملخص برنامج مقسم النصوص (tokenizers)
+  - local: attention
+    title: الانتباه Attention
+  - local: pad_truncation
+    title: الحشو والتقليم
+  - local: bertology
+    title: BERTology
+  - local: perplexity
+    title: حيرة النماذج ذات الطول الثابت
+  - local: pipeline_webserver
+    title: خطوط الأنابيب للاستدلال على خادم الويب
+  - local: model_memory_anatomy
+    title: تشريح تدريب النموذج
+  - local: llm_tutorial_optimization
+    title: الاستفادة القصوى من LLMs
+  title: أطر مفاهيمية
+# - sections:
+#   - sections:
+#     - local: main_classes/agent
+#       title: الوكلاء والأدوات
+#     - local: model_doc/auto
+#       title: فئات يتم إنشاؤها ديناميكيًا
+#     - local: main_classes/backbones
+#       title: العمود الفقري
+#     - local: main_classes/callback
+#       title: عمليات الاسترجاع
+#     - local: main_classes/configuration
+#       title: التكوين
+#     - local: main_classes/data_collator
+#       title: مجمع البيانات
+#     - local: main_classes/keras_callbacks
+#       title: استدعاءات Keras
+#     - local: main_classes/logging
+#       title: التسجيل
+#     - local: main_classes/model
+#       title: النماذج
+#     - local: main_classes/text_generation
+#       title: توليد النصوص
+#     - local: main_classes/onnx
+#       title: ONNX
+#     - local: main_classes/optimizer_schedules
+#       title: التحسين
+#     - local: main_classes/output
+#       title: مخرجات النموذج
+#     - local: main_classes/pipelines
+#       title: خطوط الأنابيب
+#     - local: main_classes/processors
+#       title: المعالجات
+#     - local: main_classes/quantization
+#       title: التكميم
+#     - local: main_classes/tokenizer
+#       title: برنامج مقسم النصوص
+#     - local: main_classes/trainer
+#       title: المدرب
+#     - local: main_classes/deepspeed
+#       title: DeepSpeed
+#     - local: main_classes/feature_extractor
+#       title: مستخرج الميزات
+#     - local: main_classes/image_processor
+#       title: معالج الصور
+#     title: الفئات الرئيسية
+#   - sections:
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/albert
+#         title: ALBERT
+#       - local: model_doc/bart
+#         title: BART
+#       - local: model_doc/barthez
+#         title: BARThez
+#       - local: model_doc/bartpho
+#         title: BARTpho
+#       - local: model_doc/bert
+#         title: BERT
+#       - local: model_doc/bert-generation
+#         title: BertGeneration
+#       - local: model_doc/bert-japanese
+#         title: BertJapanese
+#       - local: model_doc/bertweet
+#         title: Bertweet
+#       - local: model_doc/big_bird
+#         title: BigBird
+#       - local: model_doc/bigbird_pegasus
+#         title: BigBirdPegasus
+#       - local: model_doc/biogpt
+#         title: BioGpt
+#       - local: model_doc/blenderbot
+#         title: Blenderbot
+#       - local: model_doc/blenderbot-small
+#         title: Blenderbot Small
+#       - local: model_doc/bloom
+#         title: BLOOM
+#       - local: model_doc/bort
+#         title: BORT
+#       - local: model_doc/byt5
+#         title: ByT5
+#       - local: model_doc/camembert
+#         title: CamemBERT
+#       - local: model_doc/canine
+#         title: CANINE
+#       - local: model_doc/codegen
+#         title: CodeGen
+#       - local: model_doc/code_llama
+#         title: CodeLlama
+#       - local: model_doc/cohere
+#         title: Cohere
+#       - local: model_doc/convbert
+#         title: ConvBERT
+#       - local: model_doc/cpm
+#         title: CPM
+#       - local: model_doc/cpmant
+#         title: CPMANT
+#       - local: model_doc/ctrl
+#         title: CTRL
+#       - local: model_doc/dbrx
+#         title: DBRX
+#       - local: model_doc/deberta
+#         title: DeBERTa
+#       - local: model_doc/deberta-v2
+#         title: DeBERTa-v2
+#       - local: model_doc/dialogpt
+#         title: DialoGPT
+#       - local: model_doc/distilbert
+#         title: DistilBERT
+#       - local: model_doc/dpr
+#         title: DPR
+#       - local: model_doc/electra
+#         title: ELECTRA
+#       - local: model_doc/encoder-decoder
+#         title: Encoder Decoder Models
+#       - local: model_doc/ernie
+#         title: ERNIE
+#       - local: model_doc/ernie_m
+#         title: ErnieM
+#       - local: model_doc/esm
+#         title: ESM
+#       - local: model_doc/falcon
+#         title: Falcon
+#       - local: model_doc/fastspeech2_conformer
+#         title: FastSpeech2Conformer
+#       - local: model_doc/flan-t5
+#         title: FLAN-T5
+#       - local: model_doc/flan-ul2
+#         title: FLAN-UL2
+#       - local: model_doc/flaubert
+#         title: FlauBERT
+#       - local: model_doc/fnet
+#         title: FNet
+#       - local: model_doc/fsmt
+#         title: FSMT
+#       - local: model_doc/funnel
+#         title: Funnel Transformer
+#       - local: model_doc/fuyu
+#         title: Fuyu
+#       - local: model_doc/gemma
+#         title: Gemma
+#       - local: model_doc/openai-gpt
+#         title: GPT
+#       - local: model_doc/gpt_neo
+#         title: GPT Neo
+#       - local: model_doc/gpt_neox
+#         title: GPT NeoX
+#       - local: model_doc/gpt_neox_japanese
+#         title: GPT NeoX Japanese
+#       - local: model_doc/gptj
+#         title: GPT-J
+#       - local: model_doc/gpt2
+#         title: GPT2
+#       - local: model_doc/gpt_bigcode
+#         title: GPTBigCode
+#       - local: model_doc/gptsan-japanese
+#         title: GPTSAN Japanese
+#       - local: model_doc/gpt-sw3
+#         title: GPTSw3
+#       - local: model_doc/herbert
+#         title: HerBERT
+#       - local: model_doc/ibert
+#         title: I-BERT
+#       - local: model_doc/jamba
+#         title: Jamba
+#       - local: model_doc/jetmoe
+#         title: JetMoe
+#       - local: model_doc/jukebox
+#         title: Jukebox
+#       - local: model_doc/led
+#         title: LED
+#       - local: model_doc/llama
+#         title: LLaMA
+#       - local: model_doc/llama2
+#         title: Llama2
+#       - local: model_doc/llama3
+#         title: Llama3
+#       - local: model_doc/longformer
+#         title: Longformer
+#       - local: model_doc/longt5
+#         title: LongT5
+#       - local: model_doc/luke
+#         title: LUKE
+#       - local: model_doc/m2m_100
+#         title: M2M100
+#       - local: model_doc/madlad-400
+#         title: MADLAD-400
+#       - local: model_doc/mamba
+#         title: Mamba
+#       - local: model_doc/marian
+#         title: MarianMT
+#       - local: model_doc/markuplm
+#         title: MarkupLM
+#       - local: model_doc/mbart
+#         title: MBart and MBart-50
+#       - local: model_doc/mega
+#         title: MEGA
+#       - local: model_doc/megatron-bert
+#         title: MegatronBERT
+#       - local: model_doc/megatron_gpt2
+#         title: MegatronGPT2
+#       - local: model_doc/mistral
+#         title: Mistral
+#       - local: model_doc/mixtral
+#         title: Mixtral
+#       - local: model_doc/mluke
+#         title: mLUKE
+#       - local: model_doc/mobilebert
+#         title: MobileBERT
+#       - local: model_doc/mpnet
+#         title: MPNet
+#       - local: model_doc/mpt
+#         title: MPT
+#       - local: model_doc/mra
+#         title: MRA
+#       - local: model_doc/mt5
+#         title: MT5
+#       - local: model_doc/mvp
+#         title: MVP
+#       - local: model_doc/nezha
+#         title: NEZHA
+#       - local: model_doc/nllb
+#         title: NLLB
+#       - local: model_doc/nllb-moe
+#         title: NLLB-MoE
+#       - local: model_doc/nystromformer
+#         title: Nyströmformer
+#       - local: model_doc/olmo
+#         title: OLMo
+#       - local: model_doc/open-llama
+#         title: Open-Llama
+#       - local: model_doc/opt
+#         title: OPT
+#       - local: model_doc/pegasus
+#         title: Pegasus
+#       - local: model_doc/pegasus_x
+#         title: PEGASUS-X
+#       - local: model_doc/persimmon
+#         title: Persimmon
+#       - local: model_doc/phi
+#         title: Phi
+#       - local: model_doc/phi3
+#         title: Phi-3
+#       - local: model_doc/phobert
+#         title: PhoBERT
+#       - local: model_doc/plbart
+#         title: PLBart
+#       - local: model_doc/prophetnet
+#         title: ProphetNet
+#       - local: model_doc/qdqbert
+#         title: QDQBert
+#       - local: model_doc/qwen2
+#         title: Qwen2
+#       - local: model_doc/qwen2_moe
+#         title: Qwen2MoE
+#       - local: model_doc/rag
+#         title: RAG
+#       - local: model_doc/realm
+#         title: REALM
+#       - local: model_doc/recurrent_gemma
+#         title: RecurrentGemma
+#       - local: model_doc/reformer
+#         title: Reformer
+#       - local: model_doc/rembert
+#         title: RemBERT
+#       - local: model_doc/retribert
+#         title: RetriBERT
+#       - local: model_doc/roberta
+#         title: RoBERTa
+#       - local: model_doc/roberta-prelayernorm
+#         title: RoBERTa-PreLayerNorm
+#       - local: model_doc/roc_bert
+#         title: RoCBert
+#       - local: model_doc/roformer
+#         title: RoFormer
+#       - local: model_doc/rwkv
+#         title: RWKV
+#       - local: model_doc/splinter
+#         title: Splinter
+#       - local: model_doc/squeezebert
+#         title: SqueezeBERT
+#       - local: model_doc/stablelm
+#         title: StableLm
+#       - local: model_doc/starcoder2
+#         title: Starcoder2
+#       - local: model_doc/switch_transformers
+#         title: SwitchTransformers
+#       - local: model_doc/t5
+#         title: T5
+#       - local: model_doc/t5v1.1
+#         title: T5v1.1
+#       - local: model_doc/tapex
+#         title: TAPEX
+#       - local: model_doc/transfo-xl
+#         title: Transformer XL
+#       - local: model_doc/ul2
+#         title: UL2
+#       - local: model_doc/umt5
+#         title: UMT5
+#       - local: model_doc/xmod
+#         title: X-MOD
+#       - local: model_doc/xglm
+#         title: XGLM
+#       - local: model_doc/xlm
+#         title: XLM
+#       - local: model_doc/xlm-prophetnet
+#         title: XLM-ProphetNet
+#       - local: model_doc/xlm-roberta
+#         title: XLM-RoBERTa
+#       - local: model_doc/xlm-roberta-xl
+#         title: XLM-RoBERTa-XL
+#       - local: model_doc/xlm-v
+#         title: XLM-V
+#       - local: model_doc/xlnet
+#         title: XLNet
+#       - local: model_doc/yoso
+#         title: YOSO
+#       title: Text models
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/beit
+#         title: BEiT
+#       - local: model_doc/bit
+#         title: BiT
+#       - local: model_doc/conditional_detr
+#         title: Conditional DETR
+#       - local: model_doc/convnext
+#         title: ConvNeXT
+#       - local: model_doc/convnextv2
+#         title: ConvNeXTV2
+#       - local: model_doc/cvt
+#         title: CVT
+#       - local: model_doc/deformable_detr
+#         title: Deformable DETR
+#       - local: model_doc/deit
+#         title: DeiT
+#       - local: model_doc/depth_anything
+#         title: Depth Anything
+#       - local: model_doc/deta
+#         title: DETA
+#       - local: model_doc/detr
+#         title: DETR
+#       - local: model_doc/dinat
+#         title: DiNAT
+#       - local: model_doc/dinov2
+#         title: DINOV2
+#       - local: model_doc/dit
+#         title: DiT
+#       - local: model_doc/dpt
+#         title: DPT
+#       - local: model_doc/efficientformer
+#         title: EfficientFormer
+#       - local: model_doc/efficientnet
+#         title: EfficientNet
+#       - local: model_doc/focalnet
+#         title: FocalNet
+#       - local: model_doc/glpn
+#         title: GLPN
+#       - local: model_doc/imagegpt
+#         title: ImageGPT
+#       - local: model_doc/levit
+#         title: LeViT
+#       - local: model_doc/mask2former
+#         title: Mask2Former
+#       - local: model_doc/maskformer
+#         title: MaskFormer
+#       - local: model_doc/mobilenet_v1
+#         title: MobileNetV1
+#       - local: model_doc/mobilenet_v2
+#         title: MobileNetV2
+#       - local: model_doc/mobilevit
+#         title: MobileViT
+#       - local: model_doc/mobilevitv2
+#         title: MobileViTV2
+#       - local: model_doc/nat
+#         title: NAT
+#       - local: model_doc/poolformer
+#         title: PoolFormer
+#       - local: model_doc/pvt
+#         title: Pyramid Vision Transformer (PVT)
+#       - local: model_doc/pvt_v2
+#         title: Pyramid Vision Transformer v2 (PVTv2)
+#       - local: model_doc/regnet
+#         title: RegNet
+#       - local: model_doc/resnet
+#         title: ResNet
+#       - local: model_doc/segformer
+#         title: SegFormer
+#       - local: model_doc/seggpt
+#         title: SegGpt
+#       - local: model_doc/superpoint
+#         title: SuperPoint
+#       - local: model_doc/swiftformer
+#         title: SwiftFormer
+#       - local: model_doc/swin
+#         title: Swin Transformer
+#       - local: model_doc/swinv2
+#         title: Swin Transformer V2
+#       - local: model_doc/swin2sr
+#         title: Swin2SR
+#       - local: model_doc/table-transformer
+#         title: Table Transformer
+#       - local: model_doc/upernet
+#         title: UperNet
+#       - local: model_doc/van
+#         title: VAN
+#       - local: model_doc/vit
+#         title: Vision Transformer (ViT)
+#       - local: model_doc/vit_hybrid
+#         title: ViT Hybrid
+#       - local: model_doc/vitdet
+#         title: ViTDet
+#       - local: model_doc/vit_mae
+#         title: ViTMAE
+#       - local: model_doc/vitmatte
+#         title: ViTMatte
+#       - local: model_doc/vit_msn
+#         title: ViTMSN
+#       - local: model_doc/yolos
+#         title: YOLOS
+#       title: Vision models
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/audio-spectrogram-transformer
+#         title: Audio Spectrogram Transformer
+#       - local: model_doc/bark
+#         title: Bark
+#       - local: model_doc/clap
+#         title: CLAP
+#       - local: model_doc/encodec
+#         title: EnCodec
+#       - local: model_doc/hubert
+#         title: Hubert
+#       - local: model_doc/mctct
+#         title: MCTCT
+#       - local: model_doc/mms
+#         title: MMS
+#       - local: model_doc/musicgen
+#         title: MusicGen
+#       - local: model_doc/musicgen_melody
+#         title: MusicGen Melody
+#       - local: model_doc/pop2piano
+#         title: Pop2Piano
+#       - local: model_doc/seamless_m4t
+#         title: Seamless-M4T
+#       - local: model_doc/seamless_m4t_v2
+#         title: SeamlessM4T-v2
+#       - local: model_doc/sew
+#         title: SEW
+#       - local: model_doc/sew-d
+#         title: SEW-D
+#       - local: model_doc/speech_to_text
+#         title: Speech2Text
+#       - local: model_doc/speech_to_text_2
+#         title: Speech2Text2
+#       - local: model_doc/speecht5
+#         title: SpeechT5
+#       - local: model_doc/unispeech
+#         title: UniSpeech
+#       - local: model_doc/unispeech-sat
+#         title: UniSpeech-SAT
+#       - local: model_doc/univnet
+#         title: UnivNet
+#       - local: model_doc/vits
+#         title: VITS
+#       - local: model_doc/wav2vec2
+#         title: Wav2Vec2
+#       - local: model_doc/wav2vec2-bert
+#         title: Wav2Vec2-BERT
+#       - local: model_doc/wav2vec2-conformer
+#         title: Wav2Vec2-Conformer
+#       - local: model_doc/wav2vec2_phoneme
+#         title: Wav2Vec2Phoneme
+#       - local: model_doc/wavlm
+#         title: WavLM
+#       - local: model_doc/whisper
+#         title: Whisper
+#       - local: model_doc/xls_r
+#         title: XLS-R
+#       - local: model_doc/xlsr_wav2vec2
+#         title: XLSR-Wav2Vec2
+#       title: Audio models
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/timesformer
+#         title: TimeSformer
+#       - local: model_doc/videomae
+#         title: VideoMAE
+#       - local: model_doc/vivit
+#         title: ViViT
+#       title: Video models
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/align
+#         title: ALIGN
+#       - local: model_doc/altclip
+#         title: AltCLIP
+#       - local: model_doc/blip
+#         title: BLIP
+#       - local: model_doc/blip-2
+#         title: BLIP-2
+#       - local: model_doc/bridgetower
+#         title: BridgeTower
+#       - local: model_doc/bros
+#         title: BROS
+#       - local: model_doc/chinese_clip
+#         title: Chinese-CLIP
+#       - local: model_doc/clip
+#         title: CLIP
+#       - local: model_doc/clipseg
+#         title: CLIPSeg
+#       - local: model_doc/clvp
+#         title: CLVP
+#       - local: model_doc/data2vec
+#         title: Data2Vec
+#       - local: model_doc/deplot
+#         title: DePlot
+#       - local: model_doc/donut
+#         title: Donut
+#       - local: model_doc/flava
+#         title: FLAVA
+#       - local: model_doc/git
+#         title: GIT
+#       - local: model_doc/grounding-dino
+#         title: Grounding DINO
+#       - local: model_doc/groupvit
+#         title: GroupViT
+#       - local: model_doc/idefics
+#         title: IDEFICS
+#       - local: model_doc/idefics2
+#         title: Idefics2
+#       - local: model_doc/instructblip
+#         title: InstructBLIP
+#       - local: model_doc/kosmos-2
+#         title: KOSMOS-2
+#       - local: model_doc/layoutlm
+#         title: LayoutLM
+#       - local: model_doc/layoutlmv2
+#         title: LayoutLMV2
+#       - local: model_doc/layoutlmv3
+#         title: LayoutLMV3
+#       - local: model_doc/layoutxlm
+#         title: LayoutXLM
+#       - local: model_doc/lilt
+#         title: LiLT
+#       - local: model_doc/llava
+#         title: Llava
+#       - local: model_doc/llava_next
+#         title: LLaVA-NeXT
+#       - local: model_doc/lxmert
+#         title: LXMERT
+#       - local: model_doc/matcha
+#         title: MatCha
+#       - local: model_doc/mgp-str
+#         title: MGP-STR
+#       - local: model_doc/nougat
+#         title: Nougat
+#       - local: model_doc/oneformer
+#         title: OneFormer
+#       - local: model_doc/owlvit
+#         title: OWL-ViT
+#       - local: model_doc/owlv2
+#         title: OWLv2
+#       - local: model_doc/paligemma
+#         title: PaliGemma
+#       - local: model_doc/perceiver
+#         title: Perceiver
+#       - local: model_doc/pix2struct
+#         title: Pix2Struct
+#       - local: model_doc/sam
+#         title: Segment Anything
+#       - local: model_doc/siglip
+#         title: SigLIP
+#       - local: model_doc/speech-encoder-decoder
+#         title: Speech Encoder Decoder Models
+#       - local: model_doc/tapas
+#         title: TAPAS
+#       - local: model_doc/trocr
+#         title: TrOCR
+#       - local: model_doc/tvlt
+#         title: TVLT
+#       - local: model_doc/tvp
+#         title: TVP
+#       - local: model_doc/udop
+#         title: UDOP
+#       - local: model_doc/video_llava
+#         title: VideoLlava
+#       - local: model_doc/vilt
+#         title: ViLT
+#       - local: model_doc/vipllava
+#         title: VipLlava
+#       - local: model_doc/vision-encoder-decoder
+#         title: Vision Encoder Decoder Models
+#       - local: model_doc/vision-text-dual-encoder
+#         title: Vision Text Dual Encoder
+#       - local: model_doc/visual_bert
+#         title: VisualBERT
+#       - local: model_doc/xclip
+#         title: X-CLIP
+#       title: Multimodal models
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/decision_transformer
+#         title: محول القرار
+#       - local: model_doc/trajectory_transformer
+#         title: محول المسار
+#       title: نماذج التعلم التعزيزية
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/autoformer
+#         title: Autoformer
+#       - local: model_doc/informer
+#         title: Informer
+#       - local: model_doc/patchtsmixer
+#         title: PatchTSMixer
+#       - local: model_doc/patchtst
+#         title: PatchTST
+#       - local: model_doc/time_series_transformer
+#         title: محول السلاسل الزمنية
+#       title: نماذج السلاسل الزمنية
+#     - isExpanded: false
+#       sections:
+#       - local: model_doc/graphormer
+#         title: Graphormer
+#       title: نماذج الرسم البياني
+#     title: النماذج
+#   - sections:
+#     - local: internal/modeling_utils
+#       title: الطبقات المخصصة والمرافق
+#     - local: internal/pipelines_utils
+#       title: مرافق خطوط الأنابيب
+#     - local: internal/tokenization_utils
+#       title: مرافق مقسم النصوص
+#     - local: internal/trainer_utils
+#       title: مرافق المدرب
+#     - local: internal/generation_utils
+#       title: مرافق التوليد
+#     - local: internal/image_processing_utils
+#       title: مرافق معالجة الصور
+#     - local: internal/audio_utils
+#       title: مرافق معالجة الصوت
+#     - local: internal/file_utils
+#       title: مرافق عامة
+#     - local: internal/time_series_utils
+#       title: مرافق السلاسل الزمنية
+#     title: مساعدون داخليون
+#   title: API

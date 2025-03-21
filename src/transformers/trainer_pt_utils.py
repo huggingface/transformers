@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,12 +23,12 @@ import math
 import os
 import sys
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
 from logging import StreamHandler
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -56,12 +55,7 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_available():
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
-
-    if is_torch_greater_or_equal_than_2_0:
-        from torch.optim.lr_scheduler import LRScheduler
-    else:
-        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+    from torch.optim.lr_scheduler import LRScheduler
 
 
 logger = logging.get_logger(__name__)
@@ -226,7 +220,7 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
 
 
 def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]],
+    scalars: list[Union[int, float]],
     num_total_examples: Optional[int] = None,
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
@@ -629,7 +623,7 @@ class LengthGroupedSampler(Sampler):
         self,
         batch_size: int,
         dataset: Optional[Dataset] = None,
-        lengths: Optional[List[int]] = None,
+        lengths: Optional[list[int]] = None,
         model_input_name: Optional[str] = None,
         generator=None,
     ):
@@ -680,7 +674,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         rank: Optional[int] = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[List[int]] = None,
+        lengths: Optional[list[int]] = None,
         model_input_name: Optional[str] = None,
     ):
         if dataset is None and lengths is None:
@@ -941,7 +935,7 @@ def _secs2timedelta(secs):
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format
 
@@ -1085,7 +1079,7 @@ def save_metrics(self, split, metrics, combined=True):
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path) as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
@@ -1125,19 +1119,25 @@ def get_model_param_count(model, trainable_only=False):
     return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
-def get_parameter_names(model, forbidden_layer_types):
+def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None):
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
+    if forbidden_layer_names is None:
+        forbidden_layer_names = []
     result = []
     for name, child in model.named_children():
+        child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
         result += [
             f"{name}.{n}"
-            for n in get_parameter_names(child, forbidden_layer_types)
+            for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
+            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
         ]
-    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
-    result += list(model._parameters.keys())
+    # Add model specific parameters that are not in any child
+    result += [
+        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+    ]
     return result
 
 
@@ -1230,8 +1230,8 @@ class AcceleratorConfig:
             all workers.
         use_seedable_sampler (`bool`, *optional*, defaults to `True`):
             Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            training results are fully reproducible using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
@@ -1283,8 +1283,8 @@ class AcceleratorConfig:
         default=True,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducable using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "Ensures training results are fully reproducible using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are negligible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
@@ -1299,7 +1299,7 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[Dict] = field(
+    gradient_accumulation_kwargs: Optional[dict] = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
@@ -1395,3 +1395,17 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def _get_closed_form_lr(self):
         return self.base_lrs
+
+
+def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, is_distributed):
+    """Helper to set RNG state for a specific device type (CUDA, NPU, MLU, MUSA)"""
+    device_state_key = device_name.lower()
+    err_template = "Didn't manage to set back the RNG states of the {backend} because of the following error:\n {exception}\nThis won't yield the same results as if the training had not been interrupted."
+    try:
+        if is_distributed:
+            device_module.random.set_rng_state_all(checkpoint_rng_state[device_state_key])
+        else:
+            device_module.random.set_rng_state(checkpoint_rng_state[device_state_key])
+    except Exception as e:
+        # Log error if setting RNG state fails
+        logger.error(err_template.format(backend=device_name, exception=e))

@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -70,19 +71,20 @@ class EncoderDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "encoder-decoder"
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     is_composition = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        assert (
-            "encoder" in kwargs and "decoder" in kwargs
-        ), "Config has to be initialized with encoder and decoder config"
+        if "encoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError(
+                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"both `encoder` and `decoder` sub-configurations were not passed, only {kwargs}"
+            )
         encoder_config = kwargs.pop("encoder")
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")
         decoder_model_type = decoder_config.pop("model_type")
-
-        from ..auto.configuration_auto import AutoConfig
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
@@ -104,3 +106,6 @@ class EncoderDecoderConfig(PretrainedConfig):
         decoder_config.add_cross_attention = True
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
+
+
+__all__ = ["EncoderDecoderConfig"]

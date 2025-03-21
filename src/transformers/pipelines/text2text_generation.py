@@ -106,6 +106,12 @@ class Text2TextGenerationPipeline(Pipeline):
                 )
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, postprocess_params
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
@@ -115,7 +121,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return True
 
     def _parse_and_tokenize(self, *args, truncation):
-        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+        prefix = self.prefix if self.prefix is not None else ""
         if isinstance(args[0], list):
             if self.tokenizer.pad_token_id is None:
                 raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
@@ -154,7 +160,7 @@ class Text2TextGenerationPipeline(Pipeline):
                 max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./main_classes/text_generation)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -185,9 +191,14 @@ class Text2TextGenerationPipeline(Pipeline):
 
         self.check_inputs(
             input_length,
-            generate_kwargs.get("min_length", self.model.config.min_length),
-            generate_kwargs.get("max_length", self.model.config.max_length),
+            generate_kwargs.get("min_length", self.generation_config.min_length),
+            generate_kwargs.get("max_length", self.generation_config.max_length),
         )
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":
@@ -257,7 +268,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./main_classes/text_generation)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -359,7 +370,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
                 for single pair translation models
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./main_classes/text_generation)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:

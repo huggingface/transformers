@@ -114,7 +114,7 @@ class JambaConfig(PretrainedConfig):
         mamba_expand (`int`, *optional*, defaults to 2):
             Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
         mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+            Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         mamba_conv_bias (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
@@ -193,6 +193,9 @@ class JambaConfig(PretrainedConfig):
         self.attn_layer_period = attn_layer_period
         self.attn_layer_offset = attn_layer_offset
 
+        self._check_supported_offset("attention", self.attn_layer_period, self.attn_layer_offset)
+        self._check_supported_offset("expert", self.expert_layer_period, self.expert_layer_offset)
+
         self.use_mamba_kernels = use_mamba_kernels
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
@@ -222,3 +225,12 @@ class JambaConfig(PretrainedConfig):
             self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
             for i in range(self.num_hidden_layers)
         ]
+
+    def _check_supported_offset(self, property_: str, period: int, offset: int):
+        if offset >= period:
+            raise ValueError(
+                f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
+            )
+
+
+__all__ = ["JambaConfig"]

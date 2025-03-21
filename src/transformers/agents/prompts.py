@@ -129,7 +129,7 @@ final_answer(caption)
 ```<end_action>
 
 ---
-Above example were using tools that might not exist for you. You only have acces to those Tools:
+Above example were using tools that might not exist for you. You only have access to these Tools:
 <<tool_names>>
 
 Remember to make sure that variables you use are all defined.
@@ -199,7 +199,7 @@ Thought: I will now generate an image showcasing the oldest person.
 Action:
 {
   "action": "image_generator",
-  "action_input": {"text": ""A portrait of John Doe, a 55-year-old man living in Canada.""}
+  "action_input": {"prompt": "A portrait of John Doe, a 55-year-old man living in Canada."}
 }<end_action>
 Observation: "image.png"
 
@@ -256,7 +256,7 @@ Action:
 }<end_action>
 
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. You only have access to these tools:
 <<tool_descriptions>>
 
 Here are the rules you should always follow to solve your task:
@@ -332,10 +332,10 @@ final_answer("Shanghai")
 ---
 Task: "What is the current age of the pope, raised to the power 0.36?"
 
-Thought: I will use the tool `search` to get the age of the pope, then raise it to the power 0.36.
+Thought: I will use the tool `wiki` to get the age of the pope, then raise it to the power 0.36.
 Code:
 ```py
-pope_age = search(query="current pope age")
+pope_age = wiki(query="current pope age")
 print("Pope age:", pope_age)
 ```<end_action>
 Observation:
@@ -348,16 +348,16 @@ pope_current_age = 85 ** 0.36
 final_answer(pope_current_age)
 ```<end_action>
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. On top of performing computations in the Python code snippets that you create, you have access to these tools (and no other tool):
 
 <<tool_descriptions>>
 
-You also can perform computations in the Python code that you generate.
+<<managed_agents_descriptions>>
 
 Here are the rules you should always follow to solve your task:
 1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
 2. Use only variables that you have defined!
-3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
+3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = wiki({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = wiki(query="What is the place where James Bond lives?")'.
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
@@ -395,7 +395,7 @@ Do not add anything else."""
 SYSTEM_PROMPT_PLAN = """You are a world expert at making efficient plans to solve any task using a set of carefully crafted tools.
 
 Now for the given task, develop a step-by-step high-level plan taking into account the above inputs and list of facts.
-This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer.
+This plan should involve individual tasks based on the available tools, that if executed correctly will yield the correct answer.
 Do not skip steps, do not add any superfluous steps. Only write the high-level plan, DO NOT DETAIL INDIVIDUAL TOOL CALLS.
 After writing the final step of the plan, write the '\n<end_plan>' tag and stop there."""
 
@@ -409,6 +409,8 @@ Task:
 
 Your plan can leverage any of these tools:
 {tool_descriptions}
+
+{managed_agents_descriptions}
 
 List of facts that you know:
 ```
@@ -453,8 +455,10 @@ USER_PROMPT_PLAN_UPDATE = """You're still working towards solving this task:
 {task}
 ```
 
-You have access to these tools:
+You have access to these tools and only these:
 {tool_descriptions}
+
+{managed_agents_descriptions}
 
 Here is the up to date list of facts that you know:
 ```
@@ -462,7 +466,7 @@ Here is the up to date list of facts that you know:
 ```
 
 Now for the given task, develop a step-by-step high-level plan taking into account the above inputs and list of facts.
-This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer.
+This plan should involve individual tasks based on the available tools, that if executed correctly will yield the correct answer.
 Beware that you have {remaining_steps} steps remaining.
 Do not skip steps, do not add any superfluous steps. Only write the high-level plan, DO NOT DETAIL INDIVIDUAL TOOL CALLS.
 After writing the final step of the plan, write the '\n<end_plan>' tag and stop there.
@@ -470,7 +474,7 @@ After writing the final step of the plan, write the '\n<end_plan>' tag and stop 
 Now write your new plan below."""
 
 SYSTEM_PROMPT_PLAN_STRUCTURED = """Output a step-by-step plan to solve the task using the given tools.
-This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer. Each step should be structured as follows:
+This plan should involve individual tasks based on the available tools, that if executed correctly will yield the correct answer. Each step should be structured as follows:
 Step #n: {
   "description": <description of what the step does and its output>
   "tool": <tool to use>,
@@ -616,7 +620,7 @@ Now for the given task, create a plan taking into account the list of facts.
 After writing the final step of the plan, write the '\n<end_plan>' tag and stop there. Output the plan only and nothing else."""
 
 SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED = """Output a step-by-step plan to solve the task using the given tools.
-This plan should involve individual tasks based on the avilable tools, that if executed correctly will yield the correct answer. Each step should be structured as follows:
+This plan should involve individual tasks based on the available tools, that if executed correctly will yield the correct answer. Each step should be structured as follows:
 Step #n: {{
   "description": <description of what the step does and its output>
   "tool": <tool to use>,

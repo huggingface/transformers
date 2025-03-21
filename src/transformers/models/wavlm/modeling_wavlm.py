@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -690,14 +691,15 @@ class WavLMEncoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens output 0
-            hidden_states[~attention_mask] = 0.0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
         position_bias = None
 
         for i, layer in enumerate(self.layers):
@@ -708,8 +710,8 @@ class WavLMEncoder(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         layer.__call__,
@@ -775,13 +777,14 @@ class WavLMEncoderStableLayerNorm(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens are not attended to
-            hidden_states[~attention_mask] = 0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
         position_bias = None
 
         for i, layer in enumerate(self.layers):
@@ -792,8 +795,8 @@ class WavLMEncoderStableLayerNorm(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
@@ -1507,7 +1510,8 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1849,3 +1853,13 @@ class WavLMForXVector(WavLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "WavLMForAudioFrameClassification",
+    "WavLMForCTC",
+    "WavLMForSequenceClassification",
+    "WavLMForXVector",
+    "WavLMModel",
+    "WavLMPreTrainedModel",
+]

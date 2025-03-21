@@ -773,7 +773,6 @@ class TFGenerationMixin:
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         use_xla = not tf.executing_eagerly()
@@ -2119,7 +2118,7 @@ class TFGenerationMixin:
         a greedy approach, otherwise does multinomial sampling without replacement.
 
         Parameters:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`tf.Tensor` of shape `(batch_size, num_beams, sequence_length)`):
                 The sequence used as a prompt for the generation.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.

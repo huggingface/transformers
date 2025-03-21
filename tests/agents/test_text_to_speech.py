@@ -30,7 +30,7 @@ from .test_tools_common import ToolTesterMixin
 @require_torch
 class TextToSpeechToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = load_tool("text-to-speech")
+        self.tool = load_tool("text_to_speech")
         self.tool.setup()
 
     def test_exact_match_arg(self):

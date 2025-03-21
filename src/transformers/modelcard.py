@@ -489,7 +489,7 @@ class TrainingSummary:
                 f" [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
             )
 
-        if self.dataset is None:
+        if self.dataset is None or (isinstance(self.dataset, list) and len(self.dataset) == 0):
             model_card += "an unknown dataset."
         else:
             if isinstance(self.dataset, str):
@@ -874,13 +874,17 @@ def extract_hyperparameters_from_trainer(trainer):
     if total_eval_batch_size != hyperparameters["eval_batch_size"]:
         hyperparameters["total_eval_batch_size"] = total_eval_batch_size
 
-    if trainer.args.adafactor:
-        hyperparameters["optimizer"] = "Adafactor"
-    else:
-        hyperparameters["optimizer"] = (
-            f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
-            f" epsilon={trainer.args.adam_epsilon}"
-        )
+    if trainer.args.optim:
+        optimizer_name = trainer.args.optim
+        optimizer_args = trainer.args.optim_args if trainer.args.optim_args else "No additional optimizer arguments"
+
+        if "adam" in optimizer_name.lower():
+            hyperparameters["optimizer"] = (
+                f"Use {optimizer_name} with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
+                f" epsilon={trainer.args.adam_epsilon} and optimizer_args={optimizer_args}"
+            )
+        else:
+            hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:

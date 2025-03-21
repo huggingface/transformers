@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Qwen2MoE
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 Qwen2MoE is the new model series of large language models from the Qwen team. Previously, we released the Qwen series, including Qwen-72B, Qwen-1.8B, Qwen-VL, Qwen-Audio, etc.
@@ -79,4 +85,9 @@ In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inf
 ## Qwen2MoeForTokenClassification
 
 [[autodoc]] Qwen2MoeForTokenClassification
+    - forward
+
+## Qwen2MoeForQuestionAnswering
+
+[[autodoc]] Qwen2MoeForQuestionAnswering
     - forward
