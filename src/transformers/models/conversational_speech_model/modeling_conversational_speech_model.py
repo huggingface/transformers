@@ -32,6 +32,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerateDecoderOnlyOutput, GenerationConfig, GenerationMixin
 from ...generation.logits_process import LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteriaList
+from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -818,7 +819,7 @@ class ConversationalSpeechModelCodebooksHead(nn.Module):
     def __init__(self, hidden_size, num_codebooks, vocab_size):
         super().__init__()
         self.num_codebooks = num_codebooks
-        self.weight = nn.Parameter(torch.empty(self.num_codebooks, hidden_size, vocab_size))
+        self.weight = nn.Parameter(torch.empty(self.num_codebooks - 1, hidden_size, vocab_size))
 
     def reset_parameters(self):
         for i in range(self.num_codebooks - 1):
@@ -846,7 +847,6 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(ConversationalSpeechModel
         super().__init__(config)
         self.model = ConversationalSpeechModelDepthDecoder(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.codebooks_head = ConversationalSpeechModelCodebooksHead(
             config.hidden_size, config.num_codebooks, config.vocab_size
         )
@@ -961,7 +961,13 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(ConversationalSpeechModel
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            logits = logits.float()
+            labels = labels.to(logits.device)
+            shift_labels = labels[..., 1:].contiguous()
+            logits = logits.view(-1, self.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            shift_labels = shift_labels.to(logits.device)
+            loss = fixed_cross_entropy(logits, shift_labels)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1414,7 +1420,9 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
                 logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
             )
 
-            depth_decoder_input_ids = input_ids[:, :, : self.config.num_codebooks].view(-1, self.config.num_codebooks)
+            depth_decoder_input_ids = depth_decoder_input_ids = input_ids[:, :, : self.config.num_codebooks - 1].view(
+                -1, self.config.num_codebooks - 1
+            )
             backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.hidden_size)
             depth_decoder_labels = labels[:, :, : self.config.num_codebooks].view(-1, self.config.num_codebooks)
 

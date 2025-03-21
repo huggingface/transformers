@@ -32,8 +32,8 @@ from ...generation.logits_process import (
 )
 from ...generation.stopping_criteria import (
     StoppingCriteriaList,
-    StoppingCriteria
 )
+from ...loss.loss_utils import fixed_cross_entropy
 from ...configuration_utils import PretrainedConfig
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -422,7 +422,7 @@ class ConversationalSpeechModelCodebooksHead(nn.Module):
         super().__init__()
         self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(
-            torch.empty(self.num_codebooks, hidden_size, vocab_size)
+            torch.empty(self.num_codebooks - 1, hidden_size, vocab_size)
         )
 
     def reset_parameters(self):
@@ -446,6 +446,7 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
 
     def __init__(self, config):
         super().__init__(config)
+        del self.lm_head
         self.codebooks_head = ConversationalSpeechModelCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)
         self.model = ConversationalSpeechModelDepthDecoder(config)
 
@@ -504,7 +505,13 @@ class ConversationalSpeechModelDepthDecoderForCausalLM(LlamaForCausalLM):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            logits = logits.float()
+            labels = labels.to(logits.device)
+            shift_labels = labels[..., 1:].contiguous()
+            logits = logits.view(-1, self.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            shift_labels = shift_labels.to(logits.device)
+            loss = fixed_cross_entropy(logits, shift_labels)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -633,7 +640,7 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
                 logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
             )
 
-            depth_decoder_input_ids = input_ids[:, :, :self.config.num_codebooks].view(-1, self.config.num_codebooks)
+            depth_decoder_input_ids = depth_decoder_input_ids = input_ids[:, :, : self.config.num_codebooks - 1].view(-1, self.config.num_codebooks - 1)
             backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.hidden_size)
             depth_decoder_labels = labels[:, :, :self.config.num_codebooks].view(-1, self.config.num_codebooks)
 
