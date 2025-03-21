@@ -153,6 +153,13 @@ def is_numpy_array(x):
     return _is_numpy(x)
 
 
+def is_py_number(x):
+    """
+    Tests if `x` is a Python number or not.
+    """
+    return isinstance(x, (int, float))
+
+
 def _is_torch(x):
     import torch
 
@@ -257,6 +264,15 @@ def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
+    if is_py_number(obj):
+        return obj
+    elif isinstance(obj, (dict, UserDict)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        # shortcut for 1d list and tuple
+        if obj and is_py_number(obj[0]):
+            return obj
+        return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {
         "pt": lambda obj: obj.detach().cpu().tolist(),
@@ -264,11 +280,6 @@ def to_py_obj(obj):
         "jax": lambda obj: np.asarray(obj).tolist(),
         "np": lambda obj: obj.tolist(),
     }
-
-    if isinstance(obj, (dict, UserDict)):
-        return {k: to_py_obj(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [to_py_obj(o) for o in obj]
 
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(obj)
