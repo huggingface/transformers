@@ -990,9 +990,7 @@ class ConversationalSpeechBackboneModelEmbeddings(nn.Module):
         self.embed_audio_tokens = nn.Embedding(
             (num_codebooks * codebook_vocab_size), hidden_size, codebook_padding_idx
         )
-
-        audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
-        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets)
+        self.audio_tokens_offsets = torch.arange(num_codebooks) * codebook_vocab_size
 
     def forward(self, input_ids):
         """
