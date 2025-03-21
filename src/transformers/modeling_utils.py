@@ -1907,6 +1907,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
+        # Make sure the modules correctly exist if the flag is active
+        if self._keep_in_fp32_modules is not None:
+            all_modules = {name for name, _ in self.named_modules() if len(name) > 0}
+            unique_module_names = set()
+            # Get all unique module names in the module graph, without the prefixes
+            for module in all_modules:
+                unique_module_names.update([name for name in module.split(".") if not name.isnumeric()])
+            # Check that every module in the keep_in_fp32 list is part of the module graph
+            for module in self._keep_in_fp32_modules:
+                if module not in unique_module_names:
+                    raise ValueError(
+                        f"{module} was specified in the `_keep_in_fp32_modules` list, but is not part of the modules in"
+                        f" {self.__class__.__name__}"
+                    )
+
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = (
