@@ -2296,9 +2296,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         }
 
         # needs to prepare generation config, even though it'll be done again in `generate`
-        generation_config, kwargs = self._prepare_generation_config(
-            kwargs.pop("generation_config", None), False, **kwargs
-        )
+        generation_config, kwargs = self._prepare_generation_config(kwargs.pop("generation_config", None), **kwargs)
 
         input_ids, user_audio_codes, moshi_audio_codes, concat_unconditional_inputs = (
             self._check_and_maybe_initalize_inputs(

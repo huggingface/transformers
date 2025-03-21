@@ -576,7 +576,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
         # 1. prepare generation config
-        generation_config, kwargs = self._prepare_generation_config(generation_config, False, **kwargs)
+        generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]

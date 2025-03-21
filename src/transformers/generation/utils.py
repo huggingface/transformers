@@ -1553,7 +1553,7 @@ class GenerationMixin:
         return generation_config
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool], **kwargs: Dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
     ) -> Tuple[GenerationConfig, Dict]:
         """
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
@@ -1597,7 +1597,9 @@ class GenerationMixin:
             # - `use_model_defaults`: let's fallback ALL default values to the model's generation config
             # - otherwise: legacy behavior, let's just make sure we have the tokens defined
             model_base_version = version.parse(version.parse(self.generation_config.transformers_version).base_version)
-            if use_model_defaults is True or model_base_version >= version.parse("4.50.0"):
+            if use_model_defaults is True or (
+                use_model_defaults is None and model_base_version >= version.parse("4.50.0")
+            ):
                 modified_values = {}
                 default_generation_config = GenerationConfig()
                 for key, default_value in default_generation_config.__dict__.items():
