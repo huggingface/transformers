@@ -146,7 +146,7 @@ class DogeConfig(PretrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.feed_forward.router_gate": "colwise",
+        "layers.*.mlp.router_gate": "colwise_rep",
         "layers.*.mlp.down_embed": "rowwise",
         "layers.*.mlp.up_embed": "rowwise",
     }

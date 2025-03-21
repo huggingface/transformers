@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Doge is a series of small language models based on the [Doge](https://github.com/LoserCheems/WonderfulMatrices) architecture, aiming to combine the advantages of state-space and self-attention algorithms, calculate dynamic masks from cached value states using the zero-order hold method, and solve the problem of existing mainstream language models getting lost in context. It uses the `wsd_scheduler` scheduler to pre-train on the `smollm-corpus`, and can continue training on new datasets or add sparse activation feedforward networks from stable stage checkpoints.
+Doge is a series of small language models based on the [Doge](https://github.com/SmallDoges/small-doge) architecture, aiming to combine the advantages of state-space and self-attention algorithms, calculate dynamic masks from cached value states using the zero-order hold method, and solve the problem of existing mainstream language models getting lost in context. It uses the `wsd_scheduler` scheduler to pre-train on the `smollm-corpus`, and can continue training on new datasets or add sparse activation feedforward networks from stable stage checkpoints.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/refs%2Fpr%2F426/transformers/model_doc/doge_architecture.png" alt="drawing" width="600"/>
 

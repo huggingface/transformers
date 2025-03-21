@@ -73,18 +73,6 @@ class DogeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class DogeResidual(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-
-    def forward(self, residual_states, hidden_states):
-        return self.weight * residual_states + hidden_states
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}"
-
-
 class DogeRotaryEmbedding(nn.Module):
     def __init__(self, config: DogeConfig, device=None):
         super().__init__()
@@ -218,7 +206,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class DogeDynamicMaskAttention(nn.Module):
+class DogeAttention(nn.Module):
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -363,22 +351,28 @@ class DogeMLP(nn.Module):
         return down_proj
 
 
-class DogeCDMoE(DogeMLP):
+class DogeCDMoE(nn.Module):
     def __init__(self, config: DogeConfig):
-        super().__init__(config)
-        self.hidden_dim = config.hidden_size
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
 
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.num_keys = int(math.sqrt(self.num_experts))
 
+        # cross domain
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
+
         # router gate for retrieval experts
-        self.router_gate = nn.Linear(self.hidden_dim, self.num_keys * 2)
+        self.router_gate = nn.Linear(self.hidden_size, self.num_keys * 2, bias=False)
 
         # experts
-        self.down_embed = nn.Embedding(self.num_experts, self.hidden_dim)
-        self.up_embed = nn.Embedding(self.num_experts, self.hidden_dim)
+        self.down_embed = nn.Embedding(self.num_experts, self.hidden_size)
+        self.up_embed = nn.Embedding(self.num_experts, self.hidden_size)
 
     def forward(
         self,
@@ -415,12 +409,12 @@ class DogeDecoderLayer(nn.Module):
         self.hidden_dropout = config.hidden_dropout
 
         self.input_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.self_attn = DogeDynamicMaskAttention(config=config, layer_idx=layer_idx)
-        self.input_residual = DogeResidual(config.hidden_size)
+        self.self_attn = DogeAttention(config=config, layer_idx=layer_idx)
+        self.input_residual = nn.Parameter(torch.ones(config.hidden_size))
 
         self.post_attention_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
-        self.post_attention_residual = DogeResidual(config.hidden_size)
+        self.post_attention_residual = nn.Parameter(torch.ones(config.hidden_size))
 
     def forward(
         self,
@@ -431,7 +425,7 @@ class DogeDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,  # necessary, but kept here for BC
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         # sequence transformation
@@ -450,14 +444,14 @@ class DogeDecoderLayer(nn.Module):
         )
         self_attn_weights = None
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
-        hidden_states = self.input_residual(residual, hidden_states)
+        hidden_states = self.input_residual * residual + hidden_states
 
         # state transformation
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
-        hidden_states = self.post_attention_residual(residual, hidden_states)
+        hidden_states = self.post_attention_residual * residual + hidden_states
 
         outputs = (hidden_states,)
         if output_attentions:
@@ -804,7 +798,7 @@ class DogeModel(DogePreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1043,7 +1037,7 @@ class DogeForSequenceClassification(DogePreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

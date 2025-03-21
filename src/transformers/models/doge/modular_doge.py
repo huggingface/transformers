@@ -17,7 +17,7 @@
 """PyTorch Doge model."""
 
 import math
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -40,6 +40,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
+from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -51,7 +52,7 @@ from ...utils import (
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import flex_attention
+    from torch.nn.attention.flex_attention import BlockMask
 
 
 logger = logging.get_logger(__name__)
@@ -181,7 +182,7 @@ class DogeConfig(PretrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.feed_forward.router_gate": "colwise",
+        "layers.*.mlp.router_gate": "colwise_rep",
         "layers.*.mlp.down_embed": "rowwise",
         "layers.*.mlp.up_embed": "rowwise",
     }
@@ -265,18 +266,6 @@ class DogeRMSNorm(LlamaRMSNorm):
 ALL_LAYERNORM_LAYERS.append(DogeRMSNorm)
 
 
-class DogeResidual(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-
-    def forward(self, residual_states, hidden_states):
-        return self.weight * residual_states + hidden_states
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}"
-
-
 class DogeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
@@ -286,34 +275,37 @@ def flex_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: Union[torch.Tensor, "BlockMask"],
     scaling: Optional[float] = None,
-    is_causal: Optional[bool] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    causal_mask = attention_mask
-    if attention_mask is not None:
+    block_mask = None
+    causal_mask = None
+    if isinstance(attention_mask, BlockMask):
+        block_mask = attention_mask
+    else:
+        causal_mask = attention_mask
+
+    if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
-    if is_causal is None:
-        is_causal = causal_mask is None and query.shape[2] > 1
-
-    def causal_mod(score, b, h, q_idx, kv_idx):
+    def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
         if softcap is not None:
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
-            score = score + causal_mask[b][h][q_idx][kv_idx]
+            score = score + causal_mask[batch_idx][head_idx][q_idx][kv_idx]
         if head_mask is not None:
-            score = score + head_mask[b][h][0][0]
+            score = score + head_mask[batch_idx][head_idx][0][0]
         return score
 
-    attn_output, attention_weights = flex_attention(
-        query=query,
-        key=key,
-        value=value,
-        score_mod=causal_mod,
+    attn_output, attention_weights = compile_friendly_flex_attention(
+        query,
+        key,
+        value,
+        score_mod=score_mod,
+        block_mask=block_mask,
         enable_gqa=True,
         scale=scaling,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
@@ -330,7 +322,7 @@ def flex_attention_forward(
 ALL_ATTENTION_FUNCTIONS.update({"flex_attention": flex_attention_forward})
 
 
-class DogeDynamicMaskAttention(nn.Module):
+class DogeAttention(nn.Module):
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -467,22 +459,28 @@ class DogeMLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
 
 
-class DogeCDMoE(DogeMLP):
+class DogeCDMoE(nn.Module):
     def __init__(self, config: DogeConfig):
-        super().__init__(config)
-        self.hidden_dim = config.hidden_size
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
 
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.num_keys = int(math.sqrt(self.num_experts))
 
+        # cross domain
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
+
         # router gate for retrieval experts
-        self.router_gate = nn.Linear(self.hidden_dim, self.num_keys * 2)
+        self.router_gate = nn.Linear(self.hidden_size, self.num_keys * 2, bias=False)
 
         # experts
-        self.down_embed = nn.Embedding(self.num_experts, self.hidden_dim)
-        self.up_embed = nn.Embedding(self.num_experts, self.hidden_dim)
+        self.down_embed = nn.Embedding(self.num_experts, self.hidden_size)
+        self.up_embed = nn.Embedding(self.num_experts, self.hidden_size)
 
     def forward(
         self,
@@ -519,12 +517,12 @@ class DogeDecoderLayer(nn.Module):
         self.hidden_dropout = config.hidden_dropout
 
         self.input_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.self_attn = DogeDynamicMaskAttention(config=config, layer_idx=layer_idx)
-        self.input_residual = DogeResidual(config.hidden_size)
+        self.self_attn = DogeAttention(config=config, layer_idx=layer_idx)
+        self.input_residual = nn.Parameter(torch.ones(config.hidden_size))
 
         self.post_attention_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
-        self.post_attention_residual = DogeResidual(config.hidden_size)
+        self.post_attention_residual = nn.Parameter(torch.ones(config.hidden_size))
 
     def forward(
         self,
@@ -535,7 +533,7 @@ class DogeDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,  # necessary, but kept here for BC
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         # sequence transformation
@@ -554,14 +552,14 @@ class DogeDecoderLayer(nn.Module):
         )
         self_attn_weights = None
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
-        hidden_states = self.input_residual(residual, hidden_states)
+        hidden_states = self.input_residual * residual + hidden_states
 
         # state transformation
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
-        hidden_states = self.post_attention_residual(residual, hidden_states)
+        hidden_states = self.post_attention_residual * residual + hidden_states
 
         outputs = (hidden_states,)
         if output_attentions:

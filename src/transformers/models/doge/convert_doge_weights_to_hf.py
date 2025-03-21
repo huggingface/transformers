@@ -22,9 +22,9 @@ STATE_DICT_MAPPING = {
 
     # Layers keys
     r"^model.layers.(\d+).pre_layernorm.weight": r"model.layers.\1.input_layernorm.weight",
-    r"^model.layers.(\d+).pre_residual.weight": r"model.layers.\1.input_residual.weight",
+    r"^model.layers.(\d+).pre_residual.weight": r"model.layers.\1.input_residual",
     r"^model.layers.(\d+).post_layernorm.weight": r"model.layers.\1.post_attention_layernorm.weight",
-    r"^model.layers.(\d+).post_residual.weight": r"model.layers.\1.post_attention_residual.weight",
+    r"^model.layers.(\d+).post_residual.weight": r"model.layers.\1.post_attention_residual",
 
     # Attention keys
     r"^model.layers.(\d+).self_attn.q_proj.weight": r"model.layers.\1.self_attn.q_proj.weight",
@@ -39,6 +39,7 @@ STATE_DICT_MAPPING = {
     r"^model.layers.(\d+).feed_forward.up_proj.weight": r"model.layers.\1.mlp.up_proj.weight",
     r"^model.layers.(\d+).feed_forward.down_proj.weight": r"model.layers.\1.mlp.down_proj.weight",
     r"^model.layers.(\d+).feed_forward.router_gate.weight": r"model.layers.\1.mlp.router_gate.weight",
+    r"^model.layers.(\d+).feed_forward.router_gate.bias": None,
     r"^model.layers.(\d+).feed_forward.down_embed.weight": r"model.layers.\1.mlp.down_embed.weight",
     r"^model.layers.(\d+).feed_forward.up_embed.weight": r"model.layers.\1.mlp.up_embed.weight",
 }
@@ -47,7 +48,6 @@ STATE_DICT_MAPPING = {
 
 def load_weights(input_dir: str):
     safetensor_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".safetensors")]
-    bin_files = [os.path.join(input_dir, x) for x in os.listdir(input_dir) if x.endswith(".bin")]
 
     all_weights = {}
 
@@ -59,17 +59,6 @@ def load_weights(input_dir: str):
         safetensor_files = sorted(safetensor_files, key=lambda x: int(x.rsplit("-", 3)[1]))
         for file in safetensor_files:
             tensors = load_file(file)
-            all_weights.update(tensors)
-        return all_weights
-
-    elif bin_files:
-        if len(bin_files) == 1:
-            tensors = torch.load(bin_files[0], map_location="cpu")
-            all_weights.update(tensors)
-            return all_weights
-        bin_files = sorted(bin_files, key=lambda x: int(x.rsplit("-", 3)[1]))
-        for file in bin_files:
-            tensors = torch.load(file, map_location="cpu")
             all_weights.update(tensors)
         return all_weights
 
