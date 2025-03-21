@@ -442,7 +442,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
     @slow
     def test_model_600m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto")
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -462,8 +462,8 @@ class Qwen3IntegrationTest(unittest.TestCase):
     def test_model_600m_generation(self):
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B", use_fast=False)
-        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -484,7 +484,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen3ForCausalLM.from_pretrained(
-            "Qwen/Qwen3-0.6B",
+            "Qwen/Qwen3-0.6B-Base",
             device_map="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
@@ -511,7 +511,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto", attn_implementation="sdpa")
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", attn_implementation="sdpa")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
@@ -530,7 +530,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
 
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -545,10 +545,10 @@ class Qwen3IntegrationTest(unittest.TestCase):
             "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it"
         )
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B", use_fast=False)
-        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto", torch_dtype=torch.float16)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B-Base", use_fast=False)
+        model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16)
         assistant_model = Qwen3ForCausalLM.from_pretrained(
-            "Qwen/Qwen3-0.6B", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen3-0.6B-Base", device_map="auto", torch_dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -574,7 +574,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        qwen_model = "Qwen/Qwen3-0.6B"
+        qwen_model = "Qwen/Qwen3-0.6B-Base"
 
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
@@ -620,7 +620,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
     @require_flash_attn
     @slow
     def test_600m_generation(self):
-        model_id = "Qwen/Qwen3-0.6B"
+        model_id = "Qwen/Qwen3-0.6B-Base"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = Qwen3ForCausalLM.from_pretrained(
             model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048
