@@ -24,6 +24,7 @@ from transformers.utils import (
 from .configuration_granite_speech import (
     GraniteSpeechConfig,
     GraniteSpeechEncoderConfig,
+    GraniteSpeechProjectorConfig,
 )
 
 logger = logging.get_logger(__name__)
@@ -518,7 +519,7 @@ class GraniteSpeechEncoderProjectorPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = GraniteSpeechConfig
+    config_class = GraniteSpeechProjectorConfig
     base_model_prefix = "qformer"
     supports_gradient_checkpointing = True
 
@@ -741,7 +742,7 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
 # create the model through AutoModel.
 
 class EncoderProjectorQFormer(nn.Module):
-    def __init__(self, config: GraniteSpeechConfig):
+    def __init__(self, config: GraniteSpeechProjectorConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.ds_rate = config.downsample_rate
