@@ -194,6 +194,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "TrOCRDecoder",
     "PeftModelForCausalLM",
     "PeftModelForSeq2SeqLM",
+    "MoshiForConditionalGeneration",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]

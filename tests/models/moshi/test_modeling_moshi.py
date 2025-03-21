@@ -538,6 +538,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
+    fx_compatible = True
 
     def setUp(self):
         self.model_tester = MoshiTester(self)
