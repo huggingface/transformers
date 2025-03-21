@@ -575,6 +575,7 @@ class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
             -torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
         ).to(torch_device)
         embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64).to(torch_device)
+        embed_positions.weight = embed_positions._init_weight(embed_positions.weight)
         sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
 
         query_layer, key_layer = RoFormerSelfAttention.apply_rotary_position_embeddings(
