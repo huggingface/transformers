@@ -613,7 +613,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         r"""
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
@@ -1103,7 +1103,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+    ) -> Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
