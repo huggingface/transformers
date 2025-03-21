@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # PaliGemma
 
-[PaliGemma](https://huggingface.co/papers/2407.07726) is a family of vision-language models (VLMs), combining [SigLIP](./siglip) with [Gemma 2](./gemma2), that is available in 3B, 10B, and 28B parameters. The main purpose of PaliGemma is to provide an adaptable base VLM that is easy to transfer to other tasks. The SigLIP vision encoder is a "shape optimized" contrastively pretrained [ViT](./vit) that converts an image into a sequence of tokens and prepended to an optional prompt. The Gemma 2B model is used as the decoder. PaliGemma uses full attention on all image and text tokens to maximize its capacity.
+[PaliGemma](https://huggingface.co/papers/2407.07726) is a family of vision-language models (VLMs), combining [SigLIP](./siglip) with the [Gemma](./gemma) 2B model. PaliGemma is available in 3B, 10B, and 28B parameters. The main purpose of PaliGemma is to provide an adaptable base VLM that is easy to transfer to other tasks. The SigLIP vision encoder is a "shape optimized" contrastively pretrained [ViT](./vit) that converts an image into a sequence of tokens and prepended to an optional prompt. The Gemma 2B model is used as the decoder. PaliGemma uses full attention on all image and text tokens to maximize its capacity.
 
 [PaliGemma 2](https://huggingface.co/papers/2412.03555) improves on the first model by using Gemma 2 (2B, 9B, and 27B parameter variants) as the decoder. These are available as **pt** or **mix** variants. The **pt** checkpoints are intended for further fine-tuning and the **mix** checkpoints are ready for use out of the box.
 
@@ -116,7 +116,7 @@ output = model.generate(**inputs, max_new_tokens=50, cache_implementation="stati
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-Use the [`~transformers.utils.AttentionMaskVisualizer`] to better understand what tokens the model can and cannot attend to.
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
@@ -128,7 +128,7 @@ visualizer("<img> What is in this image?")
 ## Notes
 
 - PaliGemma is not a conversational model and works best when fine-tuned for specific downstream tasks such as image captioning, visual question answering (VQA), object detection, and document understanding.
-- [`PaliGemmaProcessor`] can prepare images, text, and optional labels for the model. When fine-tuning PaliGemma, pass the `suffix` parameter to the processor to create labels for the model.
+- [`PaliGemmaProcessor`] can prepare images, text, and optional labels for the model. Pass the `suffix` parameter to the processor to create labels for the model during fine-tuning.
 
     ```py
     prompt = "What is in this image?"

@@ -107,7 +107,7 @@ output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use the [`~transformers.utils.AttentionMaskVisualizer`] utility to better understand what tokens the model can and cannot attend to.
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer

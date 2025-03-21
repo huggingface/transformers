@@ -24,9 +24,9 @@ rendered properly in your Markdown viewer.
 
 # Gemma 3
 
-[Gemma 3](https://goo.gle/Gemma3Report) is a multimodal model, available in pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information in images from disappearing.
+[Gemma 3](https://goo.gle/Gemma3Report) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information from disappearing in high resolution images or images with non-square aspect ratios.
 
-The instruction-tuned Gemma 3 model was post-trained with knowledge distillation and reinforcement learning.
+The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
 
 You can find all the original Gemma 3 checkpoints under the [Gemma 3](https://huggingface.co/collections/meta-llama/llama-2-family-661da1f90a9d678b6f55773b) release.
 
@@ -99,6 +99,13 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model google/gemma-3-1b-pt --device 0
+```
+
+</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
@@ -148,7 +155,7 @@ output = model.generate(**inputs, max_new_tokens=50, cache_implementation="stati
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-Use the [`~transformers.utils.AttentionMaskVisualizer`] to better understand what tokens the model can and cannot attend to.
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```py
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
@@ -185,7 +192,7 @@ visualizer("<img>What is shown in this image?")
     ```
 - Text passed to the processor should have a `<start_of_image>` token wherever an image should be inserted.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
-- By default, the images aren't cropped and only the base image is forwarded to the model. In high resolution images or images with non-square aspect ratios, artifacts can result because the vision encoder uses a fixed resolution of 896x896. To prevent these artifacts and improve performance during inference, set `do_pan_and_scan=True` to crop the image into multiple smaller patches and concatenate them with the base image embedding. You can disable pan and scan for faster inference.
+- By default, images aren't cropped and only the base image is forwarded to the model. In high resolution images or images with non-square aspect ratios, artifacts can result because the vision encoder uses a fixed resolution of 896x896. To prevent these artifacts and improve performance during inference, set `do_pan_and_scan=True` to crop the image into multiple smaller patches and concatenate them with the base image embedding. You can disable pan and scan for faster inference.
 
     ```diff
     inputs = processor.apply_chat_template(
