@@ -114,9 +114,8 @@ class GotOcr2VisionAttention(nn.Module):
 
         return rel_pos_resized[relative_coords.long()]
 
-    def add_decomposed_rel_pos(
+    def get_decomposed_rel_pos(
         self,
-        attn: torch.Tensor,
         query: torch.Tensor,
         rel_pos_h: torch.Tensor,
         rel_pos_w: torch.Tensor,
@@ -128,8 +127,6 @@ class GotOcr2VisionAttention(nn.Module):
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
 
         Args:
-            attn (`torch.Tensor`):
-                attention map.
             query (`torch.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`torch.Tensor`):
@@ -142,8 +139,8 @@ class GotOcr2VisionAttention(nn.Module):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (`torch.Tensor`):
-                attention map with added relative positional embeddings.
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -154,10 +151,10 @@ class GotOcr2VisionAttention(nn.Module):
         reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
         rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = attn.reshape(batch_size, query_height, query_width, key_height, key_width)
-        attn = attn + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-        attn = attn.reshape(batch_size, query_height * query_width, key_height * key_width)
-        return attn
+
+        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+
+        return decomposed_rel_pos
 
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         batch_size, height, width, _ = hidden_states.shape
@@ -173,9 +170,11 @@ class GotOcr2VisionAttention(nn.Module):
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
+            attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
@@ -626,10 +625,10 @@ GOT_OCR2_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        pixel_values (`torch.FloatTensor` of shape `(seq_length, num_channels * image_size * image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`GotOcr2Processor`] uses
-            [`CLIPImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`GotOcr2Processor`] uses
+            [`GotOcr2ImageProcessor`] for processing images.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -668,13 +667,6 @@ GOT_OCR2_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).

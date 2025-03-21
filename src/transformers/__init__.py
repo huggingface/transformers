@@ -475,6 +475,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
+    "models.gemma3": ["Gemma3Config", "Gemma3Processor", "Gemma3TextConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -613,6 +614,7 @@ _import_structure = {
     ],
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
+    "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
         "MllamaConfig",
@@ -710,6 +712,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.prompt_depth_anything": ["PromptDepthAnythingConfig"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -773,6 +776,10 @@ _import_structure = {
     "models.seggpt": ["SegGptConfig"],
     "models.sew": ["SEWConfig"],
     "models.sew_d": ["SEWDConfig"],
+    "models.shieldgemma2": [
+        "ShieldGemma2Config",
+        "ShieldGemma2Processor",
+    ],
     "models.siglip": [
         "SiglipConfig",
         "SiglipProcessor",
@@ -1016,6 +1023,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_hpu_available",
         "is_torch_mlu_available",
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
@@ -1040,6 +1048,7 @@ _import_structure = {
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "QuarkConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -1260,6 +1269,7 @@ else:
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessor")
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
@@ -1291,6 +1301,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.prompt_depth_anything"].extend(["PromptDepthAnythingImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
@@ -1333,6 +1344,7 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
@@ -1365,6 +1377,10 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["model_debugging_utils"] = [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
         "Cache",
@@ -2461,6 +2477,14 @@ else:
             "Gemma2PreTrainedModel",
         ]
     )
+    _import_structure["models.gemma3"].extend(
+        [
+            "Gemma3ForCausalLM",
+            "Gemma3ForConditionalGeneration",
+            "Gemma3PreTrainedModel",
+            "Gemma3TextModel",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2563,6 +2587,7 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2570,7 +2595,6 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
-
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2935,6 +2959,12 @@ else:
             "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mistral3"].extend(
+        [
+            "Mistral3ForConditionalGeneration",
+            "Mistral3PreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -3320,6 +3350,12 @@ else:
             "Pop2PianoPreTrainedModel",
         ]
     )
+    _import_structure["models.prompt_depth_anything"].extend(
+        [
+            "PromptDepthAnythingForDepthEstimation",
+            "PromptDepthAnythingPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "ProphetNetDecoder",
@@ -3571,6 +3607,7 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
+    _import_structure["models.shieldgemma2"].append("ShieldGemma2ForImageClassification")
     _import_structure["models.siglip"].extend(
         [
             "SiglipForImageClassification",
@@ -4101,7 +4138,6 @@ else:
     )
     _import_structure["optimization"] = [
         "Adafactor",
-        "AdamW",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -5639,6 +5675,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
+    from .models.gemma3 import Gemma3Config, Gemma3Processor, Gemma3TextConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -5785,6 +5822,7 @@ if TYPE_CHECKING:
         MimiConfig,
     )
     from .models.mistral import MistralConfig
+    from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
         MllamaConfig,
@@ -5905,6 +5943,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prompt_depth_anything import PromptDepthAnythingConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -5972,6 +6011,10 @@ if TYPE_CHECKING:
     from .models.seggpt import SegGptConfig
     from .models.sew import SEWConfig
     from .models.sew_d import SEWDConfig
+    from .models.shieldgemma2 import (
+        ShieldGemma2Config,
+        ShieldGemma2Processor,
+    )
     from .models.siglip import (
         SiglipConfig,
         SiglipProcessor,
@@ -6241,6 +6284,7 @@ if TYPE_CHECKING:
         is_timm_available,
         is_tokenizers_available,
         is_torch_available,
+        is_torch_hpu_available,
         is_torch_mlu_available,
         is_torch_musa_available,
         is_torch_neuroncore_available,
@@ -6267,6 +6311,7 @@ if TYPE_CHECKING:
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        QuarkConfig,
         SpQRConfig,
         TorchAoConfig,
         VptqConfig,
@@ -6460,6 +6505,7 @@ if TYPE_CHECKING:
             FlavaProcessor,
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
+        from .models.gemma3 import Gemma3ImageProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
@@ -6507,6 +6553,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.prompt_depth_anything import PromptDepthAnythingImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
@@ -6545,6 +6592,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
@@ -6571,6 +6619,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
+        # Debugging
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6655,6 +6704,10 @@ if TYPE_CHECKING:
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
+        )
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
@@ -7477,6 +7530,12 @@ if TYPE_CHECKING:
             Gemma2Model,
             Gemma2PreTrainedModel,
         )
+        from .models.gemma3 import (
+            Gemma3ForCausalLM,
+            Gemma3ForConditionalGeneration,
+            Gemma3PreTrainedModel,
+            Gemma3TextModel,
+        )
         from .models.git import (
             GitForCausalLM,
             GitModel,
@@ -7838,6 +7897,10 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
+        from .models.mistral3 import (
+            Mistral3ForConditionalGeneration,
+            Mistral3PreTrainedModel,
+        )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForQuestionAnswering,
@@ -8138,6 +8201,10 @@ if TYPE_CHECKING:
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
         )
+        from .models.prompt_depth_anything import (
+            PromptDepthAnythingForDepthEstimation,
+            PromptDepthAnythingPreTrainedModel,
+        )
         from .models.prophetnet import (
             ProphetNetDecoder,
             ProphetNetEncoder,
@@ -8332,6 +8399,9 @@ if TYPE_CHECKING:
             SEWDForSequenceClassification,
             SEWDModel,
             SEWDPreTrainedModel,
+        )
+        from .models.shieldgemma2 import (
+            ShieldGemma2ForImageClassification,
         )
         from .models.siglip import (
             SiglipForImageClassification,
@@ -8740,7 +8810,6 @@ if TYPE_CHECKING:
         # Optimization
         from .optimization import (
             Adafactor,
-            AdamW,
             get_constant_schedule,
             get_constant_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
