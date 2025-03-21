@@ -361,13 +361,15 @@ class Gemma3Attention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        if attention_mask is not None:
+            # backwards compatibility
+            attention_mask = attention_mask.to(query_states)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask.to(query_states),
+            attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
@@ -1313,9 +1315,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Gemma3 positions are 1-indexed
-
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
@@ -1427,9 +1426,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # position_ids in Gemma3 are 1-indexed
-        if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:

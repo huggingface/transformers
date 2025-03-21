@@ -866,7 +866,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_flash_attn_2_generate_padding_left(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
 
