@@ -51,6 +51,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -936,6 +937,7 @@ class BambaModel(BambaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -947,7 +949,6 @@ class BambaModel(BambaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPast]:
@@ -956,8 +957,6 @@ class BambaModel(BambaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1043,13 +1042,12 @@ class BambaModel(BambaPreTrainedModel):
 
         next_cache = None if not use_cache else past_key_values
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
     def _update_causal_mask(
         self,
@@ -1184,6 +1182,7 @@ class BambaModel(BambaPreTrainedModel):
 
 
 class BambaForCausalLM(LlamaForCausalLM):
+    @can_return_tuple
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1198,7 +1197,6 @@ class BambaForCausalLM(LlamaForCausalLM):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
@@ -1244,7 +1242,6 @@ class BambaForCausalLM(LlamaForCausalLM):
             use_cache,
             output_attentions,
             output_hidden_states,
-            return_dict,
             cache_position,
             logits_to_keep,
             **kwargs,

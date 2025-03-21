@@ -34,7 +34,12 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    replace_return_docstrings,
+)
 from ..auto import AutoModelForCausalLM
 from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
 
@@ -440,18 +445,17 @@ class GotOcr2VisionEncoder(nn.Module):
     def get_input_embeddings(self):
         return self.patch_embed
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, GotOcr2VisionEncoderOutput]:
+    ) -> GotOcr2VisionEncoderOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -485,13 +489,11 @@ class GotOcr2VisionEncoder(nn.Module):
 
         hidden_states = self.neck(hidden_states)
 
-        output = GotOcr2VisionEncoderOutput(
+        return GotOcr2VisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-        return output if return_dict else output.to_tuple()
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -734,6 +736,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         image_outputs = self.vision_tower(pixel_values).last_hidden_state
         return self.multi_modal_projector(image_outputs)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GOT_OCR2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GotOcr2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -748,7 +751,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, GotOcr2CausalLMOutputWithPast]:
@@ -801,7 +803,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -835,7 +836,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
         )
@@ -860,7 +860,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
             )
 
-        output = GotOcr2CausalLMOutputWithPast(
+        return GotOcr2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -868,7 +868,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
 
     def prepare_inputs_for_generation(
         self,

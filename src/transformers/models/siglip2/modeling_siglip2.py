@@ -21,7 +21,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple
 
 import numpy as np
 import torch
@@ -38,6 +38,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -567,14 +568,14 @@ class Siglip2Encoder(nn.Module):
         self.gradient_checkpointing = False
 
     # Ignore copy
+    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -601,7 +602,6 @@ class Siglip2Encoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -632,10 +632,11 @@ class Siglip2Encoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        output = BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
-        return output if return_dict else output.to_tuple()
 
 
 SIGLIP2_VISION_INPUTS_DOCSTRING = r"""
@@ -670,6 +671,7 @@ class Siglip2VisionTransformer(nn.Module):
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Siglip2VisionConfig)
     def forward(
@@ -679,8 +681,7 @@ class Siglip2VisionTransformer(nn.Module):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -689,7 +690,6 @@ class Siglip2VisionTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
@@ -704,7 +704,6 @@ class Siglip2VisionTransformer(nn.Module):
             attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -712,13 +711,12 @@ class Siglip2VisionTransformer(nn.Module):
 
         pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
 
-        output = BaseModelOutputWithPooling(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class Siglip2TextEmbeddings(nn.Module):
@@ -901,6 +899,7 @@ class Siglip2TextTransformer(nn.Module):
         self.head = nn.Linear(embed_dim, config.projection_size)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP2_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Siglip2TextConfig)
     def forward(
@@ -910,8 +909,7 @@ class Siglip2TextTransformer(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -920,7 +918,6 @@ class Siglip2TextTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
@@ -941,7 +938,6 @@ class Siglip2TextTransformer(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -951,13 +947,12 @@ class Siglip2TextTransformer(nn.Module):
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
 
-        output = BaseModelOutputWithPooling(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-        return output if return_dict else output.to_tuple()
 
 
 SIGLIP2_START_DOCSTRING = r"""
@@ -1101,6 +1096,7 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP2_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Siglip2TextConfig)
     def forward(
@@ -1110,8 +1106,7 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1130,7 +1125,6 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         return self.text_model(
             input_ids=input_ids,
@@ -1138,7 +1132,6 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
@@ -1192,6 +1185,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Siglip2VisionConfig)
     def forward(
@@ -1201,8 +1195,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
@@ -1225,15 +1218,12 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled features
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         return self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
@@ -1281,7 +1271,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1307,7 +1296,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
@@ -1315,7 +1303,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         pooled_output = text_outputs.pooler_output
@@ -1330,7 +1317,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         spatial_shapes: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1361,7 +1347,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
@@ -1369,13 +1354,13 @@ class Siglip2Model(Siglip2PreTrainedModel):
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         pooled_output = vision_outputs.pooler_output
 
         return pooled_output
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Siglip2Output, config_class=Siglip2Config)
     def forward(
@@ -1389,8 +1374,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Siglip2Output]:
+    ) -> Siglip2Output:
         r"""
         Returns:
 
@@ -1425,7 +1409,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
@@ -1433,7 +1416,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(
@@ -1442,7 +1424,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         image_embeds = vision_outputs.pooler_output
@@ -1469,7 +1450,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
             nll = -torch.sum(loglik, dim=-1)
             loss = nll.mean()
 
-        output = Siglip2Output(
+        return Siglip2Output(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -1478,7 +1459,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
-        return output if return_dict else output.to_tuple()
 
 
 @add_start_docstrings(
@@ -1509,6 +1489,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1519,8 +1500,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1558,7 +1538,6 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
@@ -1566,7 +1545,6 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
             spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         sequence_output = outputs.last_hidden_state
@@ -1606,13 +1584,12 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        output = ImageClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        return output if return_dict else output.to_tuple()
 
 
 __all__ = [

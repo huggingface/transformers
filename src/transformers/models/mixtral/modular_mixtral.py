@@ -341,7 +341,6 @@ class MixtralModel(MistralModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, MoeModelOutputWithPast]:
@@ -353,8 +352,6 @@ class MixtralModel(MistralModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -439,14 +436,13 @@ class MixtralModel(MistralModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = MoeModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
@@ -474,7 +470,6 @@ class MixtralForCausalLM(MistralForCausalLM):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
@@ -519,7 +514,6 @@ class MixtralForCausalLM(MistralForCausalLM):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
@@ -532,7 +526,6 @@ class MixtralForCausalLM(MistralForCausalLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -549,7 +542,7 @@ class MixtralForCausalLM(MistralForCausalLM):
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
-                outputs.router_logits if return_dict else outputs[-1],
+                outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
                 attention_mask,
@@ -557,7 +550,7 @@ class MixtralForCausalLM(MistralForCausalLM):
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        output = MoeCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
@@ -566,7 +559,6 @@ class MixtralForCausalLM(MistralForCausalLM):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class MixtralForSequenceClassification(MistralForSequenceClassification):

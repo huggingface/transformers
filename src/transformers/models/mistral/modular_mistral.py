@@ -302,7 +302,6 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
@@ -315,7 +314,6 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs: BaseModelOutputWithPast = self.model(
             input_ids,
@@ -325,7 +323,6 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
         )
 
         sequence_output = outputs.last_hidden_state
@@ -339,11 +336,10 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
         if start_positions is not None and end_positions is not None:
             loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
 
-        output = QuestionAnsweringModelOutput(
+        return QuestionAnsweringModelOutput(
             loss=loss,
             start_logits=start_logits,
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        return output if return_dict else output.to_tuple()
