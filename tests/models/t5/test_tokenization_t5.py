@@ -498,7 +498,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokenizer.add_special_tokens(
             {"additional_special_tokens": [AddedToken("<extra_id_0>", rstrip=False, lstrip=False)]}
         )
-        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # TODO ArthurZ the above is necessary as addedTokens / initialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
 
