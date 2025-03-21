@@ -610,7 +610,9 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-15B-A2B-Base", use_fast=False)
-        model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-15B-A2B-Base", device_map="auto", torch_dtype=torch.float16)
+        model = Qwen3MoeForCausalLM.from_pretrained(
+            "Qwen/Qwen3-15B-A2B-Base", device_map="auto", torch_dtype=torch.float16
+        )
         assistant_model = Qwen3MoeForCausalLM.from_pretrained(
             "Qwen/Qwen3-15B-A2B-Base", device_map="auto", torch_dtype=torch.float16
         )
