@@ -836,6 +836,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ZambaAttentionDecoderLayer", "ZambaMambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
+    _supports_flash_attn_3 = False
     _supports_sdpa = False
     _supports_cache_class = True  # Note: only supports ZambaHybridDynamicCache
     _is_stateful = True
@@ -891,6 +892,30 @@ class ZambaPreTrainedModel(PreTrainedModel):
 
         # if using the default path -> swap sdpa by eager
         if not hard_check_only and config._attn_implementation == "flash_attention_2":
+            config._attn_implementation = "eager"
+
+        return config
+
+    @classmethod
+    @classmethod
+    def _check_and_enable_flash_attn_3(
+        cls,
+        config,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        hard_check_only: bool = False,
+        check_device_map: bool = False,
+    ):
+        """
+        Overloads `PreTrainedModel._check_and_enable_flash_attn_2` so as to DISABLE Flash Attention 3 by default on Zamba models.
+        Flash attention 2 is currently not supported in the HuggingFace implementation of Zamba v1.
+        """
+        config = super()._check_and_enable_flash_attn_3(
+            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
+        )
+
+        # if using the default path -> swap sdpa by eager
+        if not hard_check_only and config._attn_implementation == "flash_attention_3":
             config._attn_implementation = "eager"
 
         return config
@@ -1142,7 +1167,7 @@ class ZambaModel(ZambaPreTrainedModel):
 
     # Copied from transformers.models.jamba.modeling_jamba.JambaModel._update_causal_mask
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

@@ -493,6 +493,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTJBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -673,6 +674,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.post_init()
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -897,7 +899,7 @@ class GPTJModel(GPTJPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
