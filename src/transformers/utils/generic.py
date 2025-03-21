@@ -939,11 +939,19 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if is_torchdynamo_compiling():
-            return func(self, *args, **kwargs)
 
         is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
         is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
+        
+        if is_torchdynamo_compiling():
+            if is_configured_to_return_tuple:
+                raise RuntimeError(
+                    "The model is configured to return tuple (config.use_return_dict is False) but torch.compile/export is used. "
+                    "This is not supported. Please provide `return_dict=False` in the model forward call instead."
+                )
+            output = func(self, *args, **kwargs)
+            return output.to_tuple() if is_requested_to_return_tuple else output
+
 
         # The following allows to convert output to tuple ONLY on top level forward call,
         # while internal modules of the model will return Output objects

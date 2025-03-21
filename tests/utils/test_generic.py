@@ -324,10 +324,18 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
     def test_decorator_compiled(self):
         """Test that the can_return_tuple decorator works with compiled mode."""
         config = PretrainedConfig()
+
+        # Output object
         model = self._get_model(config)
         compiled_model = torch.compile(model)
         output = compiled_model(torch.tensor(10))
         self.assertIsInstance(output, BaseModelOutput)
+
+        # Tuple output
+        model = self._get_model(config)
+        compiled_model = torch.compile(model)
+        output = compiled_model(torch.tensor(10), return_dict=False)
+        self.assertIsInstance(output, tuple)
 
     def test_decorator_torch_export(self):
         """Test that the can_return_tuple decorator works with torch.export."""
