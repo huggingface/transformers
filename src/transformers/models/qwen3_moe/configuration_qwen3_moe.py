@@ -39,13 +39,13 @@ class Qwen3MoeConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`Qwen3MoeModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5632):
+        intermediate_size (`int`, *optional*, defaults to 6144):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
+        num_key_value_heads (`int`, *optional*, defaults to 4):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -116,11 +116,11 @@ class Qwen3MoeConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
             The frequency of the MoE layer.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408):
+        moe_intermediate_size (`int`, *optional*, defaults to 768):
             Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 4):
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of selected experts.
-        num_experts (`int`, *optional*, defaults to 60):
+        num_experts (`int`, *optional*, defaults to 128):
             Number of routed experts.
         norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the topk probabilities.

@@ -52,7 +52,7 @@ class Qwen3Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
-        head_dim (`int`, *optional*, defaults to 256):
+        head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
