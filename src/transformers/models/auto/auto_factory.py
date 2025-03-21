@@ -445,6 +445,11 @@ class _BaseAutoModelClass:
         )
 
     @classmethod
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+        """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
+        return config
+
+    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -539,6 +544,10 @@ class _BaseAutoModelClass:
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
+        # AutoClass-specific config manipulation
+        config = copy.deepcopy(config)
+        config = cls._prepare_config_for_auto_class(config)
+
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
         trust_remote_code = resolve_trust_remote_code(
@@ -580,7 +589,7 @@ class _BaseAutoModelClass:
             model_class ([`PreTrainedModel`]):
                 The model to register.
         """
-        if hasattr(model_class, "config_class") and str(model_class.config_class) != str(config_class):
+        if hasattr(model_class, "config_class") and model_class.config_class.__name__ != config_class.__name__:
             raise ValueError(
                 "The model class you are passing has a `config_class` attribute that is not consistent with the "
                 f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "

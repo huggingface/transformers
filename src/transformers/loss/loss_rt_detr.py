@@ -18,7 +18,6 @@ import torch.nn.functional as F
 
 from ..utils import is_scipy_available, is_vision_available, requires_backends
 from .loss_for_object_detection import (
-    _set_aux_loss,
     box_iou,
     dice_loss,
     generalized_box_iou,
@@ -33,6 +32,15 @@ if is_scipy_available():
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+
+# different for RT-DETR: not slicing the last element like in DETR one
+@torch.jit.unused
+def _set_aux_loss(outputs_class, outputs_coord):
+    # this is a workaround to make torchscript happy, as torchscript
+    # doesn't support dictionary with non-homogeneous values, such
+    # as a dict having both a Tensor and a list.
+    return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
 class RTDetrHungarianMatcher(nn.Module):

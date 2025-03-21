@@ -73,7 +73,7 @@ if is_torch_available():
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded"]
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded", "dynamic"]
     )
 
 
@@ -175,6 +175,7 @@ class GenerationConfig(PushToHubMixin):
         cache_implementation (`str`, *optional*, default to `None`):
             Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
 
+            - `"dynamic"`: [`DynamicCache`]
             - `"static"`: [`StaticCache`]
             - `"offloaded_static"`: [`OffloadedStaticCache`]
             - `"sliding_window"`: [`SlidingWindowCache`]
@@ -182,9 +183,8 @@ class GenerationConfig(PushToHubMixin):
             - `"mamba"`: [`MambaCache`]
             - `"quantized"`: [`QuantizedCache`]
 
-            We support other cache types, but they must be manually instantiated and
-            passed to `generate` through the `past_key_values` argument. See our
-            [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
+            If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
+            our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
@@ -379,6 +379,8 @@ class GenerationConfig(PushToHubMixin):
             If using a static cache, this controls how `generate` will `compile` the forward pass for performance
             gains.
 
+        disable_compile (`bool`, *optional*): Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when specific criteria are met, including using a compileable cache. Please open an issue if you find the need to use this flag.
+
         > Wild card
 
         generation_kwargs:
@@ -480,9 +482,9 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
         self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
-        # Performances
+        # Performance
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
-
+        self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
@@ -785,8 +787,7 @@ class GenerationConfig(PushToHubMixin):
             for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
                 if getattr(self, arg_name) is not None:
                     logger.warning_once(
-                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
-                        UserWarning,
+                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name))
                     )
 
         # 6.  check watermarking arguments
@@ -1579,7 +1580,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
 
 
 @dataclass
-class CompileConfig(object):
+class CompileConfig:
     """
     Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
@@ -1620,7 +1621,9 @@ class CompileConfig(object):
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"
     options: Optional[dict] = None
+    # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
+    _compile_all_devices = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
-        return copy.deepcopy(self.__dict__)
+        return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})

@@ -15,6 +15,12 @@ rendered properly in your Markdown viewer.
 -->
 # Zamba2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 Zamba2 is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).
@@ -34,6 +40,8 @@ Zamba2-1.2B, Zamba2-2.7B and Zamba2-7B are hybrid models combining state-space m
 Zamba2 requires you use `transformers` version 4.48.0 or higher:
 ```bash
 pip install transformers>=4.48.0
+```
+
 ## Inference
 
 ```python

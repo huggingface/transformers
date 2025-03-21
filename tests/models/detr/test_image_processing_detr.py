@@ -37,7 +37,7 @@ if is_vision_available():
         from transformers import DetrImageProcessorFast
 
 
-class DetrImageProcessingTester(unittest.TestCase):
+class DetrImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -54,7 +54,6 @@ class DetrImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         do_pad=True,
     ):
-        super().__init__()
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
         size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
         self.parent = parent
