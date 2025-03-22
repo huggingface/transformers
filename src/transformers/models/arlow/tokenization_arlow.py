@@ -32,7 +32,15 @@ class ArlowTokenizer(PreTrainedTokenizerFast):
         ```
 
     Attributes:
-        vocab_size (int): The size of the vocabulary.
+        vocab_file (`<fill_type>`, *optional*): <fill_docstring>
+        merges_file (`<fill_type>`, *optional*): <fill_docstring>
+        tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
+        bos_token (`<fill_type>`, *optional*, defaults to `"<|startoftext|>"`): <fill_docstring>
+        eos_token (`<fill_type>`, *optional*, defaults to `"<|endoftext|>"`): <fill_docstring>
+        unk_token (`<fill_type>`, *optional*, defaults to `"<|unk|>"`): <fill_docstring>
+        pad_token (`<fill_type>`, *optional*, defaults to `"<|pad|>"`): <fill_docstring>
+        mask_token (`<fill_type>`, *optional*, defaults to `"<|mask|>"`): <fill_docstring>
+        additional_special_tokens (`<fill_type>`, *optional*): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -38,7 +38,7 @@ class ArlowConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (useful for speedy decoding in
             multi-turn or streaming scenarios).
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by RMS normalization layers.
         rope_theta (`float`, *optional*, defaults to 100000.0):
             The base period used by RoPE (rotary position embeddings).
@@ -57,7 +57,6 @@ class ArlowConfig(PretrainedConfig):
             Token id of the beginning-of-sequence token.
         eos_token_id (`int`, *optional*, defaults to 2):
             Token id of the end-of-sequence token.
-        **kwargs:
             Additional key-value arguments passed to the base class `PretrainedConfig`.
 
     Example:

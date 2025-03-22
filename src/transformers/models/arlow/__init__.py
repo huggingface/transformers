@@ -10,12 +10,12 @@ from ...utils import _LazyModule
 ########################################################################
 _import_structure = {
     "configuration_arlow": ["ArlowConfig"],
-    "tokenization_arlow": ["ArlowTokenizer"],
     "modeling_arlow": [
-        "ArlowPreTrainedModel",
-        "ArlowModel",
         "ArlowForCausalLM",
+        "ArlowModel",
+        "ArlowPreTrainedModel",
     ],
+    "tokenization_arlow": ["ArlowTokenizer"],
 }
 
 ########################################################################

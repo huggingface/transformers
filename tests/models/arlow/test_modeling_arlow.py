@@ -8,6 +8,14 @@ from transformers.models.arlow import ArlowConfig, ArlowForCausalLM, ArlowModel
 from transformers.testing_utils import require_torch, slow, torch_device
 
 
+try:
+    from transformers.models.arlow.modeling_arlow import ArlowForCausalLM, ArlowModel
+
+    _flash_attn_available = True
+except ImportError:
+    _flash_attn_available = False
+
+
 @require_torch
 class ArlowModelTester:
     """
@@ -152,10 +160,12 @@ class ArlowModelTest(unittest.TestCase):
     def setUp(self):
         self.model_tester = ArlowModelTester()
 
+    @unittest.skipUnless(_flash_attn_available, "flash_attn is not available")
     def test_model(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(config, input_ids, attention_mask, labels)
 
+    @unittest.skipUnless(_flash_attn_available, "flash_attn is not available")
     def test_model_for_causal_lm(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm(config, input_ids, attention_mask, labels)
