@@ -776,6 +776,9 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = None
 MODEL_FOR_KEYPOINT_DETECTION_MAPPING = None
 
 
+MODEL_FOR_KEYPOINT_MATCHING_MAPPING = None
+
+
 MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
@@ -959,6 +962,13 @@ class AutoModelForInstanceSegmentation(metaclass=DummyObject):
 
 
 class AutoModelForKeypointDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForKeypointMatching(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3882,6 +3892,27 @@ class DPTModel(metaclass=DummyObject):
 
 
 class DPTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientLoFTRForKeypointMatching(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientLoFTRModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientLoFTRPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
