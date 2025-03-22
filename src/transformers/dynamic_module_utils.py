@@ -101,6 +101,10 @@ def get_relative_imports(module_file: Union[str, os.PathLike]) -> List[str]:
     relative_imports = re.findall(r"^\s*import\s+\.(\S+)\s*$", content, flags=re.MULTILINE)
     # Imports of the form `from .xxx import yyy`
     relative_imports += re.findall(r"^\s*from\s+\.(\S+)\s+import", content, flags=re.MULTILINE)
+
+    # convert modules from nested imports (e.g. `xxx.yyy` in `from .xxx.yyy import zzz`) from `xxx.yyy` to `xxx/yyy`
+    relative_imports = [f.replace(".", "/") for f in relative_imports]
+
     # Unique-ify
     return list(set(relative_imports))
 
@@ -126,6 +130,9 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> List[str]
         new_imports = []
         for f in files_to_check:
             new_imports.extend(get_relative_imports(f))
+
+        # convert modules from nested imports (e.g. `xxx.yyy` in `from .xxx.yyy import zzz`) from `xxx.yyy` to `xxx/yyy`
+        new_imports = [f.replace(".", "/") for f in new_imports]
 
         module_path = Path(module_file).parent
         new_import_files = [str(module_path / m) for m in new_imports]
@@ -362,7 +369,7 @@ def get_cached_module_file(
         logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
         raise
 
-    # Check we have all the requirements in our environment
+    # Check we have all the requirements in our environment and get all missing modules from relative imports
     modules_needed = check_imports(resolved_module_file)
 
     # Now we move the module inside our cached dynamic modules.
@@ -383,8 +390,23 @@ def get_cached_module_file(
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)
             ):
-                shutil.copy(module_needed_file, submodule_path / module_needed)
-                importlib.invalidate_caches()
+                destination = submodule_path / module_needed
+                os.makedirs(os.path.dirname(destination), exist_ok=True)  # ensure subfolders for the module exist
+                shutil.copy(module_needed_file, destination)
+
+            # Make sure we also have every file from relative imports
+            get_cached_module_file(
+                pretrained_model_name_or_path,
+                module_needed,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
+            )
     else:
         # Get the commit hash
         commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
@@ -398,7 +420,7 @@ def get_cached_module_file(
         if not (submodule_path / module_file).exists():
             shutil.copy(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
-        # Make sure we also have every file with relative
+        # Make sure we also have every file from relative imports
         for module_needed in modules_needed:
             if not (submodule_path / f"{module_needed}.py").exists():
                 get_cached_module_file(
