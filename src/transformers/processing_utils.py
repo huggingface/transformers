@@ -979,7 +979,7 @@ class ProcessorMixin(PushToHubMixin):
                     kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
-                if kwarg_value != "__empty__":
+                if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
                     used_keys.add(modality_key)
 
@@ -1069,7 +1069,7 @@ class ProcessorMixin(PushToHubMixin):
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-
+        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict.keys()})
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod

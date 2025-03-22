@@ -16,7 +16,6 @@
 
 import itertools
 import math
-from functools import partial
 from typing import List, Optional, Union
 
 from ...image_processing_utils_fast import (
@@ -31,11 +30,8 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     ImageInput,
     SizeDict,
-    get_image_size,
-    make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -103,52 +99,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def _prepare_images_structure(
+    def pan_and_scan_batched(
         self,
-        images: ImageInput,
-    ) -> ImageInput:
-        """
-        Prepare the images structure for processing.
-
-        Args:
-            images (`ImageInput`):
-                The input images to process.
-
-        Returns:
-            `ImageInput`: The images with a valid nesting.
-        """
-        return make_nested_list_of_images(images)
-
-    def _prepare_input_images(
-        self,
-        images: ImageInput,
-        do_convert_rgb: bool = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional["torch.device"] = None,
-    ) -> List["torch.Tensor"]:
-        """
-        Prepare the input images for processing.
-        """
-        batch_images = self._prepare_images_structure(images)
-        process_image_fn = partial(
-            self._process_image,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
-        )
-        # todo: yoni - check if we can parallelize this efficiently
-        batch_processed_images = []
-        for image_list in batch_images:
-            processed_images = []
-            for image in image_list:
-                processed_images.append(process_image_fn(image))
-            batch_processed_images.append(processed_images)
-
-        return batch_processed_images
-
-    def pan_and_scan(
-        self,
-        image: "torch.Tensor",
+        images: "torch.Tensor",
         pan_and_scan_min_crop_size: int,
         pan_and_scan_max_num_crops: int,
         pan_and_scan_min_ratio_to_activate: float,
@@ -167,7 +120,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
             pan_and_scan_min_ratio_to_activate (`float`, *optional*):
                 Minimum aspect ratio to activate pan and scan.
         """
-        height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        height, width = images.shape[-2:]
 
         # Square or landscape image.
         if width >= height:
@@ -210,7 +163,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         crop_positions_h = [crop_size_h * i for i in range(num_crops_h)]
 
         return [
-            image[:, pos_h : pos_h + crop_size_h, pos_w : pos_w + crop_size_w]
+            images[..., pos_h : pos_h + crop_size_h, pos_w : pos_w + crop_size_w]
             for pos_h, pos_w in itertools.product(crop_positions_h, crop_positions_w)
         ]
 
@@ -222,18 +175,14 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         pan_and_scan_max_num_crops: int,
         pan_and_scan_min_ratio_to_activate: float,
     ):
-        pas_images_list = []
-        num_crops = []
-        for image in images:
-            pas_images = self.pan_and_scan(
-                image=image,
-                pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
-                pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
-                pan_and_scan_min_ratio_to_activate=pan_and_scan_min_ratio_to_activate,
-            )
-            pas_images_list.extend([image] + pas_images)
-            num_crops.append(len(pas_images))
-        return pas_images_list, num_crops
+        pas_images = self.pan_and_scan_batched(
+            images=images,
+            pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
+            pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
+            pan_and_scan_min_ratio_to_activate=pan_and_scan_min_ratio_to_activate,
+        )
+        num_crops = [len(pas_images) for _ in images]
+        return pas_images, num_crops
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -274,46 +223,66 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, List[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
-        processed_images = []
-        batch_num_crops = []
-
-        for image_list in images:
+        # Group images by size for batched processing
+        processed_images_grouped = {}
+        num_crops_grouped = {}
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        for shape_images, stacked_images in grouped_images.items():
             if do_pan_and_scan:
-                images_list, num_crops = self._process_images_for_pan_and_scan(
-                    images=image_list,
+                pas_images, num_crops = self._process_images_for_pan_and_scan(
+                    images=stacked_images,
                     do_pan_and_scan=do_pan_and_scan,
                     pan_and_scan_min_crop_size=pan_and_scan_min_crop_size,
                     pan_and_scan_max_num_crops=pan_and_scan_max_num_crops,
                     pan_and_scan_min_ratio_to_activate=pan_and_scan_min_ratio_to_activate,
                 )
-            else:
-                num_crops = [[0] for images in images_list]
-
-            # Group images by size for batched processing
-            processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(images_list)
-            for shape, stacked_image_patches in grouped_image_patches.items():
-                if do_resize:
+                # Add the thumbnails to the image patches
+                stacked_images = [stacked_images] + pas_images
+                # Group images by size for batched resizing (this will typically group thumbnails together and cropped patches together)
+                processed_image_patches_grouped = {}
+                grouped_image_patches, grouped_image_patches_index = group_images_by_shape(stacked_images)
+                for shape, stacked_image_patches in grouped_image_patches.items():
                     stacked_image_patches = self.resize(
                         image=stacked_image_patches,
                         size=size,
                         interpolation=interpolation,
                     )
-                # Fused rescale and normalize
-                stacked_image_patches = self.rescale_and_normalize(
-                    stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-                )
-                processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
-            processed_images.extend(processed_image_patches)
-            batch_num_crops.extend(num_crops)
+                    processed_image_patches_grouped[shape] = stacked_image_patches
+                processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
+                # Transpose to have the thumbnails with their corresponding patches
+                stacked_images = torch.stack(processed_image_patches, dim=0).transpose(0, 1).contiguous()
+            else:
+                num_crops = [0 for _ in stacked_images]
 
+                if do_resize:
+                    stacked_images = self.resize(
+                        image=stacked_images,
+                        size=size,
+                        interpolation=interpolation,
+                    )
+            num_crops_grouped[shape_images] = num_crops
+            processed_images_grouped[shape_images] = stacked_images
+        resized_images = reorder_images(processed_images_grouped, grouped_images_index)
+        # If pan and scan is enabled, we need to flatten the list of images
+        if do_pan_and_scan:
+            resized_images = [image for images_list in resized_images for image in images_list]
+        num_crops = reorder_images(num_crops_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_crops": batch_num_crops}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_crops": num_crops}, tensor_type=return_tensors
         )
 
 
