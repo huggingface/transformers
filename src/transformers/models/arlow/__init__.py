@@ -16,6 +16,7 @@ _import_structure = {
         "ArlowPreTrainedModel",
     ],
     "tokenization_arlow": ["ArlowTokenizer"],
+    "tokenization_arlow_fast": ["ArlowTokenizerFast"],
 }
 
 ########################################################################
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         ArlowPreTrainedModel,
     )
     from .tokenization_arlow import ArlowTokenizer
+    from .tokenization_arlow_fast import ArlowTokenizerFast
 
 ########################################################################
 # 3) ELSE => LAZY LOADING

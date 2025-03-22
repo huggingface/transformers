@@ -264,9 +264,11 @@ With the provided scripts and tests, you can:
 3. Train with the `Trainer` in your pretraining script (using `flash_attn`, a large dataset, gradient checkpointing, etc.)
 4. Test everything end-to-end with `test_tokenization_arlow.py` and `test_modeling_arlow.py`.
 
-
 ## ArlowTokenizer
 [[autodoc]] ArlowTokenizer
+
+## ArlowTokenizerFast
+[[autodoc]] ArlowTokenizerFast
 
 ## ArlowConfig
 [[autodoc]] ArlowConfig

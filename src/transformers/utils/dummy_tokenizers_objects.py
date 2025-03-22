@@ -9,7 +9,7 @@ class AlbertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class ArlowTokenizer(metaclass=DummyObject):
+class ArlowTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

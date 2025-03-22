@@ -1119,7 +1119,7 @@ except OptionalDependencyNotAvailable:
 else:
     # Fast tokenizers structure
     _import_structure["models.albert"].append("AlbertTokenizerFast")
-    _import_structure["models.arlow"].append("ArlowTokenizer")
+    _import_structure["models.arlow"].append("ArlowTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
@@ -6374,7 +6374,7 @@ if TYPE_CHECKING:
     else:
         # Fast tokenizers imports
         from .models.albert import AlbertTokenizerFast
-        from .models.arlow import ArlowTokenizer
+        from .models.arlow import ArlowTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast

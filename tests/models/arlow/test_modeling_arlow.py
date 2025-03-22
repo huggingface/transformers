@@ -1,25 +1,23 @@
-# test_modeling_arlow.py
-
 import unittest
-
 import torch
 
-from transformers.models.arlow import ArlowConfig, ArlowForCausalLM, ArlowModel
+from transformers.models.arlow import ArlowConfig
 from transformers.testing_utils import require_torch, slow, torch_device
-
 
 try:
     from transformers.models.arlow.modeling_arlow import ArlowForCausalLM, ArlowModel
-
     _flash_attn_available = True
 except ImportError:
     _flash_attn_available = False
+    ArlowForCausalLM = None
+    ArlowModel = None
 
 
 @require_torch
 class ArlowModelTester:
     """
-    This helper class sets up small configs & sample data to test ArlowModel and ArlowForCausalLM.
+    This helper class sets up a small configuration and sample data to test ArlowModel
+    and ArlowForCausalLM.
     """
 
     def __init__(
@@ -27,10 +25,11 @@ class ArlowModelTester:
         batch_size=2,
         seq_length=8,
         vocab_size=32,
-        hidden_size=16,
-        num_attention_heads=2,
+        hidden_size=48,               # Updated so hidden_size is divisible by num_attention_heads.
+        num_attention_heads=2,        # Using 2 heads for testing.
+        num_key_value_heads=2,        # Must divide num_attention_heads evenly.
         num_hidden_layers=2,
-        intermediate_size=32,
+        intermediate_size=192,        # 4 * hidden_size for this example.
         pad_token_id=0,
         use_cache=True,
         tie_word_embeddings=True,
@@ -40,6 +39,7 @@ class ArlowModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.pad_token_id = pad_token_id
@@ -51,6 +51,7 @@ class ArlowModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,  # Added to config.
             num_hidden_layers=self.num_hidden_layers,
             intermediate_size=self.intermediate_size,
             max_position_embeddings=128,
@@ -58,37 +59,36 @@ class ArlowModelTester:
             use_cache=self.use_cache,
             tie_word_embeddings=self.tie_word_embeddings,
             rope_theta=10000.0,
+            use_flash_attn=False,  # Force flash attention off during tests.
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
         input_ids = torch.randint(0, self.vocab_size, (self.batch_size, self.seq_length), device=torch_device)
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=torch_device)
-        # Make half the tokens padded in one row, as an example
+        # Simulate some padding: make half the tokens padded in one row.
         if self.seq_length > 2:
-            attention_mask[0, -2:] = 0  # simulate some padding
+            attention_mask[0, -2:] = 0
 
         labels = input_ids.clone()
-        # Replace some tokens with pad_token_id
+        # Replace some tokens with pad_token_id.
         labels[0, -1] = config.pad_token_id
 
         return config, input_ids, attention_mask, labels
 
     def create_and_check_model(self, config, input_ids, attention_mask, labels):
         """
-        Test ArlowModel forward pass. We only verify that it runs and
-        outputs the correct shape.
+        Test ArlowModel forward pass. We only verify that it runs and outputs the correct shape.
         """
         model = ArlowModel(config).to(torch_device)
         model.eval()
-
         with torch.no_grad():
             outputs = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 return_dict=True,
             )
-        # Check shape
+        # Check the shape of last_hidden_state.
         assert outputs.last_hidden_state.shape == (
             self.batch_size,
             self.seq_length,
@@ -103,10 +103,10 @@ class ArlowModelTester:
         model = ArlowForCausalLM(config).to(torch_device)
         model.eval()
 
-        # Without labels
+        # Without labels.
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        # logits: (batch_size, seq_length, vocab_size)
+        # Logits: (batch_size, seq_length, vocab_size)
         assert outputs.logits.shape == (
             self.batch_size,
             self.seq_length,
@@ -114,7 +114,7 @@ class ArlowModelTester:
         )
         assert outputs.loss is None
 
-        # With labels
+        # With labels.
         with torch.no_grad():
             outputs_with_labels = model(
                 input_ids=input_ids,
@@ -131,11 +131,10 @@ class ArlowModelTester:
 
     def create_and_check_generation(self, config, input_ids, attention_mask):
         """
-        If you want to test generation, do so here.
+        Test generation.
         """
         model = ArlowForCausalLM(config).to(torch_device)
         model.eval()
-
         generated = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -143,7 +142,7 @@ class ArlowModelTester:
             num_beams=1,
             do_sample=False,
         )
-        # shape => (batch_size, new_seq_len)
+        # Check that generated output has shape: (batch_size, new_seq_len).
         assert generated.shape[0] == input_ids.shape[0]
         assert generated.shape[1] > self.seq_length
 
