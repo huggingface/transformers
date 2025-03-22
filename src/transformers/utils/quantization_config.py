@@ -1257,6 +1257,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         global_compression_ratio: Optional[float] = None,
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
+        transforms_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
@@ -1264,12 +1265,14 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         if is_compressed_tensors_available():
             from compressed_tensors.config import SparsityCompressionConfig
             from compressed_tensors.quantization import QuantizationConfig
+            from compressed_tensors.transforms.transform_config import TransformationConfig
         else:
             raise ImportError(
                 "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
             )
         self.quantization_config = None
         self.sparsity_config = None
+        self.transforms_config = None
 
         self.run_compressed = run_compressed
 
@@ -1292,6 +1295,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         if sparsity_config:
             self.sparsity_config = SparsityCompressionConfig.load_from_registry(
                 sparsity_config.get("format"), **sparsity_config
+            )
+        
+        if transforms_config:
+            self.transforms_config = TransformationConfig.model_validate(
+                transforms_config
             )
 
         super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
@@ -1319,6 +1327,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
+                transforms_config=config_dict.get("transforms_config")
                 **config_dict["quantization_config"],
             )
 
