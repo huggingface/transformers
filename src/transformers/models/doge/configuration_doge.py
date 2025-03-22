@@ -147,8 +147,8 @@ class DogeConfig(PretrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.router_gate": "colwise_rep",
-        "layers.*.mlp.down_embed": "rowwise",
-        "layers.*.mlp.up_embed": "rowwise",
+        "layers.*.mlp.down_embed": "rowwise_rep",
+        "layers.*.mlp.up_embed": "rowwise_rep",
     }
 
     def __init__(
