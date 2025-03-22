@@ -141,6 +141,7 @@ class TextKwargs(TypedDict, total=False):
     return_length: Optional[bool]
     verbose: Optional[bool]
     padding_side: Optional[str]
+    return_mm_token_type_ids: Optional[bool]
 
 
 class ImagesKwargs(TypedDict, total=False):
