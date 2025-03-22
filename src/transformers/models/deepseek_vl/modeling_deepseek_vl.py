@@ -21,6 +21,12 @@ import torch.nn.functional as F
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -167,16 +173,12 @@ class DeepseekVLSamVisionEncoder(nn.Module):
         self.global_neck = deepcopy(self.model.neck)
         self.neck = DeepseekVLSamVisionNeck(config)
         self.alpha = nn.Parameter(torch.zeros(1))
-        # TODO: convert to python functions
-        import torchvision
 
-        self.norm = torchvision.transforms.Normalize(
-            mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711]
-        )
+        self.register_buffer("image_mean", torch.tensor(OPENAI_CLIP_MEAN).reshape(1, 3, 1, 1), persistent=False)
+        self.register_buffer("image_std", torch.tensor(OPENAI_CLIP_STD).reshape(1, 3, 1, 1), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        pixel_values = pixel_values
-        pixel_values = self.norm(pixel_values)
+        pixel_values = (pixel_values - self.image_mean) / self.image_std
         output = self.model(
             pixel_values=pixel_values,
             output_hidden_states=True,
@@ -204,15 +206,18 @@ class DeepseekVLSiglipVisionEncoder(nn.Module):
         self.config = config
 
         self.model = SiglipVisionModel(config)
-        # TODO: convert to torch funtions
-        import torchvision
 
-        self.resize = torchvision.transforms.Resize(config.image_size, antialias=True)
-        self.norm = torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        self.register_buffer("image_mean", torch.tensor(IMAGENET_STANDARD_MEAN).reshape(1, 3, 1, 1), persistent=False)
+        self.register_buffer("image_std", torch.tensor(IMAGENET_STANDARD_STD).reshape(1, 3, 1, 1), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        pixel_values = self.resize(pixel_values)
-        pixel_values = self.norm(pixel_values)
+        pixel_values = F.interpolate(
+            pixel_values,
+            size=self.config.image_size,
+            mode="bilinear",
+            antialias=True,
+        )
+        pixel_values = (pixel_values - self.image_mean) / self.image_std
         output = self.model(pixel_values=pixel_values)
         output = output[0]  # last_hidden_state
         return output
