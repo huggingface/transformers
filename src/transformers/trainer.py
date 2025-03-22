@@ -3633,6 +3633,11 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
+    def _select_inputs_for_validation(self, inputs):
+        """Simple getattr function for getting input by name"""
+        main_input_name = getattr(self.model, "main_input_name", "input_ids")
+        return inputs[main_input_name]
+
     def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
         """
         Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
