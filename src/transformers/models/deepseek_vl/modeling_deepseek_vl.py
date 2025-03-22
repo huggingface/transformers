@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The DeepseekAI and HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,31 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, List, Optional, Tuple, Union
 from copy import deepcopy
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import PreTrainedModel
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
 )
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
@@ -174,6 +169,7 @@ class DeepseekVLSamVisionEncoder(nn.Module):
         self.alpha = nn.Parameter(torch.zeros(1))
         # TODO: convert to python functions
         import torchvision
+
         self.norm = torchvision.transforms.Normalize(
             mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711]
         )
@@ -210,6 +206,7 @@ class DeepseekVLSiglipVisionEncoder(nn.Module):
         self.model = SiglipVisionModel(config)
         # TODO: convert to torch funtions
         import torchvision
+
         self.resize = torchvision.transforms.Resize(config.image_size, antialias=True)
         self.norm = torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 

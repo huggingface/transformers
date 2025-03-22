@@ -5538,6 +5538,10 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_vl import (
+        DeepseekVLConfig,
+        DeepseekVLProcessor,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -5737,10 +5741,6 @@ if TYPE_CHECKING:
         InstructBlipVideoVisionConfig,
     )
     from .models.jamba import JambaConfig
-    from .models.deepseek_vl import (
-        DeepseekVLConfig,
-        DeepseekVLProcessor,
-    )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
         Kosmos2Config,
@@ -6493,6 +6493,7 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.deepseek_vl import DeepseekVLImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -6520,7 +6521,6 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
-        from .models.deepseek_vl import DeepseekVLImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -7164,6 +7164,11 @@ if TYPE_CHECKING:
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
         )
+        from .models.deepseek_vl import (
+            DeepseekVLForConditionalGeneration,
+            DeepseekVLModel,
+            DeepseekVLPreTrainedModel,
+        )
         from .models.deformable_detr import (
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
@@ -7714,11 +7719,6 @@ if TYPE_CHECKING:
             JambaForSequenceClassification,
             JambaModel,
             JambaPreTrainedModel,
-        )
-        from .models.deepseek_vl import (
-            DeepseekVLForConditionalGeneration,
-            DeepseekVLModel,
-            DeepseekVLPreTrainedModel,
         )
         from .models.jetmoe import (
             JetMoeForCausalLM,

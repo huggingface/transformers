@@ -679,6 +679,8 @@
         title: CvT
       - local: model_doc/dab-detr
         title: DAB-DETR
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -689,8 +691,6 @@
         title: Depth Anything V2
       - local: model_doc/depth_pro
         title: DepthPro
-      - local: model_doc/deepseek_vl
-        title: DeepseekVL
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
