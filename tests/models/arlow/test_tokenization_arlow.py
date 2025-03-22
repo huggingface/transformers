@@ -1,6 +1,8 @@
 import unittest
-from transformers.testing_utils import CaptureStdout, require_tokenizers, slow
+
 from transformers.models.arlow import ArlowTokenizer
+from transformers.testing_utils import CaptureStdout, require_tokenizers, slow
+
 
 @require_tokenizers
 class ArlowTokenizerTest(unittest.TestCase):
