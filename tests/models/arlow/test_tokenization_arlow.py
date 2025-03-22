@@ -26,10 +26,7 @@ class ArlowTokenizerTest(unittest.TestCase):
         text = "Hello, world!"
         encoded = self.tokenizer.encode(text)
         decoded = self.tokenizer.decode(encoded)
-        self.assertEqual(
-            decoded, text,
-            f"Decoded text '{decoded}' did not match the original: '{text}'"
-        )
+        self.assertEqual(decoded, text, f"Decoded text '{decoded}' did not match the original: '{text}'")
 
     def test_special_tokens(self):
         """Ensure that special tokens (bos, eos, pad, unk) are set."""
@@ -41,13 +38,7 @@ class ArlowTokenizerTest(unittest.TestCase):
     def test_padding(self):
         """Check that the tokenizer pads sequences correctly."""
         inputs = ["Hello", "Hello, world!", "This is a test sentence"]
-        batch_enc = self.tokenizer(
-            inputs,
-            padding=True,
-            truncation=True,
-            max_length=16,
-            return_tensors="pt"
-        )
+        batch_enc = self.tokenizer(inputs, padding=True, truncation=True, max_length=16, return_tensors="pt")
         # The resulting input_ids should have shape (batch_size, 16)
         self.assertEqual(batch_enc["input_ids"].shape[1], 16)
 
@@ -70,6 +61,7 @@ class ArlowTokenizerTest(unittest.TestCase):
         with CaptureStdout() as cs:
             print(f"Tokens: {encoded['input_ids']}")
         self.assertIn("Tokens:", cs.out)
+
 
 if __name__ == "__main__":
     unittest.main()
