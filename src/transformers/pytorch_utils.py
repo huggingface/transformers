@@ -18,7 +18,6 @@ from functools import lru_cache, wraps
 from typing import Callable
 
 import torch
-from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
@@ -29,18 +28,16 @@ ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
-parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
-
-is_torch_greater_or_equal_than_2_6 = parsed_torch_version_base >= version.parse("2.6")
-is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse("2.4")
-is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
-is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
-is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
+is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
+is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
+is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
+is_torch_greater_or_equal_than_2_1 = is_torch_greater_or_equal("2.1", accept_dev=True)
 
 # For backwards compatibility (e.g. some remote codes on Hub using those variables).
-is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
-is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
-is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
+is_torch_greater_or_equal_than_2_0 = is_torch_greater_or_equal("2.0", accept_dev=True)
+is_torch_greater_or_equal_than_1_13 = is_torch_greater_or_equal("1.13", accept_dev=True)
+is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_dev=True)
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
