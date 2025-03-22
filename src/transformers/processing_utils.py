@@ -28,6 +28,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub import list_repo_tree
+from huggingface_hub.errors import EntryNotFoundError  # Should this be refactored into a util instead?
 
 from .dynamic_module_utils import custom_object_save
 from .image_utils import (
@@ -52,6 +54,8 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -83,6 +87,8 @@ if sys.version_info >= (3, 11):
     Unpack = typing.Unpack
 else:
     Unpack = typing_extensions.Unpack
+
+LEGACY_CHAT_TEMPLATE_FILE = "chat_template.json"
 
 
 class TextKwargs(TypedDict, total=False):
@@ -618,24 +624,55 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_raw_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
-        output_chat_template_file = os.path.join(save_directory, "chat_template.json")
+        output_raw_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
+        output_chat_template_file = os.path.join(save_directory, "chat_template.json")  # Legacy filename
+        chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        if self.chat_template is not None:
-            if kwargs.get("save_raw_chat_template", False):
-                with open(output_raw_chat_template_file, "w", encoding="utf-8") as writer:
-                    writer.write(self.chat_template)
-                logger.info(f"chat template saved in {output_raw_chat_template_file}")
-            else:
-                chat_template_json_string = (
-                    json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+
+        if kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, str):
+            # New format for single templates is to save them as chat_template.jinja
+            with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
+                f.write(self.chat_template)
+            logger.info(f"chat template saved in {output_raw_chat_template_file}")
+        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
+            # New format for multiple templates is to save the default as chat_template.jinja
+            # and the other templates in the chat_templates/ directory
+            for template_name, template in self.chat_template.items():
+                if template_name == "default":
+                    with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
+                        f.write(self.chat_template["default"])
+                    logger.info(f"chat template saved in {output_raw_chat_template_file}")
+                else:
+                    Path(chat_template_dir).mkdir(exist_ok=True)
+                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    with open(template_filepath, "w", encoding="utf-8") as f:
+                        f.write(template)
+                    logger.info(f"chat template saved in {template_filepath}")
+        elif isinstance(self.chat_template, dict):
+            # Legacy format for multiple templates:
+            # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
+            chat_template_json_string = (
+                json.dumps(
+                    {"chat_template": [{"name": k, "template": v} for k, v in self.chat_template.items()]},
+                    indent=2,
+                    sort_keys=True,
                 )
-                with open(output_chat_template_file, "w", encoding="utf-8") as writer:
-                    writer.write(chat_template_json_string)
-                logger.info(f"chat template saved in {output_chat_template_file}")
+                + "\n"
+            )
+            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                writer.write(chat_template_json_string)
+            logger.info(f"chat template saved in {output_chat_template_file}")
+        elif self.chat_template is not None:
+            # Legacy format for single templates: Put them in chat_template.json
+            chat_template_json_string = (
+                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+            )
+            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                writer.write(chat_template_json_string)
+            logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
@@ -699,6 +736,8 @@ class ProcessorMixin(PushToHubMixin):
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
 
+        additional_chat_template_files = {}
+        resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
             # cant't load chat-template when given a file as pretrained_model_name_or_path
@@ -712,9 +751,28 @@ class ProcessorMixin(PushToHubMixin):
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
         else:
+            if is_local:
+                template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                if template_dir.is_dir():
+                    for template_file in template_dir.glob("*.jinja"):
+                        template_name = template_file.name.removesuffix(".jinja")
+                        additional_chat_template_files[template_name] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+            else:
+                try:
+                    for template_file in list_repo_tree(
+                        pretrained_model_name_or_path,
+                        path_in_repo=CHAT_TEMPLATE_DIR,
+                        recursive=False,
+                        revision=revision,
+                    ):
+                        if not template_file.path.endswith(".jinja"):
+                            continue
+                        template_name = template_file.path.split("/")[-1].removesuffix(".jinja")
+                        additional_chat_template_files[template_name] = template_file.path
+                except EntryNotFoundError:
+                    pass  # No template dir means no template files
             processor_file = PROCESSOR_NAME
-            chat_template_file = "chat_template.json"
-            raw_chat_template_file = "chat_template.jinja"
+
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
@@ -737,7 +795,7 @@ class ProcessorMixin(PushToHubMixin):
                 # Processors in older version do not accept any kwargs
                 resolved_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    chat_template_file,
+                    LEGACY_CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -752,7 +810,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 resolved_raw_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
-                    raw_chat_template_file,
+                    CHAT_TEMPLATE_FILE,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -764,6 +822,24 @@ class ProcessorMixin(PushToHubMixin):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                 )
+
+                resolved_additional_chat_template_files = {
+                    template_name: cached_file(
+                        pretrained_model_name_or_path,
+                        template_file,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
+                    for template_name, template_file in additional_chat_template_files.items()
+                }
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -778,15 +854,34 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         # Add chat template as kwarg before returning because most models don't have processor config
-        if resolved_raw_chat_template_file is not None:
-            with open(resolved_raw_chat_template_file, "r", encoding="utf-8") as reader:
-                chat_template = reader.read()
-            kwargs["chat_template"] = chat_template
-        elif resolved_chat_template_file is not None:
+        if resolved_chat_template_file is not None:
+            # This is the legacy path
             with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
-                text = reader.read()
-            chat_template = json.loads(text)["chat_template"]
-            kwargs["chat_template"] = chat_template
+                chat_template_json = json.loads(reader.read())
+                chat_templates = chat_template_json["chat_template"]
+                if isinstance(chat_templates, (list, tuple)):
+                    # Un-flatten the list storage
+                    chat_templates = {template["name"]: template["template"] for template in chat_templates}
+                if resolved_additional_chat_template_files:
+                    raise ValueError(
+                        "Cannot load chat template due to conflicting files - this checkpoint combines "
+                        "a legacy chat_template.json file with separate template files, which is not "
+                        "supported. To resolve this error, replace the legacy chat_template.json file "
+                        "with a modern chat_template.jinja file."
+                    )
+        else:
+            chat_templates = {
+                template_name: open(template_file, "r", encoding="utf-8").read()
+                for template_name, template_file in resolved_additional_chat_template_files.items()
+            }
+            if resolved_raw_chat_template_file is not None:
+                with open(resolved_raw_chat_template_file, "r", encoding="utf-8") as reader:
+                    chat_templates["default"] = reader.read()
+        if isinstance(chat_templates, dict) and "default" in chat_templates and len(chat_templates) == 1:
+            chat_templates = chat_templates["default"]  # Flatten when we just have a single template/file
+
+        if chat_templates:
+            kwargs["chat_template"] = chat_templates
 
         # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
         # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
@@ -1301,14 +1396,27 @@ class ProcessorMixin(PushToHubMixin):
         """
 
         if chat_template is None:
-            if self.chat_template is not None:
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
+                raise ValueError(
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
+                    ' which one to use by passing the `chat_template` argument. Available templates are: '
+                    f'{", ".join(self.chat_template.keys())}'
+                )
+            elif self.chat_template is not None:
                 chat_template = self.chat_template
             else:
                 raise ValueError(
-                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
-                    "or provide a chat template as an argument. See "
-                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
+                    "Cannot use apply_chat_template because this processor does not have a chat template."
                 )
+        else:
+            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
+                # It's the name of a template, not a full template string
+                chat_template = self.chat_template[chat_template]
+            else:
+                # It's a template string, render it directly
+                chat_template = chat_template
 
         # Fill two sets of kwargs that should be used by tokenizer's `apply_chat_template`
         # and for multimodal chat template
