@@ -50,6 +50,7 @@ from .configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
     Qwen2_5OmniConfig,
     Qwen2_5OmniTalkerConfig,
+    Qwen2_5OmniTextConfig,
     Qwen2_5OmniThinkerConfig,
     Qwen2_5OmniToken2WavConfig,
     Qwen2_5OmniVisionEncoderConfig,
@@ -1844,7 +1845,9 @@ class Qwen2_5OmniThinkerDecoderLayer(nn.Module):
     QWEN2_5OMNITHINKER_START_DOCSTRING,
 )
 class Qwen2_5OmniThinkerModel(Qwen2_5OmniThinkerPreTrainedModel):
-    def __init__(self, config: Qwen2_5OmniThinkerConfig):
+    config_class = Qwen2_5OmniTextConfig
+
+    def __init__(self, config: Qwen2_5OmniTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -2166,9 +2169,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniThinkerPreTrainedMod
             config.vision_config, attn_implementation=config._attn_implementation
         )
 
-        self.vocab_size = config.vocab_size
-        self.model = Qwen2_5OmniThinkerModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.vocab_size = config.text_config.vocab_size
+        self.model = Qwen2_5OmniThinkerModel._from_config(
+            config.text_config, attn_implementation=config._attn_implementation
+        )
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
