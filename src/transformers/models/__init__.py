@@ -181,6 +181,7 @@ from . import (
     modernbert,
     moonshine,
     moshi,
+    conversational_speech_model,
     mpnet,
     mpt,
     mra,
