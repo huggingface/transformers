@@ -56,6 +56,7 @@ from . import (
     cohere,
     cohere2,
     colpali,
+    colqwen2,
     conditional_detr,
     convbert,
     convnext,
