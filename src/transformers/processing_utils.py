@@ -1114,12 +1114,12 @@ class ProcessorMixin(PushToHubMixin):
             if isinstance(class_name, tuple):
                 classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
                 if attribute_name == "image_processor":
-                    # TODO: @yoni, change logic in v4.50 (when use_fast set to True by default)
+                    # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
                     use_fast = kwargs.get("use_fast", None)
                     if use_fast is None:
                         logger.warning_once(
                             "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                            "`use_fast=True` will be the default behavior in v4.50, even if the model was saved with a slow processor. "
+                            "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
                             "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
                         )
                 else:

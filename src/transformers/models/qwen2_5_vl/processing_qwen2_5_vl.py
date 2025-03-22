@@ -23,11 +23,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Union
+from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -35,7 +35,16 @@ class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
 
 
+class Qwen2_5_VLImagesKwargs(ImagesKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+
+
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Qwen2_5_VLImagesKwargs
     videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
