@@ -2081,9 +2081,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
-            if not isinstance(config._attn_implementation, dict) and config._attn_implementation not in [
-                "eager"
-            ] + list(ALL_ATTENTION_FUNCTIONS.keys()):
+            if (
+                not isinstance(config._attn_implementation, dict)
+                and config._attn_implementation not in {"eager"} | ALL_ATTENTION_FUNCTIONS.valid_keys()
+            ):
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
@@ -2148,7 +2149,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
-        elif requested_attn_implementation in list(ALL_ATTENTION_FUNCTIONS.keys()):
+        elif requested_attn_implementation in list(ALL_ATTENTION_FUNCTIONS.valid_keys()):
             config._attn_implementation = requested_attn_implementation
         elif isinstance(requested_attn_implementation, dict):
             config._attn_implementation = None
@@ -5884,12 +5885,34 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-ALL_ATTENTION_FUNCTIONS: Dict[str, Callable] = {}
-
-ALL_ATTENTION_FUNCTIONS.update(
-    {
+class AttentionInterface(object):
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # they are `imported from`, i.e. local object copy
+    _global_mapping = {
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
     }
-)
+
+    def __init__(self):
+        self._local_mapping = {}
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    def __getitem__(self, key):
+        # Allow local update of the default functions without impacting other instances
+        if key in self._local_mapping:
+            return self._local_mapping[key]
+        return self._global_mapping[key]
+
+    def __setitem__(self, key, value):
+        # Allow local update of the default functions without impacting other instances
+        self._local_mapping.update({key: value})
+
+    def valid_keys(self) -> Set[str]:
+        return set(self._global_mapping.keys()) | set(self._local_mapping.keys())
+
+
+ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
