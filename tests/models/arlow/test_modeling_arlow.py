@@ -1,11 +1,14 @@
 import unittest
+
 import torch
 
 from transformers.models.arlow import ArlowConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 
+
 try:
     from transformers.models.arlow.modeling_arlow import ArlowForCausalLM, ArlowModel
+
     _flash_attn_available = True
 except ImportError:
     _flash_attn_available = False
@@ -25,11 +28,11 @@ class ArlowModelTester:
         batch_size=2,
         seq_length=8,
         vocab_size=32,
-        hidden_size=48,               # Updated so hidden_size is divisible by num_attention_heads.
-        num_attention_heads=2,        # Using 2 heads for testing.
-        num_key_value_heads=2,        # Must divide num_attention_heads evenly.
+        hidden_size=48,  # Updated so hidden_size is divisible by num_attention_heads.
+        num_attention_heads=2,  # Using 2 heads for testing.
+        num_key_value_heads=2,  # Must divide num_attention_heads evenly.
         num_hidden_layers=2,
-        intermediate_size=192,        # 4 * hidden_size for this example.
+        intermediate_size=192,  # 4 * hidden_size for this example.
         pad_token_id=0,
         use_cache=True,
         tie_word_embeddings=True,
