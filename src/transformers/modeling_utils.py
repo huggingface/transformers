@@ -622,20 +622,34 @@ def load_state_dict(
 def set_initialized_submodules(model, state_dict_keys):
     """
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
-    dict.
+    dict. Returns modules that need initialization.
+    
+    A module needs initialization if:
+    1. It's completely new (no parameters in state_dict_keys)
+    2. It has some parameters missing (partial initialization needed)
     """
     state_dict_keys = set(state_dict_keys)
     not_initialized_submodules = {}
+    
     for module_name, module in model.named_modules():
+        # Get module's parameter keys
         if module_name == "":
-            # When checking if the root module is loaded there's no need to prepend module_name.
             module_keys = set(module.state_dict())
         else:
             module_keys = {f"{module_name}.{k}" for k in module.state_dict()}
-        if module_keys.issubset(state_dict_keys):
+            
+        # Check parameter overlap with state dict
+        params_in_state_dict = module_keys.intersection(state_dict_keys)
+        
+        if len(params_in_state_dict) == len(module_keys):
+            # All parameters exist - mark as initialized
             module._is_hf_initialized = True
         else:
+            # Module needs initialization if:
+            # 1. No parameters exist (new module)
+            # 2. Some parameters missing (partial initialization)
             not_initialized_submodules[module_name] = module
+            
     return not_initialized_submodules
 
 
