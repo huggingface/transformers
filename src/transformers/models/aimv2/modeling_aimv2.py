@@ -20,30 +20,66 @@
 # limitations under the License.
 
 
-from typing import Callable, Optional, Tuple, Union
+import math
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
-from ...modeling_outputs import ImageClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...utils import (
-    add_code_sample_docstrings,
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
-from .configuration_aimv2 import AIMv2Config
+from .configuration_aimv2 import AIMv2Config, AIMv2TextConfig, AIMv2VisionConfig
 
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-_CONFIG_FOR_DOC = "AIMv2Config"
+
+@dataclass
+class AIMv2Output(ModelOutput):
+    """
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for image-text similarity.
+        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            similarity scores.
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+            similarity scores.
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`AIMv2TextModel`].
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The image embeddings obtained by applying the projection layer to the pooled output of [`AIMv2VisionModel`].
+        text_model_output (`BaseModelOutputWithPooling`):
+            The output of the [`AIMv2TextModel`].
+        vision_model_output (`BaseModelOutputWithPooling`):
+            The output of the [`AIMv2VisionModel`].
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits_per_image: torch.FloatTensor = None
+    logits_per_text: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    image_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutputWithPooling = None
+    vision_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 class AIMv2RMSNorm(nn.Module):
@@ -67,7 +103,7 @@ class AIMv2RMSNorm(nn.Module):
 
 
 class AIMv2SwiGLUFFN(nn.Module):
-    def __init__(self, config: AIMv2Config):
+    def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         in_features = config.hidden_size
         out_features = config.intermediate_size
@@ -85,8 +121,8 @@ class AIMv2SwiGLUFFN(nn.Module):
         return hidden_states
 
 
-class AIMv2Embeddings(nn.Module):
-    def __init__(self, config: AIMv2Config):
+class AIMv2VisionEmbeddings(nn.Module):
+    def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         self.config = config
         self.patch_size = config.patch_size
@@ -132,6 +168,46 @@ class AIMv2Embeddings(nn.Module):
         return hidden_states
 
 
+class AIMv2TextEmbeddings(nn.Module):
+    def __init__(self, config: AIMv2TextConfig):
+        super().__init__()
+        embed_dim = config.hidden_size
+
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embedding(input_ids)
+
+        position_embeddings = self.position_embedding(position_ids)
+        embeddings = inputs_embeds + position_embeddings
+
+        return embeddings
+
+
 def eager_attention_forward(
     module: nn.Module,
     query_states: torch.Tensor,
@@ -160,7 +236,7 @@ def eager_attention_forward(
 class AIMv2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: AIMv2Config):
+    def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -232,7 +308,7 @@ class AIMv2Attention(nn.Module):
 
 
 class AIMv2EncoderLayer(nn.Module):
-    def __init__(self, config: AIMv2Config):
+    def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         self.attention = AIMv2Attention(config)
         self.ffn = AIMv2SwiGLUFFN(config)
@@ -371,11 +447,11 @@ class AIMv2PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class AIMv2Model(AIMv2PreTrainedModel):
-    def __init__(self, config: AIMv2Config):
+class AIMv2VisionModel(AIMv2PreTrainedModel):
+    def __init__(self, config: AIMv2VisionConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = AIMv2Embeddings(config)
+        self.embeddings = AIMv2VisionEmbeddings(config)
         self.encoder = AIMv2Encoder(config)
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
@@ -416,15 +492,71 @@ class AIMv2Model(AIMv2PreTrainedModel):
         )
 
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/aimv2-small-imagenet1k-1-layer"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+class AIMv2TextModel(AIMv2PreTrainedModel):
+    def __init__(self, config: AIMv2VisionConfig):
+        super().__init__(config)
+        self.config = config
+        self.embeddings = AIMv2TextEmbeddings(config)
+        self.encoder = AIMv2Encoder(config)
+        # Here comes the eos extract class
+        self.head = nn.Identity()
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        hidden_states = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.rms_norm(last_hidden_state)
+
+        return BaseModelOutput(
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
+    """
+    This method is equivalent to tensor.norm(p=2, dim=-1, keepdim=True) and used to make
+    model `executorch` exportable. See issue https://github.com/pytorch/executorch/issues/3566
+    """
+    square_tensor = torch.pow(tensor, 2)
+    sum_tensor = torch.sum(square_tensor, dim=-1, keepdim=True)
+    normed_tensor = torch.pow(sum_tensor, 0.5)
+    return normed_tensor
 
 
 AIMV2_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
@@ -432,18 +564,28 @@ AIMV2_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-AIMV2_INPUTS_DOCSTRING = r"""
+AIMV2_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BitImageProcessor.preprocess`] for details.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -454,105 +596,304 @@ AIMV2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+AIMV2_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
-@add_start_docstrings(
-    """
-    AIMv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
-    of the [CLS] token) e.g. for ImageNet.
-    """,
-    AIMV2_START_DOCSTRING,
-)
-class AIMv2ForImageClassification(AIMv2PreTrainedModel):
-    def __init__(self, config: AIMv2Config) -> None:
-        super().__init__(config)
+AIMV2_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
 
-        self.num_labels = config.num_labels
-        self.aimv2 = AIMv2Model(config)
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-        # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_size * 2, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(AIMV2_START_DOCSTRING)
+class AIMv2Model(AIMv2PreTrainedModel):
+    config_class = AIMv2Config
+    _no_split_modules = ["AIMv2TextEmbeddings", "AIMv2EncoderLayer", "AIMv2VisionEmbeddings"]
+
+    def __init__(self, config: AIMv2Config):
+        super().__init__()
+
+        if not isinstance(config.text_config, AIMv2VisionConfig):
+            raise TypeError(
+                "config.text_config is expected to be of type CLIPTextConfig but is of type"
+                f" {type(config.text_config)}."
+            )
+
+        if not isinstance(config.vision_config, AIMv2VisionConfig):
+            raise TypeError(
+                "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
+                f" {type(config.vision_config)}."
+            )
+
+        text_config = config.text_config
+        vision_config = config.vision_config
+
+        self.projection_dim = config.projection_dim
+        self.text_embed_dim = text_config.hidden_size
+        self.vision_embed_dim = vision_config.hidden_size
+
+        self.text_model = AIMv2TextModel._from_config(text_config)
+
+        self.vision_model = AIMv2VisionModel._from_config(vision_config)
+
+        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
+
+        # Verify whether it's working right or not.
+        logit_scale_tensor = torch.tensor(self.config.logit_scale_init_value)
+        self.log_logit_scale = nn.Parameter(torch.log(logit_scale_tensor))
+
+        self.max_log_logit_scale = math.log(config.max_logit_scale)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(AIMV2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
-    def forward(
+    @add_start_docstrings_to_model_forward(AIMV2_TEXT_INPUTS_DOCSTRING)
+    def get_text_features(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> torch.FloatTensor:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+        Returns:
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`AIMv2TextModel`].
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AIMv2Model
+
+        >>> model = AIMv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/aimv2-vit-base-patch32")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
+        # Use AIMV2 model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.aimv2(
-            pixel_values,
-            head_mask=head_mask,
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
+        pooled_output = text_outputs[1]
+        text_features = self.text_projection(pooled_output)
 
-        cls_token = sequence_output[:, 0]
-        patch_tokens = sequence_output[:, 1:]
+        return text_features
 
-        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+    @add_start_docstrings_to_model_forward(AIMV2_VISION_INPUTS_DOCSTRING)
+    def get_image_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`AIMv2VisionModel`].
 
-        logits = self.classifier(linear_input)
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, AIMv2Model
+
+        >>> model = AIMv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/aimv2-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> image_features = model.get_image_features(**inputs)
+        ```"""
+        # Use AIMV2 model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+
+        pooled_output = vision_outputs[1]  # pooled_output
+        image_features = self.visual_projection(pooled_output)
+
+        return image_features
+
+    @add_start_docstrings_to_model_forward(AIMV2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=AIMv2Output, config_class=AIMv2Config)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        return_loss: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, AIMv2Output]:
+        r"""
+        Returns:
+
+        Examples:
+        Returns:
+
+        Examples:
+
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, CLIPModel
+
+        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(
+        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ... )
+
+        >>> outputs = model(**inputs)
+        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[1]
+        image_embeds = self.visual_projection(image_embeds)
+
+        text_embeds = text_outputs[1]
+        text_embeds = self.text_projection(text_embeds)
+
+        # normalized features
+        image_embeds = image_embeds / _get_vector_norm(image_embeds)
+        text_embeds = text_embeds / _get_vector_norm(text_embeds)
+
+        logit_scale = self.log_logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
+        logits_per_text = text_embeds * logit_scale.exp().to(text_embeds.device)
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
+
+        logits_per_image = logits_per_text.t()
 
         loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+        # if return_loss:
+        # Use the loss used in aimv2
+        # loss = clip_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
+        return AIMv2Output(
             loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            image_embeds=image_embeds,
+            text_model_output=text_outputs,
+            vision_model_output=vision_outputs,
         )
 
 
-__all__ = ["AIMv2Model", "AIMv2ForImageClassification"]
+__all__ = ["AIMv2VisionModel", "AIMv2Model"]

@@ -21,66 +21,62 @@
 
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
-class AIMv2Config(PretrainedConfig):
+logger = logging.get_logger(__name__)
+
+
+class AIMv2VisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AIMv2Model`]. It is used to instantiate an AIMv2
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the AIMv2
+    This is the configuration class to store the configuration of a [`AIMv2VisionModel`]. It is used to instantiate a
+    AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
     [google/aimv2-base-patch16-224](https://huggingface.co/google/aimv2-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        encoder_stride (`int`, *optional*, defaults to 16):
-           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     Example:
 
     ```python
-    >>> from transformers import AIMv2Config, AIMv2Model
+    >>> from transformers import AIMv2VisionConfig, AIMv2VisionModel
 
-    >>> # Initializing a AIMv2 aimv2-base-patch16-224 style configuration
-    >>> configuration = AIMv2Config()
+    >>> # Initializing a AIMv2VisionConfig with google/aimv2-base-patch16-224 style configuration
+    >>> configuration = AIMv2VisionConfig()
 
-    >>> # Initializing a model (with random weights) from the aimv2-base-patch16-224 style configuration
-    >>> model = AIMv2Model(configuration)
+    >>> # Initializing a AIMv2VisionModel (with random weights) from the google/aimv2-base-patch16-224 style configuration
+    >>> model = AIMv2VisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "aimv2"
+    model_type = "aimv2_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -97,21 +93,111 @@ class AIMv2Config(PretrainedConfig):
         qkv_bias: bool = False,
         use_bias: bool = False,
         hidden_act="silu",
-        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+
+        self.attention_dropout = attention_dropout
+        self.hidden_act = hidden_act
+        self.use_bias = use_bias
         self.qkv_bias = qkv_bias
+        self.rms_norm_eps = rms_norm_eps
+        self.projection_dropout = projection_dropout
+
+
+class AIMv2TextConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`AIMv2TextModel`]. It is used to instantiate a
+    AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
+    [google/aimv2-base-patch16-224](https://huggingface.co/google/aimv2-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 32000):
+            Vocabulary size of the AIMv2 text model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`AIMv2Model`].
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        max_position_embeddings (`int`, *optional*, defaults to 64):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The id of the padding token in the vocabulary.
+        bos_token_id (`int`, *optional*, defaults to 49406):
+            The id of the beginning-of-sequence token in the vocabulary.
+        eos_token_id (`int`, *optional*, defaults to 49407):
+            The id of the end-of-sequence token in the vocabulary.
+        projection_size (`int`, *optional*, defaults to `hidden_size`):
+            The size of the projection head.
+
+    Example:
+
+    ```python
+    >>> from transformers import AIMv2TextConfig, AIMv2TextModel
+
+    >>> # Initializing a AIMv2TextConfig with google/aimv2-base-patch16-224 style configuration
+    >>> configuration = AIMv2TextConfig()
+
+    >>> # Initializing a AIMv2TextModel (with random weights) from the google/aimv2-base-patch16-224 style configuration
+    >>> model = AIMv2TextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "aimv2_text_model"
+    base_config_key = "text_config"
+
+    def __init__(
+        self,
+        vocab_size: int = 49408,
+        hidden_size: int = 768,
+        intermediate_size: int = 2048,
+        num_hidden_layers: int = 12,
+        num_attention_heads: int = 6,
+        rms_norm_eps: float = 1e-5,
+        attention_dropout: float = 0.0,
+        projection_dropout: float = 0.0,
+        qkv_bias: bool = False,
+        use_bias: bool = False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id: int = 49407,
+        max_position_embeddings: int = 77,
+        **kwargs,
+    ):
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.max_position_embeddings = max_position_embeddings
 
         self.attention_dropout = attention_dropout
         self.rms_norm_eps = rms_norm_eps
@@ -119,4 +205,82 @@ class AIMv2Config(PretrainedConfig):
         self.use_bias = use_bias
 
 
-__all__ = ["AIMv2Config"]
+class AIMv2Config(PretrainedConfig):
+    r"""
+    [`AIMv2Config`] is the configuration class to store the configuration of a [`AIMv2Model`]. It is used to
+    instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
+    [google/aimv2-base-patch16-224](https://huggingface.co/google/aimv2-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`AIMv2TextConfig`].
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`AIMv2VisionConfig`].
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+
+    ```python
+    >>> from transformers import AIMv2Config, AIMv2Model
+
+    >>> # Initializing a AIMv2Config with google/aimv2-base-patch16-224 style configuration
+    >>> configuration = AIMv2Config()
+
+    >>> # Initializing a AIMv2Model (with random weights) from the google/aimv2-base-patch16-224 style configuration
+    >>> model = AIMv2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a AIMv2Config from a AIMv2TextConfig and a AIMv2VisionConfig
+    >>> from transformers import AIMv2TextConfig, AIMv2VisionConfig
+
+    >>> # Initializing a AIMv2Text and AIMv2Vision configuration
+    >>> config_text = AIMv2TextConfig()
+    >>> config_vision = AIMv2VisionConfig()
+
+    >>> config = AIMv2Config.from_text_vision_configs(config_text, config_vision)
+    ```"""
+
+    model_type = "aimv2"
+    sub_configs = {"text_config": AIMv2TextConfig, "vision_config": AIMv2VisionConfig}
+
+    def __init__(
+        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        if text_config is None:
+            text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `AIMv2TextConfig` with default values.")
+
+        if vision_config is None:
+            vision_config = {}
+            logger.info("`vision_config` is `None`. initializing the `AIMv2VisionConfig` with default values.")
+
+        self.text_config = AIMv2TextConfig(**text_config)
+        self.vision_config = AIMv2VisionConfig(**vision_config)
+
+        self.initializer_factor = 1.0
+        self.projection_dim = projection_dim
+        self.logit_scale_init_value = logit_scale_init_value
+
+    @classmethod
+    def from_text_vision_configs(cls, text_config: AIMv2TextConfig, vision_config: AIMv2VisionConfig, **kwargs):
+        r"""
+        Instantiate a [`AIMv2Config`] (or a derived class) from aimv2 text model configuration and aimv2 vision
+        model configuration.
+
+        Returns:
+            [`AIMv2Config`]: An instance of a configuration object
+        """
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["AIMv2Config", "AIMv2VisionConfig", "AIMv2TextConfig"]
