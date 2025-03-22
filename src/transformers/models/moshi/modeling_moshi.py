@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch Moshi model."""
 
+import inspect
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -541,12 +542,6 @@ class MoshiAttention(nn.Module):
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
         attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.view(bsz, q_len, -1)
@@ -976,6 +971,47 @@ MOSHI_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        position_ids: (torch.LongTensor, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+        cache_position: (torch.LongTensor, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+        audio_encoder_padding_mask: (torch.Tensor, *optional*):
+            For audio encoder, mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        audio_encoder_encoder_past_key_values: (Union[Cache, List[torch.FloatTensor]], *optional*):
+            For audio encoder, pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding.
+            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+        audio_encoder_return_dict: (bool, *optional*):
+            For audio encoder, whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        decoder_position_ids: (torch.LongTensor, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings for decoder. Selected in the range `[0,
+            config.n_positions - 1]`.
+        decoder_cache_position: (torch.LongTensor, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence for decoder. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+        decoder_logits_to_keep: (Union[int, torch.Tensor], *optional*):
+            The number of logits to keep for the decoder.
+        depth_decoder_past_key_values: (Tuple[Tuple[torch.FloatTensor]], *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding for depth decoder.
+            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+        depth_decoder_inputs_embeds: (torch.FloatTensor, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+            representation for depth decoder. This is useful if you want more control over how to convert the inputs into associated vectors than the
+            model's internal embedding lookup matrix.
+        depth_decoder_use_cache: (bool, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`) for depth decoder.
+        depth_decoder_output_attentions: (bool, *optional*):
+            Whether or not to return the attentions tensors of all attention layers for depth decoder.
+        depth_decoder_output_hidden_states: (bool, *optional*):
+            Whether or not to return the hidden states of all layers from the depth decoder.
+        depth_decoder_return_dict: (bool, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple for depth decoder.
 """
 
 MOSHI_DECODER_INPUTS_DOCSTRING = r"""
@@ -1961,7 +1997,24 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        position_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        return_audio_waveforms: Optional[bool] = True,
+        return_audio_codes: Optional[bool] = None,
+        concat_unconditional_inputs: bool = False,
+        audio_encoder_padding_mask: Optional[torch.Tensor] = None,
+        audio_encoder_encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        audio_encoder_return_dict: Optional[bool] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
+        decoder_cache_position: Optional[torch.LongTensor] = None,
+        decoder_logits_to_keep: Union[int, torch.Tensor] = 0,
+        depth_decoder_past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        depth_decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        depth_decoder_use_cache: Optional[bool] = None,
+        depth_decoder_output_attentions: Optional[bool] = None,
+        depth_decoder_output_hidden_states: Optional[bool] = None,
+        depth_decoder_return_dict: Optional[bool] = None,
+        depth_decoder_cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         Returns:
@@ -1980,19 +2033,24 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        fwd_args = inspect.signature(self.forward).parameters
+        fwd_args = {k: v.default for k, v in fwd_args.items() if v.default is not inspect.Parameter.empty}
+
         kwargs_audio_encoder = {
             argument[len("audio_encoder_")]: value
-            for argument, value in kwargs.items()
+            for argument, value in fwd_args.items()
             if argument.startswith("audio_encoder_")
         }
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+            argument[len("decoder_") :]: value
+            for argument, value in fwd_args.items()
+            if argument.startswith("decoder_")
         }
 
         kwargs_depth_decoder = {
             argument[len("depth_decoder_") :]: value
-            for argument, value in kwargs.items()
+            for argument, value in fwd_args.items()
             if argument.startswith("depth_decoder_")
         }
 
@@ -2008,7 +2066,10 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                     moshi_input_values, num_quantizers=self.num_codebooks, **kwargs_audio_encoder
                 )[0]
 
-            audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
+            if moshi_audio_codes is not None and user_audio_codes is not None:
+                audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
+            else:
+                audio_codes = None
 
             if input_ids is None and audio_codes is None:
                 raise ValueError(
@@ -2020,7 +2081,10 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
             if audio_codes is not None:
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    [
+                        self.embed_tokens[codebook](audio_codes[:, codebook])
+                        for codebook in range(2 * self.num_codebooks)
+                    ]
                 )
                 inputs_embeds = (
                     audio_inputs_embeds
