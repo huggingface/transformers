@@ -186,7 +186,7 @@ class NotebookProgressBar:
             if self.average_time_per_item == 0:
                 self.label += ", +inf it/s"
             else:
-                self.label += f", {1/self.average_time_per_item:.2f} it/s"
+                self.label += f", {1 / self.average_time_per_item:.2f} it/s"
 
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()

@@ -2366,7 +2366,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         new_tokens = sample_tokens - previous_sampled_tokens.shape[1]
 
         logger.info(
-            f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on"
+            f"Sampling {sample_tokens} tokens for [{start},{start + sample_tokens}]. Conditioning on"
             f" {conditioning_tokens} tokens"
         )
 
@@ -2390,7 +2390,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             name = ["Ancestral", "Primed"][music_tokens_i.shape[1] == 0]
             iterator.set_description(
                 f"[prior level {level}] {name} Sampling {sample_tokens} tokens out of"
-                f" {self.total_length//prior.raw_to_tokens}",
+                f" {self.total_length // prior.raw_to_tokens}",
                 refresh=True,
             )
             tokens_i = prior.sample(

@@ -1495,9 +1495,9 @@ class FlavaImageCodebookLayerGroup(nn.Module):
         blocks = OrderedDict()
         for i in range(num_blocks):
             if i == 0:
-                blocks[f"block_{i+1}"] = FlavaImageCodebookBlock(in_size, out_size, num_layers)
+                blocks[f"block_{i + 1}"] = FlavaImageCodebookBlock(in_size, out_size, num_layers)
             else:
-                blocks[f"block_{i+1}"] = FlavaImageCodebookBlock(out_size, out_size, num_layers)
+                blocks[f"block_{i + 1}"] = FlavaImageCodebookBlock(out_size, out_size, num_layers)
 
         if use_pool:
             blocks["pool"] = nn.MaxPool2d(kernel_size=2)
