@@ -147,6 +147,8 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
 
         if not isinstance(text, list):
             text = [text]
+        elif isinstance(text, list):
+            text = text.copy()
 
         if image_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2

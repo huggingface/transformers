@@ -109,6 +109,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        elif isinstance(text, list):
+            text = text.copy()
 
         # ensure we have as much audios as audio tokens
         num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)

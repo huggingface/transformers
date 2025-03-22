@@ -197,6 +197,8 @@ class Idefics2Processor(ProcessorMixin):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            elif isinstance(text, list):
+                text = text.copy()
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             fake_image_token = self.fake_image_token.content
