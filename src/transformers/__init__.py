@@ -345,6 +345,10 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_vl": [
+        "DeepseekVLConfig",
+        "DeepseekVLProcessor",
+    ],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
@@ -1252,6 +1256,7 @@ else:
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
+    _import_structure["models.deepseek_vl"].append("DeepseekVLImageProcessor")
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -2709,6 +2714,13 @@ else:
             "JambaForSequenceClassification",
             "JambaModel",
             "JambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deepseek_vl"].extend(
+        [
+            "DeepseekVLForConditionalGeneration",
+            "DeepseekVLModel",
+            "DeepseekVLPreTrainedModel",
         ]
     )
     _import_structure["models.jetmoe"].extend(
@@ -5526,6 +5538,10 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_vl import (
+        DeepseekVLConfig,
+        DeepseekVLProcessor,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -6477,6 +6493,7 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.deepseek_vl import DeepseekVLImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -7146,6 +7163,11 @@ if TYPE_CHECKING:
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
+        )
+        from .models.deepseek_vl import (
+            DeepseekVLForConditionalGeneration,
+            DeepseekVLModel,
+            DeepseekVLPreTrainedModel,
         )
         from .models.deformable_detr import (
             DeformableDetrForObjectDetection,
