@@ -707,6 +707,27 @@ class AriaTextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class ArlowForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ArlowModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ArlowPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ASTForAudioClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
