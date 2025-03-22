@@ -34,11 +34,202 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import SamProcessor, TFSamModel
+    from transformers import SamProcessor, TFSamModel, TFSamVisionModel
     from transformers.modeling_tf_utils import keras
 
 if is_vision_available():
     from PIL import Image
+
+
+class TFSamVisionModelTester:
+    def __init__(
+        self,
+        parent,
+        hidden_size=36,
+        intermediate_size=72,
+        projection_dim=62,
+        output_channels=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_channels=3,
+        image_size=24,
+        patch_size=2,
+        hidden_act="gelu",
+        layer_norm_eps=1e-06,
+        dropout=0.0,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        qkv_bias=True,
+        mlp_ratio=4.0,
+        use_abs_pos=True,
+        use_rel_pos=True,
+        rel_pos_zero_init=False,
+        window_size=14,
+        global_attn_indexes=[2, 5, 8, 11],
+        num_pos_feats=16,
+        mlp_dim=None,
+        batch_size=2,
+    ):
+        self.parent = parent
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.output_channels = output_channels
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.hidden_act = hidden_act
+        self.layer_norm_eps = layer_norm_eps
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.qkv_bias = qkv_bias
+        self.mlp_ratio = mlp_ratio
+        self.use_abs_pos = use_abs_pos
+        self.use_rel_pos = use_rel_pos
+        self.rel_pos_zero_init = rel_pos_zero_init
+        self.window_size = window_size
+        self.global_attn_indexes = global_attn_indexes
+        self.num_pos_feats = num_pos_feats
+        self.mlp_dim = mlp_dim
+        self.batch_size = batch_size
+
+    def get_config(self):
+        return SamVisionConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            initializer_range=self.initializer_range,
+            initializer_factor=self.initializer_factor,
+            output_channels=self.output_channels,
+            qkv_bias=self.qkv_bias,
+            mlp_ratio=self.mlp_ratio,
+            use_abs_pos=self.use_abs_pos,
+            use_rel_pos=self.use_rel_pos,
+            rel_pos_zero_init=self.rel_pos_zero_init,
+            window_size=self.window_size,
+            global_attn_indexes=self.global_attn_indexes,
+            num_pos_feats=self.num_pos_feats,
+            mlp_dim=self.mlp_dim,
+        )
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def create_and_check_model(self, config, pixel_values):
+        model = TFSamVisionModel(config=config)
+        result = model(pixel_values)
+        output_size = self.image_size // self.patch_size
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_channels, output_size, output_size)
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_tf
+class TFSamVisionModelTest(TFModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (TFSamVisionModel,) if is_tf_available() else ()
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    test_onnx = False
+
+    def setUp(self):
+        self.model_tester = TFSamVisionModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, keras.layers.Dense))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.call)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        expected_attention_shape = (
+            self.model_tester.batch_size * self.model_tester.num_attention_heads,
+            196,
+            196,
+        )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-4:]),
+                list(expected_attention_shape),
+            )
+
+    @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
+    def test_hidden_states_output(self):
+        pass
 
 
 class TFSamPromptEncoderTester:
