@@ -137,6 +137,7 @@ from . import (
     instructblip,
     instructblipvideo,
     jamba,
+    deepseek_vl,
     jetmoe,
     kosmos2,
     layoutlm,

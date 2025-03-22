@@ -404,10 +404,6 @@ _import_structure = {
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
-    "models.deepseek_vl": [
-        "DeepseekVLConfig",
-        "DeepseekVLProcessor",
-    ],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
@@ -537,6 +533,10 @@ _import_structure = {
         "InstructBlipVideoVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
+    "models.deepseek_vl": [
+        "DeepseekVLConfig",
+        "DeepseekVLProcessor",
+    ],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
         "Kosmos2Config",
@@ -617,6 +617,7 @@ _import_structure = {
     ],
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
+    "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
         "MllamaConfig",
@@ -1258,7 +1259,6 @@ else:
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
-    _import_structure["models.deepseek_vl"].extend(["DeepseekVLImageProcessor"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -1275,6 +1275,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.deepseek_vl"].append("DeepseekVLImageProcessor")
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -2704,6 +2705,13 @@ else:
             "JambaPreTrainedModel",
         ]
     )
+    _import_structure["models.deepseek_vl"].extend(
+        [
+            "DeepseekVLForConditionalGeneration",
+            "DeepseekVLModel",
+            "DeepseekVLPreTrainedModel",
+        ]
+    )
     _import_structure["models.jetmoe"].extend(
         [
             "JetMoeForCausalLM",
@@ -2943,6 +2951,12 @@ else:
             "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mistral3"].extend(
+        [
+            "Mistral3ForConditionalGeneration",
+            "Mistral3PreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -5507,11 +5521,6 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
-    from .models.deepseek_vl import (
-        DeepseekVLConfig,
-        DeepseekVLProcessor,
-        DeepseekVLVisionConfig,
-    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -5711,6 +5720,10 @@ if TYPE_CHECKING:
         InstructBlipVideoVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.deepseek_vl import (
+        DeepseekVLConfig,
+        DeepseekVLProcessor,
+    )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
         Kosmos2Config,
@@ -5798,6 +5811,7 @@ if TYPE_CHECKING:
         MimiConfig,
     )
     from .models.mistral import MistralConfig
+    from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
         MllamaConfig,
@@ -6456,7 +6470,6 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.deepseek_vl import DeepseekVLImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -6484,6 +6497,7 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
+        from .models.deepseek_vl import DeepseekVLImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -7672,6 +7686,11 @@ if TYPE_CHECKING:
             JambaModel,
             JambaPreTrainedModel,
         )
+        from .models.deepseek_vl import (
+            DeepseekVLForConditionalGeneration,
+            DeepseekVLModel,
+            DeepseekVLPreTrainedModel,
+        )
         from .models.jetmoe import (
             JetMoeForCausalLM,
             JetMoeForSequenceClassification,
@@ -7854,6 +7873,10 @@ if TYPE_CHECKING:
             MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
+        )
+        from .models.mistral3 import (
+            Mistral3ForConditionalGeneration,
+            Mistral3PreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,

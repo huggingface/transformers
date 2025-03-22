@@ -685,6 +685,8 @@
         title: Depth Anything V2
       - local: model_doc/depth_pro
         title: DepthPro
+      - local: model_doc/deepseek_vl
+        title: DeepseekVL
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
