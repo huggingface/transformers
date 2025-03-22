@@ -1200,7 +1200,15 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
-            supported_models_names = []
+            supported_models_names = [
+                "PeftModelForCausalLM",
+                "PeftModelForSeq2SeqLM",
+                "PeftModelForSequenceClassification",
+                "PeftModelForQuestionAnswering",
+                "PeftModelForTokenClassification",
+                "PeftModel",
+                "PeftModelForFeatureExtraction",
+            ]
             for _, model_name in supported_models.items():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):
