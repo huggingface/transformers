@@ -198,6 +198,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("nat", "NatModel"),
         ("nemotron", "NemotronModel"),
         ("nezha", "NezhaModel"),
+        ("ngen3", "NGen3")
         ("nllb-moe", "NllbMoeModel"),
         ("nystromformer", "NystromformerModel"),
         ("olmo", "OlmoModel"),
@@ -370,6 +371,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForPreTraining"),
+        ("ngen3", "NGEN3ForCasualLM")
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
@@ -459,6 +461,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
+        ("ngen3", "NGEN3ForCasualLM")
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
@@ -556,6 +559,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("musicgen_melody", "MusicgenMelodyForCausalLM"),
         ("mvp", "MvpForCausalLM"),
         ("nemotron", "NemotronForCausalLM"),
+        ("ngen3", "NGen3ForCasualLM"),
         ("olmo", "OlmoForCausalLM"),
         ("olmo2", "Olmo2ForCausalLM"),
         ("olmoe", "OlmoeForCausalLM"),
