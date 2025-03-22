@@ -30,47 +30,48 @@ from transformers import (
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Sam (High Resolution)
-    r"vision_model.vision_tower_high.vision_tower.pos_embed": r"high_res_vision_encoder.model.pos_embed",
-    r"vision_model.vision_tower_high.vision_tower.patch_embed.proj.(weight|bias)": r"high_res_vision_encoder.model.patch_embed.projection.\1",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)": r"high_res_vision_encoder.model.layers.\1.layer_norm\2.\3",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.rel_pos_(h|w)": r"high_res_vision_encoder.model.layers.\1.attn.rel_pos_\2",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)": r"high_res_vision_encoder.model.layers.\1.attn.qkv.\2",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.proj.(weight|bias)": r"high_res_vision_encoder.model.layers.\1.attn.proj.\2",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).mlp.lin(\d+).(weight|bias)": r"high_res_vision_encoder.model.layers.\1.mlp.lin\2.\3",
-    r"vision_model.vision_tower_high.vision_tower.neck.0.weight": r"high_res_vision_encoder.model.neck.conv1.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck.1.(weight|bias)": r"high_res_vision_encoder.model.neck.layer_norm1.\1",
-    r"vision_model.vision_tower_high.vision_tower.neck.2.weight": r"high_res_vision_encoder.model.neck.conv2.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck.3.(weight|bias)": r"high_res_vision_encoder.model.neck.layer_norm2.\1",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.0.weight": r"high_res_vision_encoder.global_neck.conv1.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.1.(weight|bias)": r"high_res_vision_encoder.global_neck.layer_norm1.\1",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.2.weight": r"high_res_vision_encoder.global_neck.conv2.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.3.(weight|bias)": r"high_res_vision_encoder.global_neck.layer_norm2.\1",
-    r"vision_model.vision_tower_high.vision_tower.downsamples.0.weight": r"high_res_vision_encoder.neck.conv1.weight",
-    r"vision_model.vision_tower_high.vision_tower.downsamples.1.weight": r"high_res_vision_encoder.neck.conv2.weight",
-    r"vision_model.vision_tower_high.vision_tower.hd_alpha_downsamples": r"high_res_vision_encoder.alpha",
+    r"vision_model.vision_tower_high.vision_tower.pos_embed": r"model.high_res_vision_encoder.model.pos_embed",
+    r"vision_model.vision_tower_high.vision_tower.patch_embed.proj.(weight|bias)": r"model.high_res_vision_encoder.model.patch_embed.projection.\1",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.layer_norm\2.\3",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.rel_pos_(h|w)": r"model.high_res_vision_encoder.model.layers.\1.attn.rel_pos_\2",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.attn.qkv.\2",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.proj.(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.attn.proj.\2",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).mlp.lin(\d+).(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.mlp.lin\2.\3",
+    r"vision_model.vision_tower_high.vision_tower.neck.0.weight": r"model.high_res_vision_encoder.model.neck.conv1.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck.1.(weight|bias)": r"model.high_res_vision_encoder.model.neck.layer_norm1.\1",
+    r"vision_model.vision_tower_high.vision_tower.neck.2.weight": r"model.high_res_vision_encoder.model.neck.conv2.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck.3.(weight|bias)": r"model.high_res_vision_encoder.model.neck.layer_norm2.\1",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.0.weight": r"model.high_res_vision_encoder.global_neck.conv1.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.1.(weight|bias)": r"model.high_res_vision_encoder.global_neck.layer_norm1.\1",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.2.weight": r"model.high_res_vision_encoder.global_neck.conv2.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.3.(weight|bias)": r"model.high_res_vision_encoder.global_neck.layer_norm2.\1",
+    r"vision_model.vision_tower_high.vision_tower.downsamples.0.weight": r"model.high_res_vision_encoder.neck.conv1.weight",
+    r"vision_model.vision_tower_high.vision_tower.downsamples.1.weight": r"model.high_res_vision_encoder.neck.conv2.weight",
+    r"vision_model.vision_tower_high.vision_tower.hd_alpha_downsamples": r"model.high_res_vision_encoder.alpha",
 
     # Siglip (Low Resolution)
-    r"vision_model(?:.vision_tower_low)?.vision_tower.pos_embed": r"low_res_vision_encoder.model.vision_model.embeddings.position_embedding.weight",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.patch_embed.proj.(weight|bias)": r"low_res_vision_encoder.model.vision_model.embeddings.patch_embedding.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)": r"low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.(q|k|v)_proj.\2",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.proj.(weight|bias)": r"low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)": r"low_res_vision_encoder.model.vision_model.encoder.layers.\1.layer_norm\2.\3",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).mlp.fc(\d+).(weight|bias)": r"low_res_vision_encoder.model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.norm.(weight|bias)": r"low_res_vision_encoder.model.vision_model.post_layernorm.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.latent": r"low_res_vision_encoder.model.vision_model.head.probe",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.proj.(weight|bias)": r"low_res_vision_encoder.model.vision_model.head.attention.out_proj.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.norm.(weight|bias)": r"low_res_vision_encoder.model.vision_model.head.layernorm.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.mlp.fc(\d+).(weight|bias)": r"low_res_vision_encoder.model.vision_model.head.mlp.fc\1.\2",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.pos_embed": r"model.low_res_vision_encoder.model.vision_model.embeddings.position_embedding.weight",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.patch_embed.proj.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.embeddings.patch_embedding.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.(q|k|v)_proj.\2",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.proj.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.layer_norm\2.\3",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).mlp.fc(\d+).(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.norm.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.post_layernorm.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.latent": r"model.low_res_vision_encoder.model.vision_model.head.probe",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.proj.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.head.attention.out_proj.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.norm.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.head.layernorm.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.mlp.fc(\d+).(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.head.mlp.fc\1.\2",
 
     # Vision Projection (1.3B)
-    r"aligner.layers.0.(weight|bias)": r"aligner.low_res_vision_proj.\1",
-    r"aligner.layers.2.(weight|bias)": r"aligner.proj.\1",
+    r"aligner.layers.0.(weight|bias)": r"model.aligner.low_res_vision_proj.\1",
+    r"aligner.layers.2.(weight|bias)": r"model.aligner.proj.\1",
     # Vision Projection (7B)
-    r"aligner.(high|low)_up_proj.(weight|bias)": r"aligner.\1_res_vision_proj.\2",
-    r"aligner.layers.1.(weight|bias)": r"aligner.proj.\1",
+    r"aligner.(high|low)_up_proj.(weight|bias)": r"model.aligner.\1_res_vision_proj.\2",
+    r"aligner.layers.1.(weight|bias)": r"model.aligner.proj.\1",
 
     # Llama (Text Model)
-    r"language_model.(\w+)": r"language_model.\1",
+    r"language_model.model.(\w+)": r"model.language_model.\1",
+    r"language_model.lm_head.(weight|bias)": r"lm_head.\1",
 }
 # fmt: on
 
@@ -133,6 +134,7 @@ def update_state_dict(old_state_dict):
             state_dict[new_key] = current_parameter
 
     return state_dict
+
 
 def write_model(
     hf_repo_id: str,

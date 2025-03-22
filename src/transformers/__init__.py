@@ -404,9 +404,8 @@ _import_structure = {
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
-    "models.deepseek_vl":[
+    "models.deepseek_vl": [
         "DeepseekVLConfig",
-        "DeepseekVLVisionConfig",
         "DeepseekVLProcessor",
     ],
     "models.detr": ["DetrConfig"],
@@ -1259,7 +1258,7 @@ else:
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
-    _import_structure["models.deepseek_vl"].extend(["DeepseekImageProcessor"])
+    _import_structure["models.deepseek_vl"].extend(["DeepseekVLImageProcessor"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -5508,6 +5507,11 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_vl import (
+        DeepseekVLConfig,
+        DeepseekVLProcessor,
+        DeepseekVLVisionConfig,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -5577,11 +5581,6 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.depth_pro import DepthProConfig
-    from .models.deepseek_vl import (
-        DeepseekVLConfig,
-        DeepseekVLVisionConfig,
-        DeepseekVLProcessor,
-    )
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
@@ -6457,6 +6456,7 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.deepseek_vl import DeepseekVLImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -6464,7 +6464,6 @@ if TYPE_CHECKING:
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
         from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
-        from .models.deepseek_vl import DeepseekImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
