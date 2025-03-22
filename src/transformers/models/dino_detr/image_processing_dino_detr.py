@@ -1639,11 +1639,13 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         nms_iou_threshold=-1,
     ):
         """Perform the computation
+        Outputs are in xyxy unnormalized format
         Parameters:
             outputs: raw outputs of the model
             target_sizes: tensor of dimension [batch_size x 2] containing the size of each images of the batch
                         For evaluation, this must be the original image size (before any data augmentation)
                         For visualization, this should be the image size after data augment, but before padding
+
         """
         num_select = num_select
         out_logits, out_bbox = outputs.pred_logits, outputs.pred_boxes

@@ -26,6 +26,9 @@ from transformers import (
     is_vision_available,
 )
 from transformers.file_utils import cached_property
+from transformers.models.dino_detr.image_processing_dino_detr import (
+    DinoDetrImageProcessor,
+)
 from transformers.testing_utils import (
     require_timm,
     require_torch,
@@ -48,8 +51,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import AutoImageProcessor
 
 
 class DinoDetrModelTester:
@@ -692,10 +693,12 @@ def prepare_img():
 class DinoDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
+        return DinoDetrImageProcessor() if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = DinoDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
+        model = DinoDetrForObjectDetection.from_pretrained(
+            "/Users/konstantinospitas/projects/dino_detr/tests/pretrained_checkpoint"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -706,39 +709,47 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, pixel_mask)
 
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
+        # verify unprocessed
+        # Define expected output pred logits and pred boxes
         expected_logits = torch.tensor(
             [
-                [-9.6645, -4.3449, -5.8705],
-                [-9.7035, -3.8504, -5.0724],
-                [-10.5634, -5.3379, -7.5116],
+                [-8.3676, -4.9979, -6.5358],
+                [-8.0614, -3.9570, -6.5324],
+                [-8.6825, -4.5079, -6.9632],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.8693, 0.2289, 0.2492],
-                [0.3150, 0.5489, 0.5845],
-                [0.5563, 0.7580, 0.8518],
+                [0.1689, 0.1989, 0.2123],
+                [0.7672, 0.4147, 0.4655],
+                [0.5491, 0.2758, 0.0583],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+        # Verify pred logits
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.pred_logits.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.pred_logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
+        # Verify pred boxes shapes
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
+        target_sizes = torch.tensor(pixel_values.shape[-2:]).unsqueeze(0).to(torch_device)
         results = image_processor.post_process_object_detection(
-            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+            outputs,
+            nms_iou_threshold=10,
+            conf_threshold=0.3,
+            target_sizes=target_sizes,
         )[0]
-        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
-        expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
+        expected_scores = torch.tensor([0.7475, 0.7341, 0.7229, 0.4707, 0.4449, 0.3086]).to(torch_device)
+        expected_labels = [17, 17, 75, 75, 63, 63]
+        expected_slice_boxes = torch.tensor([569.7284, 41.1137, 1065.9333, 622.4651]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
+        self.assertEqual(len(results["scores"]), 6)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
