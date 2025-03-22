@@ -136,6 +136,7 @@ _import_structure = {
         "is_clearml_available",
         "is_comet_available",
         "is_dvclive_available",
+        "is_logfire_available",
         "is_neptune_available",
         "is_optuna_available",
         "is_ray_available",
@@ -5305,6 +5306,7 @@ if TYPE_CHECKING:
         is_ray_tune_available,
         is_sigopt_available,
         is_swanlab_available,
+        is_logfire_available,
         is_tensorboard_available,
         is_wandb_available,
     )

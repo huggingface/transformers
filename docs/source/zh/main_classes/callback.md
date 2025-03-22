@@ -38,6 +38,7 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 - [`~integrations.FlyteCallback`]，如果安装了[flyte](https://flyte.org/)。
 - [`~integrations.DVCLiveCallback`]，如果安装了[dvclive](https://dvc.org/doc/dvclive)。
 - [`~integrations.SwanLabCallback`]，如果安装了[swanlab](http://swanlab.cn/)。
+- [`~integrations.LogfireCallback`]，如果安装了 [logfire](https://pydantic.dev/logfire)。
 
 如果安装了一个软件包，但您不希望使用相关的集成，您可以将 `TrainingArguments.report_to` 更改为仅包含您想要使用的集成的列表（例如 `["azure_ml", "wandb"]`）。
 
@@ -48,7 +49,7 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 
 这里是库里可用[`TrainerCallback`]的列表：
 
-[[autodoc]] integrations.CometCallback 
+[[autodoc]] integrations.CometCallback
     - setup
 
 [[autodoc]] DefaultFlowCallback
@@ -61,10 +62,10 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 
 [[autodoc]] integrations.TensorBoardCallback
 
-[[autodoc]] integrations.WandbCallback 
+[[autodoc]] integrations.WandbCallback
     - setup
 
-[[autodoc]] integrations.MLflowCallback 
+[[autodoc]] integrations.MLflowCallback
     - setup
 
 [[autodoc]] integrations.AzureMLCallback
@@ -84,6 +85,8 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 
 [[autodoc]] integrations.SwanLabCallback
     - setup
+
+[[autodoc]] integrations.LogfireCallback
 
 ## TrainerCallback
 
