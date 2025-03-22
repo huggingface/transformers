@@ -76,12 +76,12 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 
 ```py
 # venv
-python -m venv my-env
-source ./my-env/bin/activate
+python -m venv .my-env
+source .my-env/bin/activate
 
 # uv
-uv venv my-env
-source ./my-env/bin/activate
+uv venv .my-env
+source .my-env/bin/activate
 ```
 
 Install Transformers in your virtual environment.

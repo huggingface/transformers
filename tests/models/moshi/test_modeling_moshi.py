@@ -581,7 +581,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, filtered_inputs_dict
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
+        # Overwrite because the generate method actually always uses `inputs_embeds` so `use_cache` is always `True`
         super()._check_generate_outputs(
             output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
@@ -618,13 +618,13 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(
-        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
@@ -849,7 +849,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 **model.get_unconditional_inputs(num_samples=4), max_new_tokens=5, concat_unconditional_inputs=False
             )
 
-            # check same results from uncondtional or no inputs
+            # check same results from unconditional or no inputs
             outputs_from_unconditional = model.generate(
                 **model.get_unconditional_inputs(num_samples=1), max_new_tokens=5, concat_unconditional_inputs=False
             )

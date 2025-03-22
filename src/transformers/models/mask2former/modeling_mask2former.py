@@ -799,7 +799,7 @@ class Mask2FormerLoss(nn.Module):
         return num_masks
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
+# Copied from transformers.models.oneformer.modeling_oneformer.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor,
     value_spatial_shapes: Union[Tensor, List[Tuple]],

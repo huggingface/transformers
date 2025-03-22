@@ -450,7 +450,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
 
-        # We make sure that the loss of includding padding tokens != the loss without padding tokens
+        # We make sure that the loss of including padding tokens != the loss without padding tokens
         # if attention_mask=None --> we don't exclude padding tokens
         include_padding_result = model(padded_input_ids, attention_mask=None)
 
@@ -480,7 +480,7 @@ class MixtralIntegrationTest(unittest.TestCase):
             torch_device
         )
         # TODO: might need to tweak it in case the logits do not match on our daily runners
-        # these logits have been obtained with the original megablocks impelmentation.
+        # these logits have been obtained with the original megablocks implementation.
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,

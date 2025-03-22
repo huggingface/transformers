@@ -971,7 +971,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.audio_channels = original_audio_channels
 
     @unittest.skip(
-        reason="MusicgenModel is actually not the base of MusicgenForCausalLM as the latter is a composit model"
+        reason="MusicgenModel is actually not the base of MusicgenForCausalLM as the latter is a composite model"
     )
     def test_save_load_fast_init_from_base(self):
         pass

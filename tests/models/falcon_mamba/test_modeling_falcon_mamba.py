@@ -211,7 +211,7 @@ class FalconMambaModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the orignal mamba does not support decoding more than 1 token neither do we
+        # TODO the original mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_falcon_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
