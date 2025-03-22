@@ -735,7 +735,7 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
     # TODO (Joao): fix me
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    @unittest.skip("Onnx compliance broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
 
