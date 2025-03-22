@@ -345,6 +345,10 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_vl": [
+        "DeepseekVLConfig",
+        "DeepseekVLProcessor",
+    ],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
@@ -533,10 +537,6 @@ _import_structure = {
         "InstructBlipVideoVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
-    "models.deepseek_vl": [
-        "DeepseekVLConfig",
-        "DeepseekVLProcessor",
-    ],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
         "Kosmos2Config",
@@ -1256,6 +1256,7 @@ else:
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
+    _import_structure["models.deepseek_vl"].append("DeepseekVLImageProcessor")
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -1281,7 +1282,6 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
-    _import_structure["models.deepseek_vl"].append("DeepseekVLImageProcessor")
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
