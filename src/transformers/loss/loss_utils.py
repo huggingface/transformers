@@ -19,6 +19,7 @@ from torch.nn import BCEWithLogitsLoss, MSELoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+from .loss_relation_detr import RelationDetrForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
@@ -141,5 +142,6 @@ LOSS_MAPPING = {
     "GroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
+    "RelationDetrForObjectDetection": RelationDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
 }
