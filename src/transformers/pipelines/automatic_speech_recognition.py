@@ -64,7 +64,12 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
     for chunk_start_idx in range(0, inputs_len, step):
         chunk_end_idx = chunk_start_idx + chunk_len
         chunk = inputs[chunk_start_idx:chunk_end_idx]
-        processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+        processed = feature_extractor(
+            chunk,
+            sampling_rate=feature_extractor.sampling_rate,
+            return_attention_mask=True,
+            return_tensors="pt",
+        )
         if dtype is not None:
             processed = processed.to(dtype=dtype)
         _stride_left = 0 if chunk_start_idx == 0 else stride_left
@@ -501,18 +506,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             # custom processing for Whisper timestamps and word-level timestamps
             if return_timestamps and self.type == "seq2seq_whisper":
-                generate_kwargs["return_timestamps"] = return_timestamps
+                generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
-
-                    if stride is not None:
-                        if isinstance(stride, tuple):
-                            generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
-                        else:
-                            generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
-                    else:
-                        generate_kwargs["num_frames"] = num_frames
 
             # User-defined `generation_config` passed to the pipeline call take precedence
             if "generation_config" not in generate_kwargs:
