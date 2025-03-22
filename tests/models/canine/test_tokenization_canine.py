@@ -18,13 +18,14 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import BatchEncoding, CanineTokenizer
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_utils import AddedToken
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -32,17 +33,22 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = CanineTokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def canine_tokenizer(self):
         return CanineTokenizer.from_pretrained("google/canine-s")
 
-    def get_tokenizer(self, **kwargs) -> CanineTokenizer:
-        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> CanineTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        tokenizer = cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
         tokenizer._unicode_vocab_size = 1024
         return tokenizer
 

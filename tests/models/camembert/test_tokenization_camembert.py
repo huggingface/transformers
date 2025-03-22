@@ -38,12 +38,13 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = CamembertTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @unittest.skip(
         "Token maps are not equal because someone set the probability of ('<unk>NOTUSED', -100), so it's never encoded for fast"
@@ -147,11 +148,11 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertTrue(all(item in tokenizer.added_tokens_decoder.items() for item in expected.items()))
             return tokenizer
 
-        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
+        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                tokenizer = self.get_tokenizer(pretrained_name, eos_token=new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
                     self.assertEqual(tokenizer._special_tokens_map["eos_token"], new_eos)
@@ -191,7 +192,7 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
+                        tokenizer_fast = self.get_rust_tokenizer(
                             pretrained_name, eos_token=new_eos, from_slow=True
                         )
                         self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)

@@ -18,6 +18,7 @@ import pickle
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 
 from datasets import load_dataset
 
@@ -37,7 +38,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -53,15 +54,16 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizers(self, **kwargs):
+    def get_tokenizers(cls, **kwargs):
         kwargs.update({"pad_token": "<PAD>"})
         return super().get_tokenizers(**kwargs)
 
@@ -151,8 +153,8 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -255,7 +257,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
@@ -265,7 +267,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in r_output)
 
                 if self.test_slow_tokenizer:
-                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    tokenizer_cr = self.get_rust_tokenizer(
                         pretrained_name,
                         additional_special_tokens=added_tokens,
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert

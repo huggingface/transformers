@@ -14,11 +14,12 @@
 # limitations under the License.
 import binascii
 import unittest
+from functools import lru_cache
 
 from transformers import MyT5Tokenizer
 from transformers.utils import is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 if is_torch_available():
@@ -90,11 +91,18 @@ class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MyT5Tokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def tearDownClass(cls):
+        # breakpoint()
+        cls.get_tokenizer()
+        # breakpoint()
+        print(3)
 
-    def get_tokenizer(self, **kwargs) -> MyT5Tokenizer:
-        return self.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=4)
+    def get_tokenizer(cls, **kwargs) -> MyT5Tokenizer:
+        return cls.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
 
     @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")
     def test_pretokenized_inputs(self):

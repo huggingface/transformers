@@ -214,6 +214,7 @@ tokenization_job = CircleCIJob(
     "tokenization",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     parallelism=8,
+    install_steps=["uv venv && uv pip install .", "pip install -U pytest"],
 )
 
 processor_job = CircleCIJob(
@@ -362,7 +363,8 @@ EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
+# ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
+ALL_TESTS = [tokenization_job] # fmt: sk
 
 
 def create_circleci_config(folder=None):

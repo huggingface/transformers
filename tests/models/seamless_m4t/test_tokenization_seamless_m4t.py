@@ -59,12 +59,13 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_tokenizer(self):
         tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, keep_accents=True)
