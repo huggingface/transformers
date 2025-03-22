@@ -80,14 +80,13 @@ class ArlowTokenizer(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    def save_vocabulary(
-        self, save_directory: str, filename_prefix: Optional[str] = None
-    ) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
         Save the tokenizer vocabulary + merges to `save_directory`.
         Returns a tuple of (vocab_file_path, merges_file_path).
         """
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
 
 __all__ = ["ArlowTokenizer"]

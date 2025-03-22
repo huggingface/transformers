@@ -54,9 +54,7 @@ class ArlowModelTester:
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        input_ids = torch.randint(
-            0, self.vocab_size, (self.batch_size, self.seq_length), device=torch_device
-        )
+        input_ids = torch.randint(0, self.vocab_size, (self.batch_size, self.seq_length), device=torch_device)
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=torch_device)
         # Make half the tokens padded in one row, as an example
         if self.seq_length > 2:

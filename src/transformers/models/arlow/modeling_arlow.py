@@ -7,7 +7,10 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from transformers.modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+)
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
@@ -34,10 +37,7 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
 
 
 def apply_rotary_pos_emb(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Applies rotary position embedding to query and key.
@@ -55,6 +55,7 @@ class ArlowRotaryEmbedding(nn.Module):
     """
     Basic Rotary Embedding. If you want advanced or dynamic rope, expand here.
     """
+
     def __init__(self, config: ArlowConfig):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
@@ -62,17 +63,11 @@ class ArlowRotaryEmbedding(nn.Module):
         self.rope_base = config.rope_theta  # e.g. 100000.0
 
         half_dim = self.head_dim
-        inv_freq = 1.0 / (
-            self.rope_base ** (torch.arange(0, half_dim, 2).float() / half_dim)
-        )
+        inv_freq = 1.0 / (self.rope_base ** (torch.arange(0, half_dim, 2).float() / half_dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(
-        self,
-        batch_size: int,
-        seq_len: int,
-        device: torch.device,
-        dtype: torch.dtype
+        self, batch_size: int, seq_len: int, device: torch.device, dtype: torch.dtype
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Return cos, sin each shape [batch_size, seq_len, head_dim].
@@ -94,6 +89,7 @@ class ArlowRMSNorm(nn.Module):
     """
     Root Mean Square Layer Norm, used in LLaMA-like models.
     """
+
     def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -113,6 +109,7 @@ class ArlowRMSNorm(nn.Module):
 # -----------------------------------------------------------------------------
 try:
     from flash_attn.modules.mha import MHA
+
     FLASH_ATTN_AVAILABLE = True
 except ImportError:
     MHA = None
@@ -125,6 +122,7 @@ class ArlowGroupedQueryAttention(nn.Module):
     Minimal wrapper around flash_attn's MHA for causal or cross-attention.
     If cross-attn is provided, pass in `encoder_hidden_states`.
     """
+
     def __init__(self, config: ArlowConfig):
         super().__init__()
         if not FLASH_ATTN_AVAILABLE:
@@ -144,7 +142,7 @@ class ArlowGroupedQueryAttention(nn.Module):
             dropout=dropout,
             causal=True,
             cross_attn=True,
-            use_flash_attn=True
+            use_flash_attn=True,
         )
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
 
@@ -152,7 +150,7 @@ class ArlowGroupedQueryAttention(nn.Module):
         self,
         x: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None
+        encoder_hidden_states: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         x => [batch_size, seq_len, hidden_size]
@@ -187,6 +185,7 @@ class ArlowFlashAttentionTransformerLayer(nn.Module):
       - Optional cross-attention (if config.cross_attention=True).
       - RMSNorm, then feed-forward.
     """
+
     def __init__(self, config: ArlowConfig):
         super().__init__()
         self.self_attn = ArlowGroupedQueryAttention(config)
@@ -224,7 +223,7 @@ class ArlowFlashAttentionTransformerLayer(nn.Module):
         self_attn_out = self.self_attn(
             hidden_states_normed,
             attention_mask=attention_mask,
-            encoder_hidden_states=None  # self-attn => no enc states
+            encoder_hidden_states=None,  # self-attn => no enc states
         )
         hidden_states = residual + self_attn_out
 
@@ -235,7 +234,7 @@ class ArlowFlashAttentionTransformerLayer(nn.Module):
             cross_out = self.cross_attn(
                 cross_normed,
                 attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states
+                encoder_hidden_states=encoder_hidden_states,
             )
             hidden_states = residual + cross_out
 
@@ -256,6 +255,7 @@ class ArlowPreTrainedModel(PreTrainedModel):
     Base class for all Arlow-based models.
     Handles config, weight init, and hooking into HF save/load.
     """
+
     config_class = ArlowConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -295,11 +295,7 @@ class ArlowModel(ArlowPreTrainedModel):
     def __init__(self, config: ArlowConfig):
         super().__init__(config)
         self.config = config
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size,
-            config.hidden_size,
-            padding_idx=config.pad_token_id
-        )
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
 
         # Optional: If you want to apply rotary embeddings yourself, define a separate logic or call ArlowRotaryEmbedding
         self.rotary_emb = ArlowRotaryEmbedding(config)
@@ -325,10 +321,10 @@ class ArlowModel(ArlowPreTrainedModel):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,       # not used by default
+        output_attentions: Optional[bool] = None,  # not used by default
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-        **unused
+        **unused,
     ) -> Union[BaseModelOutputWithPast, Tuple[torch.Tensor]]:
         # 1) Validate Inputs
         if input_ids is not None and inputs_embeds is not None:
@@ -355,7 +351,7 @@ class ArlowModel(ArlowPreTrainedModel):
                 hidden_states,
                 attention_mask=attention_mask,
                 encoder_hidden_states=enc_h,
-                encoder_attention_mask=enc_mask
+                encoder_attention_mask=enc_mask,
             )
 
         for layer in self.layers:
@@ -369,14 +365,14 @@ class ArlowModel(ArlowPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
-                    encoder_attention_mask
+                    encoder_attention_mask,
                 )
             else:
                 hidden_states = layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask
+                    encoder_attention_mask=encoder_attention_mask,
                 )
 
         # Final RMS norm
@@ -431,7 +427,7 @@ class ArlowForCausalLM(ArlowPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **unused
+        **unused,
     ) -> Union[CausalLMOutputWithPast, Tuple[torch.Tensor]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -444,7 +440,7 @@ class ArlowForCausalLM(ArlowPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
@@ -457,10 +453,7 @@ class ArlowForCausalLM(ArlowPreTrainedModel, GenerationMixin):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             loss_fct = nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1)
-            )
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
             out = (logits,) + outputs[1:]
@@ -471,7 +464,7 @@ class ArlowForCausalLM(ArlowPreTrainedModel, GenerationMixin):
             logits=logits,
             past_key_values=None,  # Not implemented
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions
+            attentions=outputs.attentions,
         )
 
     def tie_weights(self):
@@ -487,9 +480,9 @@ __all__ = [
     "ArlowPreTrainedModel",
     "ArlowModel",
     "ArlowForCausalLM",
-#   "ArlowFlashAttentionTransformerLayer",
-#   "ArlowGroupedQueryAttention",
-#   "ArlowRMSNorm",
-#   "ArlowRotaryEmbedding",
-#   "apply_rotary_pos_emb",
+    #   "ArlowFlashAttentionTransformerLayer",
+    #   "ArlowGroupedQueryAttention",
+    #   "ArlowRMSNorm",
+    #   "ArlowRotaryEmbedding",
+    #   "apply_rotary_pos_emb",
 ]

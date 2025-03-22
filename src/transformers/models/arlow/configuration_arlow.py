@@ -121,14 +121,14 @@ class ArlowConfig(PretrainedConfig):
         use_cross_attention=True,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -147,5 +147,6 @@ class ArlowConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.cross_attention = cross_attention
         self.use_cross_attention = use_cross_attention
+
 
 __all__ = ["ArlowConfig"]
