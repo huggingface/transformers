@@ -6128,7 +6128,7 @@ class Qwen2_5OmniModel(PreTrainedModel):
     def load_speakers(self, path):
         for key, value in torch.load(path).items():
             self.speaker_map[key] = value
-        logger.info("Speaker {} loaded".format(self.speaker_map.keys()))
+        logger.info("Speaker {} loaded".format(list(self.speaker_map.keys())))
 
     def disable_talker(self):
         if hasattr(self, "talker"):
@@ -6194,7 +6194,7 @@ class Qwen2_5OmniModel(PreTrainedModel):
         self,
         input_ids: Optional[torch.tensor] = None,
         input_embeds: Optional[torch.tensor] = None,
-        spk: str = "Cherry",
+        spk: str = "Chelsie",
         use_audio_in_video: bool = False,
         return_audio: Optional[bool] = None,
         thinker_max_new_tokens: int = 1024,
@@ -6215,7 +6215,7 @@ class Qwen2_5OmniModel(PreTrainedModel):
                 Input ids, should obtain from processor.
             input_embeds (`Optional[torch.Tensor]`, *optional*):
                 Input embeddings, should obtain from processor.
-            spk (`str` , defaults to "Cherry"):
+            spk (`str` , defaults to "Chelsie"):
                 Which speaker should be used in audio response.
             use_audio_in_video (`bool`, defaults to False):
                 Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
