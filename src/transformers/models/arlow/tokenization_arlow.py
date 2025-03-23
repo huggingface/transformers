@@ -17,8 +17,7 @@ VOCAB_FILES_NAMES = {
 
 
 class ArlowTokenizer(PreTrainedTokenizer):
-    """
-    ArlowTokenizer is a custom BPE tokenizer used for the ArlowGPT model.
+    """ArlowTokenizer is a custom BPE tokenizer used for the ArlowGPT model.
 
     This is the slow (Python-based) implementation that provides subword tokenization,
     padding, truncation, and special token handling.
@@ -32,12 +31,12 @@ class ArlowTokenizer(PreTrainedTokenizer):
     Attributes:
         vocab_file (str): Path to the vocabulary file.
         merges_file (str): Path to the merges file.
-        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`): <fill_docstring>
-        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`): <fill_docstring>
-        unk_token (`str`, *optional*, defaults to `"<|unk|>"`): <fill_docstring>
-        pad_token (`str`, *optional*, defaults to `"<|pad|>"`): <fill_docstring>
-        mask_token (`str`, *optional*, defaults to `"<|mask|>"`): <fill_docstring>
-        additional_special_tokens (`Optional`, *optional*): <fill_docstring>
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`): The beginning-of-sequence token that marks the start of a text.
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`): The end-of-sequence token that indicates the end of a text.
+        unk_token (`str`, *optional*, defaults to `"<|unk|>"`): The token used to represent unknown words.
+        pad_token (`str`, *optional*, defaults to `"<|pad|>"`): The token used for padding sequences to a uniform length.
+        mask_token (`str`, *optional*, defaults to `"<|mask|>"`): The token used for masking parts of the input (if applicable).
+        additional_special_tokens (`Optional[List[str]]`, *optional*): Additional special tokens that should be preserved during tokenization.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -187,9 +186,7 @@ class ArlowTokenizer(PreTrainedTokenizer):
 
 
 def get_pairs(word: List[str]) -> set:
-    """
-    Return set of symbol pairs in a word.
-    """
+    """Return set of symbol pairs in a word."""
     pairs = set()
     prev_char = word[0]
     for char in word[1:]:

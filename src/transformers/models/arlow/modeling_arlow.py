@@ -21,8 +21,7 @@ from .configuration_arlow import ArlowConfig
 logger = logging.get_logger(__name__)
 
 # _CHECKPOINT_FOR_DOC = "Arlow/arlow-base"
-_CONFIG_FOR_DOC = "ArlowConfig"
-
+# _CONFIG_FOR_DOC = "ArlowConfig"
 
 # -----------------------------------------------------------------------------
 # Rotary Embedding Helpers
@@ -120,7 +119,7 @@ except ImportError:
 class ArlowGroupedQueryAttention(nn.Module):
     """
     Minimal wrapper around flash_attn's MHA for causal or cross-attention.
-    If cross-attn is provided, pass in `encoder_hidden_states`.
+    Creates separate MHA modules for self-attention and cross-attention.
     """
 
     def __init__(self, config: ArlowConfig):
@@ -132,10 +131,21 @@ class ArlowGroupedQueryAttention(nn.Module):
         self.num_key_value_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         self.hidden_size = config.hidden_size
         self.head_dim = self.hidden_size // self.num_heads
-
         dropout = getattr(config, "attention_dropout", 0.0)
-        # For causal LMs, set 'causal=True'; cross_attn=True allows MHA to do cross-attention if given an encoder hidden state
-        self.mha = MHA(
+
+        # Create a self-attention MHA (cross_attn disabled)
+        self.self_attn_mha = MHA(
+            embed_dim=self.hidden_size,
+            num_heads=self.num_heads,
+            num_heads_kv=self.num_key_value_heads,
+            dropout=dropout,
+            causal=True,
+            cross_attn=False,
+            use_flash_attn=True,
+        )
+
+        # Create a cross-attention MHA (cross_attn enabled)
+        self.cross_attn_mha = MHA(
             embed_dim=self.hidden_size,
             num_heads=self.num_heads,
             num_heads_kv=self.num_key_value_heads,
@@ -144,6 +154,7 @@ class ArlowGroupedQueryAttention(nn.Module):
             cross_attn=True,
             use_flash_attn=True,
         )
+
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
 
     def forward(
@@ -152,24 +163,17 @@ class ArlowGroupedQueryAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """
-        x => [batch_size, seq_len, hidden_size]
-        If `encoder_hidden_states` is not None => cross-attn (K/V from encoder).
-        For the attention_mask, flash-attn expects `key_padding_mask`, shape [batch, seq_len],
-        with 1 for "padding" (ignore) or 0 for "active" tokens. Some data might invert that.
-        """
+        # Prepare key_padding_mask for flash_attn: 1 = mask, 0 = keep.
         key_padding_mask = None
         if attention_mask is not None and attention_mask.dim() == 2:
-            # If attention_mask has 1 for real tokens and 0 for pads, we must invert it for flash-attn:
-            # flash-attn wants 1 for "mask" and 0 for "keep."
             key_padding_mask = (1 - attention_mask).bool()
 
         if encoder_hidden_states is not None:
-            # Cross-attn
-            attn_out = self.mha(x, key_value=encoder_hidden_states, key_padding_mask=key_padding_mask)[0]
+            # Cross-attention: use the cross_attn MHA.
+            attn_out = self.cross_attn_mha(x, key_value=encoder_hidden_states, key_padding_mask=key_padding_mask)[0]
         else:
-            # Self-attn
-            attn_out = self.mha(x, key_padding_mask=key_padding_mask)[0]
+            # Self-attention: use the self_attn MHA.
+            attn_out = self.self_attn_mha(x, key_padding_mask=key_padding_mask)[0]
 
         attn_out = self.out_proj(attn_out)
         return attn_out

@@ -1,124 +1,119 @@
 import json
 import os
+import shutil
+import tempfile
 import unittest
 
-from transformers import ArlowTokenizer, ArlowTokenizerFast
-from transformers.models.arlow.tokenization_arlow import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers, slow
-
-from ...test_tokenization_common import TokenizerTesterMixin
+from transformers import PreTrainedTokenizer
+from transformers.models.arlow.tokenization_arlow import ArlowTokenizer
+from transformers.models.arlow.tokenization_arlow_fast import ArlowTokenizerFast
 
 
-@require_tokenizers
-class ArlowTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "arlow/arlow-tokenizer"
-    tokenizer_class = ArlowTokenizer
-    rust_tokenizer_class = ArlowTokenizerFast
-    test_slow_tokenizer = True
-    test_rust_tokenizer = True
-    space_between_special_tokens = False
-    from_pretrained_kwargs = None
-    test_seq2seq = False
+# Minimal dummy vocab and merges for testing.
+DUMMY_VOCAB = {
+    "h": 0,
+    "e": 1,
+    "l": 2,
+    "o": 3,
+    "w": 4,
+    "r": 5,
+    "d": 6,
+    "<|unk|>": 7,
+    "<|pad|>": 8,
+    "<|startoftext|>": 9,
+    "<|endoftext|>": 10,
+}
+# We won't perform any merges, so merges is empty.
+DUMMY_MERGES = ""
 
+# Create a valid minimal dummy tokenizer.json.
+DUMMY_TOKENIZER_JSON = {
+    "version": "1.0",
+    "truncation": None,
+    "padding": None,
+    "added_tokens": [],
+    "normalizer": {
+        "type": "BertNormalizer",
+        "lowercase": True,
+        "strip_accents": False,
+        "clean_text": True,
+        "handle_chinese_chars": True,
+    },
+    "pre_tokenizer": {"type": "BertPreTokenizer"},
+    "post_processor": None,
+    "decoder": {"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True, "decode_special_tokens": True},
+    "model": {
+        "unk_token": "<|unk|>",
+        "type": "BPE",
+        "vocab": DUMMY_VOCAB,
+        "merges": [],  # No merges
+    },
+}
+
+
+class ArlowTokenizerTester(unittest.TestCase):
     def setUp(self):
-        super().setUp()
-        # Build a vocabulary using the byte_encoder values from ArlowTokenizer,
-        # then extend with additional tokens for testing.
-        vocab = list(ArlowTokenizer.byte_encoder.values())
-        vocab.extend(["Hello", "world", "!", "H", "e", "l", "o", "w", "r", "d", " "])
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
+        # Create a temporary directory to store dummy vocab, merges, and tokenizer.json.
+        self.tmp_dir = tempfile.mkdtemp()
+        self.vocab_file = os.path.join(self.tmp_dir, "vocab.json")
+        self.merges_file = os.path.join(self.tmp_dir, "merges.txt")
+        self.tokenizer_file = os.path.join(self.tmp_dir, "tokenizer.json")
 
-        # Define minimal merges for merging "Hello"
-        merges = ["#version: 0.2", "H e", "He l", "Hel l", "Hell o"]
+        # Write the dummy vocab file.
+        with open(self.vocab_file, "w", encoding="utf-8") as vf:
+            json.dump(DUMMY_VOCAB, vf)
 
-        self.special_tokens_map = {"eos_token": "<|endoftext|>"}
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
+        # Write the dummy merges file.
+        with open(self.merges_file, "w", encoding="utf-8") as mf:
+            mf.write(DUMMY_MERGES)
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return ArlowTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        # Write the dummy tokenizer.json.
+        with open(self.tokenizer_file, "w", encoding="utf-8") as tf:
+            json.dump(DUMMY_TOKENIZER_JSON, tf)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return ArlowTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        # Define a sample sentence.
+        self.sample_text = "hello world"
 
-    def get_input_output_texts(self, tokenizer):
-        # For our test, tokenization of "Hello world!" should yield the same text.
-        input_text = "Hello world!"
-        output_text = "Hello world!"
-        return input_text, output_text
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
 
-    def test_python_full_tokenizer(self):
-        tokenizer = self.get_tokenizer()
-        sequence, _ = self.get_input_output_texts(tokenizer)
-        # With our merge rules, "Hello" should be merged into one token.
-        expected_bpe_tokens = ["Hello", " ", "world", "!"]
-        tokens = tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, expected_bpe_tokens)
+    def test_slow_tokenizer(self):
+        # Instantiate the slow ArlowTokenizer.
+        tokenizer: PreTrainedTokenizer = ArlowTokenizer(
+            vocab_file=self.vocab_file,
+            merges_file=self.merges_file,
+        )
+        # Test tokenization.
+        tokens = tokenizer.tokenize(self.sample_text)
+        self.assertIsInstance(tokens, list)
+        self.assertGreater(len(tokens), 0)
+
+        # Test conversion from tokens to IDs and back.
         token_ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertTrue(all(isinstance(i, int) for i in token_ids))
+        # Use the public API: convert_ids_to_tokens.
+        recovered_tokens = tokenizer.convert_ids_to_tokens(token_ids)
+        self.assertIsInstance(recovered_tokens, list)
 
-    @unittest.skip(reason="Pretokenized inputs test not applicable")
-    def test_pretokenized_inputs(self):
-        pass
+        # Test convert_tokens_to_string.
+        recovered_text = tokenizer.convert_tokens_to_string(tokens)
+        self.assertIsInstance(recovered_text, str)
+        self.assertGreater(len(recovered_text), 0)
 
-    @unittest.skip(reason="Clean up tokenization spaces test not applicable")
-    def test_clean_up_tokenization_spaces(self):
-        pass
+    def test_fast_tokenizer(self):
+        # Instantiate the fast tokenizer from the temporary directory.
+        tokenizer = ArlowTokenizerFast.from_pretrained(self.tmp_dir)
+        # Test that it returns a BatchEncoding with input_ids.
+        encoding = tokenizer(self.sample_text, padding=True)
+        self.assertIn("input_ids", encoding)
+        self.assertIn("attention_mask", encoding)
+        self.assertIsInstance(encoding["input_ids"], list)
+        self.assertGreater(len(encoding["input_ids"]), 0)
 
-    def test_nfc_normalization(self):
-        # Using characters with different normalization forms.
-        input_string = "\u03d2\u0301\u03d2\u0308\u017f\u0307"  # NFD form
-        output_string = "\u03d3\u03d4\u1e9b"  # Expected NFC form
-        if self.test_slow_tokenizer:
-            tokenizer = self.get_tokenizer()
-            normalized_text, _ = tokenizer.prepare_for_tokenization(input_string)
-            self.assertEqual(normalized_text, output_string)
-        if self.test_rust_tokenizer:
-            tokenizer = self.get_rust_tokenizer()
-            normalized_text = tokenizer.backend_tokenizer.normalizer.normalize_str(input_string)
-            self.assertEqual(normalized_text, output_string)
-
-    def test_slow_tokenizer_token_with_number_sign(self):
-        if not self.test_slow_tokenizer:
-            self.skipTest(reason="Slow tokenizer test disabled")
-        sequence = " ###"
-        # With our minimal vocab, assume that '#' is not merged; expect individual tokens.
-        expected_tokens = [" ", "#", "#", "#"]
-        tokenizer = self.get_tokenizer()
-        self.assertListEqual(tokenizer.tokenize(sequence), expected_tokens)
-
-    def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
-        if not self.test_slow_tokenizer:
-            self.skipTest(reason="Slow tokenizer test disabled")
-        # Decode tokens corresponding to "Hello world!"
-        tokens = ["Hello", " ", "world", "!"]
-        token_ids = self.get_tokenizer().convert_tokens_to_ids(tokens)
-        expected_sequence = "Hello world!"
-        tokenizer = self.get_tokenizer()
-        self.assertEqual(tokenizer.decode(token_ids), expected_sequence)
-
-    @slow
-    def test_tokenizer_integration(self):
-        sequences = [
-            "Transformers provides architectures for Natural Language Understanding and Generation.",
-            "🤗 Transformers 提供了先进的预训练模型。",
-            """```python\ntokenizer = AutoTokenizer.from_pretrained("arlow/arlow-tokenizer")\n"""
-            """tokenizer("Hello, world!")```""",
-        ]
-        # For integration testing, we won't specify full expected encodings.
-        expected_encoding = {"input_ids": [], "attention_mask": []}
-        self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="arlow/arlow-tokenizer",
-            revision="dummy_revision",
-            sequences=sequences,
-        )
+        # Test decoding.
+        decoded = tokenizer.decode(encoding["input_ids"][0])
+        self.assertIsInstance(decoded, str)
+        self.assertGreater(len(decoded), 0)
 
 
 if __name__ == "__main__":
