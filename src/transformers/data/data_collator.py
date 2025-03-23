@@ -1309,7 +1309,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         elif self.return_tensors == "tf":
             import tensorflow as tf
 
-            seed = self.generator.uniform(shape=(2,), minval=0, maxval=2**31 - 1, dtype=tf.int32)
+            seed = self.generator.make_seeds(2)[0]
             indices = tf.random.experimental.stateless_shuffle(tf.range(len(cand_indexes)), seed=seed).numpy().tolist()
             return [cand_indexes[i] for i in indices]
 
