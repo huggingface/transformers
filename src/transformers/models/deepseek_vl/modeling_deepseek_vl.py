@@ -313,17 +313,10 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values):
-        batch_size, n_images, n_channels, height, width = pixel_values.shape
-
-        pixel_values = pixel_values.view(batch_size * n_images, n_channels, height, width)
-
         vision_encodings = (self.low_res_vision_encoder(pixel_values),)
         if self.use_high_res_vision:
             vision_encodings += (self.high_res_vision_encoder(pixel_values),)
         images_embeds = self.aligner(*vision_encodings)
-
-        images_embeds = images_embeds.reshape(batch_size, -1, images_embeds.shape[-1])
-
         return images_embeds
 
     @add_start_docstrings_to_model_forward(DEEPSEEK_VL_INPUTS_DOCSTRING)
@@ -369,9 +362,14 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
 
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
-            image_features = image_features.to(inputs_embeds)
             image_attention_mask = input_ids == self.config.image_token_index
-            inputs_embeds[image_attention_mask] = image_features
+
+            embed_dim = inputs_embeds.shape[-1]
+            image_features = image_features.reshape(-1, embed_dim)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
+
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
         return self.language_model(
             attention_mask=attention_mask,
