@@ -7,9 +7,16 @@ from transformers import ArlowConfig, ArlowForCausalLM, ArlowModel
 from transformers.testing_utils import require_torch, torch_device
 
 
+# Check if flash attention is available.
+try:
+    from transformers.models.arlow.modeling_arlow import FLASH_ATTN_AVAILABLE
+except ImportError:
+    FLASH_ATTN_AVAILABLE = False
+
 all_model_classes = (ArlowModel, ArlowForCausalLM)
 
 
+@unittest.skipIf(not FLASH_ATTN_AVAILABLE, "Flash Attention not available, skipping Arlow model tests.")
 @require_torch
 class ArlowModelingTest(unittest.TestCase):
     def setUp(self):
