@@ -873,12 +873,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         b, n, _ = output_ts.shape
         output_ts = output_ts.view(b, n, self.config.horizon_length, len(self.config.quantiles) + 1)
 
-        return self._reverse_transform(output_ts, stats)
-
-    def _reverse_transform(self, outputs: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        """Output is of shape [B, N, P, Q]."""
         mu, sigma = stats
-        return outputs * sigma[:, None, None, None] + mu[:, None, None, None]
+        return output_ts * sigma[:, None, None, None] + mu[:, None, None, None]
 
     def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         losses = []
