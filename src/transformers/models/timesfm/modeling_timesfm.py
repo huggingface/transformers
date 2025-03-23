@@ -481,139 +481,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         )
 
 
-def _prepare_4d_attention_mask(
-    attention_mask: Optional[torch.Tensor],
-    sequence_length: int,
-    dtype: torch.dtype,
-    device: torch.device,
-    is_causal: bool = True,
-) -> Optional[torch.Tensor]:
-    """
-    Creates 4D attention mask and combines causal and padding masks if needed.
-
-    Args:
-        attention_mask: Optional tensor of shape (batch_size, seq_length) containing padding mask
-        sequence_length: Length of the sequence
-        dtype: Data type of the mask
-        device: Device of the mask
-        is_causal: Whether to apply causal masking
-
-    Returns:
-        4D attention mask of shape (batch_size, 1, seq_length, seq_length)
-    """
-    # Get minimum value for the dtype
-    min_value = torch.finfo(dtype).min if dtype.is_floating_point else torch.iinfo(dtype).min
-
-    # Handle padding mask
-    if attention_mask is not None:
-        # Convert 2D padding mask to 4D attention mask
-        attention_mask = attention_mask.view(attention_mask.shape[0], 1, 1, -1)
-        attention_mask = attention_mask * min_value
-
-    # Create causal mask if needed
-    if is_causal:
-        causal_mask = torch.triu(
-            torch.ones((sequence_length, sequence_length), dtype=dtype, device=device) * min_value,
-            diagonal=1,
-        )
-        causal_mask = causal_mask.view(1, 1, sequence_length, sequence_length)
-
-        # Combine with padding mask if it exists
-        if attention_mask is not None:
-            attention_mask = torch.minimum(attention_mask, causal_mask)
-        else:
-            attention_mask = causal_mask
-
-    return attention_mask
-
-
-def timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Calculates mean and standard deviation of `inputs` across axis 1.
-
-    It excludes values where `padding` is 1.
-
-    Args:
-        inputs: A PyTorch tensor of shape [b, n, p].
-        padding: A PyTorch tensor of shape [b, n, p] with values 0 or 1.
-
-    Returns:
-        A tuple containing the mean and standard deviation.
-        We return the statistics of the first patch with more than three non-padded values.
-    """
-
-    # Selecting the first patch with more than 3 unpadded values.
-    def _get_patch_index(arr: torch.Tensor):
-        indices = torch.argmax((arr >= 3).to(torch.int32), dim=1)
-        row_sum = (arr >= 3).to(torch.int32).sum(dim=1)
-        return torch.where(row_sum == 0, arr.shape[1] - 1, indices)
-
-    pad_sum = torch.sum(1 - padding, dim=2)
-    patch_indices = _get_patch_index(pad_sum)
-    bidxs = torch.arange(inputs.shape[0])
-
-    arr = inputs[bidxs, patch_indices, :]
-    pad = padding[bidxs, patch_indices, :]
-
-    # Create a mask where padding is 0
-    mask = 1 - pad
-
-    # Calculate the number of valid elements
-    num_valid_elements = torch.sum(mask, dim=1)
-    num_valid_elements = torch.where(
-        num_valid_elements == 0,
-        torch.tensor(1, dtype=num_valid_elements.dtype, device=num_valid_elements.device),
-        num_valid_elements,
-    )
-
-    # Calculate the masked sum and squared sum
-    masked_sum = torch.sum(arr * mask, dim=1)
-    masked_squared_sum = torch.sum((arr * mask) ** 2, dim=1)
-
-    # Calculate the masked mean and standard deviation
-    masked_mean = masked_sum / num_valid_elements
-    masked_var = masked_squared_sum / num_valid_elements - masked_mean**2
-    masked_var = torch.where(
-        masked_var < 0.0,
-        torch.tensor(0.0, dtype=masked_var.dtype, device=masked_var.device),
-        masked_var,
-    )
-    masked_std = torch.sqrt(masked_var)
-
-    return masked_mean, masked_std
-
-
-def timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
-    """Shifts rows of seq based on the first 0 in each row of the mask.
-
-    Args:
-        mask: mask tensor of shape [B, N]
-        seq: seq tensor of shape [B, N, P]
-
-    Returns:
-        The shifted sequence.
-    """
-    batch_size, num_seq, feature_dim = seq.shape
-
-    new_mask: torch.BoolTensor = mask == 0
-
-    # Use argmax to find the first True value in each row
-    indices = new_mask.to(torch.int32).argmax(dim=1)
-
-    # Handle rows with all zeros
-    indices[~new_mask.any(dim=1)] = -1
-
-    # Create index ranges for each sequence in the batch
-    idx_range = torch.arange(num_seq).to(seq.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, -1, feature_dim)
-
-    # Calculate shifted indices for each element in each sequence
-    shifted_idx = (idx_range - indices[:, None, None]) % num_seq
-
-    # Gather values from seq using shifted indices
-    shifted_seq = seq.gather(1, shifted_idx)
-
-    return shifted_seq
-
-
 TIMESFM_INPUTS_DOCSTRING = r"""
     Args:
         past_values: list of time series forecast contexts. Each context time series
@@ -661,7 +528,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         self, inputs: torch.Tensor, patched_pads: torch.Tensor
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Input is of shape [B, N, P]."""
-        mu, sigma = timesfm_masked_mean_std(inputs, patched_pads)
+        mu, sigma = self.timesfm_masked_mean_std(inputs, patched_pads)
         sigma = torch.where(
             sigma < self.config.tolerance,
             torch.tensor(1.0, dtype=sigma.dtype, device=sigma.device),
@@ -720,7 +587,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         if self.config.use_positional_embedding:
             pos_emb = self.position_emb(model_input.shape[1]).to(model_input.device)
             pos_emb = torch.concat([pos_emb] * model_input.shape[0], dim=0)
-            pos_emb = timesfm_shift_padded_seq(patched_padding, pos_emb)
+            pos_emb = self.timesfm_shift_padded_seq(patched_padding, pos_emb)
             model_input += pos_emb
 
         f_emb = self.freq_emb(freq)  # B x 1 x D
@@ -728,7 +595,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Convert paddings to attention mask and combine with causal mask
         hidden_states = model_input
-        attention_mask = _prepare_4d_attention_mask(
+        attention_mask = self._prepare_4d_attention_mask(
             attention_mask=patched_padding,
             sequence_length=hidden_states.shape[1],
             dtype=hidden_states.dtype,
@@ -776,6 +643,139 @@ class TimesFmModel(TimesFmPreTrainedModel):
                 stats[1],
                 past_key_values,
             )
+
+    @staticmethod
+    def _prepare_4d_attention_mask(
+        attention_mask: Optional[torch.Tensor],
+        sequence_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        is_causal: bool = True,
+    ) -> Optional[torch.Tensor]:
+        """
+        Creates 4D attention mask and combines causal and padding masks if needed.
+
+        Args:
+            attention_mask: Optional tensor of shape (batch_size, seq_length) containing padding mask
+            sequence_length: Length of the sequence
+            dtype: Data type of the mask
+            device: Device of the mask
+            is_causal: Whether to apply causal masking
+
+        Returns:
+            4D attention mask of shape (batch_size, 1, seq_length, seq_length)
+        """
+        # Get minimum value for the dtype
+        min_value = torch.finfo(dtype).min if dtype.is_floating_point else torch.iinfo(dtype).min
+
+        # Handle padding mask
+        if attention_mask is not None:
+            # Convert 2D padding mask to 4D attention mask
+            attention_mask = attention_mask.view(attention_mask.shape[0], 1, 1, -1)
+            attention_mask = attention_mask * min_value
+
+        # Create causal mask if needed
+        if is_causal:
+            causal_mask = torch.triu(
+                torch.ones((sequence_length, sequence_length), dtype=dtype, device=device) * min_value,
+                diagonal=1,
+            )
+            causal_mask = causal_mask.view(1, 1, sequence_length, sequence_length)
+
+            # Combine with padding mask if it exists
+            if attention_mask is not None:
+                attention_mask = torch.minimum(attention_mask, causal_mask)
+            else:
+                attention_mask = causal_mask
+
+        return attention_mask
+
+    @staticmethod
+    def timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculates mean and standard deviation of `inputs` across axis 1.
+
+        It excludes values where `padding` is 1.
+
+        Args:
+            inputs: A PyTorch tensor of shape [b, n, p].
+            padding: A PyTorch tensor of shape [b, n, p] with values 0 or 1.
+
+        Returns:
+            A tuple containing the mean and standard deviation.
+            We return the statistics of the first patch with more than three non-padded values.
+        """
+
+        # Selecting the first patch with more than 3 unpadded values.
+        def _get_patch_index(arr: torch.Tensor):
+            indices = torch.argmax((arr >= 3).to(torch.int32), dim=1)
+            row_sum = (arr >= 3).to(torch.int32).sum(dim=1)
+            return torch.where(row_sum == 0, arr.shape[1] - 1, indices)
+
+        pad_sum = torch.sum(1 - padding, dim=2)
+        patch_indices = _get_patch_index(pad_sum)
+        bidxs = torch.arange(inputs.shape[0])
+
+        arr = inputs[bidxs, patch_indices, :]
+        pad = padding[bidxs, patch_indices, :]
+
+        # Create a mask where padding is 0
+        mask = 1 - pad
+
+        # Calculate the number of valid elements
+        num_valid_elements = torch.sum(mask, dim=1)
+        num_valid_elements = torch.where(
+            num_valid_elements == 0,
+            torch.tensor(1, dtype=num_valid_elements.dtype, device=num_valid_elements.device),
+            num_valid_elements,
+        )
+
+        # Calculate the masked sum and squared sum
+        masked_sum = torch.sum(arr * mask, dim=1)
+        masked_squared_sum = torch.sum((arr * mask) ** 2, dim=1)
+
+        # Calculate the masked mean and standard deviation
+        masked_mean = masked_sum / num_valid_elements
+        masked_var = masked_squared_sum / num_valid_elements - masked_mean**2
+        masked_var = torch.where(
+            masked_var < 0.0,
+            torch.tensor(0.0, dtype=masked_var.dtype, device=masked_var.device),
+            masked_var,
+        )
+        masked_std = torch.sqrt(masked_var)
+
+        return masked_mean, masked_std
+
+    @staticmethod
+    def timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
+        """Shifts rows of seq based on the first 0 in each row of the mask.
+
+        Args:
+            mask: mask tensor of shape [B, N]
+            seq: seq tensor of shape [B, N, P]
+
+        Returns:
+            The shifted sequence.
+        """
+        batch_size, num_seq, feature_dim = seq.shape
+
+        new_mask: torch.BoolTensor = mask == 0
+
+        # Use argmax to find the first True value in each row
+        indices = new_mask.to(torch.int32).argmax(dim=1)
+
+        # Handle rows with all zeros
+        indices[~new_mask.any(dim=1)] = -1
+
+        # Create index ranges for each sequence in the batch
+        idx_range = torch.arange(num_seq).to(seq.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, -1, feature_dim)
+
+        # Calculate shifted indices for each element in each sequence
+        shifted_idx = (idx_range - indices[:, None, None]) % num_seq
+
+        # Gather values from seq using shifted indices
+        shifted_seq = seq.gather(1, shifted_idx)
+
+        return shifted_seq
 
 
 def timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
