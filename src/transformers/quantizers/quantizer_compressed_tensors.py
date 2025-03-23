@@ -121,12 +121,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 raise ValueError("`run_compressed` is only supported for quantized_compressed models")
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
         elif self.is_quantized and not self.is_quantization_compressed:
-            apply_quantization_config(model, ct_quantization_config, transforms_config=self.quantization_config.transforms_config)
+            if self.quantization_config.transforms_config is not None:
+                apply_quantization_config(model, ct_quantization_config, transforms_config=self.quantization_config.transforms_config)
+            else:
+                apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
-
-        if (self.is_quantization_compressed and not self.run_compressed) or self.is_sparsification_compressed:
+        from compressed_tensors.quantization import load_transforms
+        
+        if ((self.is_quantization_compressed and not self.run_compressed) or self.is_sparsification_compressed or self.quantization_config.transforms_config is not None):
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
 
@@ -140,7 +144,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 from compressed_tensors.quantization import QuantizationStatus
 
                 self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
+            
+            if self.quantization_config.transforms_config is not None:
+                load_transforms(model, cache_path)
+                return 
+
             self.compressor.decompress(model_path=cache_path, model=model)
+        
+    
 
     @property
     def is_quantized(self):
