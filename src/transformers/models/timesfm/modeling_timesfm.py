@@ -625,24 +625,15 @@ class TimesFmModel(TimesFmPreTrainedModel):
         else:
             all_hidden_states = None
 
-        if return_dict:
-            return TimesFmOutput(
-                last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions if output_attentions else None,
-                loc=stats[0],
-                scale=stats[1],
-                past_key_values=past_key_values,
-            )
-        else:
-            return (
-                hidden_states,
-                all_hidden_states,
-                all_attentions if output_attentions else None,
-                stats[0],
-                stats[1],
-                past_key_values,
-            )
+        output = TimesFmOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions if output_attentions else None,
+            loc=stats[0],
+            scale=stats[1],
+            past_key_values=past_key_values,
+        )
+        return output if return_dict else output.to_tuple()
 
     @staticmethod
     def _prepare_4d_attention_mask(
