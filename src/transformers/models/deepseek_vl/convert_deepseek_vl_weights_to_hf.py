@@ -75,6 +75,65 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+CHAT_TEMPLATE = (
+    # Define separators and initialize counter
+    "{% set seps = ['\n\n', '<\uff5cend\u2581of\u2581sentence\uff5c>'] %}"
+    "{% set i = 0 %}"
+
+    # Iterate through messages
+    "{% for message in messages %}"
+
+        # Identify user or assistant role
+        "{% if message['role']|lower == 'user' %}"
+            "User: "
+        "{% elif message['role']|lower == 'assistant' %}"
+            "Assistant:{% if not (loop.last and not add_generation_prompt and message['content'][0]['type']=='text' and message['content'][0]['text']=='') %} {% endif %}"
+        "{% else %}"
+            "{{ message['role'].capitalize() }}: "
+        "{% endif %}"
+
+        # Iterate through message content (text/images)
+        "{% for content in message['content'] %}"
+
+            # If content is an image, replace with placeholder
+            "{% if content['type'] == 'image' %}"
+                "{% if not loop.first %}{{ '\n' }}{% endif %}"
+                "<image_placeholder>"
+                "{% if not loop.last %}{{ '\n' }}{% endif %}"
+
+            # If content is text, handle formatting
+            "{% elif content['type'] == 'text' %}"
+                "{% set text = content['text'] %}"
+
+                # Strip whitespace for first and last text blocks
+                "{% if loop.first %}{% set text = text.lstrip() %}{% endif %}"
+                "{% if loop.last %}{% set text = text.rstrip() %}{% endif %}"
+
+                # If previous content was text, add space
+                "{% if not loop.first and message['content'][loop.index0-1]['type'] == 'text' %}"
+                    "{{ ' ' + text }}"
+                "{% else %}"
+                    "{{ text }}"
+                "{% endif %}"
+
+            "{% endif %}"
+
+        "{% endfor %}"  # End message content loop
+
+        # Add separators between messages
+        "{% if not loop.last or add_generation_prompt %}"
+            "{% if message['role']|lower == 'user' %}"
+                "{{ seps[0] }}"
+            "{% else %}"
+                "{{ seps[1] }}"
+            "{% endif %}"
+        "{% endif %}"
+
+    "{% endfor %}"  # End messages loop
+
+    # Add final Assistant prompt if required
+    "{% if add_generation_prompt %}Assistant:{% endif %}"
+)
 
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     output_dict = {}
