@@ -19,8 +19,8 @@ import numpy as np
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -115,15 +115,12 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_convert_rgb = do_convert_rgb
-
         self.min_size = min_size
-        if image_mean is None:
-            self.background_color = (127, 127, 127)
-        else:
-            self.background_color = tuple([int(x * 255) for x in image_mean])
+
+        self.background_color = tuple([int(x * 255) for x in self.image_mean])
 
     def resize(
         self,
@@ -135,7 +132,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image to dynamically calculated size.
+        Resize and pad an image to a square based on the longest edge in `size`.
 
         Args:
             image (`np.ndarray`):
@@ -376,7 +373,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
 
         # Ensure background_color is the correct shape
         if isinstance(background_color, int):
-            background_color = [background_color]
+            background_color = [background_color] * num_channels
         elif len(background_color) != num_channels:
             raise ValueError(
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
