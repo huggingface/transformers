@@ -32,20 +32,23 @@ import tempfile
 import threading
 import time
 import unittest
-from collections import defaultdict
-from collections.abc import Mapping
+from collections import UserDict, defaultdict
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from dataclasses import MISSING, fields
-from functools import wraps
+from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
 import huggingface_hub.utils
+import requests
 import urllib3
 from huggingface_hub import delete_repo
+from packaging import version
 
+from transformers import Trainer
 from transformers import logging as transformers_logging
 
 from .integrations import (
@@ -53,6 +56,7 @@ from .integrations import (
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
+    is_swanlab_available,
     is_tensorboard_available,
     is_wandb_available,
 )
@@ -112,6 +116,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quark_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -138,6 +143,7 @@ from .utils import (
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
+    is_torch_hpu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -199,6 +205,8 @@ else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
 
+logger = transformers_logging.get_logger(__name__)
+
 
 def parse_flag_from_env(key, default=False):
     try:
@@ -235,17 +243,6 @@ _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
-
-
-def get_device_count():
-    import torch
-
-    if is_torch_xpu_available():
-        num_devices = torch.xpu.device_count()
-    else:
-        num_devices = torch.cuda.device_count()
-
-    return num_devices
 
 
 def is_staging_test(test_case):
@@ -755,17 +752,17 @@ def require_spacy(test_case):
 
 def require_torch_multi_gpu(test_case):
     """
-    Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
-    multiple GPUs.
+    Decorator marking a test that requires a multi-GPU CUDA setup (in PyTorch). These tests are skipped on a machine without
+    multiple CUDA GPUs.
 
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    device_count = get_device_count()
+    import torch
 
-    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple CUDA GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
@@ -864,6 +861,13 @@ def require_torch_multi_npu(test_case):
     return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
 
 
+def require_non_hpu(test_case):
+    """
+    Decorator marking a test that should be skipped for HPU.
+    """
+    return unittest.skipUnless(torch_device != "hpu", "test requires a non-HPU")(test_case)
+
+
 def require_torch_xpu(test_case):
     """
     Decorator marking a test that requires XPU (in PyTorch).
@@ -895,6 +899,19 @@ def require_torch_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
+def require_torch_multi_hpu(test_case):
+    """
+    Decorator marking a test that requires a multi-HPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple HPUs.
+
+    To run *only* the multi_hpu tests, assuming all test names contain multi_hpu: $ pytest -sv ./tests -k "multi_hpu"
+    """
+    if not is_torch_hpu_available():
+        return unittest.skip(reason="test requires PyTorch HPU")(test_case)
+
+    return unittest.skipUnless(torch.hpu.device_count() > 1, "test requires multiple HPUs")(test_case)
+
+
 if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
@@ -923,6 +940,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "hpu" and not is_torch_hpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -935,6 +956,8 @@ if is_torch_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
+    elif _run_third_party_device_tests and is_torch_hpu_available():
+        torch_device = "hpu"
     elif _run_third_party_device_tests and is_torch_xpu_available():
         torch_device = "xpu"
     else:
@@ -961,6 +984,18 @@ def require_torchdynamo(test_case):
 def require_torchao(test_case):
     """Decorator marking a test that requires torchao"""
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
+def require_torchao_version_greater_or_equal(torchao_version):
+    def decorator(test_case):
+        correct_torchao_version = is_torchao_available() and version.parse(
+            version.parse(importlib.metadata.version("torchao")).base_version
+        ) >= version.parse(torchao_version)
+        return unittest.skipUnless(
+            correct_torchao_version, f"Test requires torchao with the version greater than {torchao_version}."
+        )(test_case)
+
+    return decorator
 
 
 def require_torch_tensorrt_fx(test_case):
@@ -1091,6 +1126,16 @@ def require_sigopt(test_case):
 
     """
     return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
+
+
+def require_swanlab(test_case):
+    """
+    Decorator marking a test that requires swanlab.
+
+    These tests are skipped when swanlab isn't installed.
+
+    """
+    return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
 
 
 def require_wandb(test_case):
@@ -1255,6 +1300,13 @@ def require_fbgemm_gpu(test_case):
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
 
 
+def require_quark(test_case):
+    """
+    Decorator for quark dependency
+    """
+    return unittest.skipUnless(is_quark_available(), "test requires quark")(test_case)
+
+
 def require_flute_hadamard(test_case):
     """
     Decorator marking a test that requires higgs and hadamard
@@ -1395,6 +1447,33 @@ def get_tests_dir(append_path=None):
         return os.path.join(tests_dir, append_path)
     else:
         return tests_dir
+
+
+def get_steps_per_epoch(trainer: Trainer) -> int:
+    training_args = trainer.args
+    train_dataloader = trainer.get_train_dataloader()
+
+    initial_training_values = trainer.set_initial_training_values(
+        args=training_args,
+        dataloader=train_dataloader,
+        total_train_batch_size=training_args.per_device_train_batch_size,
+    )
+    steps_per_epoch = initial_training_values[1]
+
+    return steps_per_epoch
+
+
+def evaluate_side_effect_factory(
+    side_effect_values: list[dict[str, float]],
+) -> Generator[dict[str, float], None, None]:
+    """
+    Function that returns side effects for the _evaluate method.
+    Used when we're unsure of exactly how many times _evaluate will be called.
+    """
+    yield from side_effect_values
+
+    while True:
+        yield side_effect_values[-1]
 
 
 #
@@ -2372,7 +2451,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -2399,10 +2478,10 @@ class SubprocessCallException(Exception):
     pass
 
 
-def run_command(command: List[str], return_stdout=False):
+def run_command(command: list[str], return_stdout=False):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
-    if an error occured while running `command`
+    if an error occurred while running `command`
     """
     try:
         output = subprocess.check_output(command, stderr=subprocess.STDOUT)
@@ -2475,6 +2554,11 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     """
     To decorate flaky tests. They will be retried on failures.
 
+    Please note that our push tests use `pytest-rerunfailures`, which prompts the CI to rerun certain types of
+    failed tests. More specifically, if the test exception contains any substring in `FLAKY_TEST_FAILURE_PATTERNS`
+    (in `.circleci/create_circleci_config.py`), it will be rerun. If you find a recurrent pattern of failures,
+    expand `FLAKY_TEST_FAILURE_PATTERNS` in our CI configuration instead of using `is_flaky`.
+
     Args:
         max_attempts (`int`, *optional*, defaults to 5):
             The maximum number of attempts to retry the flaky test.
@@ -2495,7 +2579,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
                     return test_func_ref(*args, **kwargs)
 
                 except Exception as err:
-                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
                     retry_count += 1
@@ -2505,6 +2589,62 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
         return wrapper
 
     return decorator
+
+
+def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
+    """
+    To decorate tests that download from the Hub. They can fail due to a
+    variety of network issues such as timeouts, connection resets, etc.
+
+    Args:
+        max_attempts (`int`, *optional*, defaults to 5):
+            The maximum number of attempts to retry the flaky test.
+        wait_before_retry (`float`, *optional*, defaults to 2):
+            If provided, will wait that number of seconds before retrying the test.
+    """
+
+    def decorator(test_func_ref):
+        @functools.wraps(test_func_ref)
+        def wrapper(*args, **kwargs):
+            retry_count = 1
+
+            while retry_count < max_attempts:
+                try:
+                    return test_func_ref(*args, **kwargs)
+                # We catch all exceptions related to network issues from requests
+                except (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ReadTimeout,
+                    requests.exceptions.HTTPError,
+                    requests.exceptions.RequestException,
+                ) as err:
+                    logger.error(
+                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
+                    )
+                    if wait_before_retry is not None:
+                        time.sleep(wait_before_retry)
+                    retry_count += 1
+
+            return test_func_ref(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def run_first(test_case):
+    """
+    Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
+    are garanteed to run first.
+
+    This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
+    single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
+    allocation conflicts.
+    """
+    import pytest
+
+    return pytest.mark.order(1)(test_case)
 
 
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
@@ -2614,7 +2754,7 @@ def run_test_using_subprocess(func):
 The following contains utils to run the documentation tests without having to overwrite any files.
 
 The `preprocess_string` function adds `# doctest: +IGNORE_RESULT` markers on the fly anywhere a `load_dataset` call is
-made as a print would otherwise fail the corresonding line.
+made as a print would otherwise fail the corresponding line.
 
 To skip cuda tests, make sure to call `SKIP_CUDA_DOCTEST=1 pytest --doctest-modules <path_to_files_to_test>
 """
@@ -2628,8 +2768,8 @@ def preprocess_string(string, skip_cuda_tests):
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
     """
-    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )((?:.*?\n)*?.*?```)"
-    codeblocks = re.split(re.compile(codeblock_pattern, flags=re.MULTILINE | re.DOTALL), string)
+    codeblock_pattern = r"(```(?:python|py)\s*\n\s*>>> )(.*?```)"
+    codeblocks = re.split(codeblock_pattern, string, flags=re.DOTALL)
     is_cuda_found = False
     for i, codeblock in enumerate(codeblocks):
         if "load_dataset(" in codeblock and "# doctest: +IGNORE_RESULT" not in codeblock:
@@ -2771,7 +2911,7 @@ class HfDoctestModule(Module):
                 yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
 
 
-def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
+def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
 
@@ -2794,6 +2934,25 @@ else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
+
+if is_torch_hpu_available():
+    BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
+    BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_npu_available():
+    BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
+    BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
+    BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
+
+if is_torch_xpu_available():
+    BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
+    BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
+    BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
+
+if is_torch_xla_available():
+    BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
+    BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
+    BACKEND_DEVICE_COUNT["xla"] = torch.cuda.device_count
 
 
 def backend_manual_seed(device: str, seed: int):
@@ -2840,7 +2999,7 @@ if is_torch_available():
 
         torch_device = device_name
 
-        def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name: str):
+        def update_mapping_from_spec(device_fn_dict: dict[str, Callable], attribute_name: str):
             try:
                 # Try to import the function directly
                 spec_fn = getattr(device_spec_module, attribute_name)
@@ -2890,3 +3049,78 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+
+
+# Type definition of key used in `Expectations` class.
+DeviceProperties = tuple[Union[str, None], Union[int, None]]
+
+
+@cache
+def get_device_properties(self) -> DeviceProperties:
+    """
+    Get environment device properties.
+    """
+    if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+        import torch
+
+        major, _ = torch.cuda.get_device_capability()
+        if IS_ROCM_SYSTEM:
+            return ("rocm", major)
+        else:
+            return ("cuda", major)
+    else:
+        return (torch_device, None)
+
+
+class Expectations(UserDict[DeviceProperties, Any]):
+    def get_expectation(self) -> Any:
+        """
+        Find best matching expectation based on environment device properties.
+        """
+        return self.find_expectation(get_device_properties())
+
+    @staticmethod
+    def is_default(key: DeviceProperties) -> bool:
+        return all(p is None for p in key)
+
+    @staticmethod
+    def score(key: DeviceProperties, other: DeviceProperties) -> int:
+        """
+        Returns score indicating how similar two instances of the `Properties` tuple are.
+        Points are calculated using bits, but documented as int.
+        Rules are as follows:
+            * Matching `type` gives 8 points.
+            * Semi-matching `type`, for example cuda and rocm, gives 4 points.
+            * Matching `major` (compute capability major version) gives 2 points.
+            * Default expectation (if present) gives 1 points.
+        """
+        (device_type, major) = key
+        (other_device_type, other_major) = other
+
+        score = 0b0
+        if device_type == other_device_type:
+            score |= 0b1000
+        elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
+            score |= 0b100
+
+        if major == other_major and other_major is not None:
+            score |= 0b10
+
+        if Expectations.is_default(other):
+            score |= 0b1
+
+        return int(score)
+
+    def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
+        """
+        Find best matching expectation based on provided device properties.
+        """
+        (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
+
+        if Expectations.score(key, result_key) == 0:
+            raise ValueError(f"No matching expectation found for {key}")
+
+        return result
+
+    def __repr__(self):
+        return f"{self.data}"

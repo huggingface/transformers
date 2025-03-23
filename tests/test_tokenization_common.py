@@ -838,7 +838,7 @@ class TokenizerTesterMixin:
                 toks_after_adding = tokenizer.tokenize(text)
                 toks_after_adding2 = tokenizer.tokenize(text2)
 
-                # Rust tokenizers dont't lowercase added tokens at the time calling `tokenizer.add_tokens`,
+                # Rust tokenizers don't lowercase added tokens at the time calling `tokenizer.add_tokens`,
                 # while python tokenizers do, so new_toks 0 and 2 would be treated as the same, so do new_toks 1 and 3.
                 self.assertIn(added, [2, 4])
 
@@ -1566,6 +1566,33 @@ class TokenizerTesterMixin:
                 )
 
     @require_jinja
+    def test_continue_final_message_with_decoy_earlier_message(self):
+        """Regression test for chat templates where an earlier message has similar content to the final message
+        https://github.com/huggingface/transformers/issues/35433"""
+
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" + message['content'] | trim + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "hi 0"},
+            {"role": "assistant", "content": "bye: 0"},
+            {"role": "user", "content": "hi 1"},
+            {"role": "assistant", "content": "bye: "},
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                prefill_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
+                )
+                # Assert that the final message is unterminated
+                self.assertEqual(
+                    prefill_output,
+                    "<|im_start|>user\nhi 0<|im_end|>\n<|im_start|>assistant\nbye: 0<|im_end|>\n<|im_start|>user\nhi 1<|im_end|>\n<|im_start|>assistant\nbye:",
+                )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
@@ -2038,21 +2065,21 @@ class TokenizerTesterMixin:
 
                 for chunk in range(0, len(input_full_vocab_string) - 1024, 1024):
                     string_to_check = input_full_vocab_string[chunk : chunk + 1024]
-                    with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
+                    with self.subTest(f"{(chunk / len(input_full_vocab_string)) * 100}%"):
                         slow_encode = slow_tokenizer.encode(string_to_check)
                         fast_encode = rust_tokenizer.encode(string_to_check)
                         self.assertEqual(
                             slow_encode,
                             fast_encode,
                             "Hint: the following tokenization diff were obtained for slow vs fast:\n "
-                            f"elements in slow: {set(slow_tokenizer.tokenize(string_to_check))-set(rust_tokenizer.tokenize(string_to_check))} \nvs\n "
-                            f"elements in fast: {set(rust_tokenizer.tokenize(string_to_check))-set(slow_tokenizer.tokenize(string_to_check))} \n"
+                            f"elements in slow: {set(slow_tokenizer.tokenize(string_to_check)) - set(rust_tokenizer.tokenize(string_to_check))} \nvs\n "
+                            f"elements in fast: {set(rust_tokenizer.tokenize(string_to_check)) - set(slow_tokenizer.tokenize(string_to_check))} \n"
                             f"string used     : {string_to_check}",
                         )
                 print(f"Length of the input ids that is tested: {len(input_full_vocab_ids)}")
                 for chunk in range(0, len(input_full_vocab_ids) - 100, 100):
                     ids_to_decode = input_full_vocab_ids[chunk : chunk + 100]
-                    with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
+                    with self.subTest(f"{(chunk / len(input_full_vocab_string)) * 100}%"):
                         self.assertEqual(
                             slow_tokenizer.decode(
                                 ids_to_decode,
@@ -4396,7 +4423,7 @@ class TokenizerTesterMixin:
                 self.assertTrue(
                     find,
                     f"'{special_token.__repr__()}' should appear as an `AddedToken` in the all_special_tokens_extended = "
-                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k)==new_special_token_str]} but it is missing"
+                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k) == new_special_token_str]} but it is missing"
                     ", this means that the new tokenizers did not keep the `rstrip`, `lstrip`, `normalized` etc attributes.",
                 )
             elif special_token not in special_tokens_map:
