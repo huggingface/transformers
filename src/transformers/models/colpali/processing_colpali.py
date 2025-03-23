@@ -140,9 +140,9 @@ class ColPaliProcessor(ProcessorMixin):
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
+        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
         [`~LlamaTokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
+        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
         [`~SiglipImageProcessor.__call__`].
         Please refer to the doctsring of the above two methods for more information.
 
