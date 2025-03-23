@@ -20,7 +20,7 @@ from .configuration_arlow import ArlowConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Arlow/arlow-base"
+# _CHECKPOINT_FOR_DOC = "Arlow/arlow-base"
 _CONFIG_FOR_DOC = "ArlowConfig"
 
 
