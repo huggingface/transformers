@@ -6,7 +6,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn, einsum
 import torch.nn.functional as F
-GraniteSpeechQFormerConfig = int
 from transformers.activations import ACT2FN
 from transformers.pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.generation import GenerationMixin
@@ -552,7 +551,7 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
     Querying Transformer (Q-Former), used in GraniteSpeech.
     """
 
-    def __init__(self, config: GraniteSpeechQFormerConfig):
+    def __init__(self, config: GraniteSpeechProjectorConfig):
         super().__init__(config)
         self.config = config
 

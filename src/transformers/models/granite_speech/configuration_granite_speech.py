@@ -1,6 +1,5 @@
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import AutoConfig
-from transformers.models.blip_2.configuration_blip_2 import Blip2QFormerConfig
 from transformers.models.auto import CONFIG_MAPPING, AutoConfig
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
@@ -36,8 +35,8 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.conv_expansion_factor = conv_expansion_factor
         self.use_max_pos_emb_in_pos_emb_calc = use_max_pos_emb_in_pos_emb_calc
 
-
-class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
+## adapted from transformers.models.blip.configuration_blip_2.Blip2VisionConfig
+class GraniteSpeechProjectorConfig(PretrainedConfig):
     def __init__(
         self,
         llm_dim=4096,
@@ -50,21 +49,31 @@ class GraniteSpeechProjectorConfig(Blip2QFormerConfig):
         encoder_hidden_size=1024,
         cross_attention_frequency=1,
         max_position_embeddings=2048,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=0,
+        position_embedding_type="absolute",
         use_qformer_text_input=False,
         **kwargs,
     ):
-        super().__init__(
-            hidden_size=hidden_size,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            encoder_hidden_size=encoder_hidden_size,
-            cross_attention_frequency=cross_attention_frequency,
-            max_position_embeddings=max_position_embeddings,
-            use_qformer_text_input=use_qformer_text_input,
-            **kwargs,
-        )
-
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
+        self.cross_attention_frequency = cross_attention_frequency
+        self.encoder_hidden_size = encoder_hidden_size
+        self.use_qformer_text_input = use_qformer_text_input
         self.downsample_rate = downsample_rate
         self.window_size = window_size
         self.llm_dim = llm_dim
