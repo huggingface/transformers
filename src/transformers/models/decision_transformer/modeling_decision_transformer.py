@@ -305,7 +305,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 key_states, value_states, self.layer_idx, cache_kwargs=cache_kwargs
             )
 
-        self.is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
+        is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
 
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = eager_attention_forward
@@ -335,6 +335,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 attention_mask,
                 head_mask=head_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
+                is_causal=is_causal,
                 **kwargs,
             )
 
@@ -428,10 +429,8 @@ class DecisionTransformerGPT2Block(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
-            # attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = residual + cross_attn_output
-            # outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
