@@ -905,12 +905,11 @@ class Attention(nn.Module):
         bs, n, d = x.shape
         assert(context_size > 0 and context_size <= max_pos_emb)
 
-        nb = n // context_size
+        nb = math.ceil(n / context_size)
         nr = n % context_size
         if nr > 0:
-            y = torch.zeros(x.shape[0], context_size-nr, x.shape[2], device=device)
-            x = torch.cat((x,y), dim=1)
-            nb += 1
+            # right padding to reach block size
+            x = torch.nn.functional.pad(x, (0, 0, 0, context_size - nr))
 
         q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim = -1))
         q, k, v = map(
@@ -928,10 +927,11 @@ class Attention(nn.Module):
         dots = dots + pos_attn
 
         if nr > 0:
-            mask = torch.ones(context_size, context_size, device=device)
+            # masked attention in the extended block
+            mask = torch.ones(context_size, context_size, dtype=bool, device=device)
             mask[:nr,:nr] = 0
             mask_value = -torch.finfo(dots.dtype).max
-            dots[:,-1,:].masked_fill_(mask.bool(), mask_value)
+            dots[:,-1,:].masked_fill_(mask, mask_value)
 
         attn = dots.softmax(dim = -1)
 
@@ -1239,6 +1239,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
         if input_features is not None:
+            if input_features.dtype != self.dtype:
+                logger.warning(f"input features are casted to {self.dtype}")
+                input_features = input_features.to(self.dtype)
             # Get the audio features from the encoder / projector 
             audio_features = self.get_audio_features(input_features)
 
