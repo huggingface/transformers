@@ -37,6 +37,7 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
 
 ## adapted from transformers.models.blip.configuration_blip_2.Blip2VisionConfig
 class GraniteSpeechProjectorConfig(PretrainedConfig):
+    model_type = "blip_2_qformer"
     def __init__(
         self,
         llm_dim=4096,
