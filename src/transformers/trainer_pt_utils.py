@@ -291,7 +291,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
 
 class EvalLoopContainer:
     """
-    Container to store intermediate results of evaluation loop
+    Container to store intermediate results of evaluation loop.
 
     Args:
         do_nested_concat (`bool`, *optional*, defaults to `True`):
@@ -736,7 +736,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             # add extra samples to make it evenly divisible
             indices += indices[: (self.total_size - len(indices))]
         else:
-            # remove tail of data to make it evenly divisible.
+            # remove tail of data to make it evenly divisible
             indices = indices[: self.total_size]
         assert len(indices) == self.total_size
 
@@ -928,7 +928,7 @@ def _get_learning_rate(self):
 
 def _secs2timedelta(secs):
     """
-    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal.
     """
 
     msec = int(abs(secs - int(secs)) * 100)
@@ -937,7 +937,7 @@ def _secs2timedelta(secs):
 
 def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     """
-    Reformat Trainer metrics values to a human-readable format
+    Reformat Trainer metrics values to a human-readable format.
 
     Args:
         metrics (`Dict[str, float]`):
@@ -963,7 +963,7 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
 
 def log_metrics(self, split, metrics):
     """
-    Log metrics in a specially formatted way
+    Log metrics in a specially formatted way.
 
     Under distributed environment this is done only for a process with rank 0.
 
@@ -1006,7 +1006,7 @@ def log_metrics(self, split, metrics):
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
     main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
     use a different amount of gpu memory. This is also not the same under DataParallel where gpu0 may require much more
-    memory than the rest since it stores the gradient and optimizer states for all participating GPUS. Perhaps in the
+    memory than the rest since it stores the gradient and optimizer states for all participating GPUs. Perhaps in the
     future these reports will evolve to measure those too.
 
     The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
@@ -1091,7 +1091,7 @@ def save_metrics(self, split, metrics, combined=True):
 
 def save_state(self):
     """
-    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
 
     Under distributed environment this is done only for a process with rank 0.
     """
@@ -1104,7 +1104,7 @@ def save_state(self):
 
 def get_model_param_count(model, trainable_only=False):
     """
-    Calculate model's total param count. If trainable_only is True then count only those requiring grads
+    Calculate model's total param count. If trainable_only is True then count only those requiring grads.
     """
     if is_deepspeed_zero3_enabled():
 
