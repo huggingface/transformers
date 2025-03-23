@@ -34,7 +34,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..llama.modeling_llama import eager_attention_forward
 from ..t5.modeling_t5 import T5LayerNorm
 from .configuration_timesfm import TimesFmConfig
 
@@ -178,6 +177,29 @@ class TimesFmPositionalEmbedding(nn.Module):
         return signal
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class TimesFmAttention(nn.Module):
     """Implements the attention used in TimesFM. One key difference is that there is _per_dim_scaling of the query."""
 
@@ -191,7 +213,6 @@ class TimesFmAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
         self.head_dim = config.head_dim
-        self.num_key_value_groups = 1
 
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_heads * self.head_dim
@@ -290,157 +311,6 @@ class TimesFmDecoderLayer(nn.Module):
         return scores, hidden_states
 
 
-def timesfm_get_large_negative_number(dtype: torch.dtype) -> torch.Tensor:
-    """Returns a large negative value for the given dtype."""
-    if dtype.is_floating_point:
-        dtype_max = torch.finfo(dtype).max
-    else:
-        dtype_max = torch.iinfo(dtype).max
-    return torch.tensor(-0.7 * dtype_max, dtype=dtype)
-
-
-def _prepare_4d_attention_mask(
-    attention_mask: Optional[torch.Tensor],
-    sequence_length: int,
-    dtype: torch.dtype,
-    device: torch.device,
-    is_causal: bool = True,
-) -> Optional[torch.Tensor]:
-    """
-    Creates 4D attention mask and combines causal and padding masks if needed.
-
-    Args:
-        attention_mask: Optional tensor of shape (batch_size, seq_length) containing padding mask
-        sequence_length: Length of the sequence
-        dtype: Data type of the mask
-        device: Device of the mask
-        is_causal: Whether to apply causal masking
-
-    Returns:
-        4D attention mask of shape (batch_size, 1, seq_length, seq_length)
-    """
-    # Handle padding mask
-    if attention_mask is not None:
-        # Convert 2D padding mask to 4D attention mask
-        attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        attention_mask = attention_mask * timesfm_get_large_negative_number(dtype)
-
-    # Create causal mask if needed
-    if is_causal:
-        causal_mask = torch.triu(
-            torch.ones((sequence_length, sequence_length), dtype=dtype, device=device)
-            * timesfm_get_large_negative_number(dtype),
-            diagonal=1,
-        )
-        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
-
-        # Combine with padding mask if it exists
-        if attention_mask is not None:
-            attention_mask = torch.minimum(attention_mask, causal_mask)
-        else:
-            attention_mask = causal_mask
-
-    return attention_mask
-
-
-def timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Calculates mean and standard deviation of `inputs` across axis 1.
-
-    It excludes values where `padding` is 1.
-
-    Args:
-        inputs: A PyTorch tensor of shape [b, n, p].
-        padding: A PyTorch tensor of shape [b, n, p] with values 0 or 1.
-
-    Returns:
-        A tuple containing the mean and standard deviation.
-        We return the statistics of the first patch with more than three non-padded values.
-    """
-
-    # Selecting the first patch with more than 3 unpadded values.
-    def _get_patch_index(arr: torch.Tensor):
-        indices = torch.argmax((arr >= 3).to(torch.int32), dim=1)
-        row_sum = (arr >= 3).to(torch.int32).sum(dim=1)
-        return torch.where(row_sum == 0, arr.shape[1] - 1, indices)
-
-    pad_sum = torch.sum(1 - padding, dim=2)
-    patch_indices = _get_patch_index(pad_sum)
-    bidxs = torch.arange(inputs.shape[0])
-
-    arr = inputs[bidxs, patch_indices, :]
-    pad = padding[bidxs, patch_indices, :]
-
-    # Create a mask where padding is 0
-    mask = 1 - pad
-
-    # Calculate the number of valid elements
-    num_valid_elements = torch.sum(mask, dim=1)
-    num_valid_elements = torch.where(
-        num_valid_elements == 0,
-        torch.tensor(1, dtype=num_valid_elements.dtype, device=num_valid_elements.device),
-        num_valid_elements,
-    )
-
-    # Calculate the masked sum and squared sum
-    masked_sum = torch.sum(arr * mask, dim=1)
-    masked_squared_sum = torch.sum((arr * mask) ** 2, dim=1)
-
-    # Calculate the masked mean and standard deviation
-    masked_mean = masked_sum / num_valid_elements
-    masked_var = masked_squared_sum / num_valid_elements - masked_mean**2
-    masked_var = torch.where(
-        masked_var < 0.0,
-        torch.tensor(0.0, dtype=masked_var.dtype, device=masked_var.device),
-        masked_var,
-    )
-    masked_std = torch.sqrt(masked_var)
-
-    return masked_mean, masked_std
-
-
-def timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
-    """Shifts rows of seq based on the first 0 in each row of the mask.
-
-    Args:
-        mask: mask tensor of shape [B, N]
-        seq: seq tensor of shape [B, N, P]
-
-    Returns:
-        The shifted sequence.
-    """
-    batch_size, num_seq, feature_dim = seq.shape
-
-    new_mask: torch.BoolTensor = mask == 0
-
-    # Use argmax to find the first True value in each row
-    indices = new_mask.to(torch.int32).argmax(dim=1)
-
-    # Handle rows with all zeros
-    indices[~new_mask.any(dim=1)] = -1
-
-    # Create index ranges for each sequence in the batch
-    idx_range = torch.arange(num_seq).to(seq.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, -1, feature_dim)
-
-    # Calculate shifted indices for each element in each sequence
-    shifted_idx = (idx_range - indices[:, None, None]) % num_seq
-
-    # Gather values from seq using shifted indices
-    shifted_seq = seq.gather(1, shifted_idx)
-
-    return shifted_seq
-
-
-def timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-    """Calculates the moving average using PyTorch's convolution function."""
-    # Pad with zeros to handle initial window positions
-    arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-    # Create a convolution kernel
-    kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-    # Apply convolution to calculate the moving average
-    smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
-    return [smoothed_arr, arr - smoothed_arr]
-
-
 TIMESFM_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -489,57 +359,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmRMSNorm):
             nn.init.zeros_(module.weight)
-
-        elif isinstance(module, TimesFmMLP):
-            # Initialize gate projection
-            module.gate_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.gate_proj.bias is not None:
-                nn.init.zeros_(module.gate_proj.bias)
-
-            # Initialize down projection
-            module.down_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.down_proj.bias is not None:
-                nn.init.zeros_(module.down_proj.bias)
-
-            # Initialize layer norm
-            nn.init.ones_(module.layer_norm.weight)
-            nn.init.zeros_(module.layer_norm.bias)
-
-        elif isinstance(module, TimesFmAttention):
-            # Initialize qkv projection
-            module.q_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            module.k_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            module.v_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.q_proj.bias is not None:
-                nn.init.zeros_(module.q_proj.bias)
-            if module.k_proj.bias is not None:
-                nn.init.zeros_(module.k_proj.bias)
-            if module.v_proj.bias is not None:
-                nn.init.zeros_(module.v_proj.bias)
-
-            # Initialize output projection
-            module.o_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.o_proj.bias is not None:
-                nn.init.zeros_(module.o_proj.bias)
-
-            # Initialize scaling parameter
-            nn.init.ones_(module.scaling)
-
-        elif isinstance(module, TimesFmResidualBlock):
-            # Initialize hidden layer
-            module.input_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.input_layer.bias is not None:
-                nn.init.zeros_(module.input_layer.bias)
-
-            # Initialize output layer
-            module.output_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.output_layer.bias is not None:
-                nn.init.zeros_(module.output_layer.bias)
-
-            # Initialize residual layer
-            module.residual_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.residual_layer.bias is not None:
-                nn.init.zeros_(module.residual_layer.bias)
 
         elif isinstance(module, TimesFmPositionalEmbedding):
             pass
@@ -617,7 +436,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         self, inputs: torch.Tensor, patched_pads: torch.Tensor
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Input is of shape [B, N, P]."""
-        mu, sigma = timesfm_masked_mean_std(inputs, patched_pads)
+        mu, sigma = self._timesfm_masked_mean_std(inputs, patched_pads)
         sigma = torch.where(
             sigma < self.config.tolerance,
             torch.tensor(1.0, dtype=sigma.dtype, device=sigma.device),
@@ -676,7 +495,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         if self.config.use_positional_embedding:
             pos_emb = self.position_emb(model_input.shape[1]).to(model_input.device)
             pos_emb = torch.concat([pos_emb] * model_input.shape[0], dim=0)
-            pos_emb = timesfm_shift_padded_seq(patched_padding, pos_emb)
+            pos_emb = self._timesfm_shift_padded_seq(patched_padding, pos_emb)
             model_input += pos_emb
 
         f_emb = self.freq_emb(freq)  # B x 1 x D
@@ -684,7 +503,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Convert paddings to attention mask and combine with causal mask
         hidden_states = model_input
-        attention_mask = _prepare_4d_attention_mask(
+        attention_mask = self._prepare_4d_attention_mask(
             attention_mask=patched_padding,
             sequence_length=hidden_states.shape[1],
             dtype=hidden_states.dtype,
@@ -714,24 +533,148 @@ class TimesFmModel(TimesFmPreTrainedModel):
         else:
             all_hidden_states = None
 
-        if return_dict:
-            return TimesFmOutput(
-                last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions if output_attentions else None,
-                loc=stats[0],
-                scale=stats[1],
-                past_key_values=past_key_values,
+        output = TimesFmOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions if output_attentions else None,
+            loc=stats[0],
+            scale=stats[1],
+            past_key_values=past_key_values,
+        )
+        return output if return_dict else output.to_tuple()
+
+    @staticmethod
+    def _prepare_4d_attention_mask(
+        attention_mask: Optional[torch.Tensor],
+        sequence_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        is_causal: bool = True,
+    ) -> Optional[torch.Tensor]:
+        """
+        Creates 4D attention mask and combines causal and padding masks if needed.
+
+        Args:
+            attention_mask: Optional tensor of shape (batch_size, seq_length) containing padding mask
+            sequence_length: Length of the sequence
+            dtype: Data type of the mask
+            device: Device of the mask
+            is_causal: Whether to apply causal masking
+
+        Returns:
+            4D attention mask of shape (batch_size, 1, seq_length, seq_length)
+        """
+        # Get minimum value for the dtype
+        min_value = torch.finfo(dtype).min if dtype.is_floating_point else torch.iinfo(dtype).min
+
+        # Handle padding mask
+        if attention_mask is not None:
+            # Convert 2D padding mask to 4D attention mask
+            attention_mask = attention_mask.view(attention_mask.shape[0], 1, 1, -1)
+            attention_mask = attention_mask * min_value
+
+        # Create causal mask if needed
+        if is_causal:
+            causal_mask = torch.triu(
+                torch.ones((sequence_length, sequence_length), dtype=dtype, device=device) * min_value,
+                diagonal=1,
             )
-        else:
-            return (
-                hidden_states,
-                all_hidden_states,
-                all_attentions if output_attentions else None,
-                stats[0],
-                stats[1],
-                past_key_values,
-            )
+            causal_mask = causal_mask.view(1, 1, sequence_length, sequence_length)
+
+            # Combine with padding mask if it exists
+            if attention_mask is not None:
+                attention_mask = torch.minimum(attention_mask, causal_mask)
+            else:
+                attention_mask = causal_mask
+
+        return attention_mask
+
+    @staticmethod
+    def _timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculates mean and standard deviation of `inputs` across axis 1.
+
+        It excludes values where `padding` is 1.
+
+        Args:
+            inputs: A PyTorch tensor of shape [b, n, p].
+            padding: A PyTorch tensor of shape [b, n, p] with values 0 or 1.
+
+        Returns:
+            A tuple containing the mean and standard deviation.
+            We return the statistics of the first patch with more than three non-padded values.
+        """
+
+        # Selecting the first patch with more than 3 unpadded values.
+        def _get_patch_index(arr: torch.Tensor):
+            indices = torch.argmax((arr >= 3).to(torch.int32), dim=1)
+            row_sum = (arr >= 3).to(torch.int32).sum(dim=1)
+            return torch.where(row_sum == 0, arr.shape[1] - 1, indices)
+
+        pad_sum = torch.sum(1 - padding, dim=2)
+        patch_indices = _get_patch_index(pad_sum)
+        bidxs = torch.arange(inputs.shape[0])
+
+        arr = inputs[bidxs, patch_indices, :]
+        pad = padding[bidxs, patch_indices, :]
+
+        # Create a mask where padding is 0
+        mask = 1 - pad
+
+        # Calculate the number of valid elements
+        num_valid_elements = torch.sum(mask, dim=1)
+        num_valid_elements = torch.where(
+            num_valid_elements == 0,
+            torch.tensor(1, dtype=num_valid_elements.dtype, device=num_valid_elements.device),
+            num_valid_elements,
+        )
+
+        # Calculate the masked sum and squared sum
+        masked_sum = torch.sum(arr * mask, dim=1)
+        masked_squared_sum = torch.sum((arr * mask) ** 2, dim=1)
+
+        # Calculate the masked mean and standard deviation
+        masked_mean = masked_sum / num_valid_elements
+        masked_var = masked_squared_sum / num_valid_elements - masked_mean**2
+        masked_var = torch.where(
+            masked_var < 0.0,
+            torch.tensor(0.0, dtype=masked_var.dtype, device=masked_var.device),
+            masked_var,
+        )
+        masked_std = torch.sqrt(masked_var)
+
+        return masked_mean, masked_std
+
+    @staticmethod
+    def _timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
+        """Shifts rows of seq based on the first 0 in each row of the mask.
+
+        Args:
+            mask: mask tensor of shape [B, N]
+            seq: seq tensor of shape [B, N, P]
+
+        Returns:
+            The shifted sequence.
+        """
+        batch_size, num_seq, feature_dim = seq.shape
+
+        new_mask: torch.BoolTensor = mask == 0
+
+        # Use argmax to find the first True value in each row
+        indices = new_mask.to(torch.int32).argmax(dim=1)
+
+        # Handle rows with all zeros
+        indices[~new_mask.any(dim=1)] = -1
+
+        # Create index ranges for each sequence in the batch
+        idx_range = torch.arange(num_seq).to(seq.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, -1, feature_dim)
+
+        # Calculate shifted indices for each element in each sequence
+        shifted_idx = (idx_range - indices[:, None, None]) % num_seq
+
+        # Gather values from seq using shifted indices
+        shifted_seq = seq.gather(1, shifted_idx)
+
+        return shifted_seq
 
 
 class TimesFmModelForPrediction(TimesFmPreTrainedModel):
@@ -811,12 +754,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         b, n, _ = output_ts.shape
         output_ts = output_ts.view(b, n, self.config.horizon_length, len(self.config.quantiles) + 1)
 
-        return self._reverse_transform(output_ts, stats)
-
-    def _reverse_transform(self, outputs: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        """Output is of shape [B, N, P, Q]."""
         mu, sigma = stats
-        return outputs * sigma[:, None, None, None] + mu[:, None, None, None]
+        return output_ts * sigma[:, None, None, None] + mu[:, None, None, None]
 
     def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         losses = []
@@ -886,7 +825,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             if freq is not None:
                 new_freqs = []
             for i, ts in enumerate(inputs):
-                new_inputs.extend(timesfm_moving_average(ts, window_size))
+                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
                 if freq is not None:
                     new_freqs.extend([freq[i]] * 2)
             inputs = new_inputs
@@ -976,25 +915,27 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             quantile_loss = self._quantile_loss(full_outputs[:, :, 1:], future_values)
             loss = mse_loss + quantile_loss
 
-        if return_dict:
-            return TimesFmOutputForPrediction(
-                last_hidden_state=decoder_output.last_hidden_state,
-                attentions=decoder_output.attentions if output_attentions else None,
-                hidden_states=decoder_output.hidden_states if output_hidden_states else None,
-                mean_predictions=mean_outputs,
-                full_predictions=full_outputs,
-                loss=loss,
-                past_key_values=decoder_output.past_key_values,
-            )
-        else:
-            return_tuple = [decoder_output.last_hidden_state]
-            if output_hidden_states:
-                return_tuple.append(decoder_output.hidden_states)
-            if output_attentions:
-                return_tuple.append(decoder_output.attentions)
-            return_tuple += [mean_outputs, full_outputs, loss]
-            return_tuple += [decoder_output.past_key_values]
-            return tuple(return_tuple)
+        output = TimesFmOutputForPrediction(
+            last_hidden_state=decoder_output.last_hidden_state,
+            attentions=decoder_output.attentions if output_attentions else None,
+            hidden_states=decoder_output.hidden_states if output_hidden_states else None,
+            mean_predictions=mean_outputs,
+            full_predictions=full_outputs,
+            loss=loss,
+            past_key_values=decoder_output.past_key_values,
+        )
+        return output if return_dict else output.to_tuple()
+
+    @staticmethod
+    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function."""
+        # Pad with zeros to handle initial window positions
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        # Create a convolution kernel
+        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        # Apply convolution to calculate the moving average
+        smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
+        return [smoothed_arr, arr - smoothed_arr]
 
 
 __all__ = ["TimesFmModelForPrediction", "TimesFmPreTrainedModel", "TimesFmModel"]

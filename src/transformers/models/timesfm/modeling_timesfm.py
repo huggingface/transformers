@@ -202,18 +202,6 @@ class TimesFmPositionalEmbedding(nn.Module):
         return signal
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -714,17 +702,6 @@ class TimesFmModel(TimesFmPreTrainedModel):
         return shifted_seq
 
 
-def timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-    """Calculates the moving average using PyTorch's convolution function."""
-    # Pad with zeros to handle initial window positions
-    arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-    # Create a convolution kernel
-    kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-    # Apply convolution to calculate the moving average
-    smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
-    return [smoothed_arr, arr - smoothed_arr]
-
-
 class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     """TimesFM model for quantile and mean prediction."""
 
@@ -873,7 +850,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             if freq is not None:
                 new_freqs = []
             for i, ts in enumerate(inputs):
-                new_inputs.extend(timesfm_moving_average(ts, window_size))
+                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
                 if freq is not None:
                     new_freqs.extend([freq[i]] * 2)
             inputs = new_inputs
@@ -973,6 +950,17 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             past_key_values=decoder_output.past_key_values,
         )
         return output if return_dict else output.to_tuple()
+
+    @staticmethod
+    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function."""
+        # Pad with zeros to handle initial window positions
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        # Create a convolution kernel
+        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        # Apply convolution to calculate the moving average
+        smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
+        return [smoothed_arr, arr - smoothed_arr]
 
 
 __all__ = ["TimesFmModelForPrediction", "TimesFmPreTrainedModel", "TimesFmModel"]
