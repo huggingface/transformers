@@ -481,15 +481,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         )
 
 
-def timesfm_get_large_negative_number(dtype: torch.dtype) -> torch.Tensor:
-    """Returns a large negative value for the given dtype."""
-    if dtype.is_floating_point:
-        dtype_max = torch.finfo(dtype).max
-    else:
-        dtype_max = torch.iinfo(dtype).max
-    return torch.tensor(-0.7 * dtype_max, dtype=dtype)
-
-
 def _prepare_4d_attention_mask(
     attention_mask: Optional[torch.Tensor],
     sequence_length: int,
@@ -510,17 +501,19 @@ def _prepare_4d_attention_mask(
     Returns:
         4D attention mask of shape (batch_size, 1, seq_length, seq_length)
     """
+    # Get minimum value for the dtype
+    min_value = torch.finfo(dtype).min if dtype.is_floating_point else torch.iinfo(dtype).min
+
     # Handle padding mask
     if attention_mask is not None:
         # Convert 2D padding mask to 4D attention mask
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        attention_mask = attention_mask * timesfm_get_large_negative_number(dtype)
+        attention_mask = attention_mask * min_value
 
     # Create causal mask if needed
     if is_causal:
         causal_mask = torch.triu(
-            torch.ones((sequence_length, sequence_length), dtype=dtype, device=device)
-            * timesfm_get_large_negative_number(dtype),
+            torch.ones((sequence_length, sequence_length), dtype=dtype, device=device) * min_value,
             diagonal=1,
         )
         causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
