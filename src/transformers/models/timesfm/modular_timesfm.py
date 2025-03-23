@@ -360,6 +360,10 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TimesFmRMSNorm):
             nn.init.zeros_(module.weight)
 
+        elif isinstance(module, TimesFmAttention):
+            # Initialize scaling parameter
+            nn.init.ones_(module.scaling)
+
         elif isinstance(module, TimesFmPositionalEmbedding):
             pass
 
@@ -822,8 +826,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         if window_size is not None:
             new_inputs = []
-            if freq is not None:
-                new_freqs = []
+            new_freqs = []
             for i, ts in enumerate(inputs):
                 new_inputs.extend(self._timesfm_moving_average(ts, window_size))
                 if freq is not None:
@@ -934,7 +937,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         # Create a convolution kernel
         kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
         # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0)).squeeze()
+        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
         return [smoothed_arr, arr - smoothed_arr]
 
 
