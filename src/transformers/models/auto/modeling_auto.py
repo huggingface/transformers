@@ -522,7 +522,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("fuyu", "FuyuForCausalLM"),
         ("gemma", "GemmaForCausalLM"),
         ("gemma2", "Gemma2ForCausalLM"),
-        ("gemma3", "Gemma3ForCausalLM"),
+        ("gemma3", "Gemma3ForConditionalGeneration"),
         ("gemma3_text", "Gemma3ForCausalLM"),
         ("git", "GitForCausalLM"),
         ("glm", "GlmForCausalLM"),
@@ -1671,7 +1671,17 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
         Under the hood, multimodal models mapped by AutoModelForCausalLM assume the text decoder receives its own
         config, rather than the config for the whole model. This is used e.g. to load the text-only part of a VLM.
         """
-        return config.get_text_config(decoder=True)
+        text_config, text_config_names = config.get_text_config(decoder=True, return_text_config_name=True)
+        if text_config_names and type(text_config) in cls._model_mapping.keys():
+            warnings.warn(
+                "The model config you are loading was mapped to a text config only. This behavior is deprecated and will "
+                "be removed in v.4.57. All causal models will be mapped to the entire config and load the vision/audio towers "
+                "if available. For text-only models it will have no effect. If the current behavior is affecting your model and "
+                "you want to load the multimodal version, please open an issue and tag @zucchini-nlp",
+                FutureWarning,
+            )
+            config = text_config
+        return config
 
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")

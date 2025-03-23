@@ -1117,12 +1117,16 @@ class PretrainedConfig(PushToHubMixin):
 
         return non_default_generation_parameters
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False, return_text_config_name=False) -> "PretrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
 
-        If `decoder` is set to `True`, then only search for decoder config names.
+        Args:
+            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, then only search for decoder config names.
+            return_text_config_name (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, returns all valid text config names found in the config.
         """
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
         encoder_possible_text_config_names = ("text_encoder",)
@@ -1144,8 +1148,13 @@ class PretrainedConfig(PushToHubMixin):
                 "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
             )
         elif len(valid_text_config_names) == 1:
-            return getattr(self, valid_text_config_names[0])
-        return self
+            config_to_return = getattr(self, valid_text_config_names[0])
+        else:
+            config_to_return = self
+
+        if return_text_config_name:
+            return config_to_return, valid_text_config_names
+        return config_to_return
 
 
 def get_configuration_file(configuration_files: List[str]) -> str:
