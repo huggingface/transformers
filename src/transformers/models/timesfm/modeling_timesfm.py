@@ -195,7 +195,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         inv_timescales = self.min_timescale * torch.exp(
             torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
         )
-        scaled_time = position.unsqueeze(2) * inv_timescales.unsqueeze(0).unsqueeze(0)
+        scaled_time = position.view(*position.shape, 1) * inv_timescales.view(1, 1, -1)
         signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=2)
         # Padding to ensure correct embedding dimension
         signal = F.pad(signal, (0, 0, 0, self.embedding_dims % 2))
@@ -695,7 +695,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         indices[~new_mask.any(dim=1)] = -1
 
         # Create index ranges for each sequence in the batch
-        idx_range = torch.arange(num_seq).to(seq.device).unsqueeze(0).unsqueeze(-1).expand(batch_size, -1, feature_dim)
+        idx_range = torch.arange(num_seq).to(seq.device).view(1, -1, 1).expand(batch_size, -1, feature_dim)
 
         # Calculate shifted indices for each element in each sequence
         shifted_idx = (idx_range - indices[:, None, None]) % num_seq
