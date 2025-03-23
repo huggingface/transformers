@@ -1674,13 +1674,12 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
         text_config, text_config_names = config.get_text_config(decoder=True, return_text_config_name=True)
         if text_config_names and type(text_config) in cls._model_mapping.keys():
             warnings.warn(
-                "The model config you are loading was mapped to a text config only. This behavior is deprecated and will "
-                "be removed in v.4.57. All causal models will be mapped to the entire config and load the vision/audio towers "
-                "if available. For text-only models it will have no effect. If the current behavior is affecting your model and "
-                "you want to load the multimodal version, please open an issue and tag @zucchini-nlp",
+                "Loading a model with text-config is deprecated and will be removed in v4.57. "
+                "All causal models will load the full config, including vision/audio configs if available. "
+                "If this is impacting your model and you cannot load it anymore, open an issue "
+                "and tag @zucchini-nlp.",
                 FutureWarning,
             )
-            config = text_config
         return config
 
 
