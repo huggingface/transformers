@@ -1027,25 +1027,16 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             quantile_loss = self._quantile_loss(full_outputs[:, :, 1:], future_values)
             loss = mse_loss + quantile_loss
 
-        if return_dict:
-            return TimesFmOutputForPrediction(
-                last_hidden_state=decoder_output.last_hidden_state,
-                attentions=decoder_output.attentions if output_attentions else None,
-                hidden_states=decoder_output.hidden_states if output_hidden_states else None,
-                mean_predictions=mean_outputs,
-                full_predictions=full_outputs,
-                loss=loss,
-                past_key_values=decoder_output.past_key_values,
-            )
-        else:
-            return_tuple = [decoder_output.last_hidden_state]
-            if output_hidden_states:
-                return_tuple.append(decoder_output.hidden_states)
-            if output_attentions:
-                return_tuple.append(decoder_output.attentions)
-            return_tuple += [mean_outputs, full_outputs, loss]
-            return_tuple += [decoder_output.past_key_values]
-            return tuple(return_tuple)
+        output = TimesFmOutputForPrediction(
+            last_hidden_state=decoder_output.last_hidden_state,
+            attentions=decoder_output.attentions if output_attentions else None,
+            hidden_states=decoder_output.hidden_states if output_hidden_states else None,
+            mean_predictions=mean_outputs,
+            full_predictions=full_outputs,
+            loss=loss,
+            past_key_values=decoder_output.past_key_values,
+        )
+        return output if return_dict else output.to_tuple()
 
 
 __all__ = ["TimesFmModelForPrediction", "TimesFmPreTrainedModel", "TimesFmModel"]
