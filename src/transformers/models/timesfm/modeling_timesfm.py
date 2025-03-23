@@ -507,7 +507,7 @@ def _prepare_4d_attention_mask(
     # Handle padding mask
     if attention_mask is not None:
         # Convert 2D padding mask to 4D attention mask
-        attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+        attention_mask = attention_mask.view(attention_mask.shape[0], 1, 1, -1)
         attention_mask = attention_mask * min_value
 
     # Create causal mask if needed
@@ -516,7 +516,7 @@ def _prepare_4d_attention_mask(
             torch.ones((sequence_length, sequence_length), dtype=dtype, device=device) * min_value,
             diagonal=1,
         )
-        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
+        causal_mask = causal_mask.view(1, 1, sequence_length, sequence_length)
 
         # Combine with padding mask if it exists
         if attention_mask is not None:
