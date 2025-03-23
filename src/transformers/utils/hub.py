@@ -474,7 +474,8 @@ def cached_files(
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type) for filename in full_filenames
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
+            for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
             return resolved_files
