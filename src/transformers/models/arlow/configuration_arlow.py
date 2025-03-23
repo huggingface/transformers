@@ -12,6 +12,8 @@ class ArlowConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+    Checkpoint link: [yuchenxie/ArlowGPT-Base](https://huggingface.co/yuchenxie/ArlowGPT-Base)
+
     Args:
         vocab_size (`int`, *optional*, defaults to 131072):
             Vocabulary size of the ArlowGPT model. Defines the number of different tokens that can be represented by
