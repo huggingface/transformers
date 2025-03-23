@@ -62,6 +62,8 @@ class GraniteSpeechProcessor(ProcessorMixin):
         
         if audios is not None:
             audios, audio_lengths = self._get_validated_audios(audios)
+            if any(t.count(self.audio_token) != 1 for t in text):
+                raise ValueError("We're supporting a single audio per input")
             if len(audio_lengths) != expected_num_audios:
                 raise ValueError("Text/Audio mismatch. The number of audios and audio tokens do not match")
             
