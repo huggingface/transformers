@@ -30,6 +30,13 @@ class ConvNextImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class DeepseekVLImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class DeformableDetrImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
