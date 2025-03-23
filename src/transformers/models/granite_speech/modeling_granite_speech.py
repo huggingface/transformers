@@ -1182,6 +1182,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
         self,
         input_ids: torch.LongTensor = None,
         input_features: torch.FloatTensor = None,
+        input_features_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1248,6 +1249,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
             inputs_embeds = self.get_merged_audio_embeddings(
                 input_ids=input_ids,
                 audio_features=audio_features,
+                input_features_mask=input_features_mask
             )
 
         outputs = self.language_model(
@@ -1327,7 +1329,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
             model_inputs["input_features"] = input_features
         return model_inputs
 
-    def get_merged_audio_embeddings(self, input_ids, audio_features):
+    def get_merged_audio_embeddings(self, input_ids, audio_features, input_features_mask):
         """
         Adds the audio token to the model's LLM vocabulary so that we can pass it
         through the tokenizer; it's assumed that the embeddings corresponding to the
@@ -1344,7 +1346,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
 
         # Mask the audio features into the text embeddings
         special_audio_mask = is_audio_index.unsqueeze(-1)
-        audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)[input_features_mask]
         inputs_embeds = inputs_embeds.masked_scatter(
             special_audio_mask,
             audio_features,

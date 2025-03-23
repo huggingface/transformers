@@ -75,7 +75,9 @@ class GraniteSpeechProcessor(ProcessorMixin):
             num_audio_features = self.feature_extractor._get_num_audio_features(
                 audio_lengths
             )
-
+            speech_inputs["input_features_mask"] = torch.arange(max(num_audio_features)).view(1, -1) <= \
+                torch.tensor(num_audio_features).view(-1, 1)
+            
             # duplicate the audio placeholders to match the feature dims
             text = self._expand_audio_placeholders(text, num_audio_features)
         else:
