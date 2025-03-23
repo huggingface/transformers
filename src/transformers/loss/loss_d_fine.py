@@ -344,6 +344,7 @@ def DFineForObjectDetectionLoss(
     outputs_loss = {}
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         if denoising_meta_values is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)
@@ -351,13 +352,13 @@ def DFineForObjectDetectionLoss(
             dn_out_corners, out_corners = torch.split(predicted_corners, denoising_meta_values["dn_num_split"], dim=2)
             dn_out_refs, out_refs = torch.split(initial_reference_points, denoising_meta_values["dn_num_split"], dim=2)
 
-        auxiliary_outputs = _set_aux_loss2(
-            outputs_class, outputs_coord, out_corners, out_refs, out_corners, outputs_class
-        )
+            auxiliary_outputs = _set_aux_loss2(
+                outputs_class, outputs_coord, out_corners, out_refs, out_corners, outputs_class
+            )
 
-        outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-        outputs_loss["auxiliary_outputs"].extend(_set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
-        if denoising_meta_values is not None:
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+            outputs_loss["auxiliary_outputs"].extend(_set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
+
             dn_auxiliary_outputs = _set_aux_loss2(
                 dn_out_class, dn_out_coord, dn_out_corners, dn_out_refs, dn_out_corners, dn_out_class
             )

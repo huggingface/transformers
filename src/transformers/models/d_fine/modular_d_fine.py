@@ -818,10 +818,12 @@ class DFineDecoder(RTDetrDecoder):
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate)
-        intermediate_predicted_corners += (pred_corners,)
-        intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
-        initial_reference_points += (ref_points_initial,)
-        initial_reference_points = torch.stack(initial_reference_points, dim=1)
+
+        if self.bbox_embed is not None:
+            intermediate_predicted_corners += (pred_corners,)
+            intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
+            initial_reference_points += (ref_points_initial,)
+            initial_reference_points = torch.stack(initial_reference_points, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -835,6 +837,8 @@ class DFineDecoder(RTDetrDecoder):
                     intermediate,
                     intermediate_logits,
                     intermediate_reference_points,
+                    intermediate_predicted_corners,
+                    initial_reference_points,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -844,11 +848,11 @@ class DFineDecoder(RTDetrDecoder):
 
         return DFineDecoderOutput(
             last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
             intermediate_reference_points=intermediate_reference_points,
             intermediate_predicted_corners=intermediate_predicted_corners,
             initial_reference_points=initial_reference_points,
-            intermediate_hidden_states=intermediate,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,

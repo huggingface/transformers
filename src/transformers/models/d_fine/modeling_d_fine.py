@@ -547,6 +547,10 @@ class DFineObjectDetectionOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked initial reference points (initial reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
@@ -594,6 +598,8 @@ class DFineObjectDetectionOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
+    intermediate_predicted_corners: torch.FloatTensor = None
+    initial_reference_points: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1082,6 +1088,10 @@ class DFineDecoderOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked initial reference points (initial reference points of each layer of the decoder).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -1317,10 +1327,12 @@ class DFineDecoder(DFinePreTrainedModel):
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate)
-        intermediate_predicted_corners += (pred_corners,)
-        intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
-        initial_reference_points += (ref_points_initial,)
-        initial_reference_points = torch.stack(initial_reference_points, dim=1)
+
+        if self.bbox_embed is not None:
+            intermediate_predicted_corners += (pred_corners,)
+            intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
+            initial_reference_points += (ref_points_initial,)
+            initial_reference_points = torch.stack(initial_reference_points, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1334,6 +1346,8 @@ class DFineDecoder(DFinePreTrainedModel):
                     intermediate,
                     intermediate_logits,
                     intermediate_reference_points,
+                    intermediate_predicted_corners,
+                    initial_reference_points,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -1343,11 +1357,11 @@ class DFineDecoder(DFinePreTrainedModel):
 
         return DFineDecoderOutput(
             last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
             intermediate_reference_points=intermediate_reference_points,
             intermediate_predicted_corners=intermediate_predicted_corners,
             initial_reference_points=initial_reference_points,
-            intermediate_hidden_states=intermediate,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -1882,6 +1896,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_logits=outputs.intermediate_logits,
             intermediate_reference_points=outputs.intermediate_reference_points,
+            intermediate_predicted_corners=outputs.intermediate_predicted_corners,
+            initial_reference_points=outputs.initial_reference_points,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
