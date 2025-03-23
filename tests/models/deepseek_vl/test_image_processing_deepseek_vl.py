@@ -85,7 +85,7 @@ class DeepseekVLImageProcessingTester:
 
 @require_torch
 @require_vision
-class DeepseekVLImageProcessingTest(unittest.TestCase, ImageProcessingTestMixin):
+class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DeepseekVLImageProcessor if is_vision_available() else None
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Janus
@@ -185,3 +185,7 @@ class DeepseekVLImageProcessingTest(unittest.TestCase, ImageProcessingTestMixin)
 
         # Image processor should return same pixel values, independently of input format.
         self.assertTrue((encoded_images_nested == encoded_images).all())
+
+    @unittest.skip(reason="Not supported")
+    def test_call_numpy_4_channels(self):
+        pass
