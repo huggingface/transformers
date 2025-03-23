@@ -101,7 +101,7 @@ class SequenceCompressorResampler(nn.Module):
         ff_mult: int,
     ):
         super().__init__()
-        self.latents = nn.Parameter(torch.randn(num_latents, protein_repr_dim))
+        self.latents = nn.Parameter(torch.randn(num_latents, protein_repr_dim), requires_grad=True)
 
         self.layers = nn.ModuleList([])
         for _ in range(depth):
@@ -139,6 +139,7 @@ class SequenceCompressorResampler(nn.Module):
         # latents_raw = repeat(self.latents, "n d -> b n d", b=b)
         ones = torch.ones(b).to(self.latents.device)
         latents = torch.einsum("nd, b -> bnd", self.latents, ones)
+        latents = latents.to(embeds.dtype)
         # assert torch.allclose(latents_raw, latents)
         for attn, ff in self.layers:
             latents = attn(embeds, latents, mask) + latents
