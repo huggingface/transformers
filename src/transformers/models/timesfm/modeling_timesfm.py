@@ -473,7 +473,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         self, inputs: torch.Tensor, patched_pads: torch.Tensor
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Input is of shape [B, N, P]."""
-        mu, sigma = self.timesfm_masked_mean_std(inputs, patched_pads)
+        mu, sigma = self._timesfm_masked_mean_std(inputs, patched_pads)
         sigma = torch.where(
             sigma < self.config.tolerance,
             torch.tensor(1.0, dtype=sigma.dtype, device=sigma.device),
@@ -532,7 +532,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         if self.config.use_positional_embedding:
             pos_emb = self.position_emb(model_input.shape[1]).to(model_input.device)
             pos_emb = torch.concat([pos_emb] * model_input.shape[0], dim=0)
-            pos_emb = self.timesfm_shift_padded_seq(patched_padding, pos_emb)
+            pos_emb = self._timesfm_shift_padded_seq(patched_padding, pos_emb)
             model_input += pos_emb
 
         f_emb = self.freq_emb(freq)  # B x 1 x D
@@ -627,7 +627,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         return attention_mask
 
     @staticmethod
-    def timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _timesfm_masked_mean_std(inputs: torch.Tensor, padding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates mean and standard deviation of `inputs` across axis 1.
 
         It excludes values where `padding` is 1.
@@ -682,7 +682,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         return masked_mean, masked_std
 
     @staticmethod
-    def timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
+    def _timesfm_shift_padded_seq(mask: torch.Tensor, seq: torch.Tensor) -> torch.Tensor:
         """Shifts rows of seq based on the first 0 in each row of the mask.
 
         Args:
