@@ -52,7 +52,7 @@ class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
 class DeepseekVLProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
 
-    image_processor_class = "DeepseekVLImageProcessor"
+    image_processor_class = ("DeepseekVLImageProcessor", "DeepseekVLImageProcessorFast")
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(

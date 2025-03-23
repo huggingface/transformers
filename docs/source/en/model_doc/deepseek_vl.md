@@ -92,6 +92,10 @@ print(text)
 
 [[autodoc]] DeepseekVLImageProcessor
 
+## DeepseekVLImageProcessorFast
+
+[[autodoc]] DeepseekVLImageProcessorFast
+
 ## DeepseekVLModel
 
 [[autodoc]] DeepseekVLModel
