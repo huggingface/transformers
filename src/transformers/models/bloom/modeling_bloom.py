@@ -36,8 +36,17 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import (
+    is_torch_flex_attn_available,
+    logging,
+)
 from .configuration_bloom import BloomConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -737,12 +746,17 @@ class BloomModel(BloomPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -785,7 +799,7 @@ class BloomModel(BloomPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -824,7 +838,7 @@ class BloomModel(BloomPreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -845,7 +859,9 @@ class BloomModel(BloomPreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -893,14 +909,23 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
+        # Exception 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
+                inputs_embeds is not None  # Exception 1
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the
@@ -958,6 +983,8 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
+        # Bloom has deprecated kwargs, so we need to pop num_items_in_batch explicitly
+        num_items_in_batch = deprecated_arguments.pop("num_items_in_batch", None)
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
@@ -990,14 +1017,12 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         if labels is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(lm_logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            batch_size, seq_length, vocab_size = shift_logits.shape
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
+            loss = self.loss_function(
+                lm_logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                num_items_in_batch=num_items_in_batch,
             )
 
         if not return_dict:
@@ -1122,21 +1147,20 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
-            if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
-            else:
-                sequence_lengths = -1
-                logger.warning_once(
-                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-                )
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
 
         loss = None
         if labels is not None:

@@ -146,6 +146,12 @@ class PhiConfig(PretrainedConfig):
         "layers.*.mlp.fc1": "colwise",
         "layers.*.mlp.fc2": "rowwise",
     }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "embed_dropout": (["inputs_embeds"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "final_layernorm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,

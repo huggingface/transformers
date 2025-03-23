@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import PhimoeConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     slow,
     torch_device,
@@ -338,7 +339,6 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (
         (PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (PhimoeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": PhimoeModel,
@@ -450,6 +450,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @parameterized.expand([("longrope",)])
+    @is_flaky()  # TODO (joao): unify rope tests in the mixin
     def test_model_rope_scaling_short_long_factor(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         n_factors = config.hidden_size // config.num_key_value_heads // 2

@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -188,7 +187,7 @@ class DeformableDetrModelTester:
 
 
 @require_torch
-class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
@@ -200,6 +199,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -542,10 +542,10 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
@@ -574,10 +574,10 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)

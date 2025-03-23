@@ -451,7 +451,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
     # TODO (Joao): fix me
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    @unittest.skip("Onnx compliance broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
 
@@ -548,7 +548,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_distilgpt2_left_padding(self):
-        """Tests that the generated text is the same, regarless of left padding"""
+        """Tests that the generated text is the same, regardless of left padding"""
         model = TFGPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
         tokenizer = GPT2Tokenizer.from_pretrained("distilbert/distilgpt2")
 

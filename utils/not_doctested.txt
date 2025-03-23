@@ -5,11 +5,8 @@ docs/source/en/add_new_pipeline.md
 docs/source/en/agents.md
 docs/source/en/agents.md
 docs/source/en/attention.md
-docs/source/en/bertology.md
-docs/source/en/big_models.md
 docs/source/en/community.md
 docs/source/en/contributing.md
-docs/source/en/create_a_model.md
 docs/source/en/custom_models.md
 docs/source/en/debugging.md
 docs/source/en/fast_tokenizers.md
@@ -273,7 +270,6 @@ docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
 docs/source/en/model_summary.md
-docs/source/en/multilingual.md
 docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
 docs/source/en/peft.md
@@ -287,14 +283,11 @@ docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
 docs/source/en/perf_train_tpu_tf.md
-docs/source/en/performance.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
 docs/source/en/pr_checks.md
-docs/source/en/preprocessing.md
 docs/source/en/run_scripts.md
-docs/source/en/sagemaker.md
 docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
@@ -343,12 +336,10 @@ src/transformers/commands/add_new_model_like.py
 src/transformers/commands/convert.py
 src/transformers/commands/download.py
 src/transformers/commands/env.py
-src/transformers/commands/lfs.py
 src/transformers/commands/run.py
 src/transformers/commands/serving.py
 src/transformers/commands/train.py
 src/transformers/commands/transformers_cli.py
-src/transformers/commands/user.py
 src/transformers/configuration_utils.py
 src/transformers/convert_graph_to_onnx.py
 src/transformers/convert_pytorch_checkpoint_to_tf2.py
@@ -484,7 +475,6 @@ src/transformers/models/deberta/modeling_tf_deberta.py
 src/transformers/models/deberta_v2/modeling_tf_deberta_v2.py
 src/transformers/models/decision_transformer/modeling_decision_transformer.py
 src/transformers/models/deformable_detr/convert_deformable_detr_to_pytorch.py
-src/transformers/models/deformable_detr/load_custom.py
 src/transformers/models/deit/convert_deit_timm_to_pytorch.py
 src/transformers/models/deprecated/bort/convert_bort_original_gluonnlp_checkpoint_to_pytorch.py
 src/transformers/models/deprecated/mctct/configuration_mctct.py
