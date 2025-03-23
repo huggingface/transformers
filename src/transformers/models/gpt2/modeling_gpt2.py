@@ -434,10 +434,8 @@ class GPT2Block(nn.Module):
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
-            # attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = residual + cross_attn_output
-            # outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
