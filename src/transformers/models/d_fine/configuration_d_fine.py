@@ -155,6 +155,10 @@ class DFineConfig(PretrainedConfig):
             Relative weight of the L1 bounding box loss in the object detection loss.
         weight_loss_giou (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
+        weight_loss_fgl (`float`, *optional*, defaults to 0.15):
+            Relative weight of the fine-grained localization loss in the object detection loss.
+        weight_loss_ddf (`float`, *optional*, defaults to 1.5):
+            Relative weight of the decoupled distillation focal loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
         eval_idx (`int`, *optional*, defaults to -1):
@@ -183,6 +187,8 @@ class DFineConfig(PretrainedConfig):
             Offset scale used in deformable attention.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
+        up (`float`, *optional*, defaults to 0.5)
+            Controls the upper bounds of the Weighting Function.
     """
 
     model_type = "d_fine"
@@ -252,6 +258,8 @@ class DFineConfig(PretrainedConfig):
         weight_loss_vfl=1.0,
         weight_loss_bbox=5.0,
         weight_loss_giou=2.0,
+        weight_loss_fgl=0.15,
+        weight_loss_ddf=1.5,
         eos_coefficient=1e-4,
         eval_idx=-1,
         layer_scale=1,
@@ -263,6 +271,7 @@ class DFineConfig(PretrainedConfig):
         lqe_layers=2,
         decoder_offset_scale=0.5,
         decoder_method="default",
+        up=0.5,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -356,6 +365,8 @@ class DFineConfig(PretrainedConfig):
         self.weight_loss_vfl = weight_loss_vfl
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
+        self.weight_loss_fgl = weight_loss_fgl
+        self.weight_loss_ddf = weight_loss_ddf
         self.eos_coefficient = eos_coefficient
         # add the new attributes with the given values or defaults
         self.eval_idx = eval_idx
@@ -368,6 +379,7 @@ class DFineConfig(PretrainedConfig):
         self.top_prob_values = top_prob_values
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
+        self.up = up
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:

@@ -194,6 +194,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "weight_loss_bbox",
         "weight_loss_giou",
         "weight_loss_vfl",
+        "weight_loss_fgl",
+        "weight_loss_ddf",
     ],
     "GroundingDinoConfig": [
         "bbox_cost",

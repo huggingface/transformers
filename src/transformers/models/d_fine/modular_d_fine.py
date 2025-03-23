@@ -174,6 +174,10 @@ class DFineConfig(PretrainedConfig):
             Relative weight of the L1 bounding box loss in the object detection loss.
         weight_loss_giou (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
+        weight_loss_fgl (`float`, *optional*, defaults to 0.15):
+            Relative weight of the fine-grained localization loss in the object detection loss.
+        weight_loss_ddf (`float`, *optional*, defaults to 1.5):
+            Relative weight of the decoupled distillation focal loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
         eval_idx (`int`, *optional*, defaults to -1):
@@ -202,6 +206,8 @@ class DFineConfig(PretrainedConfig):
             Offset scale used in deformable attention.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
+        up (`float`, *optional*, defaults to 0.5)
+            Controls the upper bounds of the Weighting Function.
     """
 
     model_type = "d_fine"
@@ -271,6 +277,8 @@ class DFineConfig(PretrainedConfig):
         weight_loss_vfl=1.0,
         weight_loss_bbox=5.0,
         weight_loss_giou=2.0,
+        weight_loss_fgl=0.15,
+        weight_loss_ddf=1.5,
         eos_coefficient=1e-4,
         eval_idx=-1,
         layer_scale=1,
@@ -282,6 +290,7 @@ class DFineConfig(PretrainedConfig):
         lqe_layers=2,
         decoder_offset_scale=0.5,
         decoder_method="default",
+        up=0.5,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -375,6 +384,8 @@ class DFineConfig(PretrainedConfig):
         self.weight_loss_vfl = weight_loss_vfl
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
+        self.weight_loss_fgl = weight_loss_fgl
+        self.weight_loss_ddf = weight_loss_ddf
         self.eos_coefficient = eos_coefficient
         # add the new attributes with the given values or defaults
         self.eval_idx = eval_idx
@@ -387,6 +398,7 @@ class DFineConfig(PretrainedConfig):
         self.top_prob_values = top_prob_values
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
+        self.up = up
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:
@@ -706,7 +718,7 @@ class DFineDecoder(RTDetrDecoder):
         self.pre_bbox_head = DFineMLP(config.hidden_size, config.hidden_size, 4, 3)
         self.integral = DFineIntegral(config)
         self.num_head = config.decoder_attention_heads
-        self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
+        self.up = nn.Parameter(torch.tensor([config.up]), requires_grad=False)
         self.lqe_layers = nn.ModuleList([DFineLQE(config) for _ in range(config.decoder_layers)])
         self.layers = nn.ModuleList(
             [DFineDecoderLayer(config) for _ in range(config.decoder_layers)]
@@ -743,6 +755,8 @@ class DFineDecoder(RTDetrDecoder):
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
+        intermediate_predicted_corners = ()
+        initial_reference_points = ()
 
         output_detach = pred_corners_undetach = 0
 
@@ -803,7 +817,11 @@ class DFineDecoder(RTDetrDecoder):
                     all_cross_attentions += (output[2],)
 
         # Keep batch_size as first dimension
-        intermediate = torch.stack(intermediate, dim=1)
+        intermediate = torch.stack(intermediate)
+        intermediate_predicted_corners += (pred_corners,)
+        intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
+        initial_reference_points += (ref_points_initial,)
+        initial_reference_points = torch.stack(initial_reference_points, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -828,6 +846,8 @@ class DFineDecoder(RTDetrDecoder):
             last_hidden_state=hidden_states,
             intermediate_logits=intermediate_logits,
             intermediate_reference_points=intermediate_reference_points,
+            intermediate_predicted_corners=intermediate_predicted_corners,
+            initial_reference_points=initial_reference_points,
             intermediate_hidden_states=intermediate,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,

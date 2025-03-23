@@ -443,6 +443,8 @@ def RTDetrForObjectDetectionLoss(
     enc_topk_logits=None,
     enc_topk_bboxes=None,
     denoising_meta_values=None,
+    predicted_corners=None,
+    initial_reference_points=None,
     **kwargs,
 ):
     criterion = RTDetrLoss(config)
