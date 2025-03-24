@@ -172,12 +172,10 @@ def list_repo_templates(
         )
     except LocalEntryNotFoundError:  # No local repo means no local files
         return []
-    templates_dir = os.path.join(snapshot_dir, "templates")
-    return [
-        entry
-        for entry in os.listdir(templates_dir)
-        if os.path.isfile(os.path.join(templates_dir, entry)) and entry.endswith(".jinja")
-    ]
+    templates_dir = Path(snapshot_dir, "templates")
+    if not templates_dir.is_dir():
+        return []
+    return [entry.path for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
 
 
 def is_remote_url(url_or_filename):
