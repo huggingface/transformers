@@ -928,7 +928,7 @@ def _get_learning_rate(self):
 
 def _secs2timedelta(secs):
     """
-    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal.
+    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
     """
 
     msec = int(abs(secs - int(secs)) * 100)
