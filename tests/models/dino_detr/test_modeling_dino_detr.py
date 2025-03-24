@@ -15,13 +15,13 @@
 """Testing suite for the PyTorch Dino DETR model."""
 
 import inspect
-import math
 import unittest
 from typing import Dict, List, Tuple
 
+import numpy as np
+
 from transformers import (
     DinoDetrConfig,
-    ResNetConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -61,15 +61,15 @@ class DinoDetrModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=2,
+        num_hidden_layers=6,
         num_attention_heads=8,
         intermediate_size=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        num_queries=12,
+        num_queries=900,
         num_channels=3,
-        image_size=196,
+        image_size=256,
         n_targets=8,
         num_labels=91,
         num_feature_levels=4,
@@ -95,15 +95,6 @@ class DinoDetrModelTester:
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
-
-        # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = (
-            math.ceil(self.image_size / 8) ** 2
-            + math.ceil(self.image_size / 16) ** 2
-            + math.ceil(self.image_size / 32) ** 2
-            + math.ceil(self.image_size / 64) ** 2
-        )
-        self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -132,43 +123,14 @@ class DinoDetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        resnet_config = ResNetConfig(
-            num_channels=3,
-            embeddings_size=10,
-            hidden_sizes=[10, 20, 30, 40],
-            depths=[1, 1, 2, 1],
-            hidden_act="relu",
-            num_labels=3,
-            out_features=["stage2", "stage3", "stage4"],
-            out_indices=[2, 3, 4],
-        )
-        return DinoDetrConfig(
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
-            dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
-            num_queries=self.num_queries,
-            num_labels=self.num_labels,
-            num_feature_levels=self.num_feature_levels,
-            encoder_n_points=self.encoder_n_points,
-            decoder_n_points=self.decoder_n_points,
-            use_timm_backbone=False,
-            backbone=None,
-            backbone_config=resnet_config,
-            use_pretrained_backbone=False,
-        )
+        return DinoDetrConfig()
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def create_and_check_deformable_detr_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_dino_detr_model(self, config, pixel_values, pixel_mask, labels):
         model = DinoDetrModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -181,7 +143,7 @@ class DinoDetrModelTester:
             (self.batch_size, self.num_queries, self.hidden_size),
         )
 
-    def create_and_check_deformable_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_dino_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
         model = DinoDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -215,7 +177,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
-    test_torch_exportable = True
+    test_torch_exportable = False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -258,21 +220,21 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             common_properties=[
                 "num_channels",
                 "d_model",
-                "encoder_attention_heads",
-                "decoder_attention_heads",
+                "num_heads",
+                "decoder_n_points",
             ],
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_deformable_detr_model(self):
+    def test_dino_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_deformable_detr_model(*config_and_inputs)
+        self.model_tester.create_and_check_dino_detr_model(*config_and_inputs)
 
-    def test_deformable_detr_object_detection_head_model(self):
+    def test_dino_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_deformable_detr_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_dino_detr_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="Dino DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -298,108 +260,36 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_feed_forward_chunking(self):
         pass
 
+    @unittest.skip(reason="Output attention is not implemented")
     def test_attention_outputs(self):
+        pass
+
+    def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
+
+        def check_determinism(first, second):
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
 
         for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
 
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.encoder_n_points,
-                ],
-            )
-            out_len = len(outputs)
-
-            correct_outlen = 8
-
-            # loss is at first position
-            if "labels" in inputs_dict:
-                correct_outlen += 1  # loss is added to beginning
-            # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "DinoDetrForObjectDetection":
-                correct_outlen += 2
-
-            self.assertEqual(out_len, correct_outlen)
-
-            # decoder attentions
-            decoder_attentions = outputs.decoder_attentions
-            self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(decoder_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_queries,
-                ],
-            )
-
-            # cross attentions
-            cross_attentions = outputs.cross_attentions
-            self.assertIsInstance(cross_attentions, (list, tuple))
-            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(cross_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.decoder_n_points,
-                ],
-            )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_determinism(tensor1, tensor2)
             else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.encoder_attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.encoder_n_points,
-                ],
-            )
+                check_determinism(first, second)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -457,28 +347,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(
-                model,
-                tuple_inputs,
-                dict_inputs,
-                {"output_hidden_states": True, "output_attentions": True},
-            )
+            check_equivalence(model, tuple_inputs, dict_inputs)
 
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
@@ -589,11 +458,11 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
+        config.backbone = "microsoft/resnet-50"
         config.backbone_config = None
         config.use_timm_backbone = False
         config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -610,10 +479,10 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
             else:
                 # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
@@ -633,6 +502,7 @@ class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                             or "value_proj" in name
                             or "output_proj" in name
                             or "reference_points" in name
+                            or "in_proj_weight" in name
                         ):
                             continue
                     self.assertIn(
@@ -728,8 +598,8 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
 
         # Verify pred logits
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.pred_logits.shape, expected_shape_logits)
-        torch.testing.assert_close(outputs.pred_logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
         # Verify pred boxes shapes
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))

@@ -1648,7 +1648,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
 
         """
         num_select = num_select
-        out_logits, out_bbox = outputs.pred_logits, outputs.pred_boxes
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         assert len(out_logits) == len(target_sizes)
         assert target_sizes.shape[1] == 2
