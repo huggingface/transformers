@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
@@ -41,7 +42,7 @@ from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -60,11 +61,13 @@ class Phi4MultimodalModelTester:
     def __init__(
         self,
         parent,
-        batch_size=10,
-        seq_length=7,
+        batch_size=2,
+        seq_length=12,
+        image_seq_length=275,
+        audio_seq_length=8,
         is_training=True,
         num_hidden_layers=2,
-        vocab_size=99,
+        vocab_size=49,
         hidden_size=32,
         intermediate_size=64,
         num_attention_heads=8,
@@ -72,6 +75,10 @@ class Phi4MultimodalModelTester:
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
+        image_token_id=1,
+        audio_token_id=2,
+        image_size=16,
+        audio_size=12,
         audio_config=Phi4MultimodalAudioConfig(
             num_blocks=2,
             hidden_size=32,
@@ -85,6 +92,7 @@ class Phi4MultimodalModelTester:
             hidden_size=32,
             intermediate_size=64,
             num_attention_heads=8,
+            crop_size=16,
         ),
     ):
         self.parent = parent
@@ -97,12 +105,19 @@ class Phi4MultimodalModelTester:
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+        self.image_token_id = image_token_id
+        self.audio_token_id = audio_token_id
         self.audio_config = audio_config
         self.vision_config = vision_config
 
         self.is_training = is_training
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.seq_length = seq_length + image_seq_length + audio_seq_length
+        self.image_seq_length = image_seq_length
+        self.audio_seq_length = audio_seq_length
+        self.image_size = image_size
+        self.audio_size = audio_size
+        self.num_channels = 3
 
     def get_config(self):
         return Phi4MultimodalConfig(
@@ -121,17 +136,57 @@ class Phi4MultimodalModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        # The shapes corresponds to the inputs for image of size 16x16
+        image_pixel_values = floats_tensor([self.batch_size, 2, self.num_channels, self.image_size, self.image_size])
+        image_attention_mask = torch.ones(self.batch_size, 2, 1, 1)
+        image_sizes = torch.tensor(
+            [[self.image_size, self.image_size]] * self.batch_size, dtype=torch.long, device=torch_device
+        )
+
+        # Feature sizes returned by an audio of size 10000
+        audio_input_features = floats_tensor([self.batch_size, 61, 80])
+        audio_embed_sizes = torch.tensor([self.audio_seq_length] * self.batch_size, dtype=torch.long)
+
         input_ids[input_ids == self.pad_token_id] = self.pad_token_id + 1  # random value but not pad token
-        attention_mask = torch.tril(torch.ones_like(input_ids))
+        input_ids[-1, 0] = self.pad_token_id  # mask the last text token
+        input_ids[:, -self.image_seq_length - self.audio_seq_length : -self.audio_seq_length] = self.image_token_id
+        input_ids[:, -self.audio_seq_length :] = self.audio_token_id
+
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[-1, 0] = 0  # mask the last text token
         config = self.get_config()
 
-        return config, input_ids, attention_mask
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            image_pixel_values,
+            image_attention_mask,
+            image_sizes,
+            audio_input_features,
+            audio_embed_sizes,
+        )
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+            image_pixel_values,
+            image_attention_mask,
+            image_sizes,
+            audio_input_features,
+            audio_embed_sizes,
+        ) = self.prepare_config_and_inputs()
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "image_pixel_values": image_pixel_values,
+            "image_attention_mask": image_attention_mask,
+            "image_sizes": image_sizes,
+            "audio_input_features": audio_input_features,
+            "audio_embed_sizes": audio_embed_sizes,
         }
         return config, inputs_dict
 
@@ -188,12 +243,53 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Test tries to instantiate dynamiccache with an arg")
+    @unittest.skip(reason="Test tries to instantiate dynamic cache with an arg")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @unittest.skip(reason="Test is only for old attention format")
     def test_sdpa_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip(reason="Static cache supported only for text-only inputs (not images or audios)")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Static cache supported only for text-only inputs (not images or audios)")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip(
+        reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
+    )
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip(
+        reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
+    )
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip(reason="`image_attention_mask` has a specific shape")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip(reason="`image_attention_mask` has a specific shape")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="`image_attention_mask` has a specific shape")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason="Cannot unpad inputs for all modalities so easily")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Dynamo error")
+    def test_flex_attention_with_grads(self):
         pass
 
 
