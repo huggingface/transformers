@@ -1,4 +1,5 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,10 +32,12 @@ from ..utils.quantization_config import (
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
+    QuarkConfig,
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
 )
+from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bitnet import BitNetHfQuantizer
@@ -48,6 +51,7 @@ from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
@@ -60,6 +64,7 @@ AUTO_QUANTIZER_MAPPING = {
     "gptq": GptqHfQuantizer,
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
+    "quark": QuarkHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
@@ -80,6 +85,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gptq": GPTQConfig,
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
+    "quark": QuarkConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
@@ -226,3 +232,35 @@ class AutoHfQuantizer:
             )
             return False
         return True
+
+
+def register_quantization_config(method: str):
+    """Register a custom quantization configuration."""
+
+    def register_config_fn(cls):
+        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(f"Config '{method}' already registered")
+
+        if not issubclass(cls, QuantizationConfigMixin):
+            raise ValueError("Config must extend QuantizationConfigMixin")
+
+        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
+        return cls
+
+    return register_config_fn
+
+
+def register_quantizer(name: str):
+    """Register a custom quantizer."""
+
+    def register_quantizer_fn(cls):
+        if name in AUTO_QUANTIZER_MAPPING:
+            raise ValueError(f"Quantizer '{name}' already registered")
+
+        if not issubclass(cls, HfQuantizer):
+            raise ValueError("Quantizer must extend HfQuantizer")
+
+        AUTO_QUANTIZER_MAPPING[name] = cls
+        return cls
+
+    return register_quantizer_fn
