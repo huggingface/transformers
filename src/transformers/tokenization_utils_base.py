@@ -2025,10 +2025,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                                 )
                     else:
                         for template in list_repo_templates(
-                                pretrained_model_name_or_path,
-                                local_files_only=local_files_only,
-                                revision=revision,
-                                cache_dir=cache_dir,
+                            pretrained_model_name_or_path,
+                            local_files_only=local_files_only,
+                            revision=revision,
+                            cache_dir=cache_dir,
                         ):
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
