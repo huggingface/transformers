@@ -228,7 +228,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         else:
             raw_speech = [raw_speech[:, None].to(torch.float32)]
 
-        audio_lengths = [len(speech) for speech in raw_speech]
+        audio_lengths = [torch.tensor([len(speech)]) for speech in raw_speech]
 
         # if torch is available, let's make sure input_features and audio_lengths are PyTorch tensors
         # if not, it necessarily means that inputs are NumPy arrays
