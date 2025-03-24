@@ -1052,6 +1052,26 @@ class GraniteSpeechConformerBlock(nn.Module):
         return x
 
 
+
+GRANITE_SPEECH_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config (`GraniteSpeechConfig`):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+@add_start_docstrings(
+    "The bare Granite Speech Model outputting raw hidden-states without any specific head on top.",
+    GRANITE_SPEECH_START_DOCSTRING,
+)
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechConfig
     _supports_cache_class = True
@@ -1070,7 +1090,7 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-GRANITE_SPEECH_START_DOCSTRING = r"""
+GRANITE_SPEECH_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1080,10 +1100,13 @@ GRANITE_SPEECH_START_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        input_features (`torch.FloatTensor` of shape `(batch_size, #TODO, #TODO)): 
-            The tensors corresponding to the input images. input features can be obtained using
-            [`AutoImageProcessor`]. See [`GraniteSpeechFeatureExtractor.__call__`] for details.
+        input_features (`torch.FloatTensor` of shape `(batch_size, audio seq len, mel feat dim)):
+            The tensors corresponding to the input audios. input features can be obtained using
+            [`AutoFeatureExtractor`]. See [`GraniteSpeechFeatureExtractor.__call__`] for details.
             [`GraniteSpeechProcessor`] uses [`GraniteSpeechFeatureExtractor`] for processing audio.
+        input_mask (`torch.Tensor`, *optional*)
+            Mask for extracted audio features that should should be ignored when creating the merged
+            multimodal representation (i.e., due to padding).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1122,8 +1145,6 @@ GRANITE_SPEECH_START_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-
-
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -1188,7 +1209,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         projected_embeds = self.projector(encoder_embeds, None)
         return projected_embeds
 
-    @add_start_docstrings_to_model_forward(GRANITE_SPEECH_START_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GRANITE_SPEECH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GraniteSpeechCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
