@@ -1377,6 +1377,18 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
                 self.disable_adapters()
         return super().generate(*args, input_features=input_features, **kwargs)
 
+    def save_pretrained(self, *args, **kwargs):
+        # overwrite save_pretrained to first save the adapter if we have one
+        # NOTE - this will use the base model path we are exporting in the lora
+        # adapter, which may not necessarily be the best behavior, but for now
+        # we keep this for portability, since using the local dir causes problems
+        # if the model is loaded from outside of the current working dir.
+        if is_peft_available and self._hf_peft_config_loaded:
+            super().save_pretrained(*args, **kwargs)
+        # Then save the base model afterwards
+        self._hf_peft_config_loaded = False
+        super().save_pretrained(*args, **kwargs)
+
 
 __all__ = [
     "GraniteSpeechForConditionalGeneration",
