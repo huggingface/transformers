@@ -2,20 +2,6 @@
 from ..utils import DummyObject, requires_backends
 
 
-class MusicgenMelodyFeatureExtractor(metaclass=DummyObject):
-    _backends = ["torchaudio"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchaudio"])
-
-
-class MusicgenMelodyProcessor(metaclass=DummyObject):
-    _backends = ["torchaudio"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchaudio"])
-
-
 class GraniteSpeechFeatureExtractor(metaclass=DummyObject):
     _backends = ["torchaudio"]
 
@@ -24,6 +10,20 @@ class GraniteSpeechFeatureExtractor(metaclass=DummyObject):
 
 
 class GraniteSpeechProcessor(metaclass=DummyObject):
+    _backends = ["torchaudio"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchaudio"])
+
+
+class MusicgenMelodyFeatureExtractor(metaclass=DummyObject):
+    _backends = ["torchaudio"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchaudio"])
+
+
+class MusicgenMelodyProcessor(metaclass=DummyObject):
     _backends = ["torchaudio"]
 
     def __init__(self, *args, **kwargs):
