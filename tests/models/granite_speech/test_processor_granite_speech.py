@@ -129,14 +129,14 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
 
     @parameterized.expand([
         ([1, 269920], [171], torch.rand),
-        ([2, 269920], [171, 171], torch.rand),
         ([1, 269920], [171], np.random.rand),
-        ([2, 269920], [171, 171], np.random.rand),
     ])
     def test_audio_token_filling_same_len_feature_tensors(self, vec_dims, num_expected_features, random_func):
         """Ensure audio token filling is handled correctly when we have
         one or more audio inputs whose features are all the same length
         stacked into a tensor / numpy array.
+
+        NOTE: Currently we enforce that each sample can only have one audio.
         """
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -178,9 +178,11 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         num_expected_features = [90, 171]
         audios = [torch.rand(dims) - .5 for dims in vec_dims]
 
-        audio_tokens = processor.audio_token * len(vec_dims)
         inputs = processor(
-            text=f"{audio_tokens} Can you compare this audio?",
+            text=[
+                f"{processor.audio_token} Can you describe this audio?",
+                f"{processor.audio_token} How does it compare with this audio?",
+            ],
             audios=audios,
             return_tensors="pt"
         )
