@@ -51,7 +51,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 # Copied from transformers.tests.encodec.test_feature_extraction_dac.EncodecFeatureExtractionTester with Encodec->Dac
-class DacFeatureExtractionTester(unittest.TestCase):
+class DacFeatureExtractionTester:
     # Ignore copy
     def __init__(
         self,
@@ -165,9 +165,9 @@ class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         feature_extractor = DacFeatureExtractor()
         input_values = feature_extractor(input_audio, return_tensors="pt")["input_values"]
         self.assertEqual(input_values.shape, (1, 1, 93696))
-        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-4, atol=1e-4)
         audio_input_end = torch.tensor(input_audio[0][-30:], dtype=torch.float32)
-        self.assertTrue(torch.allclose(input_values[0, 0, -46:-16], audio_input_end, atol=1e-4))
+        torch.testing.assert_close(input_values[0, 0, -46:-16], audio_input_end, rtol=1e-4, atol=1e-4)
 
     # Ignore copy
     @unittest.skip("The DAC model doesn't support stereo logic")

@@ -470,7 +470,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings_xla)
 
     @slow
-    def test_greedy_generate(self):
+    def test_t5_greedy_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
@@ -520,7 +520,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
             self.assertListEqual(expected_output_string_xla, output_strings_xla)
 
     @slow
-    def test_sample_generate(self):
+    def test_t5_sample_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
@@ -618,7 +618,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_integration_test(self):
         """
-        For comparision run:
+        For comparison run:
         >>> import t5  # pip install t5==0.7.1
         >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
@@ -644,7 +644,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_v1_1_integration_test(self):
         """
-        For comparision run:
+        For comparison run:
         >>> import t5  # pip install t5==0.7.1
         >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
@@ -670,7 +670,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_byt5_integration_test(self):
         """
-        For comparision run:
+        For comparison run:
         >>> import t5  # pip install t5==0.9.1
 
         >>> path_to_byt5_small_checkpoint = '<fill_in>'

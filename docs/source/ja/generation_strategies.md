@@ -218,9 +218,13 @@ that\'s a terrible feeling."']
 
 貪欲探索とは異なり、ビームサーチデコーディングは各時間ステップでいくつかの仮説を保持し、最終的にシーケンス全体で最も確率が高い仮説を選択します。これにより、貪欲探索では無視されてしまう初期トークンの確率が低い高確率のシーケンスを特定する利点があります。
 
-このデコーディング戦略を有効にするには、`num_beams`（追跡する仮説の数）を1よりも大きな値に指定します。
+<a href="https://huggingface.co/spaces/m-ric/beam_search_visualizer" class="flex flex-col justify-center">
+    <img style="max-width: 90%; margin: auto;" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beam_search.png"/>
+</a>
 
-希望されるテキストの翻訳がお手伝いできて嬉しいです！もしさらなる質問やサポートが必要な場合は、お気軽にお知らせください。
+ビームサーチデコーディングの動作を[このインタラクティブデモ](https://huggingface.co/spaces/m-ric/beam_search_visualizer)で確認することができます。文章を入力し、パラメータをいじることでデコーディングビームがどのように変化するかを知ることができます。
+
+このデコーディング戦略を有効にするには、`num_beams`（追跡する仮説の数）を1よりも大きな値に指定します。
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer

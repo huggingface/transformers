@@ -305,10 +305,7 @@ There are two types of language modeling:
     ...     for pred in preds
     ... ]
     >>> preds
-    [{'score': 0.2236,
-      'token': 1761,
-      'token_str': ' platform',
-      'sequence': 'Hugging Face is a community-based open-source platform for machine learning.'}]
+    [{'score': 0.224, 'token': 3944, 'token_str': ' tool', 'sequence': 'Hugging Face is a community-based open-source tool for machine learning.'}]
     ```
 
 ## Multimodal

@@ -22,7 +22,7 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -156,35 +156,6 @@ class GPTNeoModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     def create_and_check_gpt_neo_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPTNeoModel(config=config)
@@ -405,7 +376,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTNeoModel,
@@ -509,7 +479,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # the last 2 tokens are masked, and should have 0 attn_probs
         self.assertTrue(torch.all(attn_probs[:, :, -mask_tokens:, -mask_tokens:] == 0))
 
-        # in loacal attention each token can only attend to the previous window_size tokens (inlcuding itself)
+        # in loacal attention each token can only attend to the previous window_size tokens (including itself)
         # here window_size is 4, so a token at index 5 can only attend to indcies [2, 3, 4, 5]
         # and the attn_probs should be 0 for token [0, 1]
         self.assertTrue(torch.all(attn_probs[:, :, 5, 2:6] != 0))

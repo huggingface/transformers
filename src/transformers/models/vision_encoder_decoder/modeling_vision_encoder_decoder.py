@@ -21,9 +21,9 @@ from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -147,7 +147,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
-class VisionEncoderDecoderModel(PreTrainedModel):
+class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     r"""
     [`VisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with
     one of the base vision model classes of the library as encoder and another one as decoder when created with the
@@ -160,6 +160,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -190,10 +192,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
+            encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -211,6 +213,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.encoder._attn_implementation = self.encoder.config._attn_implementation
+        self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
@@ -231,6 +235,9 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def get_input_embeddings(self):
+        return self.decoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -574,6 +581,9 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # num_items_in_batch is only needed for loss computation
+        num_items_in_batch = kwargs.pop("num_items_in_batch", None)
+
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
@@ -630,8 +640,13 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         loss = None
         if labels is not None:
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
+
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.decoder.config.vocab_size,
+                num_items_in_batch=num_items_in_batch,
+            )
 
         if not return_dict:
             if loss is not None:
@@ -654,27 +669,9 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
-    ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
-        input_dict = {
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "decoder_input_ids": decoder_inputs["input_ids"],
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_inputs["past_key_values"],
-            "use_cache": use_cache,
-        }
-        return input_dict
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Resizing the embedding layers via the VisionEncoderDecoderModel directly is not supported.Please use the"
-            " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
-        )
-
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+
+__all__ = ["VisionEncoderDecoderModel"]

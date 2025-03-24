@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -180,8 +179,6 @@ def load_pytorch_checkpoint_in_tf2_model(
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
         from safetensors.torch import load_file as safe_load_file  # noqa: F401
-
-        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -201,7 +198,7 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            weights_only_kwarg = {"weights_only": True}
             state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
 
         pt_state_dict.update(state_dict)

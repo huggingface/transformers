@@ -982,9 +982,8 @@ class TFSamVisionAttention(keras.layers.Layer):
 
         return tf.gather(rel_pos_resized, tf.cast(relative_coords, tf.int32))
 
-    def add_decomposed_rel_pos(
+    def get_decomposed_rel_pos(
         self,
-        attn: tf.Tensor,
         query: tf.Tensor,
         rel_pos_h: tf.Tensor,
         rel_pos_w: tf.Tensor,
@@ -996,8 +995,6 @@ class TFSamVisionAttention(keras.layers.Layer):
         https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
 
         Args:
-            attn (`tf.Tensor`):
-                attention map.
             query (`tf.Tensor`):
                 query q in the attention layer with shape (batch_size, query_height * query_width, channel).
             rel_pos_h (`tf.Tensor`):
@@ -1010,8 +1007,8 @@ class TFSamVisionAttention(keras.layers.Layer):
                 spatial sequence size of key k with (key_height, key_width).
 
         Returns:
-            attn (`tf.Tensor`):
-                attention map with added relative positional embeddings.
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
         """
         query_height, query_width = q_size
         key_height, key_width = k_size
@@ -1022,10 +1019,12 @@ class TFSamVisionAttention(keras.layers.Layer):
         reshaped_query = tf.reshape(query, (batch_size, query_height, query_width, dim))
         rel_h = tf.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
         rel_w = tf.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
-        attn = tf.reshape(attn, (batch_size, query_height, query_width, key_height, key_width))
-        attn = attn + tf.expand_dims(rel_h, axis=-1) + tf.expand_dims(rel_w, axis=-2)
-        attn = tf.reshape(attn, (batch_size, query_height * query_width, key_height * key_width))
-        return attn
+
+        rel_h = tf.expand_dims(rel_h, axis=-1)
+        rel_w = tf.expand_dims(rel_w, axis=-2)
+        decomposed_rel_pos = rel_h + rel_w
+
+        return decomposed_rel_pos
 
     def call(self, hidden_states: tf.Tensor, output_attentions=False, training=False) -> tf.Tensor:
         batch_size, height, width, _ = shape_list(hidden_states)
@@ -1039,9 +1038,11 @@ class TFSamVisionAttention(keras.layers.Layer):
         attn_weights = tf.matmul(query * self.scale, key, transpose_b=True)
 
         if self.use_rel_pos:
-            attn_weights = self.add_decomposed_rel_pos(
-                attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )
+            decomposed_rel_pos = tf.reshape(decomposed_rel_pos, shape_list(attn_weights))
+            attn_weights = attn_weights + decomposed_rel_pos
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
@@ -1650,3 +1651,6 @@ class TFSamModel(TFSamPreTrainedModel):
         if getattr(self, "mask_decoder", None) is not None:
             with tf.name_scope(self.mask_decoder.name):
                 self.mask_decoder.build(None)
+
+
+__all__ = ["TFSamModel", "TFSamPreTrainedModel"]

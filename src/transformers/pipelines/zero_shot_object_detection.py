@@ -7,7 +7,7 @@ from .base import ChunkPipeline, build_pipeline_init_args
 if is_vision_available():
     from PIL import Image
 
-    from ..image_utils import load_image
+    from ..image_utils import load_image, valid_images
 
 if is_torch_available():
     import torch
@@ -130,8 +130,23 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
         if isinstance(image, (str, Image.Image)):
             inputs = {"image": image, "candidate_labels": candidate_labels}
+        elif isinstance(image, (list, tuple)) and valid_images(image):
+            return list(
+                super().__call__(
+                    ({"image": img, "candidate_labels": labels} for img, labels in zip(image, candidate_labels)),
+                    **kwargs,
+                )
+            )
         else:
+            """
+            Supports the following format
+            - {"image": image, "candidate_labels": candidate_labels}
+            - [{"image": image, "candidate_labels": candidate_labels}]
+            - Generator and datasets
+            This is a common pattern in other multimodal pipelines, so we support it here as well.
+            """
             inputs = image
+
         results = super().__call__(inputs, **kwargs)
         return results
 

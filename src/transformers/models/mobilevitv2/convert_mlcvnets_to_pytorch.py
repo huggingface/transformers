@@ -314,7 +314,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--orig_checkpoint_path", required=True, type=str, help="Path to the original state dict (.pt file)."
     )
-    parser.add_argument("--orig_config_path", required=True, type=str, help="Path to the original config file.")
+    parser.add_argument(
+        "--orig_config_path",
+        required=True,
+        type=str,
+        help="Path to the original config file. yaml.load will be used to load the file, please be wary of which file you're loading.",
+    )
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
     )

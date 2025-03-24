@@ -80,6 +80,18 @@ class ProcessingUtilTester(unittest.TestCase):
         self.assertTrue(np.array_equal(valid_images[0], images[0]))
         self.assertEqual(valid_text, text)
 
+        # list of strings and list of url images inputs
+        images = ["https://url1", "https://url2"]
+        text = ["text1", "text2"]
+        # test correct text and images order
+        valid_images, valid_text = _validate_images_text_input_order(images=images, text=text)
+        self.assertEqual(valid_images, images)
+        self.assertEqual(valid_text, text)
+        # test incorrect text and images order
+        valid_images, valid_text = _validate_images_text_input_order(images=text, text=images)
+        self.assertEqual(valid_images, images)
+        self.assertEqual(valid_text, text)
+
         # list of strings and nested list of numpy images inputs
         images = [[np.random.rand(224, 224, 3), np.random.rand(224, 224, 3)], [np.random.rand(224, 224, 3)]]
         text = ["text1", "text2"]

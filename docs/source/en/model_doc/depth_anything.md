@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Depth Anything
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Depth Anything model was proposed in [Depth Anything: Unleashing the Power of Large-Scale Unlabeled Data](https://arxiv.org/abs/2401.10891) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao. Depth Anything is based on the [DPT](dpt) architecture, trained on ~62 million images, obtaining state-of-the-art results for both relative and absolute depth estimation.
@@ -84,27 +88,24 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
-...     predicted_depth = outputs.predicted_depth
 
->>> # interpolate to original size
->>> prediction = torch.nn.functional.interpolate(
-...     predicted_depth.unsqueeze(1),
-...     size=image.size[::-1],
-...     mode="bicubic",
-...     align_corners=False,
+>>> # interpolate to original size and visualize the prediction
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     target_sizes=[(image.height, image.width)],
 ... )
 
->>> # visualize the prediction
->>> output = prediction.squeeze().cpu().numpy()
->>> formatted = (output * 255 / np.max(output)).astype("uint8")
->>> depth = Image.fromarray(formatted)
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
+>>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+>>> depth = depth.detach().cpu().numpy() * 255
+>>> depth = Image.fromarray(depth.astype("uint8"))
 ```
 
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Depth Anything.
 
-- [Monocular depth estimation task guide](../tasks/depth_estimation)
+- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
 - A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.

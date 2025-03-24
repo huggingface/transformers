@@ -35,7 +35,7 @@ if is_vision_available():
     from transformers import ConditionalDetrImageProcessor
 
 
-class ConditionalDetrImageProcessingTester(unittest.TestCase):
+class ConditionalDetrImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -179,31 +179,31 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # verify area
         expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
+        torch.testing.assert_close(encoding["labels"][0]["area"], expected_area)
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
+        torch.testing.assert_close(encoding["labels"][0]["boxes"][0], expected_boxes_slice, rtol=1e-3, atol=1e-3)
         # verify image_id
         expected_image_id = torch.tensor([39769])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
+        torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
         # verify is_crowd
         expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
+        torch.testing.assert_close(encoding["labels"][0]["iscrowd"], expected_is_crowd)
         # verify class_labels
         expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
+        torch.testing.assert_close(encoding["labels"][0]["class_labels"], expected_class_labels)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
+        torch.testing.assert_close(encoding["labels"][0]["orig_size"], expected_orig_size)
         # verify size
         expected_size = torch.tensor([800, 1066])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
+        torch.testing.assert_close(encoding["labels"][0]["size"], expected_size)
 
     @slow
     def test_call_pytorch_with_coco_panoptic_annotations(self):
@@ -225,34 +225,34 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(encoding["pixel_values"][0, 0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # verify area
         expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
+        torch.testing.assert_close(encoding["labels"][0]["area"], expected_area)
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
+        torch.testing.assert_close(encoding["labels"][0]["boxes"][0], expected_boxes_slice, rtol=1e-3, atol=1e-3)
         # verify image_id
         expected_image_id = torch.tensor([39769])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
+        torch.testing.assert_close(encoding["labels"][0]["image_id"], expected_image_id)
         # verify is_crowd
         expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
+        torch.testing.assert_close(encoding["labels"][0]["iscrowd"], expected_is_crowd)
         # verify class_labels
         expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
+        torch.testing.assert_close(encoding["labels"][0]["class_labels"], expected_class_labels)
         # verify masks
         expected_masks_sum = 822873
         self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
+        torch.testing.assert_close(encoding["labels"][0]["orig_size"], expected_orig_size)
         # verify size
         expected_size = torch.tensor([800, 1066])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
+        torch.testing.assert_close(encoding["labels"][0]["size"], expected_size)
 
     @slow
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr->ConditionalDetr, facebook/detr-resnet-50 ->microsoft/conditional-detr-resnet-50
@@ -282,96 +282,97 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        image_processing = ConditionalDetrImageProcessor()
-        encoding = image_processing(
-            images=images,
-            annotations=annotations,
-            return_segmentation_masks=True,
-            return_tensors="pt",  # do_convert_annotations=True
-        )
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class()
+            encoding = image_processing(
+                images=images,
+                annotations=annotations,
+                return_segmentation_masks=True,
+                return_tensors="pt",  # do_convert_annotations=True
+            )
 
-        # Check the pixel values have been padded
-        postprocessed_height, postprocessed_width = 800, 1066
-        expected_shape = torch.Size([2, 3, postprocessed_height, postprocessed_width])
-        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+            # Check the pixel values have been padded
+            postprocessed_height, postprocessed_width = 800, 1066
+            expected_shape = torch.Size([2, 3, postprocessed_height, postprocessed_width])
+            self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
-        # Check the bounding boxes have been adjusted for padded images
-        self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
-        self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
-        expected_boxes_0 = torch.tensor(
-            [
-                [0.6879, 0.4609, 0.0755, 0.3691],
-                [0.2118, 0.3359, 0.2601, 0.1566],
-                [0.5011, 0.5000, 0.9979, 1.0000],
-                [0.5010, 0.5020, 0.9979, 0.9959],
-                [0.3284, 0.5944, 0.5884, 0.8112],
-                [0.8394, 0.5445, 0.3213, 0.9110],
-            ]
-        )
-        expected_boxes_1 = torch.tensor(
-            [
-                [0.4130, 0.2765, 0.0453, 0.2215],
-                [0.1272, 0.2016, 0.1561, 0.0940],
-                [0.3757, 0.4933, 0.7488, 0.9865],
-                [0.3759, 0.5002, 0.7492, 0.9955],
-                [0.1971, 0.5456, 0.3532, 0.8646],
-                [0.5790, 0.4115, 0.3430, 0.7161],
-            ]
-        )
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3))
-        self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3))
+            # Check the bounding boxes have been adjusted for padded images
+            self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
+            self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
+            expected_boxes_0 = torch.tensor(
+                [
+                    [0.6879, 0.4609, 0.0755, 0.3691],
+                    [0.2118, 0.3359, 0.2601, 0.1566],
+                    [0.5011, 0.5000, 0.9979, 1.0000],
+                    [0.5010, 0.5020, 0.9979, 0.9959],
+                    [0.3284, 0.5944, 0.5884, 0.8112],
+                    [0.8394, 0.5445, 0.3213, 0.9110],
+                ]
+            )
+            expected_boxes_1 = torch.tensor(
+                [
+                    [0.4130, 0.2765, 0.0453, 0.2215],
+                    [0.1272, 0.2016, 0.1561, 0.0940],
+                    [0.3757, 0.4933, 0.7488, 0.9865],
+                    [0.3759, 0.5002, 0.7492, 0.9955],
+                    [0.1971, 0.5456, 0.3532, 0.8646],
+                    [0.5790, 0.4115, 0.3430, 0.7161],
+                ]
+            )
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
-        # Check the masks have also been padded
-        self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
-        self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
+            # Check the masks have also been padded
+            self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
+            self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
 
-        # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
-        # format and not in the range [0, 1]
-        encoding = image_processing(
-            images=images,
-            annotations=annotations,
-            return_segmentation_masks=True,
-            do_convert_annotations=False,
-            return_tensors="pt",
-        )
-        self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
-        self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
-        # Convert to absolute coordinates
-        unnormalized_boxes_0 = torch.vstack(
-            [
-                expected_boxes_0[:, 0] * postprocessed_width,
-                expected_boxes_0[:, 1] * postprocessed_height,
-                expected_boxes_0[:, 2] * postprocessed_width,
-                expected_boxes_0[:, 3] * postprocessed_height,
-            ]
-        ).T
-        unnormalized_boxes_1 = torch.vstack(
-            [
-                expected_boxes_1[:, 0] * postprocessed_width,
-                expected_boxes_1[:, 1] * postprocessed_height,
-                expected_boxes_1[:, 2] * postprocessed_width,
-                expected_boxes_1[:, 3] * postprocessed_height,
-            ]
-        ).T
-        # Convert from centre_x, centre_y, width, height to x_min, y_min, x_max, y_max
-        expected_boxes_0 = torch.vstack(
-            [
-                unnormalized_boxes_0[:, 0] - unnormalized_boxes_0[:, 2] / 2,
-                unnormalized_boxes_0[:, 1] - unnormalized_boxes_0[:, 3] / 2,
-                unnormalized_boxes_0[:, 0] + unnormalized_boxes_0[:, 2] / 2,
-                unnormalized_boxes_0[:, 1] + unnormalized_boxes_0[:, 3] / 2,
-            ]
-        ).T
-        expected_boxes_1 = torch.vstack(
-            [
-                unnormalized_boxes_1[:, 0] - unnormalized_boxes_1[:, 2] / 2,
-                unnormalized_boxes_1[:, 1] - unnormalized_boxes_1[:, 3] / 2,
-                unnormalized_boxes_1[:, 0] + unnormalized_boxes_1[:, 2] / 2,
-                unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
-            ]
-        ).T
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
-        self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
+            # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
+            # format and not in the range [0, 1]
+            encoding = image_processing(
+                images=images,
+                annotations=annotations,
+                return_segmentation_masks=True,
+                do_convert_annotations=False,
+                return_tensors="pt",
+            )
+            self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
+            self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
+            # Convert to absolute coordinates
+            unnormalized_boxes_0 = torch.vstack(
+                [
+                    expected_boxes_0[:, 0] * postprocessed_width,
+                    expected_boxes_0[:, 1] * postprocessed_height,
+                    expected_boxes_0[:, 2] * postprocessed_width,
+                    expected_boxes_0[:, 3] * postprocessed_height,
+                ]
+            ).T
+            unnormalized_boxes_1 = torch.vstack(
+                [
+                    expected_boxes_1[:, 0] * postprocessed_width,
+                    expected_boxes_1[:, 1] * postprocessed_height,
+                    expected_boxes_1[:, 2] * postprocessed_width,
+                    expected_boxes_1[:, 3] * postprocessed_height,
+                ]
+            ).T
+            # Convert from centre_x, centre_y, width, height to x_min, y_min, x_max, y_max
+            expected_boxes_0 = torch.vstack(
+                [
+                    unnormalized_boxes_0[:, 0] - unnormalized_boxes_0[:, 2] / 2,
+                    unnormalized_boxes_0[:, 1] - unnormalized_boxes_0[:, 3] / 2,
+                    unnormalized_boxes_0[:, 0] + unnormalized_boxes_0[:, 2] / 2,
+                    unnormalized_boxes_0[:, 1] + unnormalized_boxes_0[:, 3] / 2,
+                ]
+            ).T
+            expected_boxes_1 = torch.vstack(
+                [
+                    unnormalized_boxes_1[:, 0] - unnormalized_boxes_1[:, 2] / 2,
+                    unnormalized_boxes_1[:, 1] - unnormalized_boxes_1[:, 3] / 2,
+                    unnormalized_boxes_1[:, 0] + unnormalized_boxes_1[:, 2] / 2,
+                    unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
+                ]
+            ).T
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->ConditionalDetr
     def test_batched_coco_panoptic_annotations(self):
@@ -402,146 +403,148 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         images = [image_0, image_1]
         annotations = [annotation_0, annotation_1]
 
-        # encode them
-        image_processing = ConditionalDetrImageProcessor(format="coco_panoptic")
-        encoding = image_processing(
-            images=images,
-            annotations=annotations,
-            masks_path=masks_path,
-            return_tensors="pt",
-            return_segmentation_masks=True,
-        )
+        for image_processing_class in self.image_processor_list:
+            # encode them
+            image_processing = image_processing_class(format="coco_panoptic")
+            encoding = image_processing(
+                images=images,
+                annotations=annotations,
+                masks_path=masks_path,
+                return_tensors="pt",
+                return_segmentation_masks=True,
+            )
 
-        # Check the pixel values have been padded
-        postprocessed_height, postprocessed_width = 800, 1066
-        expected_shape = torch.Size([2, 3, postprocessed_height, postprocessed_width])
-        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+            # Check the pixel values have been padded
+            postprocessed_height, postprocessed_width = 800, 1066
+            expected_shape = torch.Size([2, 3, postprocessed_height, postprocessed_width])
+            self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
-        # Check the bounding boxes have been adjusted for padded images
-        self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
-        self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
-        expected_boxes_0 = torch.tensor(
-            [
-                [0.2625, 0.5437, 0.4688, 0.8625],
-                [0.7719, 0.4104, 0.4531, 0.7125],
-                [0.5000, 0.4927, 0.9969, 0.9854],
-                [0.1688, 0.2000, 0.2063, 0.0917],
-                [0.5492, 0.2760, 0.0578, 0.2187],
-                [0.4992, 0.4990, 0.9984, 0.9979],
-            ]
-        )
-        expected_boxes_1 = torch.tensor(
-            [
-                [0.1576, 0.3262, 0.2814, 0.5175],
-                [0.4634, 0.2463, 0.2720, 0.4275],
-                [0.3002, 0.2956, 0.5985, 0.5913],
-                [0.1013, 0.1200, 0.1238, 0.0550],
-                [0.3297, 0.1656, 0.0347, 0.1312],
-                [0.2997, 0.2994, 0.5994, 0.5987],
-            ]
-        )
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3))
-        self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3))
+            # Check the bounding boxes have been adjusted for padded images
+            self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
+            self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
+            expected_boxes_0 = torch.tensor(
+                [
+                    [0.2625, 0.5437, 0.4688, 0.8625],
+                    [0.7719, 0.4104, 0.4531, 0.7125],
+                    [0.5000, 0.4927, 0.9969, 0.9854],
+                    [0.1688, 0.2000, 0.2063, 0.0917],
+                    [0.5492, 0.2760, 0.0578, 0.2187],
+                    [0.4992, 0.4990, 0.9984, 0.9979],
+                ]
+            )
+            expected_boxes_1 = torch.tensor(
+                [
+                    [0.1576, 0.3262, 0.2814, 0.5175],
+                    [0.4634, 0.2463, 0.2720, 0.4275],
+                    [0.3002, 0.2956, 0.5985, 0.5913],
+                    [0.1013, 0.1200, 0.1238, 0.0550],
+                    [0.3297, 0.1656, 0.0347, 0.1312],
+                    [0.2997, 0.2994, 0.5994, 0.5987],
+                ]
+            )
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
-        # Check the masks have also been padded
-        self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
-        self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
+            # Check the masks have also been padded
+            self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
+            self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
 
-        # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
-        # format and not in the range [0, 1]
-        encoding = image_processing(
-            images=images,
-            annotations=annotations,
-            masks_path=masks_path,
-            return_segmentation_masks=True,
-            do_convert_annotations=False,
-            return_tensors="pt",
-        )
-        self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
-        self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
-        # Convert to absolute coordinates
-        unnormalized_boxes_0 = torch.vstack(
-            [
-                expected_boxes_0[:, 0] * postprocessed_width,
-                expected_boxes_0[:, 1] * postprocessed_height,
-                expected_boxes_0[:, 2] * postprocessed_width,
-                expected_boxes_0[:, 3] * postprocessed_height,
-            ]
-        ).T
-        unnormalized_boxes_1 = torch.vstack(
-            [
-                expected_boxes_1[:, 0] * postprocessed_width,
-                expected_boxes_1[:, 1] * postprocessed_height,
-                expected_boxes_1[:, 2] * postprocessed_width,
-                expected_boxes_1[:, 3] * postprocessed_height,
-            ]
-        ).T
-        # Convert from centre_x, centre_y, width, height to x_min, y_min, x_max, y_max
-        expected_boxes_0 = torch.vstack(
-            [
-                unnormalized_boxes_0[:, 0] - unnormalized_boxes_0[:, 2] / 2,
-                unnormalized_boxes_0[:, 1] - unnormalized_boxes_0[:, 3] / 2,
-                unnormalized_boxes_0[:, 0] + unnormalized_boxes_0[:, 2] / 2,
-                unnormalized_boxes_0[:, 1] + unnormalized_boxes_0[:, 3] / 2,
-            ]
-        ).T
-        expected_boxes_1 = torch.vstack(
-            [
-                unnormalized_boxes_1[:, 0] - unnormalized_boxes_1[:, 2] / 2,
-                unnormalized_boxes_1[:, 1] - unnormalized_boxes_1[:, 3] / 2,
-                unnormalized_boxes_1[:, 0] + unnormalized_boxes_1[:, 2] / 2,
-                unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
-            ]
-        ).T
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
-        self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
+            # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
+            # format and not in the range [0, 1]
+            encoding = image_processing(
+                images=images,
+                annotations=annotations,
+                masks_path=masks_path,
+                return_segmentation_masks=True,
+                do_convert_annotations=False,
+                return_tensors="pt",
+            )
+            self.assertEqual(encoding["labels"][0]["boxes"].shape, torch.Size([6, 4]))
+            self.assertEqual(encoding["labels"][1]["boxes"].shape, torch.Size([6, 4]))
+            # Convert to absolute coordinates
+            unnormalized_boxes_0 = torch.vstack(
+                [
+                    expected_boxes_0[:, 0] * postprocessed_width,
+                    expected_boxes_0[:, 1] * postprocessed_height,
+                    expected_boxes_0[:, 2] * postprocessed_width,
+                    expected_boxes_0[:, 3] * postprocessed_height,
+                ]
+            ).T
+            unnormalized_boxes_1 = torch.vstack(
+                [
+                    expected_boxes_1[:, 0] * postprocessed_width,
+                    expected_boxes_1[:, 1] * postprocessed_height,
+                    expected_boxes_1[:, 2] * postprocessed_width,
+                    expected_boxes_1[:, 3] * postprocessed_height,
+                ]
+            ).T
+            # Convert from centre_x, centre_y, width, height to x_min, y_min, x_max, y_max
+            expected_boxes_0 = torch.vstack(
+                [
+                    unnormalized_boxes_0[:, 0] - unnormalized_boxes_0[:, 2] / 2,
+                    unnormalized_boxes_0[:, 1] - unnormalized_boxes_0[:, 3] / 2,
+                    unnormalized_boxes_0[:, 0] + unnormalized_boxes_0[:, 2] / 2,
+                    unnormalized_boxes_0[:, 1] + unnormalized_boxes_0[:, 3] / 2,
+                ]
+            ).T
+            expected_boxes_1 = torch.vstack(
+                [
+                    unnormalized_boxes_1[:, 0] - unnormalized_boxes_1[:, 2] / 2,
+                    unnormalized_boxes_1[:, 1] - unnormalized_boxes_1[:, 3] / 2,
+                    unnormalized_boxes_1[:, 0] + unnormalized_boxes_1[:, 2] / 2,
+                    unnormalized_boxes_1[:, 1] + unnormalized_boxes_1[:, 3] / 2,
+                ]
+            ).T
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->ConditionalDetr
     def test_max_width_max_height_resizing_and_pad_strategy(self):
-        image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
+        for image_processing_class in self.image_processor_list:
+            image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
-        # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
-        image_processor = ConditionalDetrImageProcessor(
-            size={"max_height": 100, "max_width": 100},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_1], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 50]))
+            # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
+            image_processor = image_processing_class(
+                size={"max_height": 100, "max_width": 100},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_1], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 50]))
 
-        # do_pad=False, max_height=300, max_width=100, image=200x100 -> 200x100
-        image_processor = ConditionalDetrImageProcessor(
-            size={"max_height": 300, "max_width": 100},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_1], return_tensors="pt")
+            # do_pad=False, max_height=300, max_width=100, image=200x100 -> 200x100
+            image_processor = image_processing_class(
+                size={"max_height": 300, "max_width": 100},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_1], return_tensors="pt")
 
-        # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
-        image_processor = ConditionalDetrImageProcessor(
-            size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
-        )
-        inputs = image_processor(images=[image_1], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))
+            # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
+            image_processor = image_processing_class(
+                size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
+            )
+            inputs = image_processor(images=[image_1], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))
 
-        # do_pad=True, max_height=300, max_width=100, image=200x100 -> 300x100
-        image_processor = ConditionalDetrImageProcessor(
-            size={"max_height": 300, "max_width": 100},
-            do_pad=True,
-            pad_size={"height": 301, "width": 101},
-        )
-        inputs = image_processor(images=[image_1], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 301, 101]))
+            # do_pad=True, max_height=300, max_width=100, image=200x100 -> 300x100
+            image_processor = image_processing_class(
+                size={"max_height": 300, "max_width": 100},
+                do_pad=True,
+                pad_size={"height": 301, "width": 101},
+            )
+            inputs = image_processor(images=[image_1], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 301, 101]))
 
-        ### Check for batch
-        image_2 = torch.ones([100, 150, 3], dtype=torch.uint8)
+            ### Check for batch
+            image_2 = torch.ones([100, 150, 3], dtype=torch.uint8)
 
-        # do_pad=True, max_height=150, max_width=100, images=[200x100, 100x150] -> 150x100
-        image_processor = ConditionalDetrImageProcessor(
-            size={"max_height": 150, "max_width": 100},
-            do_pad=True,
-            pad_size={"height": 150, "width": 100},
-        )
-        inputs = image_processor(images=[image_1, image_2], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
+            # do_pad=True, max_height=150, max_width=100, images=[200x100, 100x150] -> 150x100
+            image_processor = image_processing_class(
+                size={"max_height": 150, "max_width": 100},
+                do_pad=True,
+                pad_size={"height": 150, "width": 100},
+            )
+            inputs = image_processor(images=[image_1, image_2], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
 
     def test_longest_edge_shortest_edge_resizing_strategy(self):
         image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)

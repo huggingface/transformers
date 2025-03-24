@@ -279,13 +279,13 @@ class SiglipVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1]
-        num_positions = self.position_embeddings.shape[1]
+        num_positions = self.position_embedding.weight.shape[0]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding(self.position_ids)
 
-        patch_pos_embed = self.position_embeddings
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
 
         dim = embeddings.shape[-1]
 
@@ -308,7 +308,8 @@ class SiglipVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         if interpolate_pos_encoding:
@@ -339,6 +340,13 @@ class SiglipTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -437,12 +445,11 @@ class SiglipFlashAttention2(SiglipAttention):
 
     is_causal = False
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
@@ -464,15 +471,9 @@ class SiglipFlashAttention2(SiglipAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim)
 
         dropout_rate = self.dropout if self.training else 0.0
 
@@ -669,6 +670,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+
     _no_split_modules = [
         "SiglipTextEmbeddings",
         "SiglipEncoderLayer",
@@ -928,7 +930,7 @@ class SiglipTextTransformer(nn.Module):
         self.encoder = SiglipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-        self.head = nn.Linear(embed_dim, embed_dim)
+        self.head = nn.Linear(embed_dim, config.projection_size)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
@@ -1218,8 +1220,8 @@ class SiglipModel(SiglipPreTrainedModel):
         vision_config = config.vision_config
 
         # First, initialize the text and vision models with proper attention implementation
-        text_model = SiglipTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
-        vision_model = SiglipVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        text_model = SiglipTextModel._from_config(text_config)
+        vision_model = SiglipVisionModel._from_config(vision_config)
 
         # Second, get the text and vision submodules (for backward compatibility)
         self.text_model = text_model.text_model
@@ -1407,10 +1409,11 @@ class SiglipModel(SiglipPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = (
-            torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * self.logit_scale.exp()
-            + self.logit_bias
-        )
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
+
+        logit_scale, logit_bias = self.logit_scale.to(text_embeds.device), self.logit_bias.to(text_embeds.device)
+        logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
+
         logits_per_image = logits_per_text.t()
 
         loss = None
@@ -1454,9 +1457,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
 
         # Create the vision model with proper attention
         # and take only vision_model submodule (for backward compatibility)
-        vision_model = SiglipVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        vision_model = SiglipVisionModel._from_config(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         # Classifier head
@@ -1567,3 +1568,12 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "SiglipModel",
+    "SiglipPreTrainedModel",
+    "SiglipTextModel",
+    "SiglipVisionModel",
+    "SiglipForImageClassification",
+]
