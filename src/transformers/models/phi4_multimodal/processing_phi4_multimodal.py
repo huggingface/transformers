@@ -130,10 +130,8 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         image_token = self.tokenizer.image_token
         audio_token = self.tokenizer.audio_token
-        compatible_image_token_pattern = rf"{self.fake_image_token_pattern}"
-        compatible_audio_token_pattern = rf"{self.fake_audio_token_pattern}"
-        processed_text = [re.sub(compatible_image_token_pattern, image_token, t) for t in text]
-        processed_text = [re.sub(compatible_audio_token_pattern, audio_token, t) for t in processed_text]
+        processed_text = [re.sub(self.fake_image_token_pattern, image_token, t) for t in text]
+        processed_text = [re.sub(self.fake_audio_token_pattern, audio_token, t) for t in processed_text]
 
         # Check that the number of special tokens is sound
         concatenated_prompt = "".join(processed_text)
