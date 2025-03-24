@@ -94,7 +94,6 @@ class GraniteSpeechConfig(PretrainedConfig):
         text_config=None,
         projector_config=None,
         audio_token_index=49155,
-        tie_word_embeddings=True,
         initializer_range=0.02,
         has_lora_adapter=True,
         **kwargs,
@@ -123,6 +122,6 @@ class GraniteSpeechConfig(PretrainedConfig):
         self.audio_token_index = audio_token_index
         self.initializer_range = initializer_range
         self.has_lora_adapter = has_lora_adapter
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechProjectorConfig", "GraniteSpeechConfig"]
