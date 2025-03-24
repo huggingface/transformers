@@ -65,6 +65,7 @@ class DeepseekVLProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         self.num_image_tokens = 576
+        self.image_token = "<image_placeholder>" # TODO: remove this
         self.use_default_system_prompt = use_default_system_prompt
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -119,7 +120,9 @@ class DeepseekVLProcessor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         prompt_strings = []
+        one_img_tokens = self.image_token * self.num_image_tokens
         for prompt in text:
+            prompt = prompt.replace(self.image_token, one_img_tokens)
             if self.use_default_system_prompt:
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
             prompt_strings.append(prompt)

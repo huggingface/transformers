@@ -75,6 +75,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+# Adopted from https://github.com/deepseek-ai/DeepSeek-VL/blob/main/deepseek_vl/utils/conversation.py#L80-L91
 CHAT_TEMPLATE = (
     # Define separators and initialize counter
     "{% set seps = ['\n\n', '<\uff5cend\u2581of\u2581sentence\uff5c>'] %}"
@@ -97,9 +98,9 @@ CHAT_TEMPLATE = (
 
             # If content is an image, replace with placeholder
             "{% if content['type'] == 'image' %}"
-                "{% if not loop.first %}{{ '\n' }}{% endif %}"
+                # "{% if not loop.first %}{{ '\n' }}{% endif %}"
                 "<image_placeholder>"
-                "{% if not loop.last %}{{ '\n' }}{% endif %}"
+                # "{% if not loop.last %}{{ '\n' }}{% endif %}"
 
             # If content is text, handle formatting
             "{% elif content['type'] == 'text' %}"
