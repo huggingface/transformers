@@ -26,6 +26,7 @@ from transformers import (
     Phi4MultimodalAudioConfig,
     Phi4MultimodalConfig,
     Phi4MultimodalForCausalLM,
+    Phi4MultimodalModel,
     Phi4MultimodalVisionConfig,
     is_torch_available,
     is_vision_available,
@@ -154,7 +155,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     Model tester for `Phi4Multimodal`.
     """
 
-    all_model_classes = (Phi4MultimodalForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (Phi4MultimodalForCausalLM, Phi4MultimodalModel) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True

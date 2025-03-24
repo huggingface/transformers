@@ -1838,6 +1838,10 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
 
 
 __all__ = [
+    "Phi4MultimodalAudioPreTrainedModel",
+    "Phi4MultimodalAudioModel",
+    "Phi4MultimodalVisionPreTrainedModel",
+    "Phi4MultimodalVisionModel",
     "Phi4MultimodalPreTrainedModel",  # noqa
     "Phi4MultimodalModel",
     "Phi4MultimodalForCausalLM",

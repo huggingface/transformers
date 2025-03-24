@@ -2305,4 +2305,12 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Phi4MultimodalPreTrainedModel", "Phi4MultimodalModel", "Phi4MultimodalForCausalLM"]
+__all__ = [
+    "Phi4MultimodalAudioPreTrainedModel",
+    "Phi4MultimodalAudioModel",
+    "Phi4MultimodalVisionPreTrainedModel",
+    "Phi4MultimodalVisionModel",
+    "Phi4MultimodalPreTrainedModel",
+    "Phi4MultimodalModel",
+    "Phi4MultimodalForCausalLM",
+]

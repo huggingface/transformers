@@ -106,17 +106,37 @@ response = processor.batch_decode(
 print(f'>>> Response\n{response}')
 ```
 
-## Phi4MultimodalConfig
+## Phi4MultimodalFeatureExtractor
 
-[[autodoc]] Phi4MultimodalConfig
+[[autodoc]] Phi4MultimodalFeatureExtractor
+
+## Phi4MultimodalImageProcessorFast
+
+[[autodoc]] Phi4MultimodalImageProcessorFast
+
+## Phi4MultimodalProcessor
+
+[[autodoc]] Phi4MultimodalProcessor
+
+## Phi4MultimodalAudioConfig
+
+[[autodoc]] Phi4MultimodalAudioConfig
 
 ## Phi4MultimodalVisionConfig
 
 [[autodoc]] Phi4MultimodalVisionConfig
 
-## Phi4MultimodalAudioConfig
+## Phi4MultimodalConfig
 
-[[autodoc]] Phi4MultimodalAudioConfig
+[[autodoc]] Phi4MultimodalConfig
+
+## Phi4MultimodalAudioModel
+
+[[autodoc]] Phi4MultimodalAudioModel
+
+## Phi4MultimodalVisionModel
+
+[[autodoc]] Phi4MultimodalVisionModel
 
 ## Phi4MultimodalModel
 
