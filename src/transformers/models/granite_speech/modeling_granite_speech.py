@@ -781,9 +781,9 @@ class CTCModel(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super(CTCModel, self).__init__()
 
-        self.rnn_trL = [nn.Linear(config.input_dim, config.hidden_dim, bias=True)]
-        for l in range(config.num_layers):
-            self.rnn_trL.append(
+        self.rnn_tr = nn.ModuleList(
+            [nn.Linear(config.input_dim, config.hidden_dim, bias=True)] + \
+            [
                 ConformerBlock(
                     dim=config.hidden_dim,
                     dim_head=config.dim_head,
@@ -796,9 +796,9 @@ class CTCModel(nn.Module):
                     ff_dropout=config.dropout,
                     conv_dropout=config.dropout,
                     use_max_pos_emb_in_pos_emb_calc=config.use_max_pos_emb_in_pos_emb_calc,
-                )
-            )
-            self.rnn_tr = nn.Sequential(*self.rnn_trL)
+                ) for layer_idx in range(config.num_layers)
+            ]
+        )
 
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
@@ -809,10 +809,10 @@ class CTCModel(nn.Module):
         self.output_dim = config.output_dim
 
     def forward(self, x: torch.Tensor):
-        x = self.rnn_trL[0](x)
-        for l in range(1, self.num_layers + 1):
-            x = self.rnn_trL[l](x, self.context_size)
-            if l == self.num_layers // 2:
+        x = self.rnn_tr[0](x)
+        for idx, layer in enumerate(self.rnn_tr[1:], start=1):
+            x = layer(x, self.context_size)
+            if idx == self.num_layers // 2:
                 x_mid = x.clone()
                 x_mid = self.out(x_mid)
                 x += self.out_mid(nn.Softmax(dim=-1)(x_mid))
