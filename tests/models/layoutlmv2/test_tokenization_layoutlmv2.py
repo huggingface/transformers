@@ -102,8 +102,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = [
             "[UNK]",
@@ -122,8 +123,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "test",
             "lowest",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
@@ -267,7 +268,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
                 words[1] = tokenizer_r.mask_token
@@ -605,8 +606,8 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -1060,7 +1061,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 words, boxes = self.get_words_and_boxes()
@@ -1363,7 +1364,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
 
@@ -1417,7 +1418,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 words, boxes = self.get_words_and_boxes()
                 tokens_r = tokenizer_r.encode_plus(
                     words,
@@ -1715,7 +1716,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 

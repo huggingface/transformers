@@ -28,10 +28,11 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     tokenizer_class = FastSpeech2ConformerTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"

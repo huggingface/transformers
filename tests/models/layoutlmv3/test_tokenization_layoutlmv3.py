@@ -20,6 +20,7 @@ import re
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 from typing import List
 
 from parameterized import parameterized
@@ -41,7 +42,12 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
+from ...test_tokenization_common import (
+    SMALL_TRAINING_CORPUS,
+    TokenizerTesterMixin,
+    merge_model_tokenizer_mappings,
+    use_cache_if_possible,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -91,8 +97,9 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -119,22 +126,30 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return LayoutLMv3TokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return LayoutLMv3TokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -485,8 +500,8 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -940,7 +955,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 words, boxes = self.get_words_and_boxes()
@@ -1241,7 +1256,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
 
@@ -1295,7 +1310,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 words, boxes = self.get_words_and_boxes()
                 tokens_r = tokenizer_r.encode_plus(
                     words,
@@ -1593,7 +1608,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
