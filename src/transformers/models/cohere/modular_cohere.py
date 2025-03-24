@@ -41,7 +41,6 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
     LlamaRotaryEmbedding,
-    can_return_tuple,
     eager_attention_forward,
 )
 from .configuration_cohere import CohereConfig
