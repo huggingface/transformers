@@ -58,7 +58,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "num_layers": 2,
             "output_dim": 42
         },
-        # NOTE - this is pretty much copied from llavanext since llama is identical in configs except for multipliers
         text_config={
             "model_type": "granite",
             "is_training": True,
