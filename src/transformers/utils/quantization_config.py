@@ -1360,7 +1360,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if value != default_config_dict[key]:
+            if key not in default_config_dict or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
