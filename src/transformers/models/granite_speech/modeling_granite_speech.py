@@ -1052,7 +1052,7 @@ class GraniteSpeechConformerBlock(nn.Module):
         return x
 
 
-class GraniteSpeechPretrainedModel(PreTrainedModel):
+class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechConfig
     _supports_cache_class = True
     _supports_flash_attn_2 = True
@@ -1146,8 +1146,8 @@ GRANITE_SPEECH_START_DOCSTRING = r"""
     """The Granite Speech model, which consists of an audio encoder, projector, and language model.""",
     GRANITE_SPEECH_START_DOCSTRING,
 )
-class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, GenerationMixin):
-    def __init__(self, config: GraniteSpeechConfig, is_legacy=False, skip_lora=True):
+class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
+    def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
         # NOTE: It doesn't matter when we initialize from config, but we should be careful
         # to make sure this does not pick up the adapter_config if in the future we use
@@ -1380,5 +1380,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
 
 __all__ = [
     "GraniteSpeechForConditionalGeneration",
-    "GraniteSpeechPretrainedModel",
+    "GraniteSpeechPreTrainedModel",
+    "GraniteSpeechEncoderProjectorPreTrainedModel",
+    "GraniteSpeechQFormerModel",
 ]
