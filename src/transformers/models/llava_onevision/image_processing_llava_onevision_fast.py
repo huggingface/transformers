@@ -4,8 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llava_onevision.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from typing import List, Optional, Union
+
+import torch
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
@@ -28,11 +29,9 @@ from ...image_utils import (
     make_flat_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_v2_available
+from ...utils import TensorType, add_start_docstrings, is_torchvision_v2_available
 
 
-if is_torch_available():
-    import torch
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:

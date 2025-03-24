@@ -461,11 +461,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)

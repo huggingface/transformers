@@ -1990,10 +1990,10 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
 
 @add_start_docstrings(
-    """The Mllama model which consists of a vision encoder and a language model.""",
+    """The Mllama model which consists of a vision encoder and a language model without language modeling head.""",
     MLLAMA_START_DOCSTRING,
 )
-class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
+class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 
     def __init__(self, config: MllamaConfig):
@@ -2005,7 +2005,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
         self.vision_model = MllamaVisionModel._from_config(config.vision_config)
-        self.language_model = MllamaForCausalLM._from_config(config.text_config)
+        self.language_model = MllamaTextModel._from_config(config.text_config)
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
@@ -2034,7 +2034,125 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        aspect_ratio_mask: Optional[torch.Tensor] = None,
+        aspect_ratio_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None and cross_attention_states is not None:
+            raise ValueError("`pixel_values` and `cross_attention_states` cannot be provided simultaneously")
+
+        if pixel_values is not None:
+            if aspect_ratio_ids is None:
+                raise ValueError("`aspect_ratio_ids` must be provided if `pixel_values` is provided")
+            # get vision tokens from vision model
+            vision_outputs = self.vision_model(
+                pixel_values=pixel_values,
+                aspect_ratio_ids=aspect_ratio_ids,
+                aspect_ratio_mask=aspect_ratio_mask,
+                output_hidden_states=output_hidden_states,
+                output_attentions=output_attentions,
+                return_dict=return_dict,
+            )
+            cross_attention_states = vision_outputs[0]
+            cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(
+                -1, cross_attention_states.shape[-2], self.hidden_size
+            )
+
+        if cross_attention_mask is not None:
+            cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
+                cross_attention_mask,
+                num_vision_tokens=self.vision_model.num_patches,
+                dtype=self.dtype,
+            )
+        else:
+            full_text_row_masked_out_mask = None
+
+        if cross_attention_mask is not None and cache_position is not None:
+            cross_attention_mask = cross_attention_mask[:, :, cache_position]
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
+
+        outputs = self.language_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cross_attention_states=cross_attention_states,
+            cross_attention_mask=cross_attention_mask,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        output = BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+        return output if return_dict else output.to_tuple()
+
+
+@add_start_docstrings(
+    """The Mllama model which consists of a vision encoder and a language model.""",
+    MLLAMA_START_DOCSTRING,
+)
+class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
+    _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
+
+    def __init__(self, config: MllamaConfig):
+        super().__init__(config)
+        self.model = MllamaModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        if self.model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.set_output_embeddings(new_embeddings)
+
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaConfig")
     def forward(
@@ -2101,88 +2219,42 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         [', it would be:.\\nA stop sign in Chinatown.\\n']
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if pixel_values is not None and cross_attention_states is not None:
-            raise ValueError("`pixel_values` and `cross_attention_states` cannot be provided simultaneously")
-
-        if pixel_values is not None:
-            if aspect_ratio_ids is None:
-                raise ValueError("`aspect_ratio_ids` must be provided if `pixel_values` is provided")
-            # get vision tokens from vision model
-            vision_outputs = self.vision_model(
-                pixel_values=pixel_values,
-                aspect_ratio_ids=aspect_ratio_ids,
-                aspect_ratio_mask=aspect_ratio_mask,
-                output_hidden_states=output_hidden_states,
-                output_attentions=output_attentions,
-                return_dict=return_dict,
-            )
-            cross_attention_states = vision_outputs[0]
-            cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(
-                -1, cross_attention_states.shape[-2], self.hidden_size
-            )
-
-        if cross_attention_mask is not None:
-            cross_attention_mask, full_text_row_masked_out_mask = _prepare_cross_attention_mask(
-                cross_attention_mask,
-                num_vision_tokens=self.vision_model.num_patches,
-                dtype=self.dtype,
-            )
-        else:
-            full_text_row_masked_out_mask = None
-
-        if cross_attention_mask is not None and cache_position is not None:
-            cross_attention_mask = cross_attention_mask[:, :, cache_position]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
-
-        outputs = self.language_model(
+        outputs = self.model(
             input_ids=input_ids,
+            pixel_values=pixel_values,
+            aspect_ratio_mask=aspect_ratio_mask,
+            aspect_ratio_ids=aspect_ratio_ids,
+            cross_attention_mask=cross_attention_mask,
+            cross_attention_states=cross_attention_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            cross_attention_states=cross_attention_states,
-            cross_attention_mask=cross_attention_mask,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
             past_key_values=past_key_values,
-            use_cache=use_cache,
             inputs_embeds=inputs_embeds,
-            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
-            **loss_kwargs,
         )
 
-        # Temporary fix to calculate the loss in main class, as the model's vocab size may be resized
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
-        logits = outputs[0]
-
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
-        if not return_dict:
-            return (loss,) + outputs if loss is not None else outputs
-
-        return CausalLMOutputWithPast(
+        output = CausalLMOutputWithPast(
             loss=loss,
-            logits=outputs.logits,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
+        return output if return_dict else output.to_tuple()
 
     def prepare_inputs_for_generation(
         self,
