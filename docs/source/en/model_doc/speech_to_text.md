@@ -74,7 +74,7 @@ be installed as follows: `apt install libsndfile1-dev`
   For multilingual speech translation models, `eos_token_id` is used as the `decoder_start_token_id` and
   the target language id is forced as the first generated token. To force the target language id as the first
   generated token, pass the `forced_bos_token_id` parameter to the `generate()` method. The following
-  example shows how to transate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
+  example shows how to translate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
   checkpoint.
 
 ```python

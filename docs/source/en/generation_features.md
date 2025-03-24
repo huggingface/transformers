@@ -50,7 +50,7 @@ The `streamer` parameter is compatible with any class with a [`~TextStreamer.put
 
 Watermarking is useful for detecting whether text is generated. The [watermarking strategy](https://hf.co/papers/2306.04634) in Transformers randomly "colors" a subset of the tokens green. When green tokens are generated, they have a small bias added to their logits, and a higher probability of being generated. You can detect generated text by comparing the proportion of green tokens to the amount of green tokens typically found in human-generated text.
 
-Watermarking is supported for any generative model in Transformers and doesn't require an extra classfication model to detect the watermarked text.
+Watermarking is supported for any generative model in Transformers and doesn't require an extra classification model to detect the watermarked text.
 
 Create a [`WatermarkingConfig`] with the bias value to add to the logits and watermarking algorithm. The example below uses the `"selfhash"` algorithm, where the green token selection only depends on the current token. Pass the [`WatermarkingConfig`] to [`~GenerationMixin.generate`].
 

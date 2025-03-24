@@ -419,7 +419,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "OPTDecoderLayer",
     ]
     _skip_keys_device_placement = "past_key_values"
-    _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1448,6 +1447,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1799,7 +1799,7 @@ class Blip2Model(Blip2PreTrainedModel):
 )
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1898,7 +1898,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 )
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2019,6 +2019,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2371,7 +2372,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules = []
+    _keep_in_fp32_modules = ["query_tokens"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
