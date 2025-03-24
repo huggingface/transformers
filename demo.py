@@ -15,3 +15,12 @@ for output in outputs:
     prompt = output.prompt
     generated_text = output.outputs[0].text
     print(f"Prompt: {prompt!r}, Generated text: {generated_text!r}")
+
+# from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# tok = AutoTokenizer.from_pretrained("gpt2")
+# model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+# inputs = tok("Hello there ", return_tensors="pt")
+# outputs = model.generate(**inputs)
+# print(tok.batch_decode(outputs))
