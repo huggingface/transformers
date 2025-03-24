@@ -1244,7 +1244,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `None`): alter submodules (usually linear) in order to
+        run_compressed (`bool`, *optional*): alter submodules (usually linear) in order to
             emulate compressed model execution if True, otherwise use default submodule. Defaults to True if the model is compressed or frozen.
     """
 
