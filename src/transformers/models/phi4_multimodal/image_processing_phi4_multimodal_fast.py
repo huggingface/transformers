@@ -25,7 +25,7 @@ from torchvision.transforms import functional as F
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorKwargs,
     Unpack,
     convert_to_rgb,
 )
@@ -36,7 +36,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_size: Optional[int]
     patch_size: Optional[int]
     dynamic_hd: Optional[int]
@@ -52,10 +52,10 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     dynamic_hd = 36
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
-    valid_init_kwargs = Phi4MultimodalFastImageProcessorInitKwargs
+    valid_init_kwargs = Phi4MultimodalFastImageProcessorKwargs
     model_input_names = ["image_pixel_values", "image_sizes", "image_attention_mask"]
 
-    def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Phi4MultimodalFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height):
