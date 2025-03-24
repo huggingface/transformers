@@ -1,17 +1,22 @@
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
-from torch import nn, einsum
 import torch.nn.functional as F
+import torch.utils.checkpoint
+from torch import einsum, nn
+
 from transformers.activations import ACT2FN
-from transformers.pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.generation import GenerationMixin
+from transformers.modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    ModelOutput,
+)
 from transformers.modeling_utils import PreTrainedModel
-from transformers.modeling_outputs import ModelOutput, BaseModelOutputWithPoolingAndCrossAttentions, BaseModelOutputWithPastAndCrossAttentions
 from transformers.models.auto import AutoModelForCausalLM
+from transformers.pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -26,9 +31,11 @@ from .configuration_granite_speech import (
     GraniteSpeechProjectorConfig,
 )
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GraniteSpeechConfig"
+
 
 @dataclass
 class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
@@ -58,6 +65,7 @@ class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
+
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
@@ -71,6 +79,7 @@ class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
 # but to do this, we will need to register the QFormer model into an automodel,
 # which will should involve pulling it out into its own dir so that it is accessible
 # under transformers.models.X.
+
 
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerMultiHeadAttention with Blip2->GraniteSpeech
 class GraniteSpeechQFormerMultiHeadAttention(nn.Module):
@@ -219,6 +228,7 @@ class GraniteSpeechQFormerSelfOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
+
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerAttention with Blip2->GraniteSpeech
 class GraniteSpeechQFormerAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
@@ -268,6 +278,7 @@ class GraniteSpeechQFormerAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->GraniteSpeechQFormer
 class GraniteSpeechQFormerIntermediate(nn.Module):
     def __init__(self, config):
@@ -298,19 +309,6 @@ class GraniteSpeechQFormerOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->GraniteSpeechQFormer
-class GraniteSpeechQFormerOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
 
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerLayer with Blip2->GraniteSpeech
 class GraniteSpeechQFormerLayer(nn.Module):
@@ -415,6 +413,7 @@ class GraniteSpeechQFormerLayer(nn.Module):
         intermediate_output = self.intermediate_query(attention_output)
         layer_output = self.output_query(intermediate_output, attention_output)
         return layer_output
+
 
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerEncoder with Blip2->GraniteSpeech
 class GraniteSpeechQFormerEncoder(nn.Module):
@@ -740,9 +739,12 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
+
 # TODO (alex) - refactor GraniteSpeechQformer to be available under
 # transformers.models.X, delete all of the code above, and
 # create the model through AutoModel.
+
 
 class GraniteSpeechEncoderProjectorQFormer(nn.Module):
     def __init__(self, config: GraniteSpeechProjectorConfig):
@@ -774,11 +776,10 @@ class GraniteSpeechEncoderProjectorQFormer(nn.Module):
             return_dict=True,
         )
         query_proj = self.linear(
-            query_output.last_hidden_state.view(
-                batch_size, nblocks * self.window_size // self.ds_rate, -1
-            )
+            query_output.last_hidden_state.view(batch_size, nblocks * self.window_size // self.ds_rate, -1)
         )
         return query_proj
+
 
 ### Encoder
 class GraniteSpeechCTCModel(nn.Module):
@@ -786,8 +787,8 @@ class GraniteSpeechCTCModel(nn.Module):
         super(GraniteSpeechCTCModel, self).__init__()
 
         self.rnn_tr = nn.ModuleList(
-            [nn.Linear(config.input_dim, config.hidden_dim, bias=True)] + \
-            [
+            [nn.Linear(config.input_dim, config.hidden_dim, bias=True)]
+            + [
                 GraniteSpeechConformerBlock(
                     dim=config.hidden_dim,
                     dim_head=config.dim_head,
@@ -800,7 +801,8 @@ class GraniteSpeechCTCModel(nn.Module):
                     ff_dropout=config.dropout,
                     conv_dropout=config.dropout,
                     use_max_pos_emb_in_pos_emb_calc=config.use_max_pos_emb_in_pos_emb_calc,
-                ) for layer_idx in range(config.num_layers)
+                )
+                for layer_idx in range(config.num_layers)
             ]
         )
 
@@ -828,7 +830,7 @@ class GraniteSpeechConformerPermute(nn.Module):
     def __init__(self, dims):
         super().__init__()
         self.dims = dims
-        
+
     def forward(self, x):
         x = x.permute(self.dims)
         return x
@@ -838,7 +840,7 @@ class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
     def __init__(self, chan_in, chan_out, kernel_size, padding):
         super().__init__()
         self.padding = padding
-        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups = chan_in, bias=False)
+        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
 
     def forward(self, x):
         x = F.pad(x, self.padding)
@@ -883,18 +885,18 @@ class GraniteSpeechConformerAttention(nn.Module):
         dim,
         heads=8,
         dim_head=64,
-        dropout=0.,
+        dropout=0.0,
         context_size=200,
         max_pos_emb=512,
         use_max_pos_emb_in_pos_emb_calc=True,
     ):
         super().__init__()
         inner_dim = dim_head * heads
-        self.heads= heads
+        self.heads = heads
         self.dim_head = dim_head
-        self.scale = dim_head ** -0.5
-        self.to_q = nn.Linear(dim, inner_dim, bias = False)
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias = False)
+        self.scale = dim_head**-0.5
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, dim)
 
         self.max_pos_emb = max_pos_emb
@@ -906,7 +908,7 @@ class GraniteSpeechConformerAttention(nn.Module):
     def forward(self, x, context_size):
         device, h, max_pos_emb = x.device, self.heads, self.max_pos_emb
         bs, n, d = x.shape
-        assert(context_size > 0 and context_size <= max_pos_emb)
+        assert context_size > 0 and context_size <= max_pos_emb
 
         nb = math.ceil(n / context_size)
         nr = n % context_size
@@ -914,50 +916,39 @@ class GraniteSpeechConformerAttention(nn.Module):
             # right padding to reach block size
             x = torch.nn.functional.pad(x, (0, 0, 0, context_size - nr))
 
-        q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim = -1))
-        q, k, v = map(
-            lambda t: t.reshape(bs, nb, context_size, h, -1).transpose(2, 3),
-            (q, k, v),
-        )
-        dots = einsum('b m h i d, b m h j d -> b m h i j', q, k) * self.scale
+        q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim=-1))
+        q, k, v = [t.reshape(bs, nb, context_size, h, -1).transpose(2, 3) for t in (q, k, v)]
+
+        dots = einsum("b m h i d, b m h j d -> b m h i j", q, k) * self.scale
 
         # shaw's relative positional embedding
-        seq = torch.arange(context_size, device = device)
+        seq = torch.arange(context_size, device=device)
         dist = seq.view(-1, 1) - seq.view(1, -1)
-        dist = torch.clamp(dist,-context_size, context_size) + self.offset
+        dist = torch.clamp(dist, -context_size, context_size) + self.offset
         rel_pos_emb = self.rel_pos_emb(dist).to(q)
-        pos_attn = einsum('b m h c d, c r d -> b m h c r', q, rel_pos_emb) * self.scale
+        pos_attn = einsum("b m h c d, c r d -> b m h c r", q, rel_pos_emb) * self.scale
         dots = dots + pos_attn
 
         if nr > 0:
             # masked attention in the extended block
             mask = torch.ones(context_size, context_size, dtype=bool, device=device)
-            mask[:nr,:nr] = 0
+            mask[:nr, :nr] = 0
             mask_value = -torch.finfo(dots.dtype).max
-            dots[:,-1,:].masked_fill_(mask, mask_value)
+            dots[:, -1, :].masked_fill_(mask, mask_value)
 
-        attn = dots.softmax(dim = -1)
+        attn = dots.softmax(dim=-1)
 
-        out = einsum('b m h i j, b m h j d -> b m h i d', attn, v)
+        out = einsum("b m h i j, b m h j d -> b m h i d", attn, v)
         out = out.transpose(2, 3).reshape(bs, x.shape[1], -1)
-        out = self.to_out(out[:,:n,:])
+        out = self.to_out(out[:, :n, :])
         return self.dropout(out)
 
 
 class GraniteSpeechConformerFeedForward(nn.Module):
-    def __init__(
-        self,
-        dim,
-        mult=4,
-        dropout=0.
-    ):
+    def __init__(self, dim, mult=4, dropout=0.0):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(dim, dim * mult),
-            nn.SiLU(),
-            nn.Dropout(dropout),
-            nn.Linear(dim * mult, dim),
-            nn.Dropout(dropout)
+            nn.Linear(dim, dim * mult), nn.SiLU(), nn.Dropout(dropout), nn.Linear(dim * mult, dim), nn.Dropout(dropout)
         )
 
     def forward(self, x):
@@ -965,13 +956,7 @@ class GraniteSpeechConformerFeedForward(nn.Module):
 
 
 class GraniteSpeechConformerConvModule(nn.Module):
-    def __init__(
-        self,
-        dim,
-        causal=False,
-        expansion_factor=2,
-        kernel_size=31,
-        dropout=0.):
+    def __init__(self, dim, causal=False, expansion_factor=2, kernel_size=31, dropout=0.0):
         super().__init__()
 
         inner_dim = dim * expansion_factor
@@ -982,15 +967,12 @@ class GraniteSpeechConformerConvModule(nn.Module):
             GraniteSpeechConformerPermute(dims=(0, 2, 1)),
             nn.Conv1d(dim, inner_dim * 2, 1),
             nn.GLU(dim=1),
-            GraniteSpeechConformerDepthWiseConv1d(inner_dim,
-                            inner_dim,
-                            kernel_size=kernel_size,
-                            padding=padding),
+            GraniteSpeechConformerDepthWiseConv1d(inner_dim, inner_dim, kernel_size=kernel_size, padding=padding),
             nn.BatchNorm1d(inner_dim) if not causal else nn.Identity(),
             nn.SiLU(),
             nn.Conv1d(inner_dim, dim, 1),
             GraniteSpeechConformerPermute(dims=(0, 2, 1)),
-            nn.Dropout(dropout)
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
@@ -1013,9 +995,9 @@ class GraniteSpeechConformerBlock(nn.Module):
         conv_expansion_factor=2,
         conv_kernel_size=31,
         context_size=-1,
-        attn_dropout=0.,
-        ff_dropout=0.,
-        conv_dropout=0.,
+        attn_dropout=0.0,
+        ff_dropout=0.0,
+        conv_dropout=0.0,
         use_max_pos_emb_in_pos_emb_calc=True,
     ):
         super().__init__()
@@ -1052,7 +1034,6 @@ class GraniteSpeechConformerBlock(nn.Module):
         return x
 
 
-
 GRANITE_SPEECH_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1068,6 +1049,8 @@ GRANITE_SPEECH_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+
 @add_start_docstrings(
     "The bare Granite Speech Model outputting raw hidden-states without any specific head on top.",
     GRANITE_SPEECH_START_DOCSTRING,
@@ -1275,14 +1258,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             if input_features.dtype != self.dtype:
                 logger.warning(f"input features are casted to {self.dtype}")
                 input_features = input_features.to(self.dtype)
-            # Get the audio features from the encoder / projector 
+            # Get the audio features from the encoder / projector
             audio_features = self.get_audio_features(input_features)
 
             # Merge the audio features into the LLM embeddings
             inputs_embeds = self.get_merged_audio_embeddings(
-                input_ids=input_ids,
-                audio_features=audio_features,
-                input_features_mask=input_features_mask
+                input_ids=input_ids, audio_features=audio_features, input_features_mask=input_features_mask
             )
 
         outputs = self.language_model(
@@ -1292,7 +1273,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states, 
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
@@ -1329,7 +1310,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
     def prepare_inputs_for_generation(
         self,
@@ -1372,9 +1352,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         """
         is_audio_index = input_ids == self.config.audio_token_index
         llm_input_ids = torch.where(is_audio_index, 0, input_ids)
-        inputs_embeds = self.language_model.get_input_embeddings()(
-            llm_input_ids
-        )  # [bsz, # features, hidden size]
+        inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
 
         # Mask the audio features into the text embeddings
         special_audio_mask = is_audio_index.unsqueeze(-1)
@@ -1398,6 +1376,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             else:
                 self.disable_adapters()
         return super().generate(*args, input_features=input_features, **kwargs)
+
 
 __all__ = [
     "GraniteSpeechForConditionalGeneration",

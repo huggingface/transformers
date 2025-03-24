@@ -11,28 +11,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import pytest
+import shutil
 import tempfile
 import unittest
-import shutil
-from parameterized import parameterized
 
 import numpy as np
+import pytest
 import torch
-from transformers import AutoTokenizer, GPT2TokenizerFast
+from parameterized import parameterized
 
+from transformers import AutoTokenizer, GPT2TokenizerFast
 from transformers.testing_utils import (
     require_torch,
-    require_torchaudio,
     require_torch_gpu,
+    require_torchaudio,
 )
 from transformers.utils import is_torchaudio_available
 
 
 if is_torchaudio_available():
-    from transformers import GraniteSpeechProcessor, GraniteSpeechFeatureExtractor
+    from transformers import GraniteSpeechFeatureExtractor, GraniteSpeechProcessor
 
 pytest.skip("Public models not yet available", allow_module_level=True)
+
+
 @require_torch
 @require_torchaudio
 class GraniteSpeechProcessorTest(unittest.TestCase):
@@ -127,10 +129,12 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         with pytest.raises(TypeError):
             processor(text=None, audios=["foo"])
 
-    @parameterized.expand([
-        ([1, 269920], [171], torch.rand),
-        ([1, 269920], [171], np.random.rand),
-    ])
+    @parameterized.expand(
+        [
+            ([1, 269920], [171], torch.rand),
+            ([1, 269920], [171], np.random.rand),
+        ]
+    )
     def test_audio_token_filling_same_len_feature_tensors(self, vec_dims, num_expected_features, random_func):
         """Ensure audio token filling is handled correctly when we have
         one or more audio inputs whose features are all the same length
@@ -144,14 +148,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
         )
-        audios = random_func(*vec_dims) - .5
+        audios = random_func(*vec_dims) - 0.5
 
         audio_tokens = processor.audio_token * vec_dims[0]
-        inputs = processor(
-            text=f"{audio_tokens} Can you compare this audio?",
-            audios=audios,
-            return_tensors="pt"
-        )
+        inputs = processor(text=f"{audio_tokens} Can you compare this audio?", audios=audios, return_tensors="pt")
 
         # Check the number of audio tokens
         audio_token_id = tokenizer.get_vocab()[processor.audio_token]
@@ -176,7 +176,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         )
         vec_dims = [[1, 142100], [1, 269920]]
         num_expected_features = [90, 171]
-        audios = [torch.rand(dims) - .5 for dims in vec_dims]
+        audios = [torch.rand(dims) - 0.5 for dims in vec_dims]
 
         inputs = processor(
             text=[
@@ -184,7 +184,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
                 f"{processor.audio_token} How does it compare with this audio?",
             ],
             audios=audios,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check the number of audio tokens
@@ -211,7 +211,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         )
 
         vec_dims = [1, 269920]
-        wav = torch.rand(vec_dims) - .5
+        wav = torch.rand(vec_dims) - 0.5
 
         inputs = processor(
             text=f"{processor.audio_token} Can you transcribe this audio?",

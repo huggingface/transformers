@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the IBM Granite Speech model."""
-import unittest
-from ...generation.test_utils import GenerationTesterMixin
+
 import tempfile
+import unittest
+
 from transformers import (
     GraniteSpeechConfig,
     GraniteSpeechForConditionalGeneration,
@@ -23,21 +24,23 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
-    torch_device,
     require_torch_sdpa,
+    torch_device,
 )
+
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    _config_zero_init,
     floats_tensor,
     ids_tensor,
-    _config_zero_init,
-    torch_device,
 )
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
     import torch
+
 
 class GraniteSpeechForConditionalGenerationModelTester:
     def __init__(
@@ -56,7 +59,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "input_dim": 160,
             "num_heads": 4,
             "num_layers": 2,
-            "output_dim": 42
+            "output_dim": 42,
         },
         text_config={
             "model_type": "granite",
@@ -99,7 +102,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "position_embedding_type": "absolute",
             "use_qformer_text_input": False,
             "vocab_size": 30522,
-            "window_size": 15
+            "window_size": 15,
         },
         audio_token_index=0,
         tie_word_embeddings=True,
@@ -117,7 +120,10 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.initializer_range = initializer_range
         self.has_lora_adapater = has_lora_adapter
         self.is_training = is_training
- 
+
+        # Dims for audio features
+        self.sequence_dim = 844
+        self.feaure_dim = 160
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.hidden_size = text_config["hidden_size"]
@@ -126,7 +132,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.seq_len = 7
         self.num_audio_tokens = 2
         self.seq_length = seq_length + self.num_audio_tokens
-
 
     def get_config(self):
         return GraniteSpeechConfig(
@@ -139,15 +144,12 @@ class GraniteSpeechForConditionalGenerationModelTester:
             has_lora_adapter=self.has_lora_adapater,
         )
 
-
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
-            # TODO - clean this up
-            [self.batch_size, 844, 160],
+            [self.batch_size, self.sequence_dim, self.feature_dim],
         )
         config = self.get_config()
         return config, input_features
-
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -165,9 +167,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_granite_speech_model_fp16_forward(
-        self, config, input_ids, input_features, attention_mask
-    ):
+    def create_and_check_granite_speech_model_fp16_forward(self, config, input_ids, input_features, attention_mask):
         model = GraniteSpeechForConditionalGeneration(config=config)
         model.to(torch_device)
         model.half()
@@ -181,7 +181,11 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
     def create_and_check_granite_speech_model_fp16_autocast_forward(
-        self, config, input_ids, input_features, attention_mask,
+        self,
+        config,
+        input_ids,
+        input_features,
+        attention_mask,
     ):
         config.torch_dtype = torch.float16
         model = GraniteSpeechForConditionalGeneration(config=config)
@@ -195,7 +199,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
                 return_dict=True,
             )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 
 @require_torch
@@ -253,7 +256,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
