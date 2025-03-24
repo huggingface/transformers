@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import inspect
 from functools import lru_cache, wraps
-from typing import Callable, List, Optional, Set, Tuple, Union
+from typing import Callable
 
 import torch
 from safetensors.torch import storage_ptr, storage_size
@@ -154,9 +154,7 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
     return new_layer
 
 
-def prune_layer(
-    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[nn.Linear, Conv1D]:
+def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None) -> nn.Linear | Conv1D:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 
@@ -257,8 +255,8 @@ def apply_chunking_to_forward(
 
 
 def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
-) -> Tuple[Set[int], torch.LongTensor]:
+    heads: list[int], n_heads: int, head_size: int, already_pruned_heads: set[int]
+) -> tuple[set[int], torch.LongTensor]:
     """
     Finds the heads and their indices taking `already_pruned_heads` into account.
 
@@ -283,9 +281,7 @@ def find_pruneable_heads_and_indices(
     return heads, index
 
 
-def meshgrid(
-    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
-) -> Tuple[torch.Tensor, ...]:
+def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None) -> tuple[torch.Tensor, ...]:
     """
     Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
 
@@ -294,7 +290,7 @@ def meshgrid(
     return torch.meshgrid(*tensors, indexing=indexing)
 
 
-def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
     example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
