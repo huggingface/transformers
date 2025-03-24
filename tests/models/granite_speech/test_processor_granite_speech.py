@@ -161,8 +161,8 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             [vec_dims[1] for _ in range(vec_dims[0])],
         )
         num_audio_tokens = int(torch.sum(inputs["input_ids"] == audio_token_id))
+        assert list(inputs["input_features"].shape) == [vec_dims[0], 844, 160]
         assert sum(num_computed_features) == num_audio_tokens
-        assert num_expected_features == num_expected_features
 
     def test_audio_token_filling_varying_len_feature_list(self):
         """Ensure audio token filling is handled correctly when we have
