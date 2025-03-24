@@ -1090,7 +1090,7 @@ class ProcessorTesterMixin:
             ]
         ]
 
-        def dummmy_sample_indices_fn(metadata, **fn_kwargs):
+        def dummy_sample_indices_fn(metadata, **fn_kwargs):
             # sample only the first two frame always
             return [0, 1]
 
@@ -1099,7 +1099,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            sample_indices_fn=dummmy_sample_indices_fn,
+            sample_indices_fn=dummy_sample_indices_fn,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
