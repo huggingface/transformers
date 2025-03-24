@@ -62,8 +62,8 @@ class GraniteSpeechProcessor(ProcessorMixin):
         
         if audios is not None:
             audios, audio_lengths = self._get_validated_audios(audios)
-            if any(t.count(self.audio_token) != 1 for t in text):
-                raise ValueError("We're supporting a single audio per input")
+            if any(text.count(self.audio_token) != 1 for text in text):
+                raise ValueError("Only one audio sample is currently supported per input")
             if len(audio_lengths) != expected_num_audios:
                 raise ValueError("Text/Audio mismatch. The number of audios and audio tokens do not match")
             
@@ -81,7 +81,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
             # duplicate the audio placeholders to match the feature dims
             text = self._expand_audio_placeholders(text, num_audio_features)
         else:
-            assert expected_num_audios == 0, "no audio is provided, expecting no audio tokens."
+            assert expected_num_audios == 0, "No audio is provided, expecting no audio tokens"
         
         text_inputs = self.tokenizer(text, padding=True, **kwargs)
         return BatchFeature(data={**text_inputs, **speech_inputs})
@@ -127,16 +127,16 @@ class GraniteSpeechProcessor(ProcessorMixin):
             if audios.ndim == 1:
                 audios = audios.unsqueeze(0)
             if not torch.is_floating_point(audios):
-                raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1.")
+                raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
             
             if audios.shape[0] > 1:
-                logger.warning("Audio samples are alrady collated, we'll assume they all have the same length")
+                logger.warning("Audio samples are already collated; assuming they all have the same length")
             lengths = [audios.shape[-1]] * audios.shape[0]
             return audios, lengths
         
         elif isinstance(audios, Sequence) and isinstance(audios[0], torch.Tensor):
             if not torch.is_floating_point(audios[0]):
-                raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1.")
+                raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
             lengths = [audio.shape[-1] for audio in audios]
             padding = [max(lengths) - length for length in lengths]
             # ensure all audios have a batch dimension:
@@ -145,7 +145,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
             audios = torch.cat(padded, dim=0)
             return audios, lengths
         
-        raise TypeError("Invalid audio provided. Audio should be a one or more torch tensors or numpy arrays.")
+        raise TypeError("Invalid audio provided. Audio should be a one or more torch tensors or numpy arrays")
 
 
 __all__ = ["GraniteSpeechProcessor"]
