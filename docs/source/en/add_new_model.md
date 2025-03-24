@@ -57,7 +57,7 @@ There is never more than two levels of abstraction for any model to keep the cod
 
 Other important functions like the forward method are defined in the `modeling.py` file.
 
-Specific model heads (for example, sequence classification or language modeling) should call the base model in the forward pass rather than inherting from it to keep abstraction low.
+Specific model heads (for example, sequence classification or language modeling) should call the base model in the forward pass rather than inheriting from it to keep abstraction low.
 
 New models require a configuration, for example `BrandNewLlamaConfig`, that is stored as an attribute of [`PreTrainedModel`].
 
@@ -233,7 +233,7 @@ If you run into issues, you'll need to choose one of the following debugging str
 This strategy relies on breaking the original model into smaller sub-components, such as when the code can be easily run in eager mode. While more difficult, there are some advantages to this approach.
 
 1. It is easier later to compare the original model to your implementation. You can automatically verify that each individual component matches its corresponding component in the Transformers' implementation. This is better than relying on a visual comparison based on print statements.
-2. It is easier to port individal components instead of the entire model.
+2. It is easier to port individual components instead of the entire model.
 3. It is easier for understanding how a model works by breaking it up into smaller parts.
 4. It is easier to prevent regressions at a later stage when you change your code thanks to component-by-component tests.
 
@@ -328,7 +328,7 @@ def _init_weights(self, module):
 
 The initialization scheme can look different if you need to adapt it to your model. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers.
 
-The `_is_hf_initialized` flag makes sure the submodule is only initialized once. Setting `module.project_q` and `module.project_hid` to `True` ensures the custom initialization is not overriden later. The `_init_weights` function won't be applied to these modules.
+The `_is_hf_initialized` flag makes sure the submodule is only initialized once. Setting `module.project_q` and `module.project_hid` to `True` ensures the custom initialization is not overridden later. The `_init_weights` function won't be applied to these modules.
 
 ```py
 def _init_weights(self, module):
@@ -457,7 +457,7 @@ Don't be discouraged if your forward pass isn't identical with the output from t
 Your output should have a precision of *1e-3*. Ensure the output shapes and output values are identical. Common reasons for why the outputs aren't identical include:
 
 - Some layers were not added (activation layer or a residual connection).
-- The word embedding matix is not tied.
+- The word embedding matrix is not tied.
 - The wrong positional embeddings are used because the original implementation includes an offset.
 - Dropout is applied during the forward pass. Fix this error by making sure `model.training` is `False` and passing `self.training` to [torch.nn.functional.dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout).
 
@@ -476,7 +476,7 @@ When both implementations produce the same output, verify the outputs are within
 torch.allclose(original_output, output, atol=1e-3)
 ```
 
-This is typically the most difficult part of the process. Congratulations if you've made it this far! 
+This is typically the most difficult part of the process. Congratulations if you've made it this far!
 
 And if you're stuck or struggling with this step, don't hesitate to ask for help on your pull request.
 
@@ -540,6 +540,48 @@ input_ids = tokenizer(input_str).input_ids
 ```
 
 When both implementations have the same `input_ids`, add a tokenizer test file. This file is analogous to the modeling test files. The tokenizer test files should contain a couple of hardcoded integration tests.
+
+## Implement image processor
+
+> [!TIP]
+> Fast image processors use the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU, significantly improving processing speed.
+> We recommend adding a fast image processor ([`BaseImageProcessorFast`]) in addition to the "slow" image processor ([`BaseImageProcessor`]) to provide users with the best performance. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for help adding a [`BaseImageProcessorFast`].
+
+While this example doesn't include an image processor, you may need to implement one if your model requires image inputs. The image processor is responsible for converting images into a format suitable for your model. Before implementing a new one, check whether an existing image processor in the Transformers library can be reused, as many models share similar image processing techniques. Note that you can also use [modular](./modular_transformers) for image processors to reuse existing components.
+
+If you do need to implement a new image processor, refer to an existing image processor to understand the expected structure. Slow image processors ([`BaseImageProcessor`]) and fast image processors ([`BaseImageProcessorFast`]) are designed differently, so make sure you follow the correct structure based on the processor type you're implementing.
+
+Run the following command (only if you haven't already created the fast image processor with the `transformers-cli add-new-model-like` command) to generate the necessary imports and to create a prefilled template for the fast image processor. Modify the template to fit your model.
+
+```bash
+transformers-cli add-fast-image-processor --model-name your_model_name
+```
+
+This command will generate the necessary imports and provide a pre-filled template for the fast image processor. You can then modify it to fit your model's needs.
+
+Add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well.
+
+## Implement processor
+
+If your model accepts multiple modalities, like text and images, you need to add a processor. The processor centralizes the preprocessing of different modalities before passing them to the model.
+
+The processor should call the appropriate modality-specific processors within its `__call__` function to handle each type of input correctly. Be sure to check existing processors in the library to understand their expected structure. Transformers uses the following convention in the `__call__` function signature.
+
+```python
+def __call__(
+    self,
+    images: ImageInput = None,
+    text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+    audio=None,
+    videos=None,
+    **kwargs: Unpack[YourModelProcessorKwargs],
+) -> BatchFeature:
+    ...
+```
+
+`YourModelProcessorKwargs` is a `TypedDict` that includes all the typical processing arguments and any extra arguments a specific processor may require.
+
+Add tests for the processor in `tests/models/your_model_name/test_processor_your_model_name.py`. These tests should be similar to those for other processors and should verify that the processor correctly handles the different modalities.
 
 ## Integration tests
 
