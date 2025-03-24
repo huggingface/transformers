@@ -19,14 +19,15 @@ Processor class for Phi4Multimodal
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
-from transformers.feature_extraction_sequence_utils import SequenceFeatureExtractor
-from transformers.image_processing_utils import BatchFeature
-from transformers.utils import TensorType, logging
-
-from ... import is_torch_available
 from ...audio_utils import AudioInput
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...image_processing_utils import BatchFeature
+from ...utils import TensorType, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
