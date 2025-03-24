@@ -15,10 +15,13 @@
 """
 Feature extractor class for Speech Granite
 """
-from typing import Optional, List
+
 import math
+from typing import List, Optional
+
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from transformers.utils import logging, is_torch_available, is_torchaudio_available
+from transformers.utils import is_torch_available, is_torchaudio_available, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -27,6 +30,7 @@ if is_torch_available():
 
 if is_torchaudio_available():
     import torchaudio
+
 
 class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
     model_input_names = ["input_features"]
@@ -48,7 +52,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             "n_fft": n_fft,
             "win_length": win_length,
             "hop_length": hop_length,
-            "n_mels": n_mels
+            "n_mels": n_mels,
         }
         # HACK - for now, lazily initialize the mel spectrogram transform;
         # the feature extractor mixin explodes otherwise because
@@ -60,14 +64,12 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
 
     def _ensure_melspec_transform_is_initialized(self):
         if self.melspec is None:
-            self.melspec = torchaudio.transforms.MelSpectrogram(
-                **self.melspec_kwargs
-            )
+            self.melspec = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
 
     def __call__(
         self,
         x: torch.Tensor,
-        device: Optional[str]="cpu",
+        device: Optional[str] = "cpu",
     ) -> BatchFeature:
         # TODO there is probably a better way to do both of these things...
         self._ensure_melspec_transform_is_initialized()
@@ -80,18 +82,17 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         B, _ = x.shape
         with torch.no_grad():
             mel = melspec(x.float())
-            logmel = mel.transpose(-1,-2).clip_(min=1e-10).log10_()
-            mx = logmel.amax(dim=(-2,-1), keepdim=True)
+            logmel = mel.transpose(-1, -2).clip_(min=1e-10).log10_()
+            mx = logmel.amax(dim=(-2, -1), keepdim=True)
             logmel = torch.maximum(logmel, mx - 8.0).div_(4).add_(1)
             if logmel.shape[1] % 2 == 1:
-                logmel = logmel[:,:-1]                       # remove last frame if odd
+                logmel = logmel[:, :-1]  # remove last frame if odd
             x = logmel.reshape(B, -1, 2 * logmel.shape[-1])  # stacking and skipping by 2
 
         if x.device != "cpu":
             return x.detach().cpu()
         return x
 
-    
     def _get_num_audio_features(self, audio_lengths: List[int]) -> List[int]:
         """
         Gets the (variable length) variable length number of features
@@ -110,8 +111,8 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             # projector output length
             projector_length = nblocks * effective_window_size
             projector_lengths.append(projector_length)
-        
+
         return projector_lengths
 
-        
+
 __all__ = ["GraniteSpeechFeatureExtractor"]

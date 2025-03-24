@@ -21,6 +21,7 @@ from ...utils import (
 )
 from ...utils.import_utils import define_import_structure
 
+
 _import_structure = {
     "configuration_granite_speech": [
         "GraniteSpeechConfig",
@@ -52,7 +53,6 @@ else:
     _import_structure["processing_granite_speech"] = ["GraniteSpeechProcessor"]
 
 
-
 if TYPE_CHECKING:
     from .configuration_granite_speech import (
         GraniteSpeechConfig,
@@ -67,9 +67,9 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_granite_speech import (
+            GraniteSpeechEncoderProjectorPreTrainedModel,
             GraniteSpeechForConditionalGeneration,
             GraniteSpeechPreTrainedModel,
-            GraniteSpeechEncoderProjectorPreTrainedModel,
             GraniteSpeechQFormerModel,
         )
 
@@ -83,5 +83,6 @@ if TYPE_CHECKING:
         from .processing_granite_speech import GraniteSpeechProcessor
 else:
     import sys
+
     _file = globals()["__file__"]
     sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

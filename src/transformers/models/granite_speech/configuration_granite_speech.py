@@ -1,6 +1,6 @@
 from transformers.configuration_utils import PretrainedConfig
-from transformers.models.auto import AutoConfig
 from transformers.models.auto import CONFIG_MAPPING, AutoConfig
+
 
 class GraniteSpeechEncoderConfig(PretrainedConfig):
     model_type = "granite_speech_encoder"
@@ -35,9 +35,11 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.conv_expansion_factor = conv_expansion_factor
         self.use_max_pos_emb_in_pos_emb_calc = use_max_pos_emb_in_pos_emb_calc
 
+
 ## adapted from transformers.models.blip.configuration_blip_2.Blip2VisionConfig
 class GraniteSpeechProjectorConfig(PretrainedConfig):
     model_type = "blip_2_qformer"
+
     def __init__(
         self,
         llm_dim=4096,
@@ -113,7 +115,7 @@ class GraniteSpeechConfig(PretrainedConfig):
             projector_config = GraniteSpeechProjectorConfig()
 
         if not isinstance(encoder_config, GraniteSpeechEncoderConfig):
-            encoder_config = dict() if encoder_config is None else encoder_config
+            encoder_config = {} if encoder_config is None else encoder_config
             encoder_config = GraniteSpeechEncoderConfig(**encoder_config)
 
         self.text_config = text_config
@@ -123,5 +125,6 @@ class GraniteSpeechConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.has_lora_adapter = has_lora_adapter
         super().__init__(**kwargs)
+
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechProjectorConfig", "GraniteSpeechConfig"]

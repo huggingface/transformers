@@ -109,7 +109,7 @@ IGNORE_NON_TESTED = (
         "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
         "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
         "GraphormerDecoderHead",  # Building part of bigger (tested) model.
-        "GraniteSpeechQFormerModel", # Building part of bigger (tested) model.
+        "GraniteSpeechQFormerModel",  # Building part of bigger (tested) model.
         "JukeboxVQVAE",  # Building part of bigger (tested) model.
         "JukeboxPrior",  # Building part of bigger (tested) model.
         "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
