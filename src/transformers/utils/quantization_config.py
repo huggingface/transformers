@@ -1244,8 +1244,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
-            emulate compressed model execution if True, otherwise use default submodule
+        run_compressed (`bool`, *optional*, defaults to `None`): alter submodules (usually linear) in order to
+            emulate compressed model execution if True, otherwise use default submodule. Defaults to True if the model is compressed or frozen.
     """
 
     def __init__(
@@ -1271,13 +1271,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quantization_config = None
         self.sparsity_config = None
 
+        if run_compressed and quantization_status not in [QuantizationStatus.COMPRESSED, QuantizationStatus.FROZEN]:
+            raise ValueError("`run_compressed` is only supported for quantized_compressed models")
+        if run_compressed is None:
+            run_compressed = quantization_status in [QuantizationStatus.COMPRESSED, QuantizationStatus.FROZEN]
+
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
-            if run_compressed and quantization_status != QuantizationStatus.COMPRESSED:
-                raise ValueError("`run_compressed` is only supported for quantized_compressed models")
-            if run_compressed is None:
-                run_compressed = quantization_status == QuantizationStatus.COMPRESSED
-
             self.quantization_config = QuantizationConfig.parse_obj(
                 {
                     "config_groups": config_groups,

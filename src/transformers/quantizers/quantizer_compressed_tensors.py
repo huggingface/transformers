@@ -70,7 +70,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # in _process_model_after_weight_loading
 
         expected_missing_keys = self.compressor.get_missing_module_keys(model)
-        print(expected_missing_keys)
         return [
             key for key in missing_keys if not any(re.match(f".*{pattern}", key) for pattern in expected_missing_keys)
         ]
@@ -90,7 +89,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # We expect some unexpected keys in model
         # safetensors file for compressed models
         keys_to_ignore = self.compressor.get_unexpected_file_keys(model)
-        # print(keys_to_ignore)
         return [key for key in unexpected_keys if not any(re.match(f".*{pattern}", key) for pattern in keys_to_ignore)]
 
     def validate_environment(self, *args, **kwargs):
@@ -154,7 +152,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.quantization_config is not None
-            and self.quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+            and self.quantization_config.quantization_config.quantization_status in [QuantizationStatus.COMPRESSED, QuantizationStatus.FROZEN]
         )
 
     @property
