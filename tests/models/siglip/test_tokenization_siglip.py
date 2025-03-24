@@ -45,7 +45,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.setUp with T5->Siglip
+    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.setUpClass with T5->Siglip
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
