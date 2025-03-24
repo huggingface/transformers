@@ -94,7 +94,7 @@ VideoInput = Union[
     list["np.ndarray"],
     list["torch.Tensor"],
     list[list["PIL.Image.Image"]],
-    list[list["np.ndarrray"]],
+    list[list["np.ndarray"]],
     list[list["torch.Tensor"]],
 ]  # noqa
 

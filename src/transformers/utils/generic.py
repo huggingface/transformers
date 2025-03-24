@@ -355,7 +355,7 @@ class ModelOutput(OrderedDict):
 
         if is_modeloutput_subclass and not is_dataclass(self):
             raise TypeError(
-                f"{self.__module__}.{self.__class__.__name__} is not a dataclasss."
+                f"{self.__module__}.{self.__class__.__name__} is not a dataclass."
                 " This is a subclass of ModelOutput and so must use the @dataclass decorator."
             )
 
