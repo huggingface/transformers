@@ -70,10 +70,10 @@ class MultiScaleDeformableAttention(nn.Module):
     ):
         batch_size, _, num_heads, hidden_dim = value.shape
         _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-        value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
         sampling_grids = 2 * sampling_locations - 1
         sampling_value_list = []
-        for level_id, (height, width) in enumerate(value_spatial_shapes):
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
             # batch_size, height*width, num_heads, hidden_dim
             # -> batch_size, height*width, num_heads*hidden_dim
             # -> batch_size, num_heads*hidden_dim, height*width
