@@ -26,7 +26,7 @@ from transformers.image_processing_utils import BatchFeature
 from transformers.utils import TensorType, logging
 
 from ... import is_torch_available
-from ...audio_utils import AudioInput, spectrogram_batch, window_function
+from ...audio_utils import AudioInput
 
 
 logger = logging.get_logger(__name__)
@@ -199,17 +199,21 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_torch_numpy = isinstance(raw_speech, (np.ndarray, torch.Tensor)) and len(raw_speech.shape) > 1
-        if is_batched_torch_numpy and len(raw_speech.shape) > 2:
+        # Convert to torch tensor
+        if isinstance(raw_speech, np.ndarray):
+            raw_speech = torch.tensor(raw_speech)
+        elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], np.ndarray):
+            raw_speech = [torch.tensor(speech) for speech in raw_speech]
+
+        is_batched_torch = isinstance(raw_speech, torch.Tensor) and len(raw_speech.shape) > 1
+        if is_batched_torch and len(raw_speech.shape) > 2:
             logger.warning(
                 f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
                 "We will take the mean of the channels to convert to mono."
             )
             raw_speech = raw_speech.mean(-1)
 
-        is_batched_sequence = isinstance(raw_speech, (list, tuple)) and (
-            isinstance(raw_speech[0], (np.ndarray, torch.Tensor))
-        )
+        is_batched_sequence = isinstance(raw_speech, (list, tuple))
         if is_batched_sequence:
             for speech in raw_speech:
                 if len(speech.shape) > 1:
@@ -219,23 +223,17 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                     )
                     speech = speech.mean(-1)
 
-        is_batched = is_batched_torch_numpy or is_batched_sequence
-
-        def to_float32(x):
-            return x.astype(np.float32) if isinstance(x, np.ndarray) else x.to(torch.float32)
-
-        if is_batched:
-            raw_speech = [to_float32(speech)[:, None] for speech in raw_speech]
+        if is_batched_torch or is_batched_sequence:
+            raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
         else:
-            raw_speech = [to_float32(raw_speech)[:, None]]
+            raw_speech = [raw_speech[:, None].to(torch.float32)]
 
         audio_lengths = [len(speech) for speech in raw_speech]
 
         # if torch is available, let's make sure input_features and audio_lengths are PyTorch tensors
         # if not, it necessarily means that inputs are NumPy arrays
         batched_speech = BatchFeature(
-            data={"audio_input_features": raw_speech, "audio_lengths": audio_lengths},
-            tensor_type="pt" if is_torch_available() and return_tensors is None else return_tensors,
+            data={"audio_input_features": raw_speech, "audio_lengths": audio_lengths}, tensor_type="pt"
         )
 
         # convert into correct format for padding
@@ -249,9 +247,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         input_features = padded_inputs.audio_input_features.squeeze(-1)
         audio_lengths = padded_inputs.audio_lengths
 
-        extract_fbank_features = (
-            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
-        )
+        extract_fbank_features = self._torch_extract_fbank_features
         input_features = extract_fbank_features(input_features, audio_lengths, device)
 
         feature_lengths = (audio_lengths - self.win_length) // self.hop_length + 1
@@ -340,61 +336,14 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
 
         return log_spec
 
-    def _np_extract_fbank_features(
-        self, waveform_batch: np.ndarray, audio_lengths: np.ndarray = None, device: str = "cpu"
-    ) -> np.ndarray:
-        """
-        Compute the log mel-scaled spectrogram of batched waveforms using NumPy's FFT implementation.
-
-        Args:
-            waveform_batch (`np.ndarray` of shape `(batch_size, max_audio_length)`):
-                The batched waveforms.
-            audio_lengths (`np.ndarray` of shape `(batch_size,)`):
-                The lengths of the waveforms along the max_audio_length dimension.
-            device (`str`, *optional*, defaults to "cpu"):
-                The device to run the computation on. Should be "cpu" as NumPy does not support CUDA.
-
-        Returns:
-            `np.ndarray` of shape `(batch_size, max_feature_length, feature_size)`:
-                The log mel-scaled spectrogram of the batched waveforms.
-        """
-        if device != "cpu":
-            raise ValueError(
-                f"Got device `{device}` for feature extraction, but feature extraction on CUDA accelerator "
-                "devices requires torch, which is not installed. Either set `device='cpu'`, or "
-                "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
-            )
-
-        log_specs = spectrogram_batch(
-            [waveform[:audio_length] * 32768 for waveform, audio_length in zip(waveform_batch, audio_lengths)],
-            window_function(self.win_length, "hamming", periodic=False),
-            self.win_length,
-            self.hop_length,
-            fft_length=self.n_fft,
-            mel_filters=self.mel_filters,
-            power=2.0,
-            center=False,
-            log_mel="log",
-            preemphasis=self.preemphasis,
-        )
-
-        pad_size = max([log_spec.shape[-1] for log_spec in log_specs])
-        log_specs = [np.pad(log_spec, ((0, 0), (0, pad_size - log_spec.shape[-1]))).T for log_spec in log_specs]
-        log_spec = np.array(log_specs)
-
-        return log_spec
-
     def _compute_audio_embed_size(self, audio_frames):
-        def astype(x, dtype):
-            return x.astype(dtype) if isinstance(x, np.ndarray) else x.to(dtype)
-
         integer = audio_frames // self.audio_compression_rate
         remainder = audio_frames % self.audio_compression_rate
-        result = integer + astype(remainder > 0, integer.dtype)
+        result = integer + (remainder > 0).to(integer.dtype)
 
         integer = result // self.audio_downsample_rate
         remainder = result % self.audio_downsample_rate
-        result = integer + astype(remainder > 0, integer.dtype)  # qformer compression
+        result = integer + (remainder > 0).to(integer.dtype)  # qformer compression
 
         return result
 
