@@ -410,7 +410,7 @@ class GPT2Block(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            **kwargs
+            **kwargs,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -461,8 +461,8 @@ class GPT2PreTrainedModel(PreTrainedModel):
 
     config_class = GPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
-    base_model_prefix = "model" # vllm
-    # base_model_prefix = "transformer" # transformers
+    # base_model_prefix = "model" # vllm
+    base_model_prefix = "transformer"  # transformers
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
