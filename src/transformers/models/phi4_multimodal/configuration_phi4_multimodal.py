@@ -153,7 +153,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
             Time reduction (subsampling factor).
         bias_max_distance (`int`, *optional*, defaults to 1000):
             Max distance for the relative attention bias module.
-        bias_symmetric (`bool`, *optional*, defaults to False):
+        bias_symmetric (`bool`, *optional*, defaults to `False`):
             Whether the relative attention bias should be symmetric or not.
         nemo_activation (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the nemo conv modules.
@@ -161,7 +161,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
             Number of channels in the nemo conv modules.
         downsample_rate (`int`, *optional*, defaults to 1):
             Downsample rate for the audio feature extractor.
-        initializer_range (`float`, *optional*, defaults to `0.02`):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         audio_token_id (`int`, *optional*, defaults to 200011):
             The audio token id.
@@ -281,9 +281,6 @@ class Phi4MultimodalConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
-        original_max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model was trained with. This is used to determine the size of the
-            original RoPE embeddings when using long scaling.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -300,14 +297,17 @@ class Phi4MultimodalConfig(PretrainedConfig):
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
             the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
-        partial_rotary_factor (`float`, *optional*, defaults to 1.0):
+        partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):
             The id of the "beginning-of-sequence" token.
-        eos_token_id (`int` or `list[int]`, *optional*, defaults to [199999, 200020]):
+        eos_token_id (`int` or `list[int]`, *optional*, defaults to `[199999, 200020]`):
             The id of the "end-of-sequence" token.
         pad_token_id (`int`, *optional*, defaults to 199999):
             The id of the padding token.
+        original_max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model was trained with. This is used to determine the size of the
+            original RoPE embeddings when using long scaling.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If `None`, no sliding window is applied.
         vision_config (`Phi4MultimodalVisionConfig` or `dict`, *optional*):
