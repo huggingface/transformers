@@ -1985,24 +1985,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
 
-                # This block looks for any extra chat template files
-                if is_local:
-                    template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                    if template_dir.is_dir():
-                        for template_file in template_dir.glob("*.jinja"):
-                            template_name = template_file.name.removesuffix(".jinja")
-                            additional_files_names[f"chat_template_{template_name}"] = (
-                                f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                            )
-                else:
-                    for template in list_repo_templates(
-                        pretrained_model_name_or_path,
-                        local_files_only=local_files_only,
-                        revision=revision,
-                        cache_dir=cache_dir,
-                    ):
-                        additional_files_names[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
-
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
                     # Try to get the tokenizer config to see if there are versioned tokenizer files.
@@ -2031,6 +2013,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if "fast_tokenizer_files" in tokenizer_config:
                                 fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
                     vocab_files["tokenizer_file"] = fast_tokenizer_file
+
+                    # This block looks for any extra chat template files
+                    if is_local:
+                        template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                        if template_dir.is_dir():
+                            for template_file in template_dir.glob("*.jinja"):
+                                template_name = template_file.name.removesuffix(".jinja")
+                                vocab_files[f"chat_template_{template_name}"] = (
+                                    f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                                )
+                    else:
+                        for template in list_repo_templates(
+                                pretrained_model_name_or_path,
+                                local_files_only=local_files_only,
+                                revision=revision,
+                                cache_dir=cache_dir,
+                        ):
+                            vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
