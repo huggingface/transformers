@@ -61,8 +61,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         This function cleans up expected missing keys and returns the remaining missing keys
         """
 
-        if self.run_compressed:
-            return missing_keys
+        # if self.run_compressed:
+        #     return missing_keys
 
         # We expect some keys to be missing for
         # compresed models
@@ -70,6 +70,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # in _process_model_after_weight_loading
 
         expected_missing_keys = self.compressor.get_missing_module_keys(model)
+        print(expected_missing_keys)
         return [
             key for key in missing_keys if not any(re.match(f".*{pattern}", key) for pattern in expected_missing_keys)
         ]
@@ -89,6 +90,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # We expect some unexpected keys in model
         # safetensors file for compressed models
         keys_to_ignore = self.compressor.get_unexpected_file_keys(model)
+        # print(keys_to_ignore)
         return [key for key in unexpected_keys if not any(re.match(f".*{pattern}", key) for pattern in keys_to_ignore)]
 
     def validate_environment(self, *args, **kwargs):
@@ -116,9 +118,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         ct_quantization_config = self.compressor.quantization_config
 
-        if self.run_compressed:
-            if not self.is_quantization_compressed:
-                raise ValueError("`run_compressed` is only supported for quantized_compressed models")
+        if self.run_compressed and self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
         elif self.is_quantized and not self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)

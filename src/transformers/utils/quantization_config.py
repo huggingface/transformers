@@ -1258,12 +1258,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
-        run_compressed: bool = True,
+        run_compressed: Optional[bool] = None,
         **kwargs,
     ):
         if is_compressed_tensors_available():
             from compressed_tensors.config import SparsityCompressionConfig
-            from compressed_tensors.quantization import QuantizationConfig
+            from compressed_tensors.quantization import QuantizationConfig, QuantizationStatus
         else:
             raise ImportError(
                 "compressed_tensors is not installed and is required for compressed-tensors quantization. Please install it with `pip install compressed-tensors`."
@@ -1271,10 +1271,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quantization_config = None
         self.sparsity_config = None
 
-        self.run_compressed = run_compressed
-
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
+            if run_compressed and quantization_status != QuantizationStatus.COMPRESSED:
+                 raise ValueError("`run_compressed` is only supported for quantized_compressed models")
+            if run_compressed is None:
+                run_compressed = quantization_status == QuantizationStatus.COMPRESSED
+
             self.quantization_config = QuantizationConfig.parse_obj(
                 {
                     "config_groups": config_groups,
@@ -1293,6 +1296,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             self.sparsity_config = SparsityCompressionConfig.load_from_registry(
                 sparsity_config.get("format"), **sparsity_config
             )
+
+        self.run_compressed = run_compressed
 
         super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
 
