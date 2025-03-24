@@ -1289,9 +1289,6 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
@@ -1303,6 +1300,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 )
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
