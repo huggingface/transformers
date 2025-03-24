@@ -623,24 +623,17 @@ class PruneReindexingLMHead(nn.Module):
     Args:
         original_lm_head (nn.Module): The original language model head.
         token_ids (list[int]): The list of token IDs to keep.
-        filter_value (float, optional): The value to use for filtering out pruned logits. Defaults to -float("Inf").
     """
-    def __init__(self, original_lm_head, token_ids, filter_value: float = -float("Inf")):
+    def __init__(self, original_lm_head, assistant_overlap_token_ids):
         super().__init__()
-        self.token_ids = token_ids
-        self.filter_value = filter_value
-        self.original_vocab_size = original_lm_head.out_features
-        self.pruned_lm_head = prune_linear_layer(original_lm_head, self.token_ids).to(original_lm_head.weight.dtype)
-        #print(f'{original_lm_head=}')
-        #print(f'{self.pruned_lm_head=}')
+        self.pruned_lm_head = prune_linear_layer(original_lm_head, assistant_overlap_token_ids).to(original_lm_head.weight.dtype)
 
     def forward(self, hidden_states):
         pruned_logits = self.pruned_lm_head(hidden_states)
-        #print(f'{torch.argmax(pruned_logits)=}')
         return pruned_logits
 
 class MapInputEmbedding(nn.Module):
-    def __init__(self, original_embedding: nn.Embedding, token_ids):
+    def __init__(self, original_embedding: nn.Embedding, assistant_overlap_token_ids):
         """
         Wraps an existing embedding layer and remaps token IDs before lookup.
         
@@ -651,8 +644,9 @@ class MapInputEmbedding(nn.Module):
         """
         super().__init__()
         self.original_embedding = original_embedding
-        self.token_ids = token_ids
-        self.first = True
+        self.weight = original_embedding.weight
+        self.assistant_overlap_token_ids = assistant_overlap_token_ids
+        self.map = False
 
     def forward(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
         """
@@ -663,15 +657,16 @@ class MapInputEmbedding(nn.Module):
             torch.FloatTensor: Corresponding input embeddings.
         """
         #print(f'A {input_ids.squeeze(0).tolist()=}')
-        #print(f'{self.first}')
-        if self.first: #input_ids.shape[-1] > 1:
-            self.first = False
+        #print(f'{self.map}')
+        if self.map:
+            # Get the last item from input_ids 
+            my_input_ids = self.assistant_overlap_token_ids[input_ids[0, -1]].unsqueeze(0).unsqueeze(0)
         else:
-            # Get the last item from input_ids
-            input_ids[0, -1] = self.token_ids[input_ids[0, -1]]
+            self.map = True
+            my_input_ids = input_ids
 
         #print(f'B {input_ids.squeeze(0).tolist()=}')
-        return self.original_embedding(input_ids)
+        return self.original_embedding(my_input_ids)
 
 class AssistantToTargetTranslator:
     """
@@ -715,14 +710,14 @@ class AssistantToTargetTranslator:
         self.assistant_prune_LM_head = assistant_prune_LM_head
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
-            if assistant_prune_LM_head:
+            if self.assistant_prune_LM_head:
 
                 self.assistant_overlap_token_ids = torch.tensor(
                     list(self.target_to_assistant_input_ids.values()), dtype=torch.long, device=self._assistant_model_device
                 )
                 original_lm_head = assistant_model.get_output_embeddings()
                 pruned_lm_head = PruneReindexingLMHead(
-                    original_lm_head, self.assistant_overlap_token_ids, self.FILTER_VALUE
+                    original_lm_head, self.assistant_overlap_token_ids
                 )
                 del original_lm_head
                 assistant_model.set_output_embeddings(pruned_lm_head)
@@ -731,17 +726,17 @@ class AssistantToTargetTranslator:
                 map_input_embeddings = MapInputEmbedding(
                     originial_input_embeddings, self.assistant_overlap_token_ids
                 )
-                assistant_model.set_input_embeddings(map_input_embeddings)
-                self._assistant_model = assistant_model
                 del originial_input_embeddings
+                assistant_model.set_input_embeddings(map_input_embeddings)
+                self.map_input_embeddings = map_input_embeddings
             else:
                 self.logits_processors = LogitsProcessorList(
                     [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
                 )
 
-    def set_first(self):
+    def set_unmap(self):
         if self.assistant_prune_LM_head:
-            self._assistant_model.get_input_embeddings().first = True
+            self.map_input_embeddings.map = False
 
     def _get_assistant_to_target_input_ids(self):
         target_vocab = self._target_tokenizer.get_vocab()
@@ -973,7 +968,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             )
             assistant_new_ids = self.assistant_tokenizer(
                 target_new_text, add_special_tokens=False, return_tensors="pt"
-            )["input_ids"].to(self.assistant_model.device)
+            )["input_ids"].to(self.assistant_model.device)         
         else:
             assistant_new_ids = torch.tensor([[assistant_new_ids]], device=self.assistant_model.device)
 
@@ -987,7 +982,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
                 self._prev_assistant_ids = self._prev_assistant_ids[:, :-tokens_to_remove]
             assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
         assistant_input_ids = assistant_input_ids.to(dtype=torch.long)
-        self._atm_translator.set_first()
+        self._atm_translator.set_unmap()
         return assistant_input_ids, len(assistant_new_ids[0])
 
 

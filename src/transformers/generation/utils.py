@@ -866,6 +866,7 @@ class GenerationMixin:
                     target_tokenizer, assistant_tokenizer, assistant_model,
                     self.config.vocab_size, assistant_prune_LM_head=generation_config.assistant_prune_LM_head
                 )
+                assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,
                     assistant_model=assistant_model,
