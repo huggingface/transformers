@@ -28,7 +28,6 @@ import shutil
 import tempfile
 import warnings
 from collections import defaultdict
-from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -890,25 +889,25 @@ def update_key_name(keys):
     """
     Updates a dictionary of keys to pack layers together as layer.{0, 1, 4} instead of layers.0, layers.1, layers.4.
     """
-    key_dict = defaultdict(set)
+    key_dict = defaultdict(list)
     for key in keys:
-        modified_key = r""
-        for char in key:
-            if char.isdigit() and modified_key[-1] == ".":
-                if modified_key != "":
-                    modified_key += r"(\d+)"
-                    modified_key = modified_key.replace(".", r"\.")
-                    key_dict[modified_key].add(int(char))
-                    modified_key = r""
-            else:
-                modified_key += char
+        all_digits = re.findall(r".(\d+).", key)
+        for i, k in enumerate(all_digits):
+            if len(key_dict[re.sub(r"(\d+)", "*", key)]) <= i:
+                key_dict[re.sub(r"(\d+)", "*", key)].append(set())
+            key_dict[re.sub(r"(\d+)", "*", key)][i].add(int(k))
+
     final_keys = set()
     for key in keys:
-        text = key
-        for pattern, values in key_dict.items():
-            if len(values) > 1:
-                text = re.sub(pattern, lambda match: match.group(0)[: -len(match.group(1))] + str(values), text)
-        final_keys.add(text)
+        text = re.sub(r"(\d+)", "*", key)
+        pattern = key_dict[text]
+        final_text = ""
+        for i, part in enumerate(text.split("*")):
+            if len(pattern) <= i:
+                final_text += part
+            else:
+                final_text += part + "{" +  ",".join([str(i) for i in sorted(list(pattern[i]))]) + "}"
+        final_keys.add(final_text)
     return final_keys
 
 
