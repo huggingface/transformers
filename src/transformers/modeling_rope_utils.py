@@ -449,7 +449,7 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
         "original_max_position_embeddings",
         "mscale",
         "mscale_all_dim",
-    , "original_max_position_embeddings"}
+    }
     received_keys = set(rope_scaling.keys())
     _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
