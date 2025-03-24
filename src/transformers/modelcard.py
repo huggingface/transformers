@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 import yaml
@@ -196,7 +195,7 @@ class ModelCard:
                 # Load model card
                 modelcard = cls.from_json_file(resolved_model_card_file)
 
-            except (EnvironmentError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError):
                 # We fall back on creating an empty model card
                 modelcard = cls()
 
@@ -223,7 +222,7 @@ class ModelCard:
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `ModelCard` from a json file of parameters."""
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         dict_obj = json.loads(text)
         return cls(**dict_obj)
@@ -357,18 +356,18 @@ def _get_mapping_values(mapping):
 @dataclass
 class TrainingSummary:
     model_name: str
-    language: Optional[Union[str, List[str]]] = None
+    language: Optional[Union[str, list[str]]] = None
     license: Optional[str] = None
-    tags: Optional[Union[str, List[str]]] = None
+    tags: Optional[Union[str, list[str]]] = None
     finetuned_from: Optional[str] = None
-    tasks: Optional[Union[str, List[str]]] = None
-    dataset: Optional[Union[str, List[str]]] = None
-    dataset_tags: Optional[Union[str, List[str]]] = None
-    dataset_args: Optional[Union[str, List[str]]] = None
-    dataset_metadata: Optional[Dict[str, Any]] = None
-    eval_results: Optional[Dict[str, float]] = None
-    eval_lines: Optional[List[str]] = None
-    hyperparameters: Optional[Dict[str, Any]] = None
+    tasks: Optional[Union[str, list[str]]] = None
+    dataset: Optional[Union[str, list[str]]] = None
+    dataset_tags: Optional[Union[str, list[str]]] = None
+    dataset_args: Optional[Union[str, list[str]]] = None
+    dataset_metadata: Optional[dict[str, Any]] = None
+    eval_results: Optional[dict[str, float]] = None
+    eval_lines: Optional[list[str]] = None
+    hyperparameters: Optional[dict[str, Any]] = None
     source: Optional[str] = "trainer"
 
     def __post_init__(self):
