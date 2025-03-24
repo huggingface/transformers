@@ -25,6 +25,7 @@ from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    BaseModelOutputWithPast,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -33,7 +34,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_paligemma import PaliGemmaConfig
 
 
@@ -115,6 +115,39 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
                     token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
                 )
     return causal_mask
+
+
+@dataclass
+class PaligemmaModelOutputWithPast(BaseModelOutputWithPast):
+    """
+    Base class for Paligemma outputs, with hidden states and attentions.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -294,10 +327,10 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The PALIGEMMA model which consists of a vision backbone and a language model.""",
+    """Base Paligemma model which consists of a vision backbone and a language model withou language modeling head.""",
     PALIGEMMA_START_DOCSTRING,
 )
-class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
+class PaliGemmaModel(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
@@ -313,27 +346,27 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings with Llava->PaliGemma
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_input_embeddings with Llava->PaliGemma
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings with Llava->PaliGemma
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.set_input_embeddings with Llava->PaliGemma
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings with Llava->PaliGemma
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_output_embeddings with Llava->PaliGemma
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings with Llava->PaliGemma
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.set_output_embeddings with Llava->PaliGemma
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder with Llava->PaliGemma
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.set_decoder with Llava->PaliGemma
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder with Llava->PaliGemma
+    # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_decoder with Llava->PaliGemma
     def get_decoder(self):
         return self.language_model.get_decoder()
 
@@ -421,7 +454,135 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **lm_kwargs,
+    ) -> Union[Tuple, PaligemmaModelOutputWithPast]:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        is_training = token_type_ids is not None and labels is not None
+
+        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
+            special_image_mask = input_ids == self.config.image_token_index
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[special_image_mask] = 0
+        else:
+            llm_input_ids = input_ids
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
+
+        # Merge text and images
+        if pixel_values is not None:
+            image_features = self.get_image_features(pixel_values)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                )
+            else:
+                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                raise ValueError(
+                    f"Number of images does not match number of special image tokens in the input text. "
+                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
+                    "tokens from image embeddings."
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
+        )
+        outputs = self.language_model(
+            attention_mask=causal_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **lm_kwargs,
+        )
+
+        output = PaligemmaModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values if use_cache else None,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+        return output if return_dict else output.to_tuple()
+
+
+@add_start_docstrings(
+    """Base Paligemma model which consists of a vision backbone and a language model withou language modeling head.""",
+    PALIGEMMA_START_DOCSTRING,
+)
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__(config)
+        self.model = PaliGemmaModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        if self.model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -478,119 +639,61 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "answer en Where is the cow standing?\nbeach"
         ```"""
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        is_training = token_type_ids is not None and labels is not None
-
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
-        if input_ids is not None and self.config.image_token_index >= self.vocab_size:
-            special_image_mask = input_ids == self.config.image_token_index
-            llm_input_ids = input_ids.clone()
-            llm_input_ids[special_image_mask] = 0
-        else:
-            llm_input_ids = input_ids
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
-
-        # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
-                )
-            else:
-                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
-                    "tokens from image embeddings."
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        # mask out pad-token-ids in labels for BC
-        if labels is not None and self.pad_token_id in labels:
-            logger.warning_once(
-                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. "
-                "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
-            )
-            labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
-
-        causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
-        )
-        outputs = self.language_model(
-            attention_mask=causal_mask,
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
+            # Shift so that tokens < n predict n
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
+                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            )
 
-            flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return PaliGemmaCausalLMOutputWithPast(
+        output = PaliGemmaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
         )
+        return output if return_dict else output.to_tuple()
 
     def prepare_inputs_for_generation(
         self,
@@ -608,7 +711,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
