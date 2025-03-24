@@ -21,6 +21,7 @@ try:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
+        use_kernel_mapping,
     )
 
     _hub_kernels_available = True
@@ -57,6 +58,16 @@ except ImportError:
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
 
+    def use_kernel_mapping(*args, **kwargs):
+        class ContextManager:
+            def __enter__(self):
+                pass
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                pass
+
+        return ContextManager()
+
     _hub_kernels_available = False
 
 
@@ -70,4 +81,5 @@ __all__ = [
     "use_kernel_forward_from_hub",
     "register_kernel_mapping",
     "replace_kernel_forward_from_hub",
+    "use_kernel_mapping",
 ]
