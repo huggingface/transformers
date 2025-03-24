@@ -82,14 +82,14 @@ class AriaVisionText2TextModelTester:
             moe_intermediate_size=4,
             moe_num_experts=4,
             moe_topk=2,
-            num_attention_heads=20,
+            num_attention_heads=8,
             num_experts_per_tok=3,
             num_hidden_layers=2,
-            num_key_value_heads=20,
+            num_key_value_heads=8,
             rope_theta=5000000,
             vocab_size=99,
             eos_token_id=2,
-            head_dim=2,
+            head_dim=4,
         ),
         is_training=True,
         vision_config=Idefics3VisionConfig(
@@ -189,7 +189,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     """
 
     all_model_classes = (AriaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (AriaForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -242,19 +241,19 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
             torch.testing.assert_close(out_embeds, out_ids)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -287,8 +286,16 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
-    @unittest.skip(reason="Unsupported")
+    @unittest.skip(reason="Dynamic control flow due to MoE")
     def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Dynamic control flow due to MoE")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Dynamic control flow due to MoE")
+    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -304,7 +311,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
@@ -326,7 +333,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
         model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
@@ -348,7 +355,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
         model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
@@ -375,7 +382,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
@@ -401,7 +408,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
-        # Let' s make sure we test the preprocessing to replace what is used
+        # Let's make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
@@ -429,12 +436,13 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_bitsandbytes
     def test_batched_generation(self):
         model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
 
         processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
-        prompt1 = "<image>\n<image>\nUSER: What's the the difference of two images?\nASSISTANT:"
+        prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
@@ -452,7 +460,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = model.eval()
 
         EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
+            "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
             "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
             "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
         ]

@@ -357,7 +357,7 @@ class MoshiRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -571,7 +571,7 @@ class MoshiFlashAttention2(MoshiAttention):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
@@ -1296,7 +1296,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -1400,7 +1400,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1434,7 +1434,9 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1608,7 +1610,7 @@ class MoshiModel(MoshiPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -1712,7 +1714,7 @@ class MoshiModel(MoshiPreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1746,7 +1748,9 @@ class MoshiModel(MoshiPreTrainedModel):
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1809,7 +1813,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, MoshiCausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -2095,6 +2098,31 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             depth_attentions=None if decoder_outputs is None else decoder_outputs.attentions,
         )
 
+    def _prepare_attention_mask_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        generation_config: GenerationConfig,
+        kwargs: Dict[str, Any],
+    ) -> torch.LongTensor:
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id = generation_config.eos_token_id
+
+        default_attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device)
+        if pad_token_id is None:
+            return default_attention_mask
+
+        is_pad_token_in_inputs = (pad_token_id is not None) and torch.isin(input_ids, pad_token_id).any()
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~torch.isin(
+            eos_token_id, pad_token_id
+        ).any()
+        can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
+        attention_mask_from_padding = input_ids.ne(pad_token_id).long()
+
+        attention_mask = (
+            attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
+        )
+        return attention_mask
+
     def _prepare_inputs_embeds_for_generation(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2311,6 +2339,12 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         kwargs_depth_decoder = depth_decoder_generation_config
 
         attention_mask = kwargs.pop("attention_mask", None)
+        if attention_mask is None:
+            attention_mask = self._prepare_attention_mask_for_generation(
+                input_ids=input_ids,
+                generation_config=generation_config,
+                kwargs=kwargs,
+            )
         (
             inputs_embeds,
             input_ids,
@@ -2473,7 +2507,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -2493,11 +2527,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 batch_size, sequence_length = input_ids.shape
                 device = input_ids.device
 
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask = self.decoder.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
                 target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
+                dtype=self.decoder.lm_head.weight.dtype,
                 device=device,
                 cache_position=cache_position,
                 batch_size=batch_size,

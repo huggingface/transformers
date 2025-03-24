@@ -182,7 +182,7 @@ class DepthProModelTester:
         model_name = model.__class__.__name__
         self.parent.assertTrue(
             diff <= 1e-03,
-            msg=(f"Batched and Single row outputs are not equal in {model_name} for fov. " f"Difference={diff}."),
+            msg=(f"Batched and Single row outputs are not equal in {model_name} for fov. Difference={diff}."),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -284,13 +284,13 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -323,7 +323,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    # this started when switched from normal initialization to kaiming_normal intialization
+    # this started when switched from normal initialization to kaiming_normal initialization
     # maybe because the magnitude of offset values from ViT-encoders increases when followed by many convolution layers
     def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)

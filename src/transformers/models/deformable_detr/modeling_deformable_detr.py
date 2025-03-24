@@ -16,19 +16,16 @@
 
 import copy
 import math
-import os
 import warnings
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -37,10 +34,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_ninja_available,
     is_timm_available,
-    is_torch_cuda_available,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -50,38 +44,6 @@ from .configuration_deformable_detr import DeformableDetrConfig
 
 
 logger = logging.get_logger(__name__)
-
-MultiScaleDeformableAttention = None
-
-
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global MultiScaleDeformableAttention
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
-    src_files = [
-        root / filename
-        for filename in [
-            "vision.cpp",
-            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
-            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
-        ]
-    ]
-
-    MultiScaleDeformableAttention = load(
-        "MultiScaleDeformableAttention",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cflags=["-DWITH_CUDA=1"],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=1",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
 
 
 if is_timm_available():
@@ -94,52 +56,59 @@ _CONFIG_FOR_DOC = "DeformableDetrConfig"
 _CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
 
 
-class MultiScaleDeformableAttentionFunction(Function):
-    @staticmethod
+@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
+class MultiScaleDeformableAttention(nn.Module):
     def forward(
-        context,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
+        self,
+        value: Tensor,
+        value_spatial_shapes: Tensor,
+        value_spatial_shapes_list: List[Tuple],
+        level_start_index: Tensor,
+        sampling_locations: Tensor,
+        attention_weights: Tensor,
+        im2col_step: int,
     ):
-        context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            context.im2col_step,
+        batch_size, _, num_heads, hidden_dim = value.shape
+        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
+        sampling_grids = 2 * sampling_locations - 1
+        sampling_value_list = []
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
+            # batch_size, height*width, num_heads, hidden_dim
+            # -> batch_size, height*width, num_heads*hidden_dim
+            # -> batch_size, num_heads*hidden_dim, height*width
+            # -> batch_size*num_heads, hidden_dim, height, width
+            value_l_ = (
+                value_list[level_id]
+                .flatten(2)
+                .transpose(1, 2)
+                .reshape(batch_size * num_heads, hidden_dim, height, width)
+            )
+            # batch_size, num_queries, num_heads, num_points, 2
+            # -> batch_size, num_heads, num_queries, num_points, 2
+            # -> batch_size*num_heads, num_queries, num_points, 2
+            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            # batch_size*num_heads, hidden_dim, num_queries, num_points
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_,
+                sampling_grid_l_,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
+            )
+            sampling_value_list.append(sampling_value_l_)
+        # (batch_size, num_queries, num_heads, num_levels, num_points)
+        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+        attention_weights = attention_weights.transpose(1, 2).reshape(
+            batch_size * num_heads, 1, num_queries, num_levels * num_points
         )
-        context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
+        output = (
+            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+            .sum(-1)
+            .view(batch_size, num_heads * hidden_dim, num_queries)
         )
-        return output
-
-    @staticmethod
-    @once_differentiable
-    def backward(context, grad_output):
-        (
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-        ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
-        )
-
-        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
+        return output.transpose(1, 2).contiguous()
 
 
 @dataclass
@@ -564,48 +533,6 @@ def build_position_encoding(config):
     return position_embedding
 
 
-def multi_scale_deformable_attention(
-    value: Tensor,
-    value_spatial_shapes: Union[Tensor, List[Tuple]],
-    sampling_locations: Tensor,
-    attention_weights: Tensor,
-) -> Tensor:
-    batch_size, _, num_heads, hidden_dim = value.shape
-    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
-    sampling_grids = 2 * sampling_locations - 1
-    sampling_value_list = []
-    for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, hidden_dim
-        # -> batch_size, height*width, num_heads*hidden_dim
-        # -> batch_size, num_heads*hidden_dim, height*width
-        # -> batch_size*num_heads, hidden_dim, height, width
-        value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
-        )
-        # batch_size, num_queries, num_heads, num_points, 2
-        # -> batch_size, num_heads, num_queries, num_points, 2
-        # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
-        sampling_value_l_ = nn.functional.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
-        )
-        sampling_value_list.append(sampling_value_l_)
-    # (batch_size, num_queries, num_heads, num_levels, num_points)
-    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_heads, 1, num_queries, num_levels * num_points
-    )
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .view(batch_size, num_heads * hidden_dim, num_queries)
-    )
-    return output.transpose(1, 2).contiguous()
-
-
 class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
@@ -614,12 +541,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: DeformableDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
-        kernel_loaded = MultiScaleDeformableAttention is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+        self.attn = MultiScaleDeformableAttention()
 
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -706,27 +628,16 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        if self.disable_custom_kernels or MultiScaleDeformableAttention is None or is_torchdynamo_compiling():
-            # PyTorch implementation
-            output = multi_scale_deformable_attention(
-                value, spatial_shapes_list, sampling_locations, attention_weights
-            )
-        else:
-            try:
-                # custom kernel
-                output = MultiScaleDeformableAttentionFunction.apply(
-                    value,
-                    spatial_shapes,
-                    level_start_index,
-                    sampling_locations,
-                    attention_weights,
-                    self.im2col_step,
-                )
-            except Exception:
-                # PyTorch implementation
-                output = multi_scale_deformable_attention(
-                    value, spatial_shapes_list, sampling_locations, attention_weights
-                )
+        output = self.attn(
+            value,
+            spatial_shapes,
+            spatial_shapes_list,
+            level_start_index,
+            sampling_locations,
+            attention_weights,
+            self.im2col_step,
+        )
+
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -834,7 +745,11 @@ class DeformableDetrMultiheadAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
+        if attn_output.size() != (
+            batch_size * self.num_heads,
+            target_len,
+            self.head_dim,
+        ):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
@@ -854,7 +769,9 @@ class DeformableDetrEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = DeformableDetrMultiscaleDeformableAttention(
-            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
+            config,
+            num_heads=config.encoder_attention_heads,
+            n_points=config.encoder_n_points,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -1054,7 +971,11 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = [r"DeformableDetrConvEncoder", r"DeformableDetrEncoderLayer", r"DeformableDetrDecoderLayer"]
+    _no_split_modules = [
+        r"DeformableDetrConvEncoder",
+        r"DeformableDetrEncoderLayer",
+        r"DeformableDetrDecoderLayer",
+    ]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1299,7 +1220,9 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -1525,7 +1448,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             for _ in range(config.num_feature_levels - num_backbone_outs):
                 input_proj_list.append(
                     nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
+                        nn.Conv2d(
+                            in_channels,
+                            config.d_model,
+                            kernel_size=3,
+                            stride=2,
+                            padding=1,
+                        ),
                         nn.GroupNorm(32, config.d_model),
                     )
                 )
@@ -1535,7 +1464,11 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
+                        nn.Conv2d(
+                            backbone.intermediate_channel_sizes[-1],
+                            config.d_model,
+                            kernel_size=1,
+                        ),
                         nn.GroupNorm(32, config.d_model),
                     )
                 ]
@@ -1625,8 +1558,20 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = meshgrid(
-                torch.linspace(0, height - 1, height, dtype=enc_output.dtype, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=enc_output.dtype, device=enc_output.device),
+                torch.linspace(
+                    0,
+                    height - 1,
+                    height,
+                    dtype=enc_output.dtype,
+                    device=enc_output.device,
+                ),
+                torch.linspace(
+                    0,
+                    width - 1,
+                    width,
+                    dtype=enc_output.dtype,
+                    device=enc_output.device,
+                ),
                 indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
@@ -1802,7 +1747,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             topk = self.config.two_stage_num_proposals
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
             topk_coords_logits = torch.gather(
-                enc_outputs_coord_logits, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
+                enc_outputs_coord_logits,
+                1,
+                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
             )
 
             topk_coords_logits = topk_coords_logits.detach()
@@ -1897,7 +1844,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # Detection heads on top
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = DeformableDetrMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+            input_dim=config.d_model,
+            hidden_dim=config.d_model,
+            output_dim=4,
+            num_layers=3,
         )
 
         prior_prob = 0.01
@@ -2033,7 +1983,13 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                outputs_class,
+                outputs_coord,
             )
         if not return_dict:
             if auxiliary_outputs is not None:

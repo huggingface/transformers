@@ -29,7 +29,6 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
-    is_torchdynamo_compiling,
     logging,
 )
 from ..cohere.modeling_cohere import (
@@ -172,6 +171,11 @@ class Cohere2Config(PretrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
@@ -483,11 +487,13 @@ class Cohere2Model(Gemma2Model):
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
+            # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
             past_key_values = HybridCache(
                 self.config,
                 max_batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
+                device=self.device,
             )
 
         if cache_position is None:
@@ -596,7 +602,7 @@ class Cohere2ForCausalLM(CohereForCausalLM):
         if past_key_values is not None:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)

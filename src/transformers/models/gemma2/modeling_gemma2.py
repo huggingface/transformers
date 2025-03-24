@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache
+from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -41,7 +41,6 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -301,7 +300,7 @@ class Gemma2DecoderLayer(nn.Module):
             # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
             # from the left, with an offset if we are beyond the sliding window
             else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
+                min_dtype = torch.finfo(attention_mask.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
@@ -395,7 +394,7 @@ class Gemma2RotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -600,11 +599,13 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
+            # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
             past_key_values = HybridCache(
                 self.config,
                 max_batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
+                device=self.device,
             )
 
         if cache_position is None:
@@ -713,7 +714,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
-        if isinstance(past_key_values, HybridCache):
+        if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]
@@ -757,7 +758,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -778,7 +779,9 @@ class Gemma2Model(Gemma2PreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -790,6 +793,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
 class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
@@ -838,7 +842,6 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -856,9 +859,9 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
+        >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
 
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 
         >>> prompt = "What is your favorite condiment?"
@@ -934,42 +937,23 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     ):
         # Overwritten: has a special cache type, `HybridCache`
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        if past_key_values is not None:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s
-                # `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride
-                # during the decoding. Here, simply using `.contiguous()` is not sufficient as in the
-                # batch size = 1 case, `position_ids` is already contiguous but with varying stride
-                # which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-        else:
-            # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
 
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
         model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+        if logits_to_keep is None:
+            _ = model_inputs.pop("logits_to_keep", None)
 
         if (
             isinstance(past_key_values, HybridCache)
@@ -992,19 +976,8 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
                 cache_position=cache_position,
                 batch_size=batch_size,
             )
+            model_inputs["attention_mask"] = attention_mask
 
-        if logits_to_keep is not None:
-            model_inputs["logits_to_keep"] = logits_to_keep
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
         return model_inputs
 
 
@@ -1087,7 +1060,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

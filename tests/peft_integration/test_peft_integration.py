@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_peft,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -440,7 +441,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_save_quantized(self):
         """
@@ -479,7 +480,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_save_quantized_regression(self):
         """
@@ -525,9 +526,13 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from transformers import pipeline
 
-        for model_id in self.peft_test_model_ids:
-            pipe = pipeline("text-generation", model_id)
-            _ = pipe("Hello")
+        for adapter_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            peft_pipe = pipeline("text-generation", adapter_id)
+            base_pipe = pipeline("text-generation", base_model_id)
+            peft_params = list(peft_pipe.model.parameters())
+            base_params = list(base_pipe.model.parameters())
+            self.assertNotEqual(len(peft_params), len(base_params))  # Assert we actually loaded the adapter too
+            _ = peft_pipe("Hello")
 
     def test_peft_add_adapter_with_state_dict(self):
         """
