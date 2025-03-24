@@ -184,7 +184,7 @@ class HiggsTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @unittest.skip("This will almost surely OOM. Enable when swithed to a smaller model")
+    @unittest.skip("This will almost surely OOM. Enable when switched to a smaller model")
     def test_dequantize(self):
         """
         Test the ability to dequantize a model
