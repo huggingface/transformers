@@ -115,7 +115,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         with pytest.raises(TypeError):
             processor(text=None, audios="foo")
 
-    def test_bad_audios_fails(self):
+    def test_nested_bad_audios_fails(self):
         """Ensure we gracefully fail if audio is the wrong nested type."""
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
