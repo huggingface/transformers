@@ -80,7 +80,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the doctsring
+        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -112,7 +112,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
         # ensure we have as much audios as audio tokens
         num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
-        num_audios = 1 if type(audios) == np.ndarray else len(audios)
+        num_audios = 1 if isinstance(audios, np.ndarray) else len(audios)
         if num_audio_tokens != num_audios:
             raise ValueError(
                 f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"

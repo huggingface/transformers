@@ -64,6 +64,8 @@ class PixtralProcessor(ProcessorMixin):
             The tokenizer is a required input.
         patch_size (`int`, *optional*, defaults to 16):
             Patch size from the vision tower.
+        spatial_merge_size (`int`, *optional*, defaults to 1):
+            The downsampling factor for the spatial merge operation.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"[IMG]"`):
@@ -78,6 +80,7 @@ class PixtralProcessor(ProcessorMixin):
     valid_kwargs = [
         "chat_template",
         "patch_size",
+        "spatial_merge_size",
         "image_token",
         "image_break_token",
         "image_end_token",
@@ -90,6 +93,7 @@ class PixtralProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size: int = 16,
+        spatial_merge_size: int = 1,
         chat_template=None,
         image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
         image_break_token="[IMG_BREAK]",
@@ -97,6 +101,7 @@ class PixtralProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.spatial_merge_size = spatial_merge_size
         self.image_token = image_token
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
@@ -114,7 +119,7 @@ class PixtralProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -187,8 +192,8 @@ class PixtralProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // self.patch_size
-                    num_width_tokens = width // self.patch_size
+                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
+                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
