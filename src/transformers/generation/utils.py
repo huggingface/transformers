@@ -877,8 +877,11 @@ class GenerationMixin:
         elif different_tokenizers:
             if generation_config.do_sample is True:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
-                    target_tokenizer, assistant_tokenizer, assistant_model,
-                    self.config.vocab_size, assistant_prune_LM_head=generation_config.assistant_prune_LM_head
+                    target_tokenizer,
+                    assistant_tokenizer,
+                    assistant_model,
+                    self.config.vocab_size,
+                    assistant_prune_LM_head=generation_config.assistant_prune_LM_head,
                 )
                 assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(

@@ -613,6 +613,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         return new_target_ids
 
+
 class PruneReindexingLMHead(nn.Module):
     """
     A class to prune and reindex the language model head.
@@ -624,19 +625,23 @@ class PruneReindexingLMHead(nn.Module):
         original_lm_head (nn.Module): The original language model head.
         token_ids (list[int]): The list of token IDs to keep.
     """
+
     def __init__(self, original_lm_head, assistant_overlap_token_ids):
         super().__init__()
-        self.pruned_lm_head = prune_linear_layer(original_lm_head, assistant_overlap_token_ids).to(original_lm_head.weight.dtype)
+        self.pruned_lm_head = prune_linear_layer(original_lm_head, assistant_overlap_token_ids).to(
+            original_lm_head.weight.dtype
+        )
 
     def forward(self, hidden_states):
         pruned_logits = self.pruned_lm_head(hidden_states)
         return pruned_logits
 
+
 class MapInputEmbedding(nn.Module):
     def __init__(self, original_embedding: nn.Embedding, assistant_overlap_token_ids):
         """
         Wraps an existing embedding layer and remaps token IDs before lookup.
-        
+
         Args:
             original_embedding (nn.Embedding): Pre-trained or existing embedding layer.
             id_map (dict): Mapping from original token IDs to new token IDs.
@@ -652,21 +657,19 @@ class MapInputEmbedding(nn.Module):
         """
         Args:
             input_ids (torch.LongTensor): Tensor of token IDs (batch_size, seq_len).
-        
+
         Returns:
             torch.FloatTensor: Corresponding input embeddings.
         """
-        #print(f'A {input_ids.squeeze(0).tolist()=}')
-        #print(f'{self.map}')
         if self.map:
-            # Get the last item from input_ids 
+            # Get the last item from input_ids
             my_input_ids = self.assistant_overlap_token_ids[input_ids[0, -1]].unsqueeze(0).unsqueeze(0)
         else:
             self.map = True
             my_input_ids = input_ids
 
-        #print(f'B {input_ids.squeeze(0).tolist()=}')
         return self.original_embedding(my_input_ids)
+
 
 class AssistantToTargetTranslator:
     """
@@ -696,7 +699,7 @@ class AssistantToTargetTranslator:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int],
-        assistant_prune_LM_head: Optional[bool] = False
+        assistant_prune_LM_head: Optional[bool] = False,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -711,21 +714,18 @@ class AssistantToTargetTranslator:
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
             if self.assistant_prune_LM_head:
-
                 self.assistant_overlap_token_ids = torch.tensor(
-                    list(self.target_to_assistant_input_ids.values()), dtype=torch.long, device=self._assistant_model_device
+                    list(self.target_to_assistant_input_ids.values()),
+                    dtype=torch.long,
+                    device=self._assistant_model_device,
                 )
                 original_lm_head = assistant_model.get_output_embeddings()
-                pruned_lm_head = PruneReindexingLMHead(
-                    original_lm_head, self.assistant_overlap_token_ids
-                )
+                pruned_lm_head = PruneReindexingLMHead(original_lm_head, self.assistant_overlap_token_ids)
                 del original_lm_head
                 assistant_model.set_output_embeddings(pruned_lm_head)
 
                 originial_input_embeddings = assistant_model.get_input_embeddings()
-                map_input_embeddings = MapInputEmbedding(
-                    originial_input_embeddings, self.assistant_overlap_token_ids
-                )
+                map_input_embeddings = MapInputEmbedding(originial_input_embeddings, self.assistant_overlap_token_ids)
                 del originial_input_embeddings
                 assistant_model.set_input_embeddings(map_input_embeddings)
                 self.map_input_embeddings = map_input_embeddings
@@ -835,7 +835,7 @@ class AssistantVocabTranslatorCache:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int] = None,
-        assistant_prune_LM_head = False
+        assistant_prune_LM_head=False,
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
         if assistant_dict is None:
@@ -968,7 +968,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             )
             assistant_new_ids = self.assistant_tokenizer(
                 target_new_text, add_special_tokens=False, return_tensors="pt"
-            )["input_ids"].to(self.assistant_model.device)         
+            )["input_ids"].to(self.assistant_model.device)
         else:
             assistant_new_ids = torch.tensor([[assistant_new_ids]], device=self.assistant_model.device)
 
