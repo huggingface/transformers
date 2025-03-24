@@ -123,6 +123,7 @@ class Conv1D(nn.Module):
         x = x.view(size_out)
         return x
 
+
 def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
     """
     Prune a Conv1D layer to keep only entries in index. A Conv1D work as a Linear layer (see e.g. BERT) but the weights
