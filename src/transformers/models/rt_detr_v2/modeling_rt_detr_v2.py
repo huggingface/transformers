@@ -1493,6 +1493,8 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
                 prediced_corners = self.bbox_embed[idx](hidden_states)
                 new_reference_points = F.sigmoid(prediced_corners + inverse_sigmoid(reference_points))
                 reference_points = new_reference_points.detach()
+                intermediate_predicted_corners += (prediced_corners,)
+                initial_reference_points += (reference_points,)
 
             intermediate += (hidden_states,)
             intermediate_reference_points += (
@@ -1516,9 +1518,7 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
             intermediate_logits = torch.stack(intermediate_logits, dim=1)
 
         if self.bbox_embed is not None:
-            intermediate_predicted_corners += (prediced_corners,)
             intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
-            initial_reference_points += (reference_points,)
             initial_reference_points = torch.stack(initial_reference_points, dim=1)
 
         # add hidden states from the last decoder layer

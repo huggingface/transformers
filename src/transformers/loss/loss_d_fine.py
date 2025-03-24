@@ -353,14 +353,24 @@ def DFineForObjectDetectionLoss(
             dn_out_refs, out_refs = torch.split(initial_reference_points, denoising_meta_values["dn_num_split"], dim=2)
 
             auxiliary_outputs = _set_aux_loss2(
-                outputs_class, outputs_coord, out_corners, out_refs, out_corners, outputs_class
+                outputs_class[:, :-1].transpose(0, 1),
+                outputs_coord[:, :-1].transpose(0, 1),
+                out_corners[:, :-1].transpose(0, 1),
+                out_refs[:, :-1].transpose(0, 1),
+                out_corners[:, -1],
+                outputs_class[:, -1],
             )
 
             outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             outputs_loss["auxiliary_outputs"].extend(_set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
 
             dn_auxiliary_outputs = _set_aux_loss2(
-                dn_out_class, dn_out_coord, dn_out_corners, dn_out_refs, dn_out_corners, dn_out_class
+                dn_out_class.transpose(0, 1),
+                dn_out_coord.transpose(0, 1),
+                dn_out_corners.transpose(0, 1),
+                dn_out_refs.transpose(0, 1),
+                dn_out_corners[:, -1],
+                dn_out_class[:, -1],
             )
             outputs_loss["dn_auxiliary_outputs"] = dn_auxiliary_outputs
             outputs_loss["denoising_meta_values"] = denoising_meta_values

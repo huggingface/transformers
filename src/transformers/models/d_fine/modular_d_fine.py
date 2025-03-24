@@ -206,7 +206,7 @@ class DFineConfig(PretrainedConfig):
             Offset scale used in deformable attention.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
-        up (`float`, *optional*, defaults to 0.5)
+        up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
     """
 
@@ -801,14 +801,16 @@ class DFineDecoder(RTDetrDecoder):
 
             intermediate += (hidden_states,)
 
-            if self.class_embed is not None and i == self.eval_idx:
+            if self.class_embed is not None and (self.training or i == self.eval_idx):
                 scores = self.class_embed[i](hidden_states)
                 # Lqe does not affect the performance here.
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
-                intermediate_logits = torch.stack(intermediate_logits, dim=1)
-                intermediate_reference_points += (inter_ref_bbox.clamp(min=0),) if self.training else (inter_ref_bbox,)
-                intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+                intermediate_reference_points += (
+                    (inter_ref_bbox.clamp(min=0, max=1),) if self.training else (inter_ref_bbox,)
+                )
+                initial_reference_points += (ref_points_initial,)
+                intermediate_predicted_corners += (pred_corners,)
 
             if output_attentions:
                 all_self_attns += (output[1],)
@@ -818,12 +820,11 @@ class DFineDecoder(RTDetrDecoder):
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate)
-
-        if self.bbox_embed is not None:
-            intermediate_predicted_corners += (pred_corners,)
+        if self.class_embed is not None and self.bbox_embed is not None:
+            intermediate_logits = torch.stack(intermediate_logits, dim=1)
             intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
-            initial_reference_points += (ref_points_initial,)
             initial_reference_points = torch.stack(initial_reference_points, dim=1)
+            intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

@@ -187,7 +187,7 @@ class DFineConfig(PretrainedConfig):
             Offset scale used in deformable attention.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
-        up (`float`, *optional*, defaults to 0.5)
+        up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
     """
 
