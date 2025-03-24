@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 import numpy as np
 import torch
 import torch.distributed as dist
+from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
@@ -47,7 +48,6 @@ from ..utils import (
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
-    is_torchdynamo_compiling,
     logging,
 )
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -344,7 +344,22 @@ GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 class GenerationMixin:
     """
-    A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
+    A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
+    Inheriting from this class causes the model to have special generation-related behavior, such as loading a
+    `GenerationConfig` at initialization time or ensuring `generate`-related tests are run in `transformers` CI.
+
+    A model class should inherit from `GenerationMixin` to enable calling methods like `generate`, or when it
+    has defined a custom `generate` method that relies on `GenerationMixin`, directly or indirectly, which
+    approximately shares the same interface to public methods like `generate`. Three examples:
+        - `LlamaForCausalLM` should inherit from `GenerationMixin` to enable calling `generate` and other public
+            methods in the mixin;
+        - `BlipForQuestionAnswering` has a custom `generate` method that approximately shares the same interface as
+           `GenerationMixin.generate` (it has a few extra arguments, and the same output). That function also calls
+           `GenerationMixin.generate` indirectly, through an inner model. As such, `BlipForQuestionAnswering` should
+           inherit from `GenerationMixin` to benefit from all generation-related automation in our codebase;
+        - `BarkModel` has a custom `generate` method and one of its inner models calls `GenerationMixin.generate`.
+            However, its `generate` does not share the same interface as `GenerationMixin.generate`. In this case,
+            `BarkModel` shoud NOT inherit from `GenerationMixin`, as it breaks the `generate` interface.
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
@@ -393,7 +408,6 @@ class GenerationMixin:
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
         # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
         # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
@@ -402,7 +416,7 @@ class GenerationMixin:
                 inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
             elif (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -1339,7 +1353,7 @@ class GenerationMixin:
         # TODO(joao): remove this function in v4.50, i.e. when we remove the inheritance of `GenerationMixin` from
         # `PreTrainedModel`. With that inheritance removed, all model classes inheriting from `GenerationMixin` can
         # safely call `GenerationMixin.generate`
-        if not is_torchdynamo_compiling() and not self.can_generate():
+        if not self.can_generate():
             terminations_with_generation_support = [
                 "ForCausalLM",
                 "ForConditionalGeneration",
@@ -1440,11 +1454,6 @@ class GenerationMixin:
 
     def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
         """Performs validation related to the resulting generated length"""
-
-        # Can't throw warnings/exceptions during compilation
-        if is_torchdynamo_compiling():
-            return
-
         # 1. Max length warnings related to poor parameterization
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             # 20 is the default max_length of the generation config
@@ -1544,17 +1553,16 @@ class GenerationMixin:
         return generation_config
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], **kwargs: Dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
     ) -> Tuple[GenerationConfig, Dict]:
         """
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
         function handles retrocompatibility with respect to configuration files.
         """
-        # TODO joao: when we can detect `fullgraph=True` in `torch.compile` (https://github.com/pytorch/pytorch/pull/120400)
-        # replace `is_torchdynamo_compiling` by the corresponding check. As it is, we are being too restrictive with
-        # the parameterization in `fullgraph=False` so as to enable `fullgraph=True`.
+        # parameterization priority:
+        # kwargs > non-global default values in `generation_config` > `model.generation_config` > GenerationConfig()
+        # TODO (joao): per-model generation config classes.
 
-        # priority: `generation_config` argument > `model.generation_config` (the default generation config)
         using_model_generation_config = False
         if generation_config is None:
             # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
@@ -1563,10 +1571,8 @@ class GenerationMixin:
             # 2) the generation config must have seen no modification since its creation (the hash is the same);
             # 3) there are non-default generation parameters in the model config.
             # 4) the user must have set new generation parameters in the model config.
-            # NOTE: `torch.compile` can't compile `hash`, this legacy support is disabled with compilation.
             if (
-                not is_torchdynamo_compiling()
-                and self.generation_config._from_model_config  # 1)
+                self.generation_config._from_model_config  # 1)
                 and self.generation_config._original_object_hash == hash(self.generation_config)  # 2)
                 and len(self.config._get_non_default_generation_parameters()) > 0  # 3)
             ):
@@ -1584,19 +1590,20 @@ class GenerationMixin:
             generation_config = self.generation_config
             using_model_generation_config = True
 
-        # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
-        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled -- an
-        # exception will be raised in `_validate_model_kwargs`
-        if not is_torchdynamo_compiling():
-            generation_config = copy.deepcopy(generation_config)
+        generation_config = copy.deepcopy(generation_config)
 
-            # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
-            # TODO (joao): per-model generation config classes.
-            if not using_model_generation_config:
+        if not using_model_generation_config:
+            # If `generation_config` is provided:
+            # - `use_model_defaults`: let's fallback ALL default values to the model's generation config
+            # - otherwise: legacy behavior, let's just make sure we have the tokens defined
+            model_base_version = version.parse(version.parse(self.generation_config.transformers_version).base_version)
+            if use_model_defaults is True or (
+                use_model_defaults is None and model_base_version >= version.parse("4.50.0")
+            ):
                 modified_values = {}
                 default_generation_config = GenerationConfig()
                 for key, default_value in default_generation_config.__dict__.items():
-                    if key.startswith("_"):  # metadata
+                    if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
                     custom_gen_config_value = getattr(generation_config, key)
                     model_gen_config_value = getattr(self.generation_config, key)
@@ -1608,11 +1615,19 @@ class GenerationMixin:
                         f"`generation_config` default values have been modified to match model-specific defaults: "
                         f"{modified_values}. If this is not desired, please set these values explicitly."
                     )
+            else:
+                if generation_config.bos_token_id is None:
+                    generation_config.bos_token_id = self.generation_config.bos_token_id
+                if generation_config.eos_token_id is None:
+                    generation_config.eos_token_id = self.generation_config.eos_token_id
+                if generation_config.pad_token_id is None:
+                    generation_config.pad_token_id = self.generation_config.pad_token_id
+                if generation_config.decoder_start_token_id is None:
+                    generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
 
-            # Finally, apply any passed kwargs
-            model_kwargs = generation_config.update(**kwargs)
-        else:
-            model_kwargs = kwargs
+        # Finally, apply any passed kwargs
+        model_kwargs = generation_config.update(**kwargs)
+
         return generation_config, model_kwargs
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
@@ -1636,10 +1651,7 @@ class GenerationMixin:
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
 
-            # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
-            # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
-            if not is_torchdynamo_compiling():
-                cache_position = cache_position[past_length:]
+            cache_position = cache_position[past_length:]
 
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
@@ -1716,13 +1728,7 @@ class GenerationMixin:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
-                if not is_torchdynamo_compiling():
-                    cache_dtype = self.dtype
-                else:
-                    # NOTE: self.dtype is not compatible with torch.compile, as it calls `self.parameters()`.
-                    # Workaround: trust the lm_head, whose attribute name is somewhat consistent across generative
-                    # models. May cause trobles with non-text modalities.
-                    cache_dtype = self.get_output_embeddings().weight.dtype
+                cache_dtype = self.dtype
 
             layer_device_map = self._get_layer_device_map_for_cache_init()
             cache_kwargs = {
@@ -1924,12 +1930,11 @@ class GenerationMixin:
 
         # Set pad token if unset (and there are conditions to do so)
         if pad_token_tensor is None and eos_token_tensor is not None:
-            if not is_torchdynamo_compiling():
-                if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
-                    logger.warning(
-                        "The attention mask and the pad token id were not set. As a consequence, you may observe "
-                        "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
-                    )
+            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+                logger.warning(
+                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
+                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+                )
             pad_token_tensor = eos_token_tensor[0]
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_tensor} for open-end generation.")
 
@@ -1938,24 +1943,23 @@ class GenerationMixin:
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if not is_torchdynamo_compiling():  # Checks that depend on tensor-dependent control flow
-            if (
-                eos_token_tensor is not None
-                and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
-            ):
-                if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
-                    logger.warning_once(
-                        "The attention mask is not set and cannot be inferred from input because pad token is same as "
-                        "eos token. As a consequence, you may observe unexpected behavior. Please pass your input's "
-                        "`attention_mask` to obtain reliable results."
-                    )
-            if eos_token_tensor is not None and (
-                torch.is_floating_point(eos_token_tensor) or (eos_token_tensor < 0).any()
-            ):
-                logger.warning(
-                    f"`eos_token_id` should consist of positive integers, but is {eos_token_tensor}. Your generation "
-                    "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
+        if (
+            eos_token_tensor is not None
+            and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
+        ):
+            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+                logger.warning_once(
+                    "The attention mask is not set and cannot be inferred from input because pad token is same as "
+                    "eos token. As a consequence, you may observe unexpected behavior. Please pass your input's "
+                    "`attention_mask` to obtain reliable results."
                 )
+        if eos_token_tensor is not None and (
+            torch.is_floating_point(eos_token_tensor) or (eos_token_tensor < 0).any()
+        ):
+            logger.warning(
+                f"`eos_token_id` should consist of positive integers, but is {eos_token_tensor}. Your generation "
+                "will not stop until the maximum length is reached. Depending on other flags, it may even crash."
+            )
 
         # Update generation config with the updated special tokens tensors
         # NOTE: this must be written into a different attribute name than the one holding the original special tokens
@@ -1979,6 +1983,7 @@ class GenerationMixin:
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        use_model_defaults: Optional[bool] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2043,6 +2048,11 @@ class GenerationMixin:
                 size. This is an experimental feature, subject to breaking API changes in future versions.
             negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Attention_mask for `negative_prompt_ids`.
+            use_model_defaults (`bool`, *optional*):
+                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
+                generation configuration (`model.generation_config`), as opposed to the global defaults
+                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
+                `True`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2070,7 +2080,9 @@ class GenerationMixin:
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
 
-        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
 
@@ -2095,7 +2107,7 @@ class GenerationMixin:
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
 
         # decoder-only models must use left-padding for batched generation.
-        if not self.config.is_encoder_decoder and not is_torchdynamo_compiling():
+        if not self.config.is_encoder_decoder:
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
             # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
@@ -2192,7 +2204,7 @@ class GenerationMixin:
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
             )
 
-        if not is_torchdynamo_compiling() and self.device.type != input_ids.device.type:
+        if self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
@@ -2442,43 +2454,29 @@ class GenerationMixin:
         # Convert to legacy cache format if requested
         if (
             generation_config.return_legacy_cache is True
-            and not is_torchdynamo_compiling()
             and hasattr(result, "past_key_values")
             and getattr(result.past_key_values, "to_legacy_cache") is not None
         ):
             result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
-    def _has_unfinished_sequences(
-        self,
-        this_peer_finished: bool,
-        synced_gpus: bool,
-        device: torch.device,
-        cur_len: Optional[int] = None,
-        max_length: Optional[int] = None,
-    ) -> bool:
+    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
         """
-        # torch.compile does not support data-dependent control flow. This is a workaround to allow torch.compile,
-        # although we lose the ability to stop when all sequences return an EOS token (and other stopping criteria)
-        # TODO (joao): remove this when torch's support for control flow is not experimental (https://pytorch.org/docs/stable/generated/torch.cond.html)
-        if is_torchdynamo_compiling():
-            return cur_len < max_length
-        else:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    return False
-            elif this_peer_finished:
+        if synced_gpus:
+            # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+            # The following logic allows an early break if all peers finished generating their sequence
+            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
+            # send 0.0 if we finished, 1.0 otherwise
+            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+            # did all peers finish? the reduced sum will be 0.0 then
+            if this_peer_finished_flag.item() == 0.0:
                 return False
-            return True
+        elif this_peer_finished:
+            return False
+        return True
 
     def heal_tokens(
         self, input_ids: torch.LongTensor, tokenizer: Optional["PreTrainedTokenizerBase"] = None
@@ -3240,7 +3238,6 @@ class GenerationMixin:
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
-        max_length = generation_config.max_length
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
@@ -3277,9 +3274,7 @@ class GenerationMixin:
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
-        while self._has_unfinished_sequences(
-            this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
-        ):
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
