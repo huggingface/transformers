@@ -128,8 +128,14 @@ class EvollaConfig(PretrainedConfig):
             The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*, defaults to 128009):
             The id of the *end-of-sequence* token.
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the attentions tensors of all attention layers.
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the hidden states of all layers.
         use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to tie the input and output word embeddings.
 
