@@ -51,7 +51,9 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = PixtralProcessor.from_pretrained("hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor")
+        processor = PixtralProcessor.from_pretrained(
+            "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor"
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_processor(self):
