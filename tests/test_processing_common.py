@@ -105,6 +105,22 @@ class ProcessorTesterMixin:
         processor = self.processor_class(**components, **self.prepare_processor_dict())
         return processor
 
+    def get_processor_slow_vision(self):
+        # Used in case when we don't want to depend on require-torch
+        # Loading `use_fast=False` on processor forces slow tokenizer, but not all models
+        # support slow tokenizer (i.e. Chameleon)
+        processor_components = self.prepare_components()
+        if "image_processor" in processor_components:
+            processor_components["image_processor"] = self.get_component("image_processor", use_fast=False)
+        if "video_processor" in processor_components:
+            processor_components["video_processor"] = self.get_component("video_processor", use_fast=False)
+        if "tokenizer" in processor_components:  # some processors have no tokenizer (SAM)
+            processor_components["tokenizer"] = self.get_component("tokenizer")
+
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        return processor
+
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
             return "lower newer"
@@ -725,7 +741,7 @@ class ProcessorTesterMixin:
             )
 
     def test_chat_template_save_loading(self):
-        processor = self.get_processor()
+        processor = self.processor_class.from_pretrained(self.tmpdirname, use_fast=False)
         signature = inspect.signature(processor.__init__)
         if "chat_template" not in {*signature.parameters.keys()}:
             self.skipTest("Processor doesn't accept chat templates at input")
@@ -753,7 +769,7 @@ class ProcessorTesterMixin:
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
     def test_chat_template_single(self):
-        processor = self.get_processor()
+        processor = self.get_processor_slow_vision()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
@@ -772,17 +788,19 @@ class ProcessorTesterMixin:
         self.assertEqual(len(formatted_prompt), 1)
 
         formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+            messages, add_generation_prompt=True, tokenize=True, return_tensors="np"
         )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
         expected_output = processor.tokenizer(
-            formatted_prompt, return_tensors=None, add_special_tokens=add_special_tokens
+            formatted_prompt, return_tensors="np", add_special_tokens=add_special_tokens
         ).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
 
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        out_dict = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="np"
+        )
         self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
 
         # Now test the ability to return dict
@@ -798,7 +816,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict[self.images_input_name]), 1)
 
     def test_chat_template_batched(self):
-        processor = self.get_processor()
+        processor = self.get_processor_slow_vision()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
@@ -832,17 +850,18 @@ class ProcessorTesterMixin:
             add_special_tokens = False
         expected_output = processor.tokenizer(
             formatted_prompt,
-            return_tensors=None,
             padding=True,
+            return_tensors="np",
             add_special_tokens=add_special_tokens,
         ).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
 
         out_dict = processor.apply_chat_template(
             batched_messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+            return_tensors="np",
             padding=True,
         )
         self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
@@ -865,7 +884,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict[self.images_input_name]), 2)
 
     def test_chat_template_accepts_processing_kwargs(self):
-        processor = self.get_processor()
+        processor = self.get_processor_slow_vision()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
@@ -895,6 +914,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             truncation=True,
+            return_tensors="np",
             max_length=5,
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
@@ -943,7 +963,8 @@ class ProcessorTesterMixin:
 
     @require_av
     def test_chat_template_video(self):
-        processor = self.get_processor()
+        processor = self.get_processor_slow_vision()
+
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
@@ -970,19 +991,28 @@ class ProcessorTesterMixin:
         self.assertEqual(len(formatted_prompt), 1)
 
         formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_tensors="np",
         )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
         expected_output = processor.tokenizer(
             formatted_prompt,
-            return_tensors=None,
+            return_tensors="np",
             add_special_tokens=add_special_tokens,
         ).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
 
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
+        out_dict = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="np",
+        )
         self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
 
         # Add video URL for return dict and load with `num_frames` arg
@@ -997,6 +1027,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1010,6 +1041,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             video_fps=video_fps,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1057,60 +1089,11 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
 
     @require_av
-    def test_chat_template_video_custom_sampling(self):
-        """
-        Tests that models can pass their custom callables to sample video indices.
-        """
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
-
-        video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
-        )
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "path": video_file_path,
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        def dummmy_sample_indices_fn(metadata, **fn_kwargs):
-            # sample only the first two frame always
-            return [0, 1]
-
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            sample_indices_fn=dummmy_sample_indices_fn,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
-
-    @require_av
     def test_chat_template_video_special_processing(self):
         """
         Tests that models can use their own preprocessing to preprocess conversations.
         """
-        processor = self.get_processor()
+        processor = self.get_processor_slow_vision()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
@@ -1163,6 +1146,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
 

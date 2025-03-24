@@ -402,11 +402,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 10)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
         # Load with `video_fps` arg
         video_fps = 1
@@ -416,6 +417,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             video_fps=video_fps,
+            return_tensors="np",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

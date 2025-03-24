@@ -386,14 +386,10 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
     return_assistant_tokens_mask: Optional[bool] = False
 
 
-class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
+class ChatTemplateLoadKwargs(TypedDict, total=False):
     """
-    Keyword arguments for processor chat templates.
+    Keyword arguments used to load multimodal data in processor chat templates.
 
-    tokenize (`bool`, *optional*, defaults to `False`):
-        Whether to tokenize the output or not.
-    return_dict (`bool`, defaults to `False`):
-        Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
     video_load_backend (`str`, *optional*, defaults to `"pyav"`):
@@ -415,12 +411,26 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
                 return np.linspace(start_idx, end_idx, num_frames, dtype=int)
     """
 
-    tokenize: Optional[bool] = False
-    return_dict: Optional[bool] = False
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
+    sampling_rate: Optional[int] = 16_000
     sample_indices_fn: Optional[Callable] = None
+    load_audio_from_video: Optional[bool] = False
+
+
+class ProcessorChatTemplateKwargs(ChatTemplateLoadKwargs, TokenizerChatTemplateKwargs, total=False):
+    """
+    Keyword arguments for processor's `apply_chat_template`.
+
+    tokenize (`bool`, *optional*, defaults to `False`):
+        Whether to tokenize the output or not.
+    return_dict (`bool`, defaults to `False`):
+        Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+    """
+
+    tokenize: Optional[bool] = False
+    return_dict: Optional[bool] = False
 
 
 class AllKwargsForChatTemplate(
@@ -1310,19 +1320,25 @@ class ProcessorMixin(PushToHubMixin):
                     "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
                 )
 
-        # Fill two sets of kwargs that should be used by tokenizer's `apply_chat_template`
-        # and for multimodal chat template
+        # Fill sets of kwargs that should be used by call's of tokenizer/processor
+        # and for multimodal data loading. Everything else will be used in `self.video_processor.load_video`
         tokenizer_template_kwargs = {}
         for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__.keys():
-            tokenizer_value = getattr(TokenizerChatTemplateKwargs, tokenizer_key, None)
-            value = kwargs.pop(tokenizer_key, tokenizer_value)
+            default_value = getattr(TokenizerChatTemplateKwargs, tokenizer_key, None)
+            value = kwargs.pop(tokenizer_key, default_value)
             tokenizer_template_kwargs[tokenizer_key] = value
 
-        chat_template_kwargs = {}
-        for key in ProcessorChatTemplateKwargs.__annotations__.keys():
-            processor_value = getattr(ProcessorChatTemplateKwargs, key, None)
-            value = kwargs.pop(key, processor_value)
-            chat_template_kwargs[key] = value
+        mm_load_kwargs = {}
+        for mm_load_key in ChatTemplateLoadKwargs.__annotations__.keys():
+            default_value = getattr(ChatTemplateLoadKwargs, mm_load_key, None)
+            value = kwargs.pop(mm_load_key, default_value)
+            mm_load_kwargs[mm_load_key] = value
+
+        processor_call_kwargs = {}
+        for key in ProcessingKwargs.__annotations__.keys():
+            value = kwargs.pop(key, None)
+            if value is not None:
+                processor_call_kwargs[key] = value
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1333,12 +1349,8 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
-        num_frames = chat_template_kwargs.get("num_frames")
-        video_fps = chat_template_kwargs.get("video_fps")
-        video_load_backend = chat_template_kwargs.get("video_load_backend")
-        tokenize = chat_template_kwargs.get("tokenize")
-        return_dict = chat_template_kwargs.get("return_dict")
-        sample_indices_fn = chat_template_kwargs.get("sample_indices_fn")
+        tokenize = kwargs.pop("tokenize", False)
+        return_dict = kwargs.pop("return_dict", False)
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1373,12 +1385,13 @@ class ProcessorMixin(PushToHubMixin):
                                 "If you model applies special processing based on metadata, please load the whole video and let the model sample frames."
                             )
                         else:
-                            video, metadata = load_video(
+                            # TODO: raushan, should be `self.video_processor.load_video_for_model` when API is added
+                            video, metadata = self._load_video_for_model(
                                 fname,
-                                num_frames=num_frames,
-                                fps=video_fps,
-                                backend=video_load_backend,
-                                sample_indices_fn=sample_indices_fn,
+                                num_frames=mm_load_kwargs["num_frames"],
+                                fps=mm_load_kwargs["video_fps"],
+                                backend=mm_load_kwargs["video_load_backend"],
+                                **kwargs,
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
@@ -1397,7 +1410,7 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images=batch_images,
                 batch_videos=batch_videos,
                 batch_video_metadata=batch_video_metadata,
-                **chat_template_kwargs,
+                **mm_load_kwargs,
             )
 
         prompt = self.tokenizer.apply_chat_template(
@@ -1420,19 +1433,50 @@ class ProcessorMixin(PushToHubMixin):
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                kwargs["add_special_tokens"] = False
+                processor_call_kwargs["add_special_tokens"] = False
 
             out = self(
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
-                **kwargs,
+                **processor_call_kwargs,
             )
             if return_dict:
                 return out
             else:
                 return out["input_ids"]
         return prompt
+
+    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
+    # Keep private so we can simply remove when needed
+    def _load_video_for_model(
+        self,
+        video: Union[str, "VideoInput"],
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+        backend: str = "opencv",
+    ) -> np.array:
+        """
+        Loads `video` to a numpy array.
+
+        Args:
+            video (`str` or `VideoInput`):
+                The video to convert to the numpy array format. Can be a link to video or local path.
+            num_frames (`int`, *optional*):
+                Number of frames to sample uniformly. If not passed, the whole video is loaded.
+            fps (`int`, *optional*):
+                Number of frames to sample per second. Should be passed only when `num_frames=None`.
+                If not specified and `num_frames==None`, all frames are sampled.
+            backend (`str`, *optional*, defaults to `"opencv"`):
+                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+
+        Returns:
+            Tuple[`np.array`, Dict]: A tuple containing:
+                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
+                - Metadata dictionary.
+        """
+        video, metadata = load_video(video, num_frames, fps=fps, backend=backend)
+        return video, metadata
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
