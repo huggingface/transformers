@@ -286,7 +286,7 @@ class LlavaModel(LlavaPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.post_init()
 
