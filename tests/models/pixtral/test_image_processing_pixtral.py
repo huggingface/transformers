@@ -109,8 +109,8 @@ class PixtralImageProcessingTester:
 
             ratio = max(height / max_height, width / max_width)
             if ratio > 1:
-                height = int(np.ceil(height / ratio))
-                width = int(np.ceil(width / ratio))
+                height = int(np.floor(height / ratio))
+                width = int(np.floor(width / ratio))
 
             patch_height, patch_width = self.patch_size["height"], self.patch_size["width"]
             num_height_tokens = (height - 1) // patch_height + 1
