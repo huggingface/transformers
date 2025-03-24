@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -56,7 +56,7 @@ deepspeed --num_gpus 2 trainer-program.py ...
 
 ### Order of GPUs
 
-To select specific GPUs to use and their order, configure the the `CUDA_VISIBLE_DEVICES` environment variable. It is easiest to set the environment variable in `~/bashrc` or another startup config file. `CUDA_VISIBLE_DEVICES` is used to map which GPUs are used. For example, if there are 4 GPUs (0, 1, 2, 3) and you only want to run GPUs 0 and 2:
+To select specific GPUs to use and their order, configure the `CUDA_VISIBLE_DEVICES` environment variable. It is easiest to set the environment variable in `~/bashrc` or another startup config file. `CUDA_VISIBLE_DEVICES` is used to map which GPUs are used. For example, if there are 4 GPUs (0, 1, 2, 3) and you only want to run GPUs 0 and 2:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
