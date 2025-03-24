@@ -893,13 +893,13 @@ def update_key_name(keys):
     for key in keys:
         all_digits = re.findall(r".(\d+).", key)
         for i, k in enumerate(all_digits):
-            if len(key_dict[re.sub(r"(\d+)", "*", key)]) <= i:
-                key_dict[re.sub(r"(\d+)", "*", key)].append(set())
-            key_dict[re.sub(r"(\d+)", "*", key)][i].add(int(k))
+            if len(key_dict[re.sub(r".(\d+).", ".*.", key)]) <= i:
+                key_dict[re.sub(r".(\d+).", ".*.", key)].append(set())
+            key_dict[re.sub(r".(\d+).", ".*.", key)][i].add(int(k))
 
     final_keys = set()
     for key in keys:
-        text = re.sub(r"(\d+)", "*", key)
+        text = re.sub(r".(\d+).", ".*.", key)
         pattern = key_dict[text]
         final_text = ""
         for i, part in enumerate(text.split("*")):
@@ -916,7 +916,7 @@ def update_key_name(keys):
                 else:
                     final_text += part + data[0]
         final_keys.add(final_text)
-    return final_keys
+    return list(final_keys)
 
 
 def _get_resolved_checkpoint_files(
