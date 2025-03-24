@@ -17,7 +17,7 @@ and remove unnecessary dependencies.
 """
 
 import warnings
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
