@@ -20,7 +20,7 @@ import unittest
 import requests
 
 from transformers import PixtralProcessor
-from transformers.testing_utils import require_read_token, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
