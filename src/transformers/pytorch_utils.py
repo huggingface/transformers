@@ -118,8 +118,9 @@ class Conv1D(nn.Module):
         return "Conv1D(nf={nf}, nx={nx})".format(**self.__dict__)
 
     def forward(self, x):
-        x = x @ self.weight
-        x = x + self.bias
+        size_out = x.size()[:-1] + (self.nf,)
+        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
+        x = x.view(size_out)
         return x
 
 def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
