@@ -1274,7 +1274,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
             if run_compressed and quantization_status != QuantizationStatus.COMPRESSED:
-                 raise ValueError("`run_compressed` is only supported for quantized_compressed models")
+                raise ValueError("`run_compressed` is only supported for quantized_compressed models")
             if run_compressed is None:
                 run_compressed = quantization_status == QuantizationStatus.COMPRESSED
 
