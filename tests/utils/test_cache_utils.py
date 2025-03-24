@@ -98,6 +98,11 @@ class CacheTest(unittest.TestCase):
                     torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
                 )
 
+    def test_static_cache_index(self):
+        mha_config = LlamaConfig(num_attention_heads=32)
+        mha_static_cache = StaticCache(config=mha_config, batch_size=1, max_cache_len=10, device=torch_device)
+        self.assertTrue(torch.allclose(mha_static_cache[0][0], mha_static_cache.key_cache[0]))
+
     def test_reorder_cache_retrocompatibility(self):
         """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
         legacy_reorder_fn = GPT2LMHeadModel._reorder_cache  # An example of a legacy `_reorder_cache` function

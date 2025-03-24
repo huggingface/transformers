@@ -1207,6 +1207,13 @@ class StaticCache(Cache):
     def get_max_cache_shape(self) -> Optional[int]:
         return self.max_cache_len
 
+    def __getitem__(self, idx: int) -> List[torch.Tensor]:
+        if idx == 0:
+            return self.key_cache
+        if idx == 1:
+            return self.value_cache
+        raise ValueError("StaticCache doesn't have entries other than key/value")
+
     def reset(self):
         """Resets the cache values while preserving the objects"""
         for layer_idx in range(len(self.key_cache)):
