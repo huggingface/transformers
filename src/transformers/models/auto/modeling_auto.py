@@ -1671,7 +1671,13 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
         Under the hood, multimodal models mapped by AutoModelForCausalLM assume the text decoder receives its own
         config, rather than the config for the whole model. This is used e.g. to load the text-only part of a VLM.
         """
-        text_config, text_config_names = config.get_text_config(decoder=True, return_text_config_name=True)
+        possible_text_config_names = ("decoder", "generator", "text_config")
+        text_config_names = []
+        for text_config_name in possible_text_config_names:
+            if hasattr(config, text_config_name):
+                text_config_names += [text_config_name]
+
+        text_config = config.get_text_config(decoder=True)
         if text_config_names and type(text_config) in cls._model_mapping.keys():
             warnings.warn(
                 "Loading a multimodal model with `AutoModelForCausalLM` is deprecated and will be removed in v5. "
