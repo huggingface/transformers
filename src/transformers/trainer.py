@@ -3043,8 +3043,8 @@ class Trainer:
                 f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
             )
 
-    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
-        metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False, limit_eval_sample_size = False):
+        metrics = self.evaluate(ignore_keys=ignore_keys_for_eval, limit_eval_sample_size=limit_eval_sample_size)
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         # Run delayed LR scheduler now that metrics are populated
@@ -3090,7 +3090,7 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            metrics = self._evaluate(trial, ignore_keys_for_eval)
+            metrics = self._evaluate(trial, ignore_keys_for_eval, limit_eval_sample_size = True)
             is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
 
             if self.args.save_strategy == SaveStrategy.BEST:
@@ -4070,6 +4070,7 @@ class Trainer:
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
+        limit_eval_sample_size : bool = False
     ) -> dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -4141,6 +4142,7 @@ class Trainer:
             prediction_loss_only=True if self.compute_metrics is None else None,
             ignore_keys=ignore_keys,
             metric_key_prefix=metric_key_prefix,
+            limit_eval_sample_size = limit_eval_sample_size
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
@@ -4240,6 +4242,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
+        limit_eval_sample_size : bool = False
     ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
@@ -4316,8 +4319,14 @@ class Trainer:
         # Will be useful when we have an iterable dataset so don't know its length.
         observed_num_examples = 0
 
+        #setting the maximum number of samples the evaluation loop processes 
+        max_eval_samples = self.args.max_eval_samples if limit_eval_sample_size else -1
+
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
+            # check to see if maximum amount of eval samples reached 
+            if max_eval_samples != -1 and observed_num_examples >= max_eval_samples:
+                break
             # Update the observed num examples
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
@@ -4841,6 +4850,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
+        limit_eval_sample_size : bool = False
     ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
