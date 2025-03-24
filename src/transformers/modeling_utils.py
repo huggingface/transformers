@@ -5001,9 +5001,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
                         # NOTE order does not matter, layers that changed per shard are unique and can be reassigned to the orignal meta model
                         for result in pool.imap_unordered(load_shard_file, args_list):
-                            _mismatched_keys, _error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules = (
-                                result
-                            )
+                            (
+                                _mismatched_keys,
+                                _error_msgs,
+                                disk_offload_index,
+                                cpu_offload_index,
+                                state_dict_modules,
+                            ) = result
 
                             mismatched_keys += _mismatched_keys
                             error_msgs += _error_msgs
@@ -5020,7 +5024,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for state_dict_modules in state_dict_modules_list:
                     for full_name, param in state_dict_modules.items():
                         *module_path, attr_name = full_name.split(".")
-                        module_path = '.'.join(module_path)
+                        module_path = ".".join(module_path)
                         module = model_to_load.get_submodule(module_path)
                         setattr(module, attr_name, param)
 
@@ -5029,7 +5033,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             finally:
                 # Restore the start method to prevent side effects for other code that may be running
                 multiprocessing.set_start_method(original_start_method, force=True)
-
 
         else:
             if len(args_list) > 1:
