@@ -803,8 +803,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
-        relative_attention_bias: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor,
         **kwargs,
     ):
         input_shape = hidden_states.shape[:-1]
@@ -813,11 +812,6 @@ class Phi4MultimodalAudioAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        if attention_mask is not None:
-            attention_mask = attention_mask.unsqueeze(1)
-            if relative_attention_bias is not None:
-                attention_mask = attention_mask + relative_attention_bias
 
         attention_interface: Callable = simple_eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -919,13 +913,12 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        mask: Optional[torch.Tensor],
-        relative_attention_bias: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor,
     ):
         residual = hidden_states + 0.5 * self.feed_forward_in(hidden_states)
         hidden_states = self.layer_norm_att(residual)
 
-        hidden_states = residual + self.self_attn(hidden_states, mask, relative_attention_bias)
+        hidden_states = residual + self.self_attn(hidden_states, attention_mask)
         hidden_states = hidden_states + self.conv(hidden_states)
         hidden_states = hidden_states + 0.5 * self.feed_forward_out(hidden_states)
 
@@ -1213,14 +1206,17 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
             )  # calculate hs_mask based on the unfolded pad mask
 
         relative_attention_bias = self.relative_attention_bias_layer(hidden_states)
+        attention_mask = hs_mask.unsqueeze(1) + relative_attention_bias
 
         for layer in self.encoders:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
-                    layer.__call__, hidden_states, hs_mask, relative_attention_bias
+                    layer.__call__,
+                    hidden_states,
+                    attention_mask,
                 )
             else:
-                hidden_states = layer(hidden_states, hs_mask, relative_attention_bias)
+                hidden_states = layer(hidden_states, attention_mask)
 
         if unfolded:
             embed_dim = hidden_states.shape[-1]
@@ -1229,7 +1225,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
             if chunk_pad_size > 0:
                 hidden_states = hidden_states[:, :-chunk_pad_size, :]
 
-        return hidden_states, mask
+        return hidden_states
 
 
 class Phi4MultimodalAudioEmbedding(nn.Module):
@@ -1271,7 +1267,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 
         audio_input_features = audio_input_features.to(device=target_device, dtype=target_dtype)
 
-        audio_encoder_hidden_states, _ = self.encoder(audio_input_features, audio_attention_mask)
+        audio_encoder_hidden_states = self.encoder(audio_input_features, audio_attention_mask)
         audio_encoder_hidden_states = up_proj(audio_encoder_hidden_states)
         audio_encoder_hidden_states = nn.functional.gelu(audio_encoder_hidden_states)
         audio_embeds = down_proj(audio_encoder_hidden_states)
