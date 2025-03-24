@@ -45,7 +45,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.setUpClass with T5->Siglip
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -137,7 +136,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def siglip_tokenizer(self):
         return SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
     @classmethod
     @use_cache_if_possible
     @lru_cache(maxsize=64)

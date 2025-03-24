@@ -296,7 +296,7 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     (1 + len(text_of_1_token) + 1, 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
                 )
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, use_fast=True, add_prefix_space=True, trim_offsets=False
                 )
                 encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
@@ -306,7 +306,7 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     (1 + len(text_of_1_token), 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
                 )
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, use_fast=True, add_prefix_space=False, trim_offsets=False
                 )
                 encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
