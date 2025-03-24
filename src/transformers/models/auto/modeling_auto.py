@@ -1674,10 +1674,8 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
         text_config, text_config_names = config.get_text_config(decoder=True, return_text_config_name=True)
         if text_config_names and type(text_config) in cls._model_mapping.keys():
             warnings.warn(
-                "Loading a model with text-config is deprecated and will be removed in v4.57. "
-                "All causal models will load the full config, including vision/audio configs if available. "
-                "If this is impacting your model and you cannot load it anymore, open an issue "
-                "and tag @zucchini-nlp.",
+                "Loading a multimodal model with `AutoModelForCausalLM` is deprecated and will be removed in v5. "
+                "`AutoModelForCausalLM` will be used to load only the text-to-text generation module.",
                 FutureWarning,
             )
         return config
