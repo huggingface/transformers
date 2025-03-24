@@ -52,6 +52,10 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             The audio processor to use for audio inputs.
         tokenizer (`GPT2Tokenizer`):
             The tokenizer to use for text.
+        fake_image_token_pattern (`str`, *optional*, defaults to `r"<\|image_\d+\|>"`):
+            The fake image token pattern.
+        fake_audio_token_pattern (`str`, *optional*, defaults to `r"<\|audio_\d+\|>"`):
+            The fake audio token pattern.
     """
 
     attributes = ["image_processor", "audio_processor", "tokenizer"]

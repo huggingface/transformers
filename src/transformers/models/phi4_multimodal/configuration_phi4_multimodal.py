@@ -34,19 +34,19 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1152):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 4304):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 27):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 448):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
