@@ -30,11 +30,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-# Special tokens
-COMPATIBLE_IMAGE_TOKEN_PATTERN = r"<\|image_\d+\|>"
-COMPATIBLE_AUDIO_TOKEN_PATTERN = r"<\|audio_\d+\|>"
-
-
 class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
@@ -63,10 +58,20 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     tokenizer_class = "GPT2TokenizerFast"
     image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
-    valid_kwargs = ["chat_template"]
+    valid_kwargs = ["chat_template", "fake_image_token_pattern", "fake_audio_token_pattern"]
 
-    def __init__(self, image_processor, audio_processor, tokenizer, **kwargs):
+    def __init__(
+        self,
+        image_processor,
+        audio_processor,
+        tokenizer,
+        fake_image_token_pattern: str = r"<\|image_\d+\|>",
+        fake_audio_token_pattern: str = r"<\|audio_\d+\|>",
+        **kwargs,
+    ):
         super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
+        self.fake_image_token_pattern = fake_image_token_pattern
+        self.fake_audio_token_pattern = fake_audio_token_pattern
 
     def __call__(
         self,
@@ -125,8 +130,10 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         image_token = self.tokenizer.image_token
         audio_token = self.tokenizer.audio_token
-        processed_text = [re.sub(COMPATIBLE_IMAGE_TOKEN_PATTERN, image_token, t) for t in text]
-        processed_text = [re.sub(COMPATIBLE_AUDIO_TOKEN_PATTERN, audio_token, t) for t in processed_text]
+        compatible_image_token_pattern = rf"{self.fake_image_token_pattern}"
+        compatible_audio_token_pattern = rf"{self.fake_audio_token_pattern}"
+        processed_text = [re.sub(compatible_image_token_pattern, image_token, t) for t in text]
+        processed_text = [re.sub(compatible_audio_token_pattern, audio_token, t) for t in processed_text]
 
         # Check that the number of special tokens is sound
         concatenated_prompt = "".join(processed_text)
