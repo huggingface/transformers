@@ -4448,7 +4448,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            config._pre_quantization_dtype = torch_dtype
+            config._pre_quantization_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
 
         # Prepare the full device map
         if device_map is not None:
