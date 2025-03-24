@@ -740,7 +740,7 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
 # transformers.models.X, delete all of the code above, and
 # create the model through AutoModel.
 
-class EncoderProjectorQFormer(nn.Module):
+class GraniteSpeechEncoderProjectorQFormer(nn.Module):
     def __init__(self, config: GraniteSpeechProjectorConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -777,14 +777,14 @@ class EncoderProjectorQFormer(nn.Module):
         return query_proj
 
 ### Encoder
-class CTCModel(nn.Module):
+class GraniteSpeechCTCModel(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
-        super(CTCModel, self).__init__()
+        super(GraniteSpeechCTCModel, self).__init__()
 
         self.rnn_tr = nn.ModuleList(
             [nn.Linear(config.input_dim, config.hidden_dim, bias=True)] + \
             [
-                ConformerBlock(
+                GraniteSpeechConformerBlock(
                     dim=config.hidden_dim,
                     dim_head=config.dim_head,
                     heads=config.num_heads,
@@ -820,7 +820,7 @@ class CTCModel(nn.Module):
 
 
 # NOTE: Conformer adapated from: https://github.com/lucidrains/conformer.git
-class Permute(nn.Module):
+class GraniteSpeechConformerPermute(nn.Module):
     def __init__(self, dims):
         super().__init__()
         self.dims = dims
@@ -830,7 +830,7 @@ class Permute(nn.Module):
         return x
 
 
-class DepthWiseConv1d(nn.Module):
+class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
     def __init__(self, chan_in, chan_out, kernel_size, padding):
         super().__init__()
         self.padding = padding
@@ -841,7 +841,7 @@ class DepthWiseConv1d(nn.Module):
         return self.conv(x)
 
 
-class Scale(nn.Module):
+class GraniteSpeechConformerScale(nn.Module):
     def __init__(self, scale, fn):
         super().__init__()
         self.fn = fn
@@ -851,7 +851,7 @@ class Scale(nn.Module):
         return self.fn(x, **kwargs) * self.scale
 
 
-class PreNorm(nn.Module):
+class GraniteSpeechConformerPreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
         self.fn = fn
@@ -862,7 +862,7 @@ class PreNorm(nn.Module):
         return self.fn(x, **kwargs)
 
 
-class PreNormAttn(nn.Module):
+class GraniteSpeechConformerPreNormAttn(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
         self.fn = fn
@@ -873,7 +873,7 @@ class PreNormAttn(nn.Module):
         return self.fn(x, context_size, **kwargs)
 
 
-class Attention(nn.Module):
+class GraniteSpeechConformerAttention(nn.Module):
     def __init__(
         self,
         dim,
@@ -940,7 +940,7 @@ class Attention(nn.Module):
         return self.dropout(out)
 
 
-class FeedForward(nn.Module):
+class GraniteSpeechConformerFeedForward(nn.Module):
     def __init__(
         self,
         dim,
@@ -960,7 +960,7 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
-class ConformerConvModule(nn.Module):
+class GraniteSpeechConformerConvModule(nn.Module):
     def __init__(
         self,
         dim,
@@ -975,17 +975,17 @@ class ConformerConvModule(nn.Module):
 
         self.net = nn.Sequential(
             nn.LayerNorm(dim),
-            Permute(dims=(0, 2, 1)),
+            GraniteSpeechConformerPermute(dims=(0, 2, 1)),
             nn.Conv1d(dim, inner_dim * 2, 1),
             nn.GLU(dim=1),
-            DepthWiseConv1d(inner_dim,
+            GraniteSpeechConformerDepthWiseConv1d(inner_dim,
                             inner_dim,
                             kernel_size=kernel_size,
                             padding=padding),
             nn.BatchNorm1d(inner_dim) if not causal else nn.Identity(),
             nn.SiLU(),
             nn.Conv1d(inner_dim, dim, 1),
-            Permute(dims=(0, 2, 1)),
+            GraniteSpeechConformerPermute(dims=(0, 2, 1)),
             nn.Dropout(dropout)
         )
 
@@ -998,7 +998,7 @@ class ConformerConvModule(nn.Module):
         return (pad, pad - (kernel_size + 1) % 2)
 
 
-class ConformerBlock(nn.Module):
+class GraniteSpeechConformerBlock(nn.Module):
     def __init__(
         self,
         *,
@@ -1015,8 +1015,8 @@ class ConformerBlock(nn.Module):
         use_max_pos_emb_in_pos_emb_calc=True,
     ):
         super().__init__()
-        self.ff1 = FeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
-        self.attn = Attention(
+        self.ff1 = GraniteSpeechConformerFeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
+        self.attn = GraniteSpeechConformerAttention(
             dim=dim,
             dim_head=dim_head,
             heads=heads,
@@ -1024,18 +1024,18 @@ class ConformerBlock(nn.Module):
             context_size=context_size,
             use_max_pos_emb_in_pos_emb_calc=use_max_pos_emb_in_pos_emb_calc,
         )
-        self.conv = ConformerConvModule(
+        self.conv = GraniteSpeechConformerConvModule(
             dim=dim,
             causal=False,
             expansion_factor=conv_expansion_factor,
             kernel_size=conv_kernel_size,
             dropout=conv_dropout,
         )
-        self.ff2 = FeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
+        self.ff2 = GraniteSpeechConformerFeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
 
-        self.attn = PreNormAttn(dim, self.attn)
-        self.ff1 = Scale(0.5, PreNorm(dim, self.ff1))
-        self.ff2 = Scale(0.5, PreNorm(dim, self.ff2))
+        self.attn = GraniteSpeechConformerPreNormAttn(dim, self.attn)
+        self.ff1 = GraniteSpeechConformerScale(0.5, GraniteSpeechConformerPreNorm(dim, self.ff1))
+        self.ff2 = GraniteSpeechConformerScale(0.5, GraniteSpeechConformerPreNorm(dim, self.ff2))
 
         self.post_norm = nn.LayerNorm(dim)
 
@@ -1154,8 +1154,8 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
-        self.encoder = CTCModel(config.encoder_config)
-        self.projector = EncoderProjectorQFormer(config.projector_config)
+        self.encoder = GraniteSpeechCTCModel(config.encoder_config)
+        self.projector = GraniteSpeechEncoderProjectorQFormer(config.projector_config)
 
         if config.has_lora_adapter and not is_peft_available():
             logger.warning(
