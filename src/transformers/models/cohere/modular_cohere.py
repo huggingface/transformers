@@ -305,7 +305,6 @@ class CohereForCausalLM(LlamaForCausalLM):
         self.logit_scale = config.logit_scale
         self.tie_word_embeddings = config.tie_word_embeddings
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
