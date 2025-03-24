@@ -48,6 +48,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -145,7 +146,6 @@ class OptimizerNames(ExplicitEnum):
     Stores the acceptable string identifiers for optimizers.
     """
 
-    ADAMW_HF = "adamw_hf"
     ADAMW_TORCH = "adamw_torch"
     ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
@@ -260,9 +260,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for training.
+            The batch size per device accelerator core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for evaluation.
+            The batch size per device accelerator core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -275,7 +275,7 @@ class TrainingArguments:
 
         eval_accumulation_steps (`int`, *optional*):
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
-            left unset, the whole predictions are accumulated on GPU/NPU/TPU before being moved to the CPU (faster but
+            left unset, the whole predictions are accumulated on the device accelerator before being moved to the CPU (faster but
             requires more memory).
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
@@ -451,8 +451,8 @@ class TrainingArguments:
             training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [wandb](https://www.wandb.com/),
-            [mlflow](https://www.mlflow.org/) and [comet](https://www.comet.com/site) logging. If not specified, will
-            be the same as `output_dir`.
+            [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and [swanlab](https://swanlab.cn)
+            logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -542,7 +542,7 @@ class TrainingArguments:
                      all-gathers.
                 - use_orig_params (`bool`, *optional*, defaults to `True`)
                     If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
-                    frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
+                    frozen and trainable parameters. Useful in cases such as parameter-efficient fine-tuning. Please
                     refer this
                     [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
                 - sync_module_states (`bool`, *optional*, defaults to `True`)
@@ -604,8 +604,8 @@ class TrainingArguments:
                     all workers.
                 - use_seedable_sampler (`bool`, *optional*, defaults to `True`):
                     Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-                    training results are fully reproducable using a different sampling technique. While seed-to-seed results
-                    may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+                    training results are fully reproducible using a different sampling technique. While seed-to-seed results
+                    may differ, on average the differences are negligible when using multiple different seeds to compare. Should
                     also be ran with [`~utils.set_seed`] for the best results.
                 - use_configured_state (`bool`, *optional*, defaults to `False`):
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
@@ -627,7 +627,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-            The optimizer to use, such as "adamw_hf", "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
+            The optimizer to use, such as "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
             "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
             for a full list of optimizers.
         optim_args (`str`, *optional*):
@@ -642,8 +642,8 @@ class TrainingArguments:
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
-            integrations.
+            `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
+            for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -853,10 +853,10 @@ class TrainingArguments:
     )
 
     per_device_train_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for training."}
+        default=8, metadata={"help": "Batch size per device accelerator core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for evaluation."}
+        default=8, metadata={"help": "Batch size per device accelerator core/CPU for evaluation."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
@@ -1044,7 +1044,7 @@ class TrainingArguments:
     use_cpu: bool = field(
         default=False,
         metadata={
-            "help": "Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+            "help": "Whether or not to use cpu. If left to False, we will use the available torch device/backend (cuda/mps/xpu/hpu etc.)"
         },
     )
     use_mps_device: bool = field(
@@ -1187,7 +1187,9 @@ class TrainingArguments:
 
     run_name: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional descriptor for the run. Notably used for wandb, mlflow and comet logging."},
+        metadata={
+            "help": "An optional descriptor for the run. Notably used for wandb, mlflow comet and swanlab logging."
+        },
     )
     disable_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
@@ -1278,7 +1280,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with the internal Accelerator object initializtion. The value is either a "
+                "Config to be used with the internal Accelerator object initialization. The value is either a "
                 "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1528,7 +1530,7 @@ class TrainingArguments:
     neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
-            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instruction fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
         },
     )
 
@@ -1584,7 +1586,7 @@ class TrainingArguments:
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
             passed_value = getattr(self, field)
-            # We only want to do this if the str starts with a bracket to indiciate a `dict`
+            # We only want to do this if the str starts with a bracket to indicate a `dict`
             # else its likely a filename if supported
             if isinstance(passed_value, str) and passed_value.startswith("{"):
                 loaded_dict = json.loads(passed_value)
@@ -1638,7 +1640,7 @@ class TrainingArguments:
             self.do_eval = True
 
         if self.torch_empty_cache_steps is not None:
-            if not (isinstance(self.torch_empty_cache_steps, int) or self.torch_empty_cache_steps > 0):
+            if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
                 raise ValueError(
                     f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
                 )
@@ -1828,7 +1830,10 @@ class TrainingArguments:
         if (self.torch_compile_mode is not None or self.torch_compile_backend is not None) and not self.torch_compile:
             self.torch_compile = True
         if self.torch_compile and self.torch_compile_backend is None:
-            self.torch_compile_backend = "inductor"
+            if not self.use_cpu and is_torch_hpu_available():
+                self.torch_compile_backend = "hpu_backend"
+            else:
+                self.torch_compile_backend = "inductor"
 
         # accelerate integration for torch compile
         if self.torch_compile:
@@ -1849,7 +1854,7 @@ class TrainingArguments:
                     torch.backends.cudnn.allow_tf32 = True
             else:
                 logger.warning(
-                    "The speedups for torchdynamo mostly come wih GPU Ampere or higher and which is not detected here."
+                    "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
                 )
         if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
@@ -2310,6 +2315,9 @@ class TrainingArguments:
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)
+            elif is_torch_hpu_available():
+                device = torch.device("hpu:0")
+                torch.hpu.set_device(device)
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -2848,8 +2856,8 @@ class TrainingArguments:
             report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed,
-                `"none"` for no integrations.
+                `"neptune"`, `"swanlab"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations
+                installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
@@ -2977,7 +2985,7 @@ class TrainingArguments:
 
         Args:
             name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
+                The optimizer to use: `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
                 `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):
                 The initial learning rate.
