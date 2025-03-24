@@ -30,7 +30,6 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_aya_vision import AyaVisionConfig
 
@@ -484,11 +483,11 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
@@ -496,7 +495,6 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.model.get_decoder()
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(AYA_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AyaVisionCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
