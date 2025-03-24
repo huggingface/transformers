@@ -906,7 +906,12 @@ def update_key_name(keys):
             if len(pattern) <= i:
                 final_text += part
             else:
-                final_text += part + "{" +  ",".join([str(i) for i in sorted(list(pattern[i]))]) + "}"
+                data = [str(i) for i in sorted(pattern[i])]
+                result = ", ".join(data)  # If there are only 1 or 2 elements, show them all
+                if len(data) > 1:
+                    final_text += part + "{" + result + "}"
+                else:
+                    final_text += part + data[0]
         final_keys.add(final_text)
     return final_keys
 
