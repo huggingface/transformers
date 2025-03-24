@@ -89,7 +89,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-class ImageLoss(nn.Module):
+class DinoDetrImageLoss(nn.Module):
     """
     This class computes the losses for DetrForObjectDetection/DetrForSegmentation. The process happens in two steps: 1)
     we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
@@ -268,7 +268,7 @@ class ImageLoss(nn.Module):
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
-            "labels": self.loss_labels,
+            "class_labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
             "masks": self.loss_masks,
@@ -295,7 +295,7 @@ class ImageLoss(nn.Module):
         indices_list = []
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
-        num_boxes = sum(len(t["labels"]) for t in targets)
+        num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -316,8 +316,8 @@ class ImageLoss(nn.Module):
             dn_pos_idx = []
             dn_neg_idx = []
             for i in range(len(targets)):
-                if len(targets[i]["labels"]) > 0:
-                    t = torch.range(0, len(targets[i]["labels"]) - 1).long().to(device)
+                if len(targets[i]["class_labels"]) > 0:
+                    t = torch.range(0, len(targets[i]["class_labels"]) - 1).long().to(device)
                     t = t.unsqueeze(0).repeat(scalar, 1)
                     tgt_idx = t.flatten()
                     output_idx = (torch.tensor(range(scalar)) * single_pad).long().to(device).unsqueeze(1) + t
@@ -331,9 +331,6 @@ class ImageLoss(nn.Module):
             output_known_lbs_bboxes = dn_meta["output_known_lbs_bboxes"]
             l_dict = {}
             for loss in self.losses:
-                kwargs = {}
-                if "labels" in loss:
-                    kwargs = {"log": False}
                 l_dict.update(
                     self.get_loss(
                         loss,
@@ -341,7 +338,6 @@ class ImageLoss(nn.Module):
                         targets,
                         dn_pos_idx,
                         num_boxes * scalar,
-                        **kwargs,
                     )
                 )
 
@@ -371,11 +367,7 @@ class ImageLoss(nn.Module):
                     if loss == "masks":
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
-                    kwargs = {}
-                    if loss == "labels":
-                        # Logging is enabled only for the last layer
-                        kwargs = {"log": False}
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes)
                     l_dict = {k + f"_{idx}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -383,10 +375,6 @@ class ImageLoss(nn.Module):
                     aux_outputs_known = output_known_lbs_bboxes["aux_outputs"][idx]
                     l_dict = {}
                     for loss in self.losses:
-                        kwargs = {}
-                        if "labels" in loss:
-                            kwargs = {"log": False}
-
                         l_dict.update(
                             self.get_loss(
                                 loss,
@@ -394,7 +382,6 @@ class ImageLoss(nn.Module):
                                 targets,
                                 dn_pos_idx,
                                 num_boxes * scalar,
-                                **kwargs,
                             )
                         )
 
@@ -419,14 +406,7 @@ class ImageLoss(nn.Module):
             if return_indices:
                 indices_list.append(indices)
             for loss in self.losses:
-                if loss == "masks":
-                    # Intermediate masks losses are too costly to compute, we ignore them.
-                    continue
-                kwargs = {}
-                if loss == "labels":
-                    # Logging is enabled only for the last layer
-                    kwargs = {"log": False}
-                l_dict = self.get_loss(loss, interm_outputs, targets, indices, num_boxes, **kwargs)
+                l_dict = self.get_loss(loss, interm_outputs, targets, indices, num_boxes)
                 l_dict = {k + "_interm": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
@@ -437,14 +417,7 @@ class ImageLoss(nn.Module):
                 if return_indices:
                     indices_list.append(indices)
                 for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
-                    kwargs = {}
-                    if loss == "labels":
-                        # Logging is enabled only for the last layer
-                        kwargs = {"log": False}
-                    l_dict = self.get_loss(loss, enc_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = self.get_loss(loss, enc_outputs, targets, indices, num_boxes)
                     l_dict = {k + f"_enc_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -678,6 +651,7 @@ def DinoDetrForObjectDetectionLoss(
     labels,
     device,
     pred_boxes,
+    dn_meta,
     config,
     outputs_class=None,
     outputs_coord=None,
@@ -690,8 +664,8 @@ def DinoDetrForObjectDetectionLoss(
         giou_cost=config.giou_cost,
     )
     # Second: create the criterion
-    losses = ["labels", "boxes", "cardinality"]
-    criterion = ImageLoss(
+    losses = ["class_labels", "boxes", "cardinality"]
+    criterion = DinoDetrImageLoss(
         num_classes=config.num_labels,
         matcher=matcher,
         focal_alpha=config.focal_alpha,
@@ -703,6 +677,7 @@ def DinoDetrForObjectDetectionLoss(
     auxiliary_outputs = None
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
+    outputs_loss["dn_meta"] = dn_meta
     if config.auxiliary_loss:
         auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
@@ -716,25 +691,28 @@ def DinoDetrForObjectDetectionLoss(
 
 def compute_weight_dict(config):
     # prepare weight dict
-    weight_dict = {"loss_ce": config.cls_loss_coef, "loss_bbox": config.bbox_loss_coef}
-    weight_dict["loss_giou"] = config.giou_loss_coef
+    weight_dict = {
+        "loss_ce": config.cls_loss_coefficient,
+        "loss_bbox": config.bbox_loss_coefficient,
+    }
+    weight_dict["loss_giou"] = config.giou_loss_coefficient
     clean_weight_dict_wo_dn = copy.deepcopy(weight_dict)
 
     # for DN training
     if config.use_dn:
-        weight_dict["loss_ce_dn"] = config.cls_loss_coef
-        weight_dict["loss_bbox_dn"] = config.bbox_loss_coef
-        weight_dict["loss_giou_dn"] = config.giou_loss_coef
+        weight_dict["loss_ce_dn"] = config.cls_loss_coefficient
+        weight_dict["loss_bbox_dn"] = config.bbox_loss_coefficient
+        weight_dict["loss_giou_dn"] = config.giou_loss_coefficient
 
-    if config.masks:
-        weight_dict["loss_mask"] = config.mask_loss_coef
-        weight_dict["loss_dice"] = config.dice_loss_coef
+    if config.use_masks:
+        weight_dict["loss_mask"] = config.mask_loss_coefficient
+        weight_dict["loss_dice"] = config.dice_loss_coefficient
     clean_weight_dict = copy.deepcopy(weight_dict)
 
     # TODO this is a hack
-    if config.aux_loss:
+    if config.auxiliary_loss:
         aux_weight_dict = {}
-        for i in range(config.dec_layers - 1):
+        for i in range(config.num_decoder_layers - 1):
             aux_weight_dict.update({k + f"_{i}": v for k, v in clean_weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
