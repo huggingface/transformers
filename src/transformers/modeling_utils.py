@@ -907,7 +907,10 @@ def update_key_name(keys):
                 final_text += part
             else:
                 data = [str(i) for i in sorted(pattern[i])]
-                result = ", ".join(data)  # If there are only 1 or 2 elements, show them all
+                if len(data) > 10:
+                    result = f"{data[0]}...{data[-1]}"
+                else:
+                    result = ", ".join(data)  # If there are only 1 or 2 elements, show them all
                 if len(data) > 1:
                     final_text += part + "{" + result + "}"
                 else:
