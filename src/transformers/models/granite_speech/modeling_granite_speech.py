@@ -72,7 +72,7 @@ class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
 # which will should involve pulling it out into its own dir so that it is accessible
 # under transformers.models.X.
 
-# Copied from transformers.models.blip_2.modeling_blip2.Blip2QFormerMultiHeadAttention with Blip2->GraniteSpeech
+# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerMultiHeadAttention with Blip2->GraniteSpeech
 class GraniteSpeechQFormerMultiHeadAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
@@ -219,7 +219,7 @@ class GraniteSpeechQFormerSelfOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-# Copied from transformers.models.blip_2.modeling_blip2.Blip2QFormerAttention with Blip2->GraniteSpeech
+# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerAttention with Blip2->GraniteSpeech
 class GraniteSpeechQFormerAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False):
         super().__init__()
@@ -312,7 +312,7 @@ class GraniteSpeechQFormerOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-# Copied from transformers.models.blip_2.modeling_blip2.Blip2QFormerLayer with Blip2->GraniteSpeech
+# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerLayer with Blip2->GraniteSpeech
 class GraniteSpeechQFormerLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -416,7 +416,7 @@ class GraniteSpeechQFormerLayer(nn.Module):
         layer_output = self.output_query(intermediate_output, attention_output)
         return layer_output
 
-# Copied from transformers.models.blip_2.modeling_blip2.Blip2QFormerEncoder with Blip2->GraniteSpeech
+# Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerEncoder with Blip2->GraniteSpeech
 class GraniteSpeechQFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -511,7 +511,7 @@ class GraniteSpeechQFormerEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-# Copied from transformers.models.blip.modeling_blip.Blip2PreTrainedModel with Blip2->GraniteSpeechEncoderProjector
+
 class GraniteSpeechEncoderProjectorPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -545,7 +545,6 @@ class GraniteSpeechEncoderProjectorPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-# Copied from transformers.models.blip.modeling_blip.GraniteSpeechQFormerModel with GraniteSpeech->GraniteSpeech
 class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
     """
     Querying Transformer (Q-Former), used in GraniteSpeech.
@@ -562,12 +561,15 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
 
         self.post_init()
 
+    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
+    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -576,6 +578,7 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel.get_extended_attention_mask
     def get_extended_attention_mask(
         self,
         attention_mask: torch.Tensor,
@@ -621,6 +624,7 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
+    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel.forward
     def forward(
         self,
         query_embeds: torch.FloatTensor,
