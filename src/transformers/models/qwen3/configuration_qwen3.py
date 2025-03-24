@@ -27,7 +27,7 @@ class Qwen3Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen3Model`]. It is used to instantiate a
     Qwen3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen3-8B-beta [Qwen/Qwen3-8B-beta](https://huggingface.co/Qwen/Qwen3-8B-beta).
+    Qwen3-8B [Qwen/Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -123,7 +123,7 @@ class Qwen3Config(PretrainedConfig):
     >>> # Initializing a Qwen3 style configuration
     >>> configuration = Qwen3Config()
 
-    >>> # Initializing a model from the Qwen3-7B style configuration
+    >>> # Initializing a model from the Qwen3-8B style configuration
     >>> model = Qwen3Model(configuration)
 
     >>> # Accessing the model configuration

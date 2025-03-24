@@ -53,7 +53,7 @@ from .configuration_qwen3 import Qwen3Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "meta-qwen3/Qwen3-2-7b-hf"
+_CHECKPOINT_FOR_DOC = "Qwen/Qwen3-8B"
 _CONFIG_FOR_DOC = "Qwen3Config"
 
 
@@ -861,8 +861,8 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Qwen3ForCausalLM
 
-        >>> model = Qwen3ForCausalLM.from_pretrained("meta-qwen3/Qwen3-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-qwen3/Qwen3-2-7b-hf")
+        >>> model = Qwen3ForCausalLM.from_pretrained("Qwen/Qwen3-8B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-8B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

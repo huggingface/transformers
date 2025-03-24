@@ -56,7 +56,7 @@ from .configuration_qwen3_moe import Qwen3MoeConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "meta-qwen3_moe/Qwen3Moe-2-7b-hf"
+_CHECKPOINT_FOR_DOC = "Qwen/Qwen3-MoE-15B-A2B"
 _CONFIG_FOR_DOC = "Qwen3MoeConfig"
 
 
@@ -1055,8 +1055,8 @@ class Qwen3MoeForCausalLM(Qwen3MoePreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Qwen3MoeForCausalLM
 
-        >>> model = Qwen3MoeForCausalLM.from_pretrained("mistralai/Qwen3Moe-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Qwen3Moe-8x7B-v0.1")
+        >>> model = Qwen3MoeForCausalLM.from_pretrained("Qwen/Qwen3-MoE-15B-A2B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-MoE-15B-A2B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
