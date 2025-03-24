@@ -61,8 +61,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         This function cleans up expected missing keys and returns the remaining missing keys
         """
 
-        # if self.run_compressed:
-        #     return missing_keys
+        if self.run_compressed:
+            return missing_keys
 
         # We expect some keys to be missing for
         # compresed models
@@ -152,7 +152,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.quantization_config is not None
-            and self.quantization_config.quantization_config.quantization_status in [QuantizationStatus.COMPRESSED, QuantizationStatus.FROZEN]
+            and self.quantization_config.quantization_config.quantization_status
+            in [QuantizationStatus.COMPRESSED, QuantizationStatus.FROZEN]
         )
 
     @property
