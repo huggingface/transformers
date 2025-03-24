@@ -28,7 +28,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
-def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
     # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
@@ -550,7 +550,7 @@ def is_torch_bf16_available():
     return is_torch_bf16_gpu_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_fp16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -582,7 +582,7 @@ def is_torch_fp16_available_on_device(device):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_bf16_available_on_device(device):
     if not is_torch_available():
         return False
@@ -675,7 +675,7 @@ def is_g2p_en_available():
     return _g2p_en_available
 
 
-@lru_cache()
+@lru_cache
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     warnings.warn(
@@ -721,14 +721,14 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_xla_available()
     return False
 
 
-@lru_cache()
+@lru_cache
 def is_torch_npu_available(check_device=False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_npu") is None:
@@ -747,7 +747,7 @@ def is_torch_npu_available(check_device=False):
     return hasattr(torch, "npu") and torch.npu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_torch_mlu_available(check_device=False):
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
@@ -772,7 +772,7 @@ def is_torch_mlu_available(check_device=False):
     return available
 
 
-@lru_cache()
+@lru_cache
 def is_torch_musa_available(check_device=False):
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_musa") is None:
@@ -999,7 +999,7 @@ def is_torch_xpu_available(check_device=False):
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-@lru_cache()
+@lru_cache
 def is_bitsandbytes_available():
     if not is_torch_available() or not _bitsandbytes_available:
         return False
@@ -1053,7 +1053,7 @@ def is_flash_attn_2_available():
         return False
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
         return False
@@ -1061,7 +1061,7 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-@lru_cache()
+@lru_cache
 def is_flash_attn_greater_or_equal(library_version: str):
     if not _is_package_available("flash_attn"):
         return False
@@ -1857,8 +1857,8 @@ def is_torch_fx_proxy(x):
     return False
 
 
-BACKENDS_T = FrozenSet[str]
-IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+BACKENDS_T = frozenset[str]
+IMPORT_STRUCTURE_T = dict[BACKENDS_T, dict[str, set[str]]]
 
 
 class _LazyModule(ModuleType):
@@ -1874,7 +1874,7 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: importlib.machinery.ModuleSpec = None,
-        extra_objects: Dict[str, object] = None,
+        extra_objects: dict[str, object] = None,
     ):
         super().__init__(name)
 
@@ -2078,7 +2078,7 @@ def fetch__all__(file_content):
         return _all
 
 
-@lru_cache()
+@lru_cache
 def create_import_structure_from_path(module_path):
     """
     This method takes the path to a file/a folder and returns the import structure.
