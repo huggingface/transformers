@@ -139,51 +139,6 @@ class LlavaMultiModalProjector(nn.Module):
         return hidden_states
 
 
-class LlavaLMModel(nn.Module):
-    """
-    A model for language model class of LLaVA. Used only to deal with BC issues, not recommended
-    to load this class with hub checkpoint.
-    """
-
-    def __init__(self, config: LlavaConfig):
-        super().__init__()
-        self.model = AutoModel.from_config(config)
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **lm_kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-            **lm_kwargs,
-        )
-        return outputs
-
-
 LLAVA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -207,9 +162,9 @@ LLAVA_START_DOCSTRING = r"""
 )
 class LlavaPreTrainedModel(PreTrainedModel):
     config_class = LlavaConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlavaVisionAttention"]
+    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
@@ -319,7 +274,7 @@ LLAVA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The LLAVA model which consists of a vision backbone and a language model, without a language modeling head.""",
+    """The Llava model which consists of a vision backbone and a language model, without a language modeling head.""",
     LLAVA_START_DOCSTRING,
 )
 class LlavaModel(LlavaPreTrainedModel):
@@ -328,32 +283,30 @@ class LlavaModel(LlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
-        self.language_model = LlavaLMModel(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
 
-        if self.language_model.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [
-                f"language_model.model.{k}" for k in self.language_model.model._tied_weights_keys
-            ]
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.language_model.model.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.language_model.model.set_input_embeddings(value)
+        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.language_model.model.get_output_embeddings()
+        return self.language_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.language_model.model.set_output_embeddings(new_embeddings)
+        self.language_model.set_output_embeddings(new_embeddings)
 
     def set_decoder(self, decoder):
-        self.language_model.model.set_decoder(decoder)
+        self.language_model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.language_model.model.get_decoder()
+        return self.language_model.get_decoder()
 
     def get_image_features(
         self,
@@ -366,7 +319,7 @@ class LlavaModel(LlavaPreTrainedModel):
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
             vision_feature_layer (`Union[int, List[int]]`):
                 The index of the layer to select the vision feature. If multiple indices are provided,
@@ -437,11 +390,6 @@ class LlavaModel(LlavaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -453,14 +401,21 @@ class LlavaModel(LlavaPreTrainedModel):
                 image_sizes=image_sizes,
             )
 
-            n_image_tokens = (input_ids == self.config.image_token_index).sum()
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_index, dtype=torch.long, device=inputs_embeds.device)
+                )
+                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+            else:
+                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -488,20 +443,16 @@ class LlavaModel(LlavaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The LLAVA model which consists of a vision backbone and a language model.""",
+    """The AriaMultiModalProjector model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
 class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
-    base_model_prefix = "model"
-
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
-        self.model = LlavaModel._from_config(config)
-        self.model.language_model.lm_head = nn.Linear(
-            config.text_config.hidden_size, config.text_config.vocab_size, bias=False
-        )
+        self.model = LlavaModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.model.{k}" for k in self.model._tied_weights_keys]
+            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
 
         self.post_init()
 
@@ -618,7 +569,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.model.language_model.lm_head(hidden_states[:, slice_indices, :])
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -661,7 +612,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = self.model.language_model.model.prepare_inputs_for_generation(
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
