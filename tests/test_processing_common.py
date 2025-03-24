@@ -757,7 +757,7 @@ class ProcessorTesterMixin:
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
-    def test_image_chat_template_single_images(self):
+    def test_image_chat_template_single(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")

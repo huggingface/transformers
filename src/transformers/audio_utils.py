@@ -19,7 +19,7 @@ and remove unnecessary dependencies.
 import os
 import warnings
 from io import BytesIO
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import requests
