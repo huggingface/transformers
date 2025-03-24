@@ -268,8 +268,8 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
 
     # TODO; @eustlb, move this to audio_utils in a general spectogram_batch function that handles torch and numpy
     def _torch_extract_fbank_features(
-        self, waveform: torch.FloatTensor, audio_lengths: torch.Tensor, device: str = "cpu"
-    ) -> torch.FloatTensor:
+        self, waveform: "torch.FloatTensor", audio_lengths: "torch.Tensor", device: str = "cpu"
+    ) -> "torch.FloatTensor":
         """
         Compute the log mel-scaled spectrogram of batched waveforms using PyTorch's FFT implementation.
 
