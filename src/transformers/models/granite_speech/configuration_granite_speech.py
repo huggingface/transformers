@@ -38,7 +38,7 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
 
 ## adapted from transformers.models.blip.configuration_blip_2.Blip2VisionConfig
 class GraniteSpeechProjectorConfig(PretrainedConfig):
-    model_type = "blip_2_qformer"
+    model_type = "granite_speech_qformer"
 
     def __init__(
         self,
@@ -107,9 +107,7 @@ class GraniteSpeechConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["granite"]()
 
         if isinstance(projector_config, dict):
-            # TODO - Make this generic after blip2qformer is moved out to its own model dir.
-            if projector_config["model_type"] != "blip_2_qformer":
-                raise ValueError("Granite speech currently requires blip2 qformer as its encoder!")
+            # TODO - In the future, we should make this generic.
             projector_config = GraniteSpeechProjectorConfig(**projector_config)
         elif projector_config is None:
             projector_config = GraniteSpeechProjectorConfig()

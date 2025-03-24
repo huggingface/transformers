@@ -96,7 +96,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "layer_norm_eps": 1e-12,
             "llm_dim": 32,
             "max_position_embeddings": 2048,
-            "model_type": "blip_2_qformer",
+            "model_type": "granite_speech_qformer",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "position_embedding_type": "absolute",
