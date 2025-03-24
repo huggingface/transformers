@@ -228,27 +228,22 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         else:
             raw_speech = [raw_speech[:, None].to(torch.float32)]
 
-        audio_lengths = [torch.tensor([len(speech)]) for speech in raw_speech]
-
-        # if torch is available, let's make sure input_features and audio_lengths are PyTorch tensors
-        # if not, it necessarily means that inputs are NumPy arrays
-        batched_speech = BatchFeature(
-            data={"audio_input_features": raw_speech, "audio_lengths": audio_lengths}, tensor_type="pt"
-        )
+        audio_lengths = [len(speech) for speech in raw_speech]
 
         # convert into correct format for padding
+        batched_speech = BatchFeature(data={"audio_input_features": raw_speech, "audio_lengths": audio_lengths})
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors="pt",
         )
         input_features = padded_inputs.audio_input_features.squeeze(-1)
         audio_lengths = padded_inputs.audio_lengths
 
-        extract_fbank_features = self._torch_extract_fbank_features
-        input_features = extract_fbank_features(input_features, audio_lengths, device)
+        input_features = self._torch_extract_fbank_features(input_features, audio_lengths, device)
 
         feature_lengths = (audio_lengths - self.win_length) // self.hop_length + 1
         feature_lengths = feature_lengths * self.audio_feat_stride
