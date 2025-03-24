@@ -904,7 +904,7 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -997,7 +997,7 @@ class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
 

@@ -3376,6 +3376,9 @@ else:
             "Qwen2_5OmniThinkerModel",
             "Qwen2_5OmniThinkerPreTrainedModel",
             "Qwen2_5OmniToken2WavModel",
+            "Qwen2_5OmniToken2WavDiTModel",
+            "Qwen2_5OmniToken2WavBigVGANModel",
+            "Qwen2_5OmniPreTrainedModel",
         ]
     )
     _import_structure["models.qwen2_5_vl"].extend(
@@ -8201,12 +8204,15 @@ if TYPE_CHECKING:
         )
         from .models.qwen2_5_omni import (
             Qwen2_5OmniModel,
+            Qwen2_5OmniPreTrainedModel,
             Qwen2_5OmniTalkerForConditionalGeneration,
             Qwen2_5OmniTalkerModel,
             Qwen2_5OmniTalkerPretrainedModel,
             Qwen2_5OmniThinkerForConditionalGeneration,
             Qwen2_5OmniThinkerModel,
             Qwen2_5OmniThinkerPreTrainedModel,
+            Qwen2_5OmniToken2WavBigVGANModel,
+            Qwen2_5OmniToken2WavDiTModel,
             Qwen2_5OmniToken2WavModel,
         )
         from .models.qwen2_5_vl import (

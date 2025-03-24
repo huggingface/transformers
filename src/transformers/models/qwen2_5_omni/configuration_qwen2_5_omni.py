@@ -18,7 +18,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
-from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -429,8 +428,11 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     >>> # Initializing a Qwen2_5OmniVisionEncoder config
     >>> vision_config = Qwen2_5OmniVisionEncoderConfig()
 
+    >>> # Initializing a Qwen2_5OmniTextConfig config
+    >>> text_config = Qwen2_5OmniTextConfig()
+
     >>> # Initializing a Qwen2.5OmniThinker configuration
-    >>> configuration = Qwen2_5OmniThinkerConfig(audio_config, vision_config)
+    >>> configuration = Qwen2_5OmniThinkerConfig(audio_config, vision_config, text_config)
 
     >>> # Initializing a model from the Qwen-Omni style configuration
     >>> model = Qwen2_5OmniThinkerForConditionalGeneration(configuration)
@@ -440,8 +442,12 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_thinker"
-    sub_configs = {"audio_config": AutoConfig, "vision_config": AutoConfig, "text_config": AutoConfig}
-    is_composition = False
+    sub_configs = {
+        "audio_config": Qwen2_5OmniAudioEncoderConfig,
+        "vision_config": Qwen2_5OmniVisionEncoderConfig,
+        "text_config": Qwen2_5OmniTextConfig,
+    }
+    is_composition = True
 
     def __init__(
         self,
@@ -757,11 +763,11 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
     It defines the architecture of the DiT model, which is used for generating mel-spectrograms from tokens.
 
     Args:
-        dim (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 1024):
             The dimension of the model.
-        depth (`int`, *optional*, defaults to 22):
+        num_hidden_layers (`int`, *optional*, defaults to 22):
             The number of transformer blocks in the DiT model.
-        heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             The number of attention heads in each transformer block.
         ff_mult (`int`, *optional*, defaults to 2):
             The multiplier for the feedforward layer in each transformer block.
@@ -777,8 +783,6 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
             The dimension of the mel-spectrogram.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the transformer blocks.
-        long_skip_connection (`bool`, *optional*, defaults to `False`):
-            Whether to use a long skip connection in the transformer blocks.
 
         enc_emb_dim (`int`, *optional*, defaults to 192):
             The dimension of the pre-trained speaker embedding.
@@ -798,25 +802,27 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
             The scale of the Res2Net block in the encoder.
         enc_se_channels (`int`, *optional*, defaults to 64):
             The number of output channels after squeeze in the SEBlock.
-        enc_global_context (`bool`, *optional*, defaults to `True`):
-            Whether to use global context in the AttentiveStatisticsPooling layer.
     """
 
     model_type = "qwen2_5_omni_dit"
 
     def __init__(
         self,
-        dim=1024,
-        depth=22,
-        heads=16,
+        hidden_size=1024,
+        num_hidden_layers=22,
+        num_attention_heads=16,
         ff_mult=2,
         emb_dim=512,
         head_dim=64,
+        rope_theta=10000.0,
+        max_position_embeddings=32768,
+        block_size=24,
+        look_ahead_layers=[10],
+        look_backward_layers=[0, 20],
         repeats=2,
         num_embeds=8193,
         mel_dim=80,
         dropout=0.1,
-        long_skip_connection=False,
         enc_emb_dim=192,
         enc_dim=128,
         enc_lin_neurons=192,
@@ -826,20 +832,23 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         enc_attention_channels=64,
         enc_res2net_scale=2,
         enc_se_channels=64,
-        enc_global_context=True,
         **kwargs,
     ):
-        self.dim = dim
-        self.depth = depth
-        self.heads = heads
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.ff_mult = ff_mult
         self.emb_dim = emb_dim
         self.head_dim = head_dim
+        self.rope_theta = rope_theta
+        self.max_position_embeddings = max_position_embeddings
+        self.block_size = block_size
+        self.look_ahead_layers = look_ahead_layers
+        self.look_backward_layers = look_backward_layers
         self.repeats = repeats
         self.num_embeds = num_embeds
         self.mel_dim = mel_dim
         self.dropout = dropout
-        self.long_skip_connection = long_skip_connection
         self.enc_emb_dim = enc_emb_dim
         self.enc_dim = enc_dim
         self.enc_lin_neurons = enc_lin_neurons
@@ -849,7 +858,6 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         self.enc_attention_channels = enc_attention_channels
         self.enc_res2net_scale = enc_res2net_scale
         self.enc_se_channels = enc_se_channels
-        self.enc_global_context = enc_global_context
         super().__init__(**kwargs)
 
 
@@ -871,14 +879,6 @@ class Qwen2_5OmniBigVGANConfig(PretrainedConfig):
             A list of upsampling rates for each upsampling layer.
         upsample_kernel_sizes (`List[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
             A list of kernel sizes for each upsampling layer.
-        snake_logscale (`bool`, *optional*, defaults to `True`):
-            Whether to use logscale in the SnakeBeta activation function.
-        activation (`str`, *optional*, defaults to `"snakebeta"`):
-            The activation function used in the model.
-        use_tanh_at_final (`bool`, *optional*, defaults to `False`):
-            Whether to use tanh activation at the final layer.
-        use_bias_at_final (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the final layer.
     """
 
     model_type = "qwen2_5_omni_bigvgan"
@@ -891,10 +891,6 @@ class Qwen2_5OmniBigVGANConfig(PretrainedConfig):
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         upsample_rates=[5, 3, 2, 2, 2, 2],
         upsample_kernel_sizes=[11, 7, 4, 4, 4, 4],
-        snake_logscale=True,
-        activation="snakebeta",
-        use_tanh_at_final=False,
-        use_bias_at_final=False,
         **kwargs,
     ):
         self.mel_dim = mel_dim
@@ -903,10 +899,6 @@ class Qwen2_5OmniBigVGANConfig(PretrainedConfig):
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.upsample_rates = upsample_rates
         self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.snake_logscale = snake_logscale
-        self.activation = activation
-        self.use_tanh_at_final = use_tanh_at_final
-        self.use_bias_at_final = use_bias_at_final
         super().__init__(**kwargs)
 
 
@@ -975,7 +967,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
     model according to the specified sub-models configurations, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [Qwen2.5Omni]() architecture.
+    [Qwen2.5-Omni]() architecture.
     #TODO: add link
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -1077,8 +1069,8 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
 
 __all__ = [
-    Qwen2_5OmniConfig,
-    Qwen2_5OmniThinkerConfig,
-    Qwen2_5OmniTalkerConfig,
-    Qwen2_5OmniToken2WavConfig,
+    "Qwen2_5OmniConfig",
+    "Qwen2_5OmniThinkerConfig",
+    "Qwen2_5OmniTalkerConfig",
+    "Qwen2_5OmniToken2WavConfig",
 ]
