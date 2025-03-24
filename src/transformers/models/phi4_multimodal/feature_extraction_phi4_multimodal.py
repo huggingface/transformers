@@ -298,18 +298,19 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             frames = frames.clone()
             # concerned batch indices
             to_mask_batch_idxs = torch.arange(batch_size)[audio_lengths != audio_lengths.max()]
-            batch_idxs_down = (audio_lengths[to_mask_batch_idxs] - self.win_length) // self.hop_length + 1
-            batch_idxs_up = audio_lengths[to_mask_batch_idxs] // self.hop_length + 1
-            offset_idx = batch_idxs_down.min()
-            max_idx = batch_idxs_up.max()
+            if to_mask_batch_idxs.numel() > 0:
+                batch_idxs_down = (audio_lengths[to_mask_batch_idxs] - self.win_length) // self.hop_length + 1
+                batch_idxs_up = audio_lengths[to_mask_batch_idxs] // self.hop_length + 1
+                offset_idx = batch_idxs_down.min()
+                max_idx = batch_idxs_up.max()
 
-            mask = torch.arange(max_idx - offset_idx, device=device).expand(to_mask_batch_idxs.shape[0], -1)
-            mask = ((batch_idxs_down - offset_idx).unsqueeze(1) <= mask) & (
-                mask < (batch_idxs_up - offset_idx).unsqueeze(1)
-            )
-            mask = mask.unsqueeze(-1).expand(-1, -1, self.win_length)
-            masked_frames = frames[to_mask_batch_idxs, offset_idx:max_idx].masked_fill_(mask, 0)
-            frames[to_mask_batch_idxs, offset_idx:max_idx] = masked_frames
+                mask = torch.arange(max_idx - offset_idx, device=device).expand(to_mask_batch_idxs.shape[0], -1)
+                mask = ((batch_idxs_down - offset_idx).unsqueeze(1) <= mask) & (
+                    mask < (batch_idxs_up - offset_idx).unsqueeze(1)
+                )
+                mask = mask.unsqueeze(-1).expand(-1, -1, self.win_length)
+                masked_frames = frames[to_mask_batch_idxs, offset_idx:max_idx].masked_fill_(mask, 0)
+                frames[to_mask_batch_idxs, offset_idx:max_idx] = masked_frames
         # ---
 
         # apply pre-emphasis first order filter on fft windows
