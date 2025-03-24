@@ -26,8 +26,6 @@ e.g. `facebook/opt-30b` on an AWS EC2 g4dn.metal instance can be made to load in
 
 Profile before committing to using this environment variable, this will not produce speed ups for smaller models.
 
-NOTE, if you are not loading a model onto specifically the CPU, you must set `multiprocessing` to use the `spawn` start method like so:
-
 ```py
 import os
 
@@ -36,18 +34,18 @@ os.environ["HF_ENABLE_PARALLEL_LOADING"] = "true"
 import multiprocessing
 from transformers import pipeline
 
-if __name__ == "__main__":
-    # NOTE if a model loads on CPU this is not required
-    multiprocessing.set_start_method("spawn", force=True)
-
-    model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
+model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
 ```
-
-If loading onto a cuda device, the code will crash if multiprocessing.set_start_method("spawn", force=True) is not set.
 
 ## HF_PARALLEL_LOADING_WORKERS
 
-Determines how many child processes should be used when parallel loading is enabled. Default is `8`. Tune as you see fit.
+Determines how many child processes should be used when parallel loading is enabled. Default is `8`. 
+
+If the number of files that are being loaded is less than the number of child processes specified, the number that is actually spawned will be equal to the number of files.
+
+e.g. If you specify 8 workers, and there are only 2 files, only 2 workers will be spawned.
+
+Tune as you see fit.
 
 ```py
 import os
@@ -58,9 +56,5 @@ os.environ["HF_PARALLEL_LOADING_WORKERS"] = "4"
 import multiprocessing
 from transformers import pipeline
 
-if __name__ == "__main__":
-    # NOTE if a model loads on CPU this is not required
-    multiprocessing.set_start_method("spawn", force=True)
-
-    model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
+model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
 ```
