@@ -94,6 +94,7 @@ from .hub import (
     http_user_agent,
     is_offline_mode,
     is_remote_url,
+    list_repo_templates,
     send_example_telemetry,
     try_to_load_from_cache,
 )

@@ -32,8 +32,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from huggingface_hub import list_repo_tree
-from huggingface_hub.errors import EntryNotFoundError  # Should this be refactored into a util instead?
 from packaging import version
 
 from . import __version__
@@ -66,6 +64,7 @@ from .utils import (
     is_torch_available,
     is_torch_device,
     is_torch_tensor,
+    list_repo_templates,
     logging,
     requires_backends,
     to_py_obj,
@@ -1996,19 +1995,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                                 f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
                             )
                 else:
-                    try:
-                        for template_file in list_repo_tree(
-                            pretrained_model_name_or_path,
-                            path_in_repo=CHAT_TEMPLATE_DIR,
-                            recursive=False,
-                            revision=revision,
-                        ):
-                            if not template_file.path.endswith(".jinja"):
-                                continue
-                            template_name = template_file.path.split("/")[-1].removesuffix(".jinja")
-                            additional_files_names[f"chat_template_{template_name}"] = template_file.path
-                    except EntryNotFoundError:
-                        pass  # No template dir means no template files
+                    for template in list_repo_templates(
+                        pretrained_model_name_or_path,
+                        local_files_only=local_files_only,
+                        revision=revision,
+                        cache_dir=cache_dir,
+                    ):
+                        additional_files_names[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
