@@ -41,7 +41,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
     VisionSdpaAttention,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
@@ -816,7 +816,12 @@ class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
 
 
+class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
+    pass
+
+
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Qwen2_5_VLImagesKwargs
     videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
