@@ -113,7 +113,12 @@ class DeformableDetrModelTester:
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
+                target["masks"] = torch.rand(
+                    self.n_targets,
+                    self.image_size,
+                    self.image_size,
+                    device=torch_device,
+                )
                 labels.append(target)
 
         config = self.get_config()
@@ -164,7 +169,10 @@ class DeformableDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.num_queries, self.hidden_size),
+        )
 
     def create_and_check_deformable_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
         model = DeformableDetrForObjectDetection(config=config)
@@ -188,7 +196,10 @@ class DeformableDetrModelTester:
 class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
+        {
+            "image-feature-extraction": DeformableDetrModel,
+            "object-detection": DeformableDetrForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -207,10 +218,15 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 for i in range(self.model_tester.batch_size):
                     target = {}
                     target["class_labels"] = torch.ones(
-                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                        size=(self.model_tester.n_targets,),
+                        device=torch_device,
+                        dtype=torch.long,
                     )
                     target["boxes"] = torch.ones(
-                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                        self.model_tester.n_targets,
+                        4,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     target["masks"] = torch.ones(
                         self.model_tester.n_targets,
@@ -230,7 +246,12 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             self,
             config_class=DeformableDetrConfig,
             has_text_modality=False,
-            common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
+            common_properties=[
+                "num_channels",
+                "d_model",
+                "encoder_attention_heads",
+                "decoder_attention_heads",
+            ],
         )
 
     def test_config(self):
@@ -323,7 +344,11 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_queries,
+                ],
             )
 
             # cross attentions
@@ -380,6 +405,8 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
+                breakpoint()
+
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
@@ -394,7 +421,9 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                     else:
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -439,7 +468,10 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                model,
+                tuple_inputs,
+                dict_inputs,
+                {"output_hidden_states": True, "output_attentions": True},
             )
 
     def test_retain_grad_hidden_states_attentions(self):
