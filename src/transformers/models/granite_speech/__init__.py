@@ -37,7 +37,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_granite_speech"] = [
         "GraniteSpeechForConditionalGeneration",
-        "GraniteSpeechPretrainedModel",
+        "GraniteSpeechPreTrainedModel",
+        "GraniteSpeechEncoderProjectorPreTrainedModel",
+        "GraniteSpeechQFormerModel",
     ]
 
 try:
@@ -66,7 +68,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_granite_speech import (
             GraniteSpeechForConditionalGeneration,
-            GraniteSpeechPretrainedModel,
+            GraniteSpeechPreTrainedModel,
+            GraniteSpeechEncoderProjectorPreTrainedModel,
+            GraniteSpeechQFormerModel,
         )
 
     try:
