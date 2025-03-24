@@ -332,6 +332,10 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
+    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
+    def test_model_is_small(self):
+        pass
+
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):
