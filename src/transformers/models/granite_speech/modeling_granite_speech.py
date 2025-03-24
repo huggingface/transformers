@@ -1051,6 +1051,8 @@ class ConformerBlock(nn.Module):
 class GraniteSpeechPretrainedModel(PreTrainedModel):
     config_class = GraniteSpeechConfig
     _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1269,7 +1271,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            labels=labels,
             **lm_kwargs,
         )
         logits = outputs[0]
@@ -1359,18 +1360,19 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPretrainedModel, Genera
         )
         return inputs_embeds
 
-    def generate(self, input_features=None, **kwargs):
+    def generate(self, *args, **kwargs):
         """This model is expected to have a lora adapater, which is only
         enabled when considering audio inputs. As such, we override generate
         to conditionally enable / disable the lora adapter based on whether
         or not any input features were provided.
         """
+        input_features = kwargs.pop("input_features", None)
         if is_peft_available and self._hf_peft_config_loaded:
             if input_features is not None:
                 self.enable_adapters()
             else:
                 self.disable_adapters()
-        return super().generate(input_features=input_features, **kwargs)
+        return super().generate(*args, input_features=input_features, **kwargs)
 
 __all__ = [
     "GraniteSpeechForConditionalGeneration",
