@@ -222,10 +222,23 @@ def check_dummies(overwrite: bool = False):
                 with open(dummy_file_paths[backend], "w", encoding="utf-8", newline="\n") as f:
                     f.write(dummy_files[backend])
             else:
+                # Temporary fix to help people identify which objects introduced are not correctly protected.
+                for _actual, _dummy in zip(
+                    actual_dummies["torch"].split("class"), dummy_files["torch"].split("class")
+                ):
+                    if _actual != _dummy:
+                        actual_broken = _actual
+                        dummy_broken = _dummy
+                        break
                 raise ValueError(
                     "The main __init__ has objects that are not present in "
-                    f"transformers.utils.dummy_{short_names.get(backend, backend)}_objects.py. Run `make fix-copies` "
-                    "to fix this."
+                    f"transformers.utils.dummy_{short_names.get(backend, backend)}_objects.py.\n"
+                    f" It is likely the following objects are responsible, see these excerpts: \n"
+                    f"---------------------------------- Actual -------------------------------------\n"
+                    f" \n {actual_broken} \n"
+                    f"---------------------------------- Dummy -------------------------------------\n"
+                    f" \n {dummy_broken} \n"
+                    "Run `make fix-copies` to fix this."
                 )
 
 

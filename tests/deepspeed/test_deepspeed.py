@@ -405,7 +405,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demostrating that this issue is
+        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
         # exclusive to DeepSpeed
         bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
@@ -628,7 +628,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 with CaptureStd() as cs:
                     trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
-            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn(f"Trial {n_trials - 1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
     # --- These tests need to run on both zero stages --- #
