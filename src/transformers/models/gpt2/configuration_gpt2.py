@@ -127,6 +127,7 @@ class GPT2Config(PretrainedConfig):
 
     model_type = "gpt2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {}
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",
