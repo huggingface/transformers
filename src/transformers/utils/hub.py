@@ -40,6 +40,7 @@ from huggingface_hub import (
     create_repo,
     hf_hub_download,
     hf_hub_url,
+    list_repo_tree,
     snapshot_download,
     try_to_load_from_cache,
 )
@@ -135,6 +136,43 @@ def _get_cache_file_to_return(
     if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
         return resolved_file
     return None
+
+
+def list_repo_templates(
+    repo_id: str,
+    *,
+    local_files_only: bool,
+    revision: Optional[str] = None,
+    cache_dir: Optional[str] = None,
+) -> List[str]:
+    """List template files from a repo.
+
+    A template is a jinja file located under the `templates/` folder.
+    If working in offline mode or if internet is down, the method will list jinja template from the local cache - if any.
+    """
+
+    if not local_files_only:
+        try:
+            return [
+                entry.path.removeprefix("templates/")
+                for entry in list_repo_tree(
+                    repo_id=repo_id, revision=revision, path_in_repo="templates", recursive=False
+                )
+                if entry.path.endswith(".jinja")
+            ]
+        except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
+            raise  # valid errors => do not catch
+        except (ConnectionError, HTTPError):
+            pass  # offline mode, internet down, etc. => try local files
+
+    # check local files
+    snapshot_dir = snapshot_download(repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True)
+    templates_dir = os.path.join(snapshot_dir, "templates")
+    return [
+        entry
+        for entry in os.listdir(templates_dir)
+        if os.path.isfile(os.path.join(templates_dir, entry)) and entry.endswith(".jinja")
+    ]
 
 
 def is_remote_url(url_or_filename):
