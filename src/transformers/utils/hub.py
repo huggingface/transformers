@@ -166,7 +166,12 @@ def list_repo_templates(
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
-    snapshot_dir = snapshot_download(repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True)
+    try:
+        snapshot_dir = snapshot_download(
+            repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True
+        )
+    except LocalEntryNotFoundError:  # No local repo means no local files
+        return []
     templates_dir = os.path.join(snapshot_dir, "templates")
     return [
         entry
