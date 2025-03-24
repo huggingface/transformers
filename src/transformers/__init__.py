@@ -569,13 +569,6 @@ _import_structure = {
         "LlavaNextConfig",
         "LlavaNextProcessor",
     ],
-    "models.phi4_multimodal": [
-        "Phi4MultimodalConfig",
-        "Phi4MultimodalVisionConfig",
-        "Phi4MultimodalAudioConfig",
-        "Phi4MultimodalProcessor",
-        "Phi4MultimodalFeatureExtractor",
-    ],
     "models.llava_next_video": [
         "LlavaNextVideoConfig",
         "LlavaNextVideoProcessor",
@@ -706,6 +699,13 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phi4_multimodal": [
+        "Phi4MultimodalAudioConfig",
+        "Phi4MultimodalConfig",
+        "Phi4MultimodalFeatureExtractor",
+        "Phi4MultimodalProcessor",
+        "Phi4MultimodalVisionConfig",
+    ],
     "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
@@ -1347,7 +1347,6 @@ else:
     _import_structure["models.clip"].append("CLIPImageProcessorFast")
     _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
-    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
@@ -1356,6 +1355,7 @@ else:
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
