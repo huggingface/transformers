@@ -42,15 +42,11 @@ from urllib.request import urlopen
 
 # Define model path
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = "cuda
+device = "cuda:0"
 
 # Load model and processor
-processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(
-    model_path, 
-    device_map=device, 
-    torch_dtype=torch.float16, 
-)
+processor = AutoProcessor.from_pretrained(model_path)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  torch_dtype=torch.float16)
 
 # Optional: load the adapters (note that without them, the base model will very likely not work well)
 model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})

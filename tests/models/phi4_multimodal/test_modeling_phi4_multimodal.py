@@ -199,7 +199,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 @require_torch
 @slow
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
-    checkpoint_path = "/raid/cyril/phi4-converted"
+    checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
     audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
 
