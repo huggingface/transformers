@@ -22,6 +22,7 @@ import inspect
 import itertools
 import json
 import math
+import multiprocessing
 import os
 import re
 import shutil
@@ -4946,8 +4947,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map)
 
-        from multiprocessing import Pool
-
         # Prepare arguments for multiprocessing
         args_list = [
             (
@@ -4983,47 +4982,55 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Use multiprocessing Pool for parallel execution, off by default
         if json.loads(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")):
-            num_workers = json.loads(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
-            logger.info(f"Loading model weights in parallel with {num_workers} workers...")
-            state_dict_modules_list = []
+            original_start_method = multiprocessing.get_start_method(allow_none=True)
 
-            with Pool(processes=num_workers) as pool:
-                # For nice tqdm bars
-                with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
-                    # NOTE order does not matter, layers that changed per shard are unique and can be reassigned to the orignal meta model
-                    for result in pool.imap_unordered(load_shard_file, args_list):
-                        _mismatched_keys, _error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules = (
-                            result
-                        )
+            try:
+                # CUDA requires the start method to be spawn, fork creates multiple copies of the cuda runtime, which throws
+                multiprocessing.set_start_method("spawn", force=True)
 
-                        mismatched_keys += _mismatched_keys
-                        error_msgs += _error_msgs
+                num_workers = json.loads(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
 
-                        state_dict_modules_list.append(state_dict_modules)
+                # Do not spawn anymore workers than you need
+                num_workers = min(len(args_list), num_workers)
 
-                        pbar.update(1)
+                logger.info(f"Loading model weights in parallel with {num_workers} workers...")
+                state_dict_modules_list = []
 
-            # We now update each layer of the meta model with the tensor module refs that were set to specific devices in the copy of the meta model for each worker
-            # We are transferring that state into the orginal ref (model_to_load) here
-            # This is required because model_to_load is pickled when using multiprocessing, which means the ref to model_to_load is different for each worker, so you only get some of the state with respect to the loaded tensors
-            # You could in theory return each worker's copy of the model and use .named_parameters(), and .named_buffers(), but this appears to be more robust
-            # in that all you have to care about are the names of the layers in the state dict, as long as the logic that lead to the creation of the state_dict is correct, this will also be correct
-            for state_dict_modules in state_dict_modules_list:
-                for tensor_name in state_dict_modules.keys():
-                    splits = tensor_name.split(".")
-                    module = model_to_load
+                with multiprocessing.Pool(processes=num_workers) as pool:
+                    # For nice tqdm bars
+                    with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
+                        # NOTE order does not matter, layers that changed per shard are unique and can be reassigned to the orignal meta model
+                        for result in pool.imap_unordered(load_shard_file, args_list):
+                            _mismatched_keys, _error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules = (
+                                result
+                            )
 
-                    for split in splits[:-1]:
-                        module = getattr(module, split)
+                            mismatched_keys += _mismatched_keys
+                            error_msgs += _error_msgs
 
-                    last_key = splits.pop()
+                            state_dict_modules_list.append(state_dict_modules)
 
-                    tensor_ref = state_dict_modules[tensor_name]
+                            pbar.update(1)
 
-                    setattr(module, last_key, tensor_ref)
+                # We now update each layer of the meta model with the tensor module refs that were set to specific devices in the copy of the meta model for each worker
+                # We are transferring that state into the orginal ref (model_to_load) here
+                # This is required because model_to_load is pickled when using multiprocessing, which means the ref to model_to_load is different for each worker, so you only get some of the state with respect to the loaded tensors
+                # You could in theory return each worker's copy of the model and use .named_parameters(), and .named_buffers(), but this appears to be more robust
+                # in that all you have to care about are the names of the layers in the state dict, as long as the logic that lead to the creation of the state_dict is correct, this will also be correct
+                for state_dict_modules in state_dict_modules_list:
+                    for full_name, param in state_dict_modules.items():
+                        *module_path, attr_name = full_name.split(".")
+                        module_path = '.'.join(module_path)
+                        module = model_to_load.get_submodule(module_path)
+                        setattr(module, attr_name, param)
 
-            del state_dict_modules_list
-            gc.collect()
+                del state_dict_modules_list
+                gc.collect()
+            finally:
+                # Restore the start method to prevent side effects for other code that may be running
+                multiprocessing.set_start_method(original_start_method, force=True)
+
+
         else:
             if len(args_list) > 1:
                 # For nice tqdm bars
