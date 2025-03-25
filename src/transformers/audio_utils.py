@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team and the librosa & torchaudio authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,11 @@ import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+
+
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+]
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
@@ -146,7 +150,7 @@ def chroma_filter_bank(
     sampling_rate: int,
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float, float]] = (5.0, 2.0),
+    weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
     start_at_c_chroma: Optional[bool] = True,
 ):
     """
@@ -592,7 +596,7 @@ def spectrogram(
 
 
 def spectrogram_batch(
-    waveform_list: List[np.ndarray],
+    waveform_list: list[np.ndarray],
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
@@ -611,7 +615,7 @@ def spectrogram_batch(
     db_range: Optional[float] = None,
     remove_dc_offset: Optional[bool] = None,
     dtype: np.dtype = np.float32,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
     This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.
