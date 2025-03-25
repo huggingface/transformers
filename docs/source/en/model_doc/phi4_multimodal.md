@@ -30,14 +30,8 @@ found [here](https://github.com/huggingface/transformers/blob/main/src/transform
 In the following, we demonstrate how to use it for inference depending on the input modalities (text, image, audio).
 
 ```python
-import requests
 import torch
-import os
-import io
-from PIL import Image
-import soundfile as sf
 from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
-from urllib.request import urlopen
 
 
 # Define model path
@@ -52,21 +46,25 @@ model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  tor
 model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
 model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
 
-# Define prompt structure
-user_prompt = '<|user|>'
-assistant_prompt = '<|assistant|>'
-prompt_suffix = '<|end|>'
+# Part : Image Processing
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
 
-# Part 1: Image Processing
 model.set_adapter("vision") # if loaded, activate the vision adapter
-print("\n--- IMAGE PROCESSING ---")
-image_url = 'https://www.ilankelman.org/stopsigns/australia.jpg'
-prompt = f'{user_prompt}<|image_1|>What is shown in this image?{prompt_suffix}{assistant_prompt}'
-print(f'>>> Prompt\n{prompt}')
-
-# Download and open image
-image = Image.open(requests.get(image_url, stream=True).raw)
-inputs = processor(text=prompt, images=image, return_tensors='pt').to(device)
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(device, torch.float16)
 
 # Generate response
 generate_ids = model.generate(
@@ -80,19 +78,28 @@ response = processor.batch_decode(
 )[0]
 print(f'>>> Response\n{response}')
 
+
 # Part 2: Audio Processing
 model.set_adapter("speech") # if loaded, activate the speech adapter
-print("\n--- AUDIO PROCESSING ---")
 audio_url = "https://upload.wikimedia.org/wikipedia/commons/b/b0/Barbara_Sahakian_BBC_Radio4_The_Life_Scientific_29_May_2012_b01j5j24.flac"
-speech_prompt = "Transcribe the audio to text, and then translate the audio to French. Use <sep> as a separator between the original transcript and the translation."
-prompt = f'{user_prompt}<|audio_1|>{speech_prompt}{prompt_suffix}{assistant_prompt}'
-print(f'>>> Prompt\n{prompt}')
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "audio", "url": audio_url},
+            {"type": "text", "text": "Transcribe the audio to text, and then translate the audio to French. Use <sep> as a separator between the origina transcript and the translation."},
+        ],
+    },
+]
 
-# Downlowd and open audio file
-audio, sample_rate = sf.read(io.BytesIO(urlopen(audio_url).read()))
-
-# Process with the model
-inputs = processor(text=prompt, audios=audio, sample_rate=sample_rate, return_tensors='pt').to(device)
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    sample_rate=sample_rate,
+).to(device, torch.float16)
 
 generate_ids = model.generate(
     **inputs,
