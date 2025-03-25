@@ -155,7 +155,7 @@ class DeepseekVLSamVisionNeck(nn.Module):
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         # interpolate Sam encodings to match Siglip encodings
         features = F.interpolate(
-            features,
+            features.float(),
             size=(4 * self.output_size, 4 * self.output_size),
             mode="bilinear",
             align_corners=False,
@@ -215,7 +215,7 @@ class DeepseekVLSiglipVisionEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         pixel_values = F.interpolate(
-            pixel_values,
+            pixel_values.float(),
             size=self.config.image_size,
             mode="bilinear",
             antialias=True,
@@ -269,14 +269,12 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
     _supports_quantized_cache = True
+    _supports_cache_class = True
     _supports_static_cache = True
-    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -307,6 +305,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         self.language_model = LlamaModel(config.text_config)
         self.aligner = DeepseekVLAligner(config)
 
+        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -367,6 +366,23 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -403,6 +419,8 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
     DEEPSEEK_VL_START_DOCSTRING,
 )
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model = DeepseekVLModel(config)
@@ -416,6 +434,18 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
 
     @add_start_docstrings_to_model_forward(DEEPSEEK_VL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    require_torch_sdpa,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -157,6 +158,7 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
+            "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
         }
         if is_torch_available()
@@ -191,7 +193,7 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 model(**inputs)
 
-    # Overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -211,3 +213,49 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
+
+    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    def test_initialization(self):
+        pass
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="sdpa",
+                )
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+            if hasattr(model_sdpa, "low_res_vision_encoder") and hasattr(model_sdpa, "language_model"):
+                self.assertTrue(model_sdpa.language_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.low_res_vision_encoder.model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.low_res_vision_encoder.model.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if any(re.finditer(r"Attention(?!Pool)", class_name)):
+                    self.assertTrue(submodule.config._attn_implementation == "eager")
+
+            for name, submodule in model_sdpa.named_modules():
+                class_name = submodule.__class__.__name__
+                if any(re.finditer(r"Attention(?!Pool)", class_name)):
+                    self.assertTrue(submodule.config._attn_implementation == "sdpa")
