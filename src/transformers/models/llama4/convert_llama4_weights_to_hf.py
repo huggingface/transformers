@@ -108,7 +108,7 @@ def permute_for_rope(input_tensor, n_heads, dim1, dim2):
 
 def is_param_same_across_shards(key):
     """
-    Return `True` if the parameter is different across checkpoint shards
+    Return `False` if the parameter is different across checkpoint shards
     and needs to be concatenated.
     """
     patterns = [
@@ -210,6 +210,8 @@ def write_model(
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
+    num_experts = params["moe_args"]["num_experts"]
+
     bos_token_id = 200000
     eos_token_id = [200001, 200002, 200003] if instruct else 200001
     pad_token_id = 200008
@@ -223,6 +225,7 @@ def write_model(
         num_hidden_layers=num_layers,
         intermediate_size=8192,
         rope_scaling=rope_scaling,
+        num_local_experts=num_experts,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
@@ -349,7 +352,6 @@ def write_model(
                 gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
                 up_key = re.sub(r"(gate|up)_proj", lambda m: "up_proj", new_key)
                 if gate_key == new_key:
-                    # torch.cat([ p.view(-1,1, 5120) for p in current_parameter], dim = 1) could be this
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                 elif new_key == up_key:
                     if "shared" in new_key:
@@ -379,7 +381,7 @@ def write_model(
                 if "experts" in new_key:
                     p = []
                     for i in range(8):
-                        p += [current_parameter.reshape(8, -1, 5120)[i, :, :].view(16, -1, 5120)]
+                        p += [current_parameter.reshape(8, -1, 5120)[i, :, :].view(num_experts, -1, 5120)]
                     current_parameter = torch.cat(p, dim=1)
                 state_dict[new_key] = current_parameter.contiguous()
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
