@@ -699,10 +699,10 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -726,7 +726,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             abs(param.data.max().item()),
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    # Modifed from RT-DETR
+                    # Modified from RT-DETR
                     elif "class_embed" in name and "bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
                         torch.testing.assert_close(
