@@ -89,6 +89,65 @@ class InternVLProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
+    def _insert_media_placeholders(
+        self,
+        text: list[str],
+        image_pixel_values,
+        video_pixel_values,
+        image_num_patches: list[int],
+        video_num_patches: list[int],
+        image_num_patches_indices: np.ndarray,
+        video_num_patches_indices: np.ndarray,
+        video_patch_indices: np.ndarray,
+    ):
+        """
+        Processes interleaved text with <image> and <video> placeholders, replacing them with appropriate
+        image and video tokens while keeping track of the patches used.
+        """
+        image_index = 0
+        video_index = 0
+        processed_text = []
+        image_video_patches = []
+        # Support interleaved image and video in prompts:
+        # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
+        for prompt in text:
+            new_prompt = prompt
+            while "<image>" in new_prompt or "<video>" in new_prompt:
+                if "<image>" in new_prompt and (
+                    "<video>" not in new_prompt or new_prompt.index("<image>") < new_prompt.index("<video>")
+                ):
+                    # Get the slice of patches corresponding to the current image
+                    start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
+                    end_index = image_num_patches_indices[image_index]
+                    image_video_patches.append(image_pixel_values[start_index:end_index])
+                    # Replace the corresponding image placeholder with the correct number of image tokens
+                    new_prompt = new_prompt.replace(
+                        "<image>",
+                        f"<img>{'<IMG_CONTEXT>' * self.image_seq_length * image_num_patches[image_index]}</img>",
+                        1,
+                    )
+                    image_index += 1
+                else:
+                    # Get the slice of patches corresponding to the current video
+                    # Here we need to account for both the multiple video frames and the potential multiple patches per frame
+                    # As of now, InternVL only supports one patch per frame, but we keep the code flexible for future updates
+                    current_patch_index = video_patch_indices[video_index - 1] if video_index > 0 else 0
+                    end_patch_index = video_patch_indices[video_index]
+                    start_index = video_num_patches_indices[current_patch_index] if video_index > 0 else 0
+                    end_index = video_num_patches_indices[end_patch_index - 1]
+                    image_video_patches.append(video_pixel_values[start_index:end_index])
+                    # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
+                    num_patches = list(video_num_patches[current_patch_index:end_patch_index])
+                    video_prompt = "\n".join(
+                        f"Frame{i+1}: <img>{'<IMG_CONTEXT>' * self.image_seq_length * num_patches[i]}</img>"
+                        for i in range(len(num_patches))
+                    )
+                    new_prompt = new_prompt.replace("<video>", video_prompt, 1)
+                    video_index += 1
+            processed_text.append(new_prompt)
+
+        return processed_text, image_video_patches, image_index, video_index
+
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -146,6 +205,11 @@ class InternVLProcessor(ProcessorMixin):
         image_num_patches = []
         video_num_patches = []
         image_videos_inputs = {}
+        image_pixel_values = None
+        video_pixel_values = None
+        image_num_patches_indices = np.array([0])
+        video_patch_indices = np.array([0])
+        video_num_patches_indices = np.array([0])
         if images is not None:
             images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
@@ -155,7 +219,7 @@ class InternVLProcessor(ProcessorMixin):
         if videos is not None:
             videos = make_batched_videos(videos)
             num_frames_per_video = [len(video) for video in videos]
-            patch_indices = np.cumsum(num_frames_per_video)
+            video_patch_indices = np.cumsum(num_frames_per_video)
             output_kwargs["images_kwargs"]["crop_to_patches"] = False
             video_inputs = self.image_processor(images=videos, **output_kwargs["videos_kwargs"])
             video_num_patches = video_inputs.pop("num_patches")
@@ -163,48 +227,16 @@ class InternVLProcessor(ProcessorMixin):
             video_num_patches_indices = np.cumsum(video_num_patches)
 
         if images is not None or videos is not None:
-            image_index = 0
-            video_index = 0
-            processed_text = []
-            image_video_patches = []  # List to store processed image/video patches
-            # Support interleaved image and video in prompts:
-            # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
-            for prompt in text:
-                new_prompt = prompt
-                while "<image>" in new_prompt or "<video>" in new_prompt:
-                    if "<image>" in new_prompt and (
-                        "<video>" not in new_prompt or new_prompt.index("<image>") < new_prompt.index("<video>")
-                    ):
-                        # Get the slice of patches corresponding to the current image
-                        start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
-                        end_index = image_num_patches_indices[image_index]
-                        image_video_patches.append(image_pixel_values[start_index:end_index])
-                        # Replace the corresponding image placeholder with the correct number of image tokens
-                        new_prompt = new_prompt.replace(
-                            "<image>",
-                            f"<img>{'<IMG_CONTEXT>' * self.image_seq_length * image_num_patches[image_index]}</img>",
-                            1,
-                        )
-                        image_index += 1
-                    else:
-                        # Get the slice of patches corresponding to the current video
-                        # Here we need to account for both the multiple video frames and the potential multiple patches per frame
-                        # As of now, InternVL only supports one patch per frame, but we keep the code flexible for future updates
-                        current_patch_index = patch_indices[video_index - 1] if video_index > 0 else 0
-                        end_patch_index = patch_indices[video_index]
-                        start_index = video_num_patches_indices[current_patch_index] if video_index > 0 else 0
-                        end_index = video_num_patches_indices[end_patch_index - 1]
-                        image_video_patches.append(video_pixel_values[start_index:end_index])
-                        # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
-                        num_patches = list(video_num_patches[current_patch_index:end_patch_index])
-                        video_prompt = "\n".join(
-                            f"Frame{i+1}: <img>{'<IMG_CONTEXT>'*self.image_seq_length* num_patches[i]}</img>"
-                            for i in range(len(num_patches))
-                        )
-                        new_prompt = new_prompt.replace("<video>", video_prompt, 1)
-                        video_index += 1
-                processed_text.append(new_prompt)
-
+            text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
+                text,
+                image_pixel_values,
+                video_pixel_values,
+                image_num_patches,
+                video_num_patches,
+                image_num_patches_indices,
+                video_num_patches_indices,
+                video_patch_indices,
+            )
             if images is not None and image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
             if videos is not None and video_index != len(videos):
@@ -212,7 +244,6 @@ class InternVLProcessor(ProcessorMixin):
 
             # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
             image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
-            text = processed_text
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
