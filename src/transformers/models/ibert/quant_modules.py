@@ -171,9 +171,9 @@ class QuantAct(nn.Module):
             x_min = x_act.data.min()
             x_max = x_act.data.max()
 
-            assert (
-                x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0
-            ), "NaN detected when computing min/max of the activation"
+            assert x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0, (
+                "NaN detected when computing min/max of the activation"
+            )
 
             # Initialization
             if self.x_min.min() > -1.1e-5 and self.x_max.max() < 1.1e-5:

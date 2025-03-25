@@ -114,7 +114,7 @@ class DepthProConfig(PretrainedConfig):
         # scaled_images_ratios is sorted
         if scaled_images_ratios != sorted(scaled_images_ratios):
             raise ValueError(
-                f"Values in scaled_images_ratios={scaled_images_ratios} " "should be sorted from low to high"
+                f"Values in scaled_images_ratios={scaled_images_ratios} should be sorted from low to high"
             )
 
         # scaled_images_ratios, scaled_images_overlap_ratios, scaled_images_feature_dims should be consistent

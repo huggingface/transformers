@@ -513,7 +513,7 @@ def find_all_dependencies(
     all_dependencies = set()
     all_dependencies_with_parent = []
     checked_dependencies = set(initial_checked_dependencies)
-    parents = {initial_dep: start_entity for initial_dep in initial_dependencies}
+    parents = dict.fromkeys(initial_dependencies, start_entity)
     while len(dependency_queue) > 0:
         # Pick element to visit
         current = dependency_queue.popleft()
@@ -524,7 +524,7 @@ def find_all_dependencies(
             if current in dependency_mapping.keys():
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
-                parents.update({dep: current for dep in dependency_mapping[current]})
+                parents.update(dict.fromkeys(dependency_mapping[current], current))
             # add visited node to the list
             checked_dependencies.add(current)
 

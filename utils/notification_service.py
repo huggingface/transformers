@@ -665,7 +665,7 @@ class Message:
 
         failure_text = ""
         for idx, error in enumerate(failures):
-            new_text = failure_text + f'*{error["line"]}*\n_{error["trace"]}_\n\n'
+            new_text = failure_text + f"*{error['line']}*\n_{error['trace']}_\n\n"
             if len(new_text) > MAX_ERROR_TEXT:
                 # `failure_text` here has length <= 3000
                 failure_text = failure_text + "[Truncated]"
@@ -728,7 +728,7 @@ class Message:
                         if error["line"] in prev_error_lines:
                             continue
 
-                        new_text = f'{error["line"]}\n\n'
+                        new_text = f"{error['line']}\n\n"
 
                         if new_text not in all_failure_lines:
                             all_failure_lines[new_text] = []
@@ -794,7 +794,7 @@ class Message:
                         job_result,
                         failures,
                         device,
-                        text=f'Number of failures: {job_result["failed"][device]}',
+                        text=f"Number of failures: {job_result['failed'][device]}",
                     )
 
                     print("Sending the following reply")

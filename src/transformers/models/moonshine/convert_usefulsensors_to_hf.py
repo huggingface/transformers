@@ -56,7 +56,7 @@ def _read_h5_weights(group, current_key="", weights={}):
 def _convert_layer_names(name, gated_mlp=False):
     name = re.sub(
         r"layers\.functional(?:_(\d+))?\.layers",
-        lambda m: f'layers.{m.group(1) if m.group(1) else "0"}',
+        lambda m: f"layers.{m.group(1) if m.group(1) else '0'}",
         name,
         count=1,
     )

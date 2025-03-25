@@ -773,7 +773,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 
 
 @add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.",
     TVP_START_DOCSTRING,
 )
 class TvpModel(TvpPreTrainedModel):

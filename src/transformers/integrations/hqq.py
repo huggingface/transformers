@@ -106,11 +106,11 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
 
     if any(key in linear_tags for key in quant_config.keys()):
         # If the user doesn't specify a key from get_linear_tags, the layer is not quantized via (key, None)
-        patch_params = {key: None for key in linear_tags}
+        patch_params = dict.fromkeys(linear_tags)
         patch_params.update(quant_config)
     else:
         # Same quant_config for all layers
-        patch_params = {k: quant_config for k in linear_tags}
+        patch_params = dict.fromkeys(linear_tags, quant_config)
 
     model, has_been_replaced = _prepare_for_hqq_linear(
         model, patch_params=patch_params, has_been_replaced=has_been_replaced
