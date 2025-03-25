@@ -71,7 +71,7 @@ SUPPORTED_GENERATION_KWARGS = [
     "repetition_penalty",
 ]
 
-SETTING_RE = r"^set\s+[A-Za-z_][A-Za-z_\s]*=[A-Za-z\d.!\"#$%&'()*+,\-/:<=>?@\[\]^_`{|}~\s]+(?:;\s*[A-Za-z_][A-Za-z_\s]*=[A-Za-z\d.!\"#$%&'()*+,\-/:<=>?@\[\]^_`{|}~\s]+)*$"
+SETTING_RE = r"^set\s+[A-Za-z_][A-Za-z_\s]*=[A-Za-z\d.!\"#$%&'()*+,-/:<=>?@\[\]^_`{|}~\s]+(?:;\s*[A-Za-z_][A-Za-z_\s]*=[A-Za-z\d.!\"#$%&'()*+,-/:<=>?@\[\]^_`{|}~\s]+)*$"
 
 DEFAULT_EXAMPLES = {
     "llama": {"text": "There is a Llama in my lawn, how can I get rid of it?"},
