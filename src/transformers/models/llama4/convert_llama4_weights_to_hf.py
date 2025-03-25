@@ -288,8 +288,6 @@ def write_model(
 
         print("Converting model...")
         all_keys = list(loaded[0].keys())
-        breakpoint()
-        print(model)
         new_keys = convert_old_keys_to_new_keys(all_keys)
         state_dict = {}
         replicated_params = []  # To keep track of replicated weights.
@@ -400,7 +398,6 @@ def write_model(
                     f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}, concat dim = {concat_dim}"
                 )
             elif new_key == "vision_model.patch_embedding.linear.weight":
-                breakpoint()
                 current_parameter = torch.cat(current_parameter, dim=concat_dim).clone()
                 # We don't reshape the patch embedding as we're using unfolded convolution as well
                 state_dict[new_key] = current_parameter  # .reshape(-1, 3, vision_patch_size, vision_patch_size)
@@ -457,11 +454,9 @@ def write_model(
 
         from transformers import AutoTokenizer
 
-        model_path = "llama4_hf"
-        tokenizer = AutoTokenizer.from_pretrained(model_path, pad_token="<|finetune_right_pad|>")
-        # input_ids = tokenizer(["<|begin_of_text|>Roses are red,"], return_tensors="pt", padding=True, padding_side="left")
-        out = model.generate(torch.tensor([[200000, 62, 19441, 583, 4242, 24]]), max_new_tokens=1)
-        # out = model.generate(**input_ids, max_new_tokens=10)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
+        out = model.generate(**inputs, max_new_tokens=10)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:
@@ -680,10 +675,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--convert_checkpoints",
         action="store_true",
-        help="Whether the model is an instruct model",
+        help="Whether to convert the original weights (or skip if previously converted)",
     )
 
     args = parser.parse_args()
+    write_tokenizer(
+        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+        save_dir=args.output_dir,
+        instruct=args.instruct,
+    )
+
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
@@ -691,12 +692,6 @@ if __name__ == "__main__":
         num_shards=args.num_shards,
         instruct=args.instruct,
         convert_checkpoints=args.convert_checkpoints,
-    )
-
-    write_tokenizer(
-        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
-        save_dir=args.output_dir,
-        instruct=args.instruct,
     )
 
 # torchrun --nproc-per-node=8   .venv/lib/python3.12/site-packages/llama_models/llama4/scripts/text_completion.py --checkpoint_dir   "llama4" --world_size 8
