@@ -4916,7 +4916,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_mesh is not None:
             # When using TP, the device map is a single device for all parameters
             tp_device = list(device_map.values())[0]
-            print(f"TP DEVICE: {tp_device} {os.environ["RANK"]}")
+            print(f"TP DEVICE: {tp_device} {os.environ['RANK']}")
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
