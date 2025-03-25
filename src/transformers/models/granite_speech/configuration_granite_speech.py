@@ -18,7 +18,6 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         dropout=0.1,
         conv_kernel_size=15,
         conv_expansion_factor=2,
-        use_max_pos_emb_in_pos_emb_calc=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -33,7 +32,6 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.dropout = dropout
         self.conv_kernel_size = conv_kernel_size
         self.conv_expansion_factor = conv_expansion_factor
-        self.use_max_pos_emb_in_pos_emb_calc = use_max_pos_emb_in_pos_emb_calc
 
 
 ## adapted from transformers.models.blip.configuration_blip_2.Blip2VisionConfig
