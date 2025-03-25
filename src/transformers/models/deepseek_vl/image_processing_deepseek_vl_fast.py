@@ -43,14 +43,6 @@ if is_torchvision_available():
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
 class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -58,7 +50,6 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = False
-    min_size = 14
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -99,10 +90,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
 
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
-        output_size_nonpadded = [
-            max(int(height * delta), self.min_size),
-            max(int(width * delta), self.min_size),
-        ]
+        output_size_nonpadded = [round(height * delta), round(width * delta)]
 
         image = F.resize(image, output_size_nonpadded, interpolation=interpolation, antialias=antialias)
         image = self.pad_to_square(image, background_color=self.background_color)
