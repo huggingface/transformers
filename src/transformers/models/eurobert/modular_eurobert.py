@@ -311,7 +311,7 @@ class EuroBertAttention(LlamaAttention):
 
 
 @add_start_docstrings(
-    "The bare ModernBert Model outputting raw hidden-states without any specific head on top.",
+    "The bare EuroBERT Model outputting raw hidden-states without any specific head on top.",
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertPreTrainedModel(LlamaPreTrainedModel):
@@ -413,7 +413,7 @@ class EuroBertModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if attention_mask is not None:
+        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[1], inputs_embeds.dtype)
         else:
             mask = None
