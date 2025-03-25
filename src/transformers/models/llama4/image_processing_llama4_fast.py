@@ -363,7 +363,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         # process images by batch, grouped by shape
         grouped_images, grouped_images_index = group_images_by_shape(images)
         processed_images_grouped = {}
-        aspect_ratios = {}
+        aspect_ratios_grouped = {}
         for shape, stacked_images in grouped_images.items():
             image_size = stacked_images.shape[-2:]
             target_size = get_best_fit(image_size, possible_resolutions, resize_to_max_canvas=resize_to_max_canvas)
@@ -398,7 +398,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
             # split into tiles
             processed_images = split_to_tiles(processed_images, ratio_h, ratio_w)
             processed_images_grouped[shape] = processed_images
-            aspect_ratios[shape] = torch.tensor([[ratio_h, ratio_w]] * stacked_images.shape[0])
+            aspect_ratios_grouped[shape] = torch.tensor([[ratio_h, ratio_w]] * stacked_images.shape[0])
 
             # add a global tile to the processed tile if there are more than one tile
             if ratio_h * ratio_w > 1:
@@ -412,12 +412,10 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
                 )
                 processed_images_grouped[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        # flatten processed_images
-        # FIXME we cannot flatten here, we need a list of tensors that is not batch-able.
-        processed_images = torch.cat(processed_images, dim=0)
-        aspect_ratios = reorder_images(aspect_ratios, grouped_images_index)
-        aspect_ratios = torch.stack(aspect_ratios, dim=0) if return_tensors else aspect_ratios
+        aspect_ratios_list = reorder_images(aspect_ratios_grouped, grouped_images_index)
 
+        processed_images = torch.cat(processed_images, dim=0) if return_tensors else processed_images
+        aspect_ratios = torch.stack(aspect_ratios_list, dim=0) if return_tensors else aspect_ratios
         return BatchFeature(
             data={"pixel_values": processed_images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors
         )

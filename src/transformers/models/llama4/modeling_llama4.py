@@ -1602,41 +1602,24 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         return hidden_state
 
     @staticmethod
-    def create_image_embeddings_with_placeholders(pixel_values, image_mask, h_image, projected_embeddings):
-        """
-        pixel_values is a list of list of image tensors.
-        image_mask
-        h_image is an empty tensor of shape identical to that of the token sequence
-                (including image tokens)
-        projected_embedding is the output of vision_model.forward() on image inputs.
+    def create_image_embeddings_with_placeholders(image_mask, reference_embedding, projected_embeddings):
+        partial_embeddings = projected_embeddings.view(-1, projected_embeddings.size(-1))
+        image_mask_2d = image_mask[..., 0]    
+        mask_1d = image_mask_2d.view(-1)
+        num_masked_positions = mask_1d.sum()
 
-        The result will be an embedding tensor with the image embeddings placed at the "right positions".
-        """
-        # FIXME This expects pixel_values to be a list of list
-        # it is currently a tensor, so we bracket with [[]]
-        # WILL FAIL with batching with several images per sample
-        num_images_per_sequence = [sum(image.size(0) for image in sample_images) for sample_images in [[pixel_values]]]
-        image_mask = image_mask[:, :, 0, None]
-        encoded_patches_list = projected_embeddings.split(num_images_per_sequence, dim=0)
-        for index in range(h_image.size(0)):
-            encoded_patches_per_sample = encoded_patches_list[index]
-            sample_image_mask = image_mask[index]
-
-            if encoded_patches_per_sample.numel() == 0:
-                continue
-            encoded_patches_per_sample = encoded_patches_per_sample.contiguous().view(
-                -1, encoded_patches_per_sample.size(-1)
+        if num_masked_positions != partial_embeddings.size(0):
+            raise ValueError(
+                f"Mismatch: needed {num_masked_positions} patch embeddings, "
+                f"but have {partial_embeddings.size(0)} from the vision tower."
             )
 
-            n_tokens_to_fill = sample_image_mask.sum()
-            assert n_tokens_to_fill <= encoded_patches_per_sample.size(0)
+        final_embeddings = reference_embedding.view(-1, reference_embedding.size(-1))
+        expanded_mask = mask_1d.unsqueeze(-1).expand(-1, final_embeddings.size(-1))
+        final_embeddings.masked_scatter_(expanded_mask, partial_embeddings)
 
-            h_image[index].masked_scatter_(
-                sample_image_mask.expand(-1, h_image.size(-1)),
-                encoded_patches_per_sample[:n_tokens_to_fill],
-            )
+        return final_embeddings
 
-        return h_image
 
     @replace_return_docstrings(output_type=Llama4CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1749,15 +1732,11 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             )
 
             image_embeddings_pre_scatter = self.create_image_embeddings_with_placeholders(
-                pixel_values=pixel_values,
                 image_mask=special_image_mask,
-                h_image=reference_embedding,
+                reference_embedding=reference_embedding,
                 projected_embeddings=image_features,
             )
             projected_image_embeddings = self.multi_modal_projector(image_embeddings_pre_scatter)
-            projected_image_embeddings = torch.load("/fsx/arthur/projected_image_embeddings")
-            # FIXME This should be more or less robust but
-            # it is not elegant at all. We can do a lot better
             final_mask = special_image_mask[:, :, 0, None]
             inputs_embeds = inputs_embeds * ~final_mask.to(
                 inputs_embeds.device
