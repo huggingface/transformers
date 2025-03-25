@@ -523,11 +523,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 [
                     (
                         f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.weight",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.weight",
                     ),
                     (
                         f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.bias",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.bias",
                     ),
                 ]
             )
@@ -863,9 +863,9 @@ def test(
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=tolerance
-            ), "The backbone features are not the same."
+            assert torch.allclose(original_model_feature, our_model_feature, atol=tolerance), (
+                "The backbone features are not the same."
+            )
 
         # Test pixel decoder
         mask_features, _, multi_scale_features = original_model.sem_seg_head.pixel_decoder.forward_features(
@@ -875,9 +875,9 @@ def test(
         for original_model_feature, our_model_feature in zip(
             multi_scale_features, our_model_output.pixel_decoder_hidden_states
         ):
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=tolerance
-            ), "The pixel decoder feature are not the same"
+            assert torch.allclose(original_model_feature, our_model_feature, atol=tolerance), (
+                "The pixel decoder feature are not the same"
+            )
 
         # Let's test the full model
         tr_complete = T.Compose(
@@ -894,12 +894,12 @@ def test(
 
         assert original_mask_logits.shape == our_mask_logits.shape, "Output masks shapes are not matching."
         assert original_class_logits.shape == our_class_logits.shape, "Output class logits shapes are not matching."
-        assert torch.allclose(
-            original_class_logits, our_class_logits, atol=tolerance
-        ), "The class logits are not the same."
-        assert torch.allclose(
-            original_mask_logits, our_mask_logits, atol=tolerance
-        ), "The predicted masks are not the same."
+        assert torch.allclose(original_class_logits, our_class_logits, atol=tolerance), (
+            "The class logits are not the same."
+        )
+        assert torch.allclose(original_mask_logits, our_mask_logits, atol=tolerance), (
+            "The predicted masks are not the same."
+        )
 
         logger.info("✅ Test passed!")
 

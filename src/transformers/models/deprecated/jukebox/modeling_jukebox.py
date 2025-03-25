@@ -1303,7 +1303,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             n_ctx (`int`, *optional*):
                 Number of tokens or lyrics tokens provided in a single pass.
             embed_dim (`int`, *optional*):
-                Either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codeboook dimension,
+                Either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codebook dimension,
                 if the model combines lyrics and music tokens, or simply n_vocab if the model is a seperate encoder
             audio_conditioning (`bool`, *optional*, defaults to `False`):
                 Whether or not the prior supports conditionning on audio.
@@ -1921,7 +1921,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def set_metadata_lyric_tokens(self, labels):
         """
-        Processes the full labels to only retreive the relevant lyric tokens and keep the metadata conditioning tokens.
+        Processes the full labels to only retrieve the relevant lyric tokens and keep the metadata conditioning tokens.
         """
         if self.nb_relevant_lyric_tokens > 0:
             tokens_list = torch.zeros(
@@ -2147,7 +2147,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def get_encoder_states(self, lyric_tokens, sample=False):
         """
-        Retreive the last hidden_states of the lyric encoder that will be attended to by the decoder. Forwards through
+        Retrieve the last hidden_states of the lyric encoder that will be attended to by the decoder. Forwards through
         the lyric encoder.
         """
         if self.nb_relevant_lyric_tokens != 0 and self.lyric_conditioning:
@@ -2366,7 +2366,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         new_tokens = sample_tokens - previous_sampled_tokens.shape[1]
 
         logger.info(
-            f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on"
+            f"Sampling {sample_tokens} tokens for [{start},{start + sample_tokens}]. Conditioning on"
             f" {conditioning_tokens} tokens"
         )
 
@@ -2390,7 +2390,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             name = ["Ancestral", "Primed"][music_tokens_i.shape[1] == 0]
             iterator.set_description(
                 f"[prior level {level}] {name} Sampling {sample_tokens} tokens out of"
-                f" {self.total_length//prior.raw_to_tokens}",
+                f" {self.total_length // prior.raw_to_tokens}",
                 refresh=True,
             )
             tokens_i = prior.sample(

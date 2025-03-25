@@ -16,6 +16,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
@@ -26,7 +28,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -281,7 +282,7 @@ class RecurrentGemmaModelTester:
 
 
 @require_torch
-class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     # Doesn't run generation tests. TODO @gante not fully supported
     all_generative_model_classes = ()
@@ -348,10 +349,6 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="RecurrentGemma only supports sdpa")
-    def test_eager_matches_sdpa_inference(self):
-        pass
-
     @unittest.skip(reason="RecurrentGemma does not return the cache")
     def test_contrastive_generate_low_memory(self):
         pass
@@ -380,6 +377,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_model_parallel_beam_search(self):
         pass
 
+    @pytest.mark.generate
     @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
     def test_assisted_decoding_matches_greedy_search(self):
         pass
@@ -388,6 +386,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_left_padding_compatibility(self):
         pass
 
+    @pytest.mark.generate
     @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
         pass

@@ -269,7 +269,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             inst2class = {}
             for label in class_labels:
                 instance_ids = np.unique(instance_seg[class_id_map == label])
-                inst2class.update({i: label for i in instance_ids})
+                inst2class.update(dict.fromkeys(instance_ids, label))
 
             return instance_seg, inst2class
 
