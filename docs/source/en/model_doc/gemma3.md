@@ -105,59 +105,75 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
 ).to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=50)
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
+output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
+print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-### Multi-image Inference
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```python
-model_id = "google/gemma-3-4b-it"
-model = Gemma3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-processor = AutoProcessor.from_pretrained(model_id, padding_side="left")
+```py
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
-url_cow = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
-url_stop = "https://www.ilankelman.org/stopsigns/australia.jpg"
-messages = [
-    {
-        "role": "system",
-        "content": [
-            {"type": "text", "text": "You are a helpful assistant."}
-        ]
-    },
-    {
-        "role": "user", "content": [
-            {"type": "image", "url": url_cow},
-            {"type": "image", "url": url_stop},
-            {"type": "text", "text": "Are these two images identical?"},
-        ]
-    },
-]
-inputs = processor.apply_chat_template(
-    messages,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-    add_generation_prompt=True,
-).to(model.device)
-
-output = model.generate(**inputs, max_new_tokens=50)
-print(processor.decode(output[0], skip_special_tokens=True)[inputs.input_ids.shape[1]: ])
-
+visualizer = AttentionMaskVisualizer("google/gemma-3-4b-it")
+visualizer("<img>What is shown in this image?")
 ```
 
-### Text-only inference
+## Notes
 
-You can use the VLMs for text-only generation by omitting images in your input. However, you can also load the models in text-only mode as shown below. This will skip loading the vision tower and will save resources when you just need the LLM capabilities.
-```python
-from transformers import AutoTokenizer, Gemma3ForCausalLM
+- Use [`Gemma3ForConditionalGeneration`] for image-and-text and image-only inputs.
+- Gemma 3 supports multiple input images, but make sure the images are correctly batched before passing them to the processor. Each batch should be a list of one or more images.
 
-model_id = "google/gemma-3-1b-it"
+    ```py
+    url_cow = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
+    url_cat = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = Gemma3ForCausalLM.from_pretrained(model_id, device_map="auto")
+    messages =[
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": "You are a helpful assistant."}
+            ]
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": url_cow},
+                {"type": "image", "url": url_cat},
+                {"type": "text", "text": "Which image is cuter?"},
+            ]
+        },
+    ]
+    ```
+- Text passed to the processor should have a `<start_of_image>` token wherever an image should be inserted.
+- The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
+- By default, images aren't cropped and only the base image is forwarded to the model. In high resolution images or images with non-square aspect ratios, artifacts can result because the vision encoder uses a fixed resolution of 896x896. To prevent these artifacts and improve performance during inference, set `do_pan_and_scan=True` to crop the image into multiple smaller patches and concatenate them with the base image embedding. You can disable pan and scan for faster inference.
 
-input_ids = tokenizer("Write me a poem about Machine Learning.", return_tensors="pt").to(model.device)
+    ```diff
+    inputs = processor.apply_chat_template(
+        messages,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+        add_generation_prompt=True,
+    +   do_pan_and_scan=True,
+        ).to("cuda")
+    ```
+- For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
+
+    ```py
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        "google/gemma-3-1b-pt",
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        "google/gemma-3-1b-pt",
+        torch_dtype=torch.bfloat16,
+        device_map="auto",
+        attn_implementation="sdpa"
+    )
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
 
 outputs = model.generate(**input_ids, max_new_tokens=100)
 text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
