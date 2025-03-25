@@ -55,6 +55,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Unused keys in load hooks (explicitly removed)
     r'layers.(\d+).attention.wqkv._extra_state':             None,
     r'layers.(\d+).attention.wo._extra_state':               None,
+
+    # MLP layer variant
+    # r"layers.(\d+).feed_forward.w1":                         r"language_model.model.layers.\1.feed_forward.gate_proj",               # might need to be fused for efficiency?
+    # r"layers.(\d+).feed_forward.w3":                         r"language_model.model.layers.\1.feed_forward.up_proj",                 # might need to be fused for efficiency?
+    r"layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.feed_forward.gate_up_proj.weight",
+    r"layers.(\d+).feed_forward.mlp.fc2_weight":             r"language_model.model.layers.\1.feed_forward.down_proj.weight",
+    r"layers.(\d+).feed_forward.mlp.layer_norm.weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
+
     # Vision encoder mapping
     r"vision_embeddings.vision_encoder.conv1._linear":                                            r"vision_model.patch_embedding.linear",
     r'vision_embeddings.vision_adapter.mlp.c_fc':                                                 r"vision_model.vision_adapter.mlp.fc1",
@@ -142,6 +150,7 @@ def get_concat_dim(key):
         "experts.gate_proj",
         "experts.up_proj",
         "expert.down_proj",
+        "feed_forward.down_proj",
         "global_gate_stats",
         # vision dim1 sharded stuff
         "mlp.fc2.weight", # covers all rowparallels across vis
@@ -211,6 +220,7 @@ def write_model(
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
     num_experts = params["moe_args"]["num_experts"]
+    interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
 
     bos_token_id = 200000
     eos_token_id = [200001, 200002, 200003] if instruct else 200001
@@ -226,6 +236,8 @@ def write_model(
         intermediate_size=8192,
         rope_scaling=rope_scaling,
         num_local_experts=num_experts,
+        interleave_moe_layer_step = interleave_moe_layer_step,
+        use_qk_norm=params["use_qk_norm"],
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
@@ -348,34 +360,37 @@ def write_model(
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {v}, {values.shape}")
                 state_dict[v] = values
             elif re.search(r"(gate|up)_proj", new_key):
-                path = new_key.split(".")
-                gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
-                up_key = re.sub(r"(gate|up)_proj", lambda m: "up_proj", new_key)
-                if gate_key == new_key:
+                if "gate_up_proj" not in new_key:
+                    path = new_key.split(".")
+                    gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
+                    up_key = re.sub(r"(gate|up)_proj", lambda m: "up_proj", new_key)
+                    if gate_key == new_key:
+                        state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
+                    elif new_key == up_key:
+                        if "shared" in new_key:
+                            gate_proj = state_dict.pop(gate_key)
+                            up_proj = torch.cat(current_parameter, dim=concat_dim)
+                            state_dict[gate_key] = gate_proj
+                            state_dict[new_key] = up_proj
+                            # TODO that's kinda low hanging fruit, but shard dim for shared should be
+                            # column, then row. TO get hidden // tp * col // tp, gate + up
+                            tqdm.write(f"Processing: {key.ljust(50)}  ->\t {gate_key}, {state_dict[gate_key].shape}")
+                        else:
+                            gate_proj = state_dict.pop(gate_key)
+                            gate_proj = [
+                                gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
+                            ]
+                            gate_proj = torch.cat(gate_proj, dim=-1)
+
+                            up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
+                            up_proj = torch.cat(up_proj, dim=-1)
+
+                            gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
+                            new_key = new_key.replace("up_proj", "gate_up_proj")
+                            state_dict[new_key] = gate_up_proj.contiguous()
+                        tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
+                else:
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
-                elif new_key == up_key:
-                    if "shared" in new_key:
-                        gate_proj = state_dict.pop(gate_key)
-                        up_proj = torch.cat(current_parameter, dim=concat_dim)
-                        state_dict[gate_key] = gate_proj
-                        state_dict[new_key] = up_proj
-                        # TODO that's kinda low hanging fruit, but shard dim for shared should be
-                        # column, then row. TO get hidden // tp * col // tp, gate + up
-                        tqdm.write(f"Processing: {key.ljust(50)}  ->\t {gate_key}, {state_dict[gate_key].shape}")
-                    else:
-                        gate_proj = state_dict.pop(gate_key)
-                        gate_proj = [
-                            gate_proj.reshape(16, -1, 8, 1024)[:, :, k, :].reshape(16, -1, 1024) for k in range(8)
-                        ]
-                        gate_proj = torch.cat(gate_proj, dim=-1)
-
-                        up_proj = [k.reshape(16, -1, 8, 1024).reshape(16, -1, 1024) for k in current_parameter]
-                        up_proj = torch.cat(up_proj, dim=-1)
-
-                        gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
-                        new_key = new_key.replace("up_proj", "gate_up_proj")
-                        state_dict[new_key] = gate_up_proj.contiguous()
-                    tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
             elif "down_proj" in new_key:
                 current_parameter = torch.cat(current_parameter, dim=concat_dim)
                 if "experts" in new_key:
@@ -458,7 +473,7 @@ def write_model(
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
-        out = model.generate(**inputs, max_new_tokens=10)
+        out = model.generate(**inputs, max_new_tokens=2)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:
