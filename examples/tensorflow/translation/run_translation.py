@@ -501,9 +501,9 @@ def main():
 
         # region Set decoder_start_token_id
         if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-            assert (
-                data_args.target_lang is not None and data_args.source_lang is not None
-            ), "mBart requires --target_lang and --source_lang"
+            assert data_args.target_lang is not None and data_args.source_lang is not None, (
+                "mBart requires --target_lang and --source_lang"
+            )
             if isinstance(tokenizer, MBartTokenizer):
                 model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
             else:

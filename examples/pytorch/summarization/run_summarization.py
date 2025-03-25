@@ -505,9 +505,9 @@ def main():
         return
 
     if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
-        assert (
-            data_args.lang is not None
-        ), f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --lang argument"
+        assert data_args.lang is not None, (
+            f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --lang argument"
+        )
 
         tokenizer.src_lang = data_args.lang
         tokenizer.tgt_lang = data_args.lang
