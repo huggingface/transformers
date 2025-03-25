@@ -4549,7 +4549,10 @@ class Trainer:
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                     else:
-                        logits = outputs[1:]
+                        if len(outputs) == 1:
+                            logits = outputs
+                        else:
+                            logits = outputs[1:]
                 else:
                     loss = None
                     with self.compute_loss_context_manager():
