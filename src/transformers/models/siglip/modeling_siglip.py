@@ -34,16 +34,11 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
     torch_int,
 )
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-
-
-if is_flash_attn_2_available():
-    pass
 
 
 logger = logging.get_logger(__name__)

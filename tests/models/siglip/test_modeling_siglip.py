@@ -34,7 +34,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_torch_available,
-    is_torch_sdpa_available,
     is_vision_available,
 )
 
@@ -55,9 +54,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-
-if is_torch_sdpa_available():
-    pass
 
 if is_vision_available():
     from PIL import Image
