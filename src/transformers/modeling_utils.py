@@ -1402,9 +1402,15 @@ def _find_mismatched_keys(
     weights_only: bool,
 ) -> List[str]:
     """
-    Find mismatch of shapes between the model parameters and the loaded state dict, and optionally remove the
-    problematic keys from `state_dict` if `ignore_mismatched_sizes` is `True`. In this case, reinitialize the
-    weights correctly.
+    Find potential shape mismatch between the different state dicts and the model parameters, but only if `ignore_mismatched_sizes`
+    is True. Otherwise, return immediately and any shape mismatch that may exist will be raised later on. This avoids checking
+    every parameter in advance, as shape mismatch are extremely rare in practice. If we want to ignore them however, we do
+    need to check in advance as we need to know which parameters we need to move back from meta to cpu, and initialize
+    correctly. Indeed, as our model initialization takes place at the module level, and not the weight level, in the
+    case of a sharded checkpoint we cannot correctly initialize the weights according to `model._init_weights()` if we perform
+    this check on each state dict at loading time (after the first loaded checkpoint, there are no way to initialize only the
+    mismatched weights if any, without overwriting the previously loaded weights as well because all the module will be
+    initialized, not only the weights that are mismatched).
     """
 
     # An error will be raised later on anyway if there is a mismatch - this avoids running the rest of this function
