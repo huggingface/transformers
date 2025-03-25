@@ -158,6 +158,14 @@ def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1
     return hidden_dim
 
 
+# Ignore extra info - h/t Aritra
+def safe_load(filename):
+    # Can use weights_only because io.BytesIO was registered, but we still need to skip those objects
+    shard = torch.load(filename, weights_only=True, map_location="cpu", mmap=True)
+    shard = {k: v for k, v in shard.items() if not isinstance(v, io.BytesIO)}
+    return shard
+
+
 def write_model(
     model_path,
     input_base_path,
@@ -256,15 +264,10 @@ def write_model(
                 path = os.path.join(input_base_path, "consolidated.00.pth")
             else:
                 path = os.path.join(input_base_path, "consolidated.pth")
-            loaded = [torch.load(path, map_location="cpu", mmap=True)]
+            loaded = [safe_load(path)]
         else:
             loaded = [
-                torch.load(
-                    os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
-                    map_location="cpu",
-                    mmap=True,
-                    weights_only=True,
-                )
+                safe_load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"))
                 for i in tqdm(range(num_shards), desc="Loading shards", unit="shard")
             ]
 
