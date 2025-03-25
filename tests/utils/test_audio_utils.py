@@ -520,7 +520,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         self.assertTrue(np.allclose(spec_list[2][:64, 400], expected3))
 
         mel_filters = mel_filter_bank(
-            num_frequency_bins=256,
+            num_frequency_bins=257,
             num_mel_filters=400,
             min_frequency=20,
             max_frequency=8000,
@@ -529,8 +529,6 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
         )
-
-        mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
 
         spec_list = spectrogram_batch(
             waveform_list,
