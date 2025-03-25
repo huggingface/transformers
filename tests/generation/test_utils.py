@@ -127,6 +127,7 @@ VLM_CLASS_NAMES = [
     "deepseek_vl",
     "gemma3",
     "mistral3",
+    "chameleon",
 ]
 
 
