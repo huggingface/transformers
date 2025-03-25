@@ -1742,7 +1742,7 @@ class TrainingArguments:
 
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
+            if not isinstance(self.accelerator_config, AcceleratorConfig):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
                 elif isinstance(self.accelerator_config, dict):
