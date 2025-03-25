@@ -885,6 +885,40 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     return weights_name
 
 
+def update_key_name(keys):
+    """
+    Updates a dictionary of keys to pack layers together as layer.{0, 1, 4} instead of layers.0, layers.1, layers.4.
+    """
+    key_dict = defaultdict(list)
+    for key in keys:
+        all_digits = re.findall(r".(\d+).", key)
+        for i, k in enumerate(all_digits):
+            if len(key_dict[re.sub(r".(\d+).", ".*.", key)]) <= i:
+                key_dict[re.sub(r".(\d+).", ".*.", key)].append(set())
+            key_dict[re.sub(r".(\d+).", ".*.", key)][i].add(int(k))
+
+    final_keys = set()
+    for key in keys:
+        text = re.sub(r".(\d+).", ".*.", key)
+        pattern = key_dict[text]
+        final_text = ""
+        for i, part in enumerate(text.split("*")):
+            if len(pattern) <= i:
+                final_text += part
+            else:
+                data = [str(i) for i in sorted(pattern[i])]
+                if len(data) > 10:
+                    result = f"{data[0]}...{data[-1]}"
+                else:
+                    result = ", ".join(data)  # If there are only 1 or 2 elements, show them all
+                if len(data) > 1:
+                    final_text += part + "{" + result + "}"
+                else:
+                    final_text += part + data[0]
+        final_keys.add(final_text)
+    return list(final_keys)
+
+
 def _get_resolved_checkpoint_files(
     pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
     subfolder: str,
@@ -4996,7 +5030,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
-                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__}: {update_key_name(unexpected_keys)}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
                 " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
                 " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
@@ -5008,7 +5042,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if len(missing_keys) > 0:
             logger.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
-                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                f" {pretrained_model_name_or_path} and are newly initialized: {update_key_name(missing_keys)}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:

@@ -48,6 +48,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.modeling_utils import update_key_name
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -1717,6 +1718,45 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
+
+    def test_update_key_name(self):
+        original_keys = [
+            "model.language_model.0.self_attn.0.mlp0",
+            "model.language_model.0.self_attn.1.mlp.conv1.weight",
+            "model.language_model.1.self_attn.0.mlp.conv1.weight",
+            "model.language_model.1.self_attn.1.mlp.conv1.weight",
+            "model.language_model.2.self_attn.0.mlp.conv1.weight",
+            "model.language_model.2.self_attn.1.conv1.weight",
+            "model.language_model.3.self_attn.0.mlp.conv1.weight",
+            "model.language_model.3.self_attn.1.mlp.conv1.weight",
+            "model.language_model.0.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.1.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.2.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.3.self_attn.0.mlp.layer.conv1.weight",
+            "model.language_model.0.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.1.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.2.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.3.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.4.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.5.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.6.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.7.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.8.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.9.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.10.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.11.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.12.self_attn.0.mlp.layer.1.weight",
+            "model.language_model.13.self_attn.0.mlp.layer.1.weigh,t",
+        ]
+        new_keys = update_key_name(original_keys)
+        expected_new_keys = [
+            "model.language_model.{0, ..., 13}.self_attn.{0, 1}.mlp.layer.1.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.conv1.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp0",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.conv1.weight",
+            "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.conv1.weight",
+        ]
+        self.assertListEqual(list(new_keys), expected_new_keys)
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
