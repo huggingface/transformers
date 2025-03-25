@@ -24,7 +24,9 @@ from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
-def fixed_cross_entropy(source, target, num_items_in_batch: Optional[int] = None, ignore_index: int = -100, **kwargs):
+def fixed_cross_entropy(
+    source, target, num_items_in_batch: Optional[int] = None, ignore_index: int = -100, **kwargs
+) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
@@ -38,23 +40,23 @@ def ForCausalLMLoss(
     vocab_size: int,
     num_items_in_batch: Optional[int] = None,
     ignore_index: int = -100,
-    shift_labels=None,
+    shift_labels: Optional[torch.Tensor] = None,
     **kwargs,
-):
+) -> torch.Tensor:
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
 
     if shift_labels is None:
-        labels = labels.to(logits.device)
         # Shift so that tokens < n predict n
         labels = nn.functional.pad(labels, (0, 1), value=ignore_index)
-        shift_labels = labels[..., 1:].contiguous()
+        shift_labels = labels[..., 1:].to(device=logits.device, memory_format=torch.contiguous_format).view(-1)
+    else:
+        shift_labels = shift_labels.view(-1)
+        # Enable model parallelism
+        shift_labels = shift_labels.to(logits.device)
 
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
-    shift_labels = shift_labels.view(-1)
-    # Enable model parallelism
-    shift_labels = shift_labels.to(logits.device)
     loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
 
@@ -64,7 +66,6 @@ def ForMaskedLMLoss(
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
-    labels = labels.to(logits.device)
 
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
@@ -81,7 +82,7 @@ def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
     if config.problem_type is None:
         if num_labels == 1:
             config.problem_type = "regression"
-        elif num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+        elif num_labels > 1 and (labels.dtype in (torch.long, torch.int)):
             config.problem_type = "single_label_classification"
         else:
             config.problem_type = "multi_label_classification"
