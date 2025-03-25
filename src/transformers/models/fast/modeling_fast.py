@@ -106,7 +106,7 @@ class FastRepConvLayer(nn.Module):
         padding = (int((kernel_size[0] - 1) / 2), int((kernel_size[1] - 1) / 2))
 
         self.activation = nn.ReLU(inplace=True)
-
+        self.identity = nn.Identity()
         self.main_conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -147,12 +147,16 @@ class FastRepConvLayer(nn.Module):
         else:
             self.horizontal_conv = nn.Identity()
             self.horizontal_batch_norm = nn.Identity()
+            
+        if out_channels == in_channels and stride == 1:
+            self.use_identity = True
+            self.identity = nn.BatchNorm2d(out_channels)
+        else:
+            self.use_identity = False
+            self.identity = None
 
-        # TODO: check if needed
-        self.rbr_identity = nn.BatchNorm2d(out_channels) if out_channels == in_channels and stride == 1 else None
 
     def forward(self, hidden_states: torch.Tensor):
-        # if self.training:
         main = self.main_conv(hidden_states)
         main = self.main_batch_norm(main)
 
@@ -162,12 +166,9 @@ class FastRepConvLayer(nn.Module):
         horizontal = self.horizontal_conv(hidden_states)
         horizontal = self.horizontal_batch_norm(horizontal)
 
-        if self.rbr_identity is not None:
-            rbr_identity = self.rbr_identity(hidden_states)
-        else:
-            rbr_identity = 0
-
-        return self.activation(main + vertical + horizontal + rbr_identity)
+        identity = self.identity(hidden_states) if self.use_identity else 0
+            
+        return self.activation(main + vertical + horizontal + identity)
 
 
 class FastPreTrainedModel(PreTrainedModel):
@@ -253,12 +254,11 @@ class FASTHead(nn.Module):
         if config.head_dropout_ratio > 0:
             self.dropout = nn.Dropout2d(config.head_dropout_ratio)
         else:
-            self.dropout = None
+            self.dropout = nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv(hidden_states)
-        if self.dropout is not None:
-            hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         hidden_states = self.final_conv(hidden_states)
         return hidden_states
 
@@ -311,11 +311,11 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         pixel_values: torch.FloatTensor,
         output_hidden_states: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-        labels: Dict = None,
+        labels: Optional[Dict] = None,
     ):
         r"""
         labels (`Dict[str, torch.Tensor]`, *optional*):
-            Should contain 3 keys: gt_texts,gt_kernels,gt_instances
+            Should contain 3 keys: gt_texts, gt_kernels, gt_instances
 
         Returns:
 
@@ -335,12 +335,11 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         >>> outputs = model(pixel_values=inputs["pixel_values"])
         >>> target_sizes = [(image.height, image.width)]
         >>> threshold = 0.88
-        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold, bbox_type="rect")
-        >>> print(text_locations[0]["bboxes"][0][:10])
+        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold, bounding_box_type="rect")
+        >>> print(text_locations[0]["boxes"][0])
         [151, 151, 160, 56, 355, 74, 346, 169]
         ```
         """
-        # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         features = (
             self.backbone(pixel_values) if self.config.use_timm_backbone else self.backbone(pixel_values).feature_maps

@@ -45,6 +45,13 @@ rename_key_mappings = {
     "neck.reduce_layer3": "neck.reduce_layers.2",
     "neck.reduce_layer4": "neck.reduce_layers.3",
     "final.conv.weight": "final_conv.weight",
+    "neck.reduce_layers.1.rbr_identity.weight": "neck.reduce_layers.1.identity.weight",
+    "neck.reduce_layers.1.rbr_identity.bias" : "neck.reduce_layers.1.identity.bias",
+    "neck.reduce_layers.1.rbr_identity.running_mean": "neck.reduce_layers.1.identity.running_mean",
+    "neck.reduce_layers.1.rbr_identity.running_var": "neck.reduce_layers.1.identity.running_var",
+    "neck.reduce_layers.1.rbr_identity.num_batches_tracked": "neck.reduce_layers.1.identity.num_batches_tracked"
+
+
 }
 
 
@@ -191,7 +198,7 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bounding_box_t
 
 
 def convert_fast_checkpoint(
-    checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately
+    checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately, verify_logits
 ):
     config_filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
     # we download the json file for safety reasons
@@ -265,24 +272,27 @@ def convert_fast_checkpoint(
     model.load_state_dict(state_dict_changed)
     model.eval()
 
-    url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    if verify_logits:
+        url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
+        image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    pixel_values = fast_image_processor(image, return_tensors="pt").pixel_values
+        pixel_values = fast_image_processor(image, return_tensors="pt").pixel_values
 
-    with torch.no_grad():
-        output = model(pixel_values)
+        with torch.no_grad():
+            output = model(pixel_values)
 
-    # test the logits
-    torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
+        # test the logits
+        torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
 
-    target_sizes = [(image.height, image.width)]
-    threshold = 0.88
-    text_locations = fast_image_processor.post_process_text_detection(
-        output, target_sizes, threshold, bounding_box_type="rect"
-    )
+        target_sizes = [(image.height, image.width)]
+        threshold = 0.88
+        text_locations = fast_image_processor.post_process_text_detection(
+            output, target_sizes, threshold, bounding_box_type="rect"
+        )
+        breakpoint()
+        if text_locations[0]["boxes"][0] != expected_slice_boxes:
+            raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")
 
-    assert text_locations[0]["boxes"][0] == expected_slice_boxes
     breakpoint()
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
@@ -314,9 +324,15 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/home/user/app/transformers/src/transformers/models/fast/output",
+        default="./output",
         type=str,
         help="Path to the folder to output PyTorch model.",
+    )
+    parser.add_argument(
+        "--verify_logits",
+        action="store_false",
+        required=False,
+        help="Whether to verify the logits after conversion.",
     )
     args = parser.parse_args()
 
@@ -325,4 +341,5 @@ if __name__ == "__main__":
         args.checkpoint_config_filename,
         args.pytorch_dump_folder_path,
         args.save_backbone_separately,
+        args.verify_logits,
     )

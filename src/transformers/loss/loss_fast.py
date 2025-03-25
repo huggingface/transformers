@@ -20,23 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class FastForSceneTextRecognitionLoss(nn.Module):
-    """
-    This class computes the embedding loss for Fast. It encapsulates multiple loss components such as embedding loss,
-    dice loss, and OHEM loss.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, hidden: torch.Tensor, labels: torch.Tensor, texts):
-        """
-        Computes the overall loss.
-        """
-        return fast_loss_fn(hidden, labels, texts)
-
-
-def fast_loss_fn(hidden: torch.Tensor, labels: torch.Tensor, texts):
+def FastForSceneTextRecognitionLoss(hidden: torch.Tensor, labels: torch.Tensor, texts):
     """
     Computes the overall loss for fast.
     """

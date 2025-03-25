@@ -511,6 +511,7 @@ class FastImageProcessor(BaseImageProcessor):
                 - "scores" (np.ndarray): Corresponding confidence scores for each bounding box.
         """
         scale = 2
+        breakpoint()
         image_size = image_size if image_size is not None else self.img_size
         out = output["last_hidden_state"]
         batch_size = out.size(0)
