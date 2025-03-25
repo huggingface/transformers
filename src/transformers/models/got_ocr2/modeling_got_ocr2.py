@@ -835,7 +835,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
 
 
 @add_start_docstrings(
-    """The AriaMultiModalProjector model which consists of a vision backbone and a language model.""",
+    """The GotOcr2ForConditionalGeneration model which consists of a vision backbone and a language model.""",
     GOT_OCR2_START_DOCSTRING,
 )
 class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):

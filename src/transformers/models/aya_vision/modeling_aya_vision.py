@@ -307,10 +307,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 
         self.multi_modal_projector = AyaVisionMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
-
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -466,7 +462,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The AriaMultiModalProjector model which consists of a vision backbone and a language model.""",
+    """The AyaVisionForConditionalGeneration model which consists of a vision backbone and a language model.""",
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
@@ -476,14 +472,12 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         "multi_modal_projector": "model.multi_modal_projector",
         "language_model.lm_head": "lm_head",
     }
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
         self.model = AyaVisionModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
