@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -106,8 +106,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_convert_rgb = do_convert_rgb
 
-        self.background_color = tuple([int(x * 255) for x in self.image_mean])
-
     def resize(
         self,
         image: np.ndarray,
@@ -170,7 +168,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
-            background_color=self.background_color,
             input_data_format=input_data_format,
         )
         return image
@@ -178,7 +175,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
     def pad_to_square(
         self,
         image: np.ndarray,
-        background_color: Union[int, Tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
@@ -188,10 +184,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
-                The color to use for the padding. Can be an integer for single channel or a
-                tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -218,18 +210,10 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
 
         max_dim = max(height, width)
 
-        # Ensure background_color is the correct shape
-        if isinstance(background_color, int):
-            background_color = [background_color] * num_channels
-        elif len(background_color) != num_channels:
-            raise ValueError(
-                f"background_color must have no more than {num_channels} elements to match the number of channels"
-            )
-
         if input_data_format == ChannelDimension.FIRST:
             result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[i, :, :] = color
+            for i, color in enumerate(self.image_mean):
+                result[i, :, :] = int(color * 255)
             if width > height:
                 start = (max_dim - height) // 2
                 result[:, start : start + height, :] = image
@@ -238,8 +222,8 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
                 result[:, :, start : start + width] = image
         else:
             result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[:, :, i] = color
+            for i, color in enumerate(self.image_mean):
+                result[:, :, i] = int(color * 255)
             if width > height:
                 start = (max_dim - height) // 2
                 result[start : start + height, :, :] = image

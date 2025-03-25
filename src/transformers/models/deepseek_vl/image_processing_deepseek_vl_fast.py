@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Tuple, Union
 
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
@@ -50,10 +49,6 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = False
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.background_color = tuple([int(x * 255) for x in self.image_mean])
 
     def resize(
         self,
@@ -93,24 +88,16 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         output_size_nonpadded = [round(height * delta), round(width * delta)]
 
         image = F.resize(image, output_size_nonpadded, interpolation=interpolation, antialias=antialias)
-        image = self.pad_to_square(image, background_color=self.background_color)
+        image = self.pad_to_square(image)
         return image
 
-    def pad_to_square(
-        self,
-        image: "torch.Tensor",
-        background_color: Union[int, Tuple[int, int, int]] = 0,
-    ) -> "torch.Tensor":
+    def pad_to_square(self, image: "torch.Tensor") -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
 
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
-                The color to use for the padding. Can be an integer for single channel or a
-                tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
 
         Returns:
             `torch.Tensor`: The padded image.
@@ -121,18 +108,9 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
             return image
 
         max_dim = max(height, width)
-
-        # Ensure background_color is the correct shape
-        if isinstance(background_color, int):
-            background_color = [background_color] * num_channels
-        elif len(background_color) != num_channels:
-            raise ValueError(
-                f"background_color must have no more than {num_channels} elements to match the number of channels"
-            )
-
         result = torch.zeros((batch_size, num_channels, max_dim, max_dim), dtype=image.dtype)
-        for i, color in enumerate(background_color):
-            result[:, i, :, :] = color
+        for i, color in enumerate(self.image_mean):
+            result[:, i, :, :] = int(color * 255)
         if width > height:
             start = (max_dim - height) // 2
             result[:, :, start : start + height, :] = image
