@@ -8,5 +8,5 @@ ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 RUN uv pip install  --upgrade --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[tf-cpu,sklearn,testing,sentencepiece,tf-speech,vision]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3"
-RUN uv pip uninstall -y transformers
+RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean

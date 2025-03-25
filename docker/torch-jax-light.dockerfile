@@ -12,5 +12,5 @@ RUN uv pip install --no-cache-dir "scipy<1.13" "git+https://github.com/huggingfa
 
 # RUN pip install --no-cache-dir "scipy<1.13" "transformers[flax,testing,sentencepiece,flax-speech,vision]"
 
-RUN uv pip uninstall -y transformers
+RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean

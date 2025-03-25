@@ -12,5 +12,5 @@ RUN uv pip install --no-cache-dir "tensorflow-cpu<2.16" "tf-keras<2.16"
 RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[flax,quality,testing,torch-speech,vision]"
 RUN git lfs install
 
-RUN uv pip uninstall -y transformers
+RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean

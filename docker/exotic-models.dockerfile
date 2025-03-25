@@ -13,5 +13,5 @@ RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transform
 # RUN git clone https://github.com/facebookresearch/detectron2.git
 # RUN python3 -m pip install --no-cache-dir -e detectron2
 RUN uv pip install 'git+https://github.com/facebookresearch/detectron2.git@92ae9f0b92aba5867824b4f12aa06a22a60a45d3'
-RUN uv pip uninstall -y transformers
+RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
