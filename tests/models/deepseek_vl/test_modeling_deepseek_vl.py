@@ -17,27 +17,17 @@
 import re
 import tempfile
 import unittest
-from functools import reduce
-
-import numpy as np
-import requests
-from huggingface_hub import hf_hub_download
 
 from transformers import (
-    AutoProcessor,
     DeepseekVLConfig,
     DeepseekVLForConditionalGeneration,
     DeepseekVLModel,
     is_torch_available,
-    is_vision_available,
 )
-from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     require_torch,
-    slow,
-    torch_device,
     require_torch_sdpa,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -47,10 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class DeepseekVLModelTester:
@@ -92,7 +78,7 @@ class DeepseekVLModelTester:
             "image_size": 128,
             "patch_size": 32,
             "num_attention_heads": 4,
-        }
+        },
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,8 +92,8 @@ class DeepseekVLModelTester:
         self.use_high_res_vision = use_high_res_vision
         self.low_res_vision_config = low_res_vision_config
         self.high_res_vision_config = high_res_vision_config
-        self.low_res_vision_config['num_channels'] = self.num_channels
-        self.high_res_vision_config['num_channels'] = self.num_channels
+        self.low_res_vision_config["num_channels"] = self.num_channels
+        self.high_res_vision_config["num_channels"] = self.num_channels
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]

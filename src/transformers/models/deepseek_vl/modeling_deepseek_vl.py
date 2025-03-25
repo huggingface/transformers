@@ -140,7 +140,7 @@ DEEPSEEK_VL_INPUTS_DOCSTRING = r"""
 
 
 class DeepseekVLSamVisionNeck(nn.Module):
-    def __init__(self, config, output_size:int=24):
+    def __init__(self, config, output_size: int = 24):
         super().__init__()
         self.config = config
         self.output_size = output_size
@@ -166,7 +166,7 @@ class DeepseekVLSamVisionNeck(nn.Module):
 
 
 class DeepseekVLSamVisionEncoder(nn.Module):
-    def __init__(self, config: SamVisionConfig, output_size:int=24):
+    def __init__(self, config: SamVisionConfig, output_size: int = 24):
         super().__init__()
         self.config = config
         self.output_size = output_size
@@ -300,7 +300,9 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         self.low_res_vision_encoder = DeepseekVLSiglipVisionEncoder(config.low_res_vision_config)
         if self.use_high_res_vision:
             output_size = config.low_res_vision_config.image_size // config.low_res_vision_config.patch_size
-            self.high_res_vision_encoder = DeepseekVLSamVisionEncoder(config.high_res_vision_config, output_size=output_size)
+            self.high_res_vision_encoder = DeepseekVLSamVisionEncoder(
+                config.high_res_vision_config, output_size=output_size
+            )
 
         self.language_model = LlamaModel(config.text_config)
         self.aligner = DeepseekVLAligner(config)
@@ -527,7 +529,9 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
