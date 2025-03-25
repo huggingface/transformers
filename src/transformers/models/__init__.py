@@ -212,6 +212,7 @@ from . import (
     persimmon,
     phi,
     phi3,
+    phi4_multimodal,
     phimoe,
     phobert,
     pix2struct,

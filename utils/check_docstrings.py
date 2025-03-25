@@ -524,6 +524,7 @@ OBJECTS_TO_IGNORE = [
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
+    "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
