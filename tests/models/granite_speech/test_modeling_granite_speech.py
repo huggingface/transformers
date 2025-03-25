@@ -123,7 +123,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
 
         # Dims for audio features
         self.sequence_dim = 844
-        self.feaure_dim = 160
+        self.feature_dim = 160
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.hidden_size = text_config["hidden_size"]
