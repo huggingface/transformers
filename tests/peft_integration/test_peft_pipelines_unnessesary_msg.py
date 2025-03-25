@@ -1,3 +1,8 @@
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    pipeline,
+)
 from transformers.testing_utils import (
     require_peft,
     require_torch,
@@ -5,12 +10,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    pipeline,
-)
 
 @slow
 @require_torch
