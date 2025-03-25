@@ -1360,7 +1360,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if value != default_config_dict[key]:
+            if key not in default_config_dict or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
@@ -1595,7 +1595,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             "autoquant": autoquant,
         }
 
-    def get_quantize_config(self):
+    def get_apply_tensor_subclass(self):
         """Create the appropriate quantization method based on configuration."""
         if isinstance(self.quant_type, str):
             methods = self._get_torchao_quant_type_to_method()
