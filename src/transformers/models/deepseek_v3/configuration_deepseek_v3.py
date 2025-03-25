@@ -134,14 +134,15 @@ class DeepseekV3Config(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `DeepseekV3Model`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.q_a_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "colwise",
-        "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        # "layers.*.self_attn.q_b_proj": "colwise",
+        # "layers.*.self_attn.q_a_proj": "colwise",
+        # "layers.*.self_attn.kv_a_proj_with_mqa": "colwise",
+        # "layers.*.self_attn.kv_b_proj": "colwise",
+        # "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
+        "layers.*.mlp.experts.*.up_proj": "local_colwise",
+        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "isolated_parallel",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",

@@ -223,6 +223,10 @@ class DeepseekV3MoE(nn.Module):
                 expert_output = expert(expert_input)
                 weighted_output = expert_output * expert_weights.unsqueeze(-1)
                 final_hidden_states.index_add_(0, token_indices, weighted_output)
+
+        # in original deepseek, the output of the experts are gathered once we leave this module
+        # thus the moe module is itelsf an IsolatedParallel module
+        # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
 
 

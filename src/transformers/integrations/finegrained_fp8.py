@@ -310,11 +310,12 @@ class FP8Linear(nn.Linear):
 
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
 
-        scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
-        scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-        self.register_buffer(
-            "weight_scale_inv", torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
-        )
+        if self.weight.element_size() == 1:
+            scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
+            scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
+            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device))
+        else:
+            self.register_parameter("weight_scale_inv", None)
 
         self.block_size = block_size
 
@@ -352,6 +353,7 @@ class FP8Linear(nn.Linear):
 
 def _replace_with_fp8_linear(
     model,
+    tp_plan=None,
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
@@ -378,10 +380,13 @@ def _replace_with_fp8_linear(
                         block_size=quantization_config.weight_block_size,
                     )
                     has_been_replaced = True
+            # import re
+            # tp_plan[re.sub("\d+", "*", current_key_name_str) + ".weight_scale_inv"] = tp_plan[re.sub("\d+", "*", current_key_name_str)]
 
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fp8_linear(
                 module,
+                tp_plan,
                 modules_to_not_convert,
                 current_key_name,
                 quantization_config,
@@ -407,6 +412,7 @@ def replace_with_fp8_linear(
     print(modules_to_not_convert)
     model, has_been_replaced = _replace_with_fp8_linear(
         model,
+        tp_plan=model._tp_plan,
         modules_to_not_convert=modules_to_not_convert,
         quantization_config=quantization_config,
     )
