@@ -117,14 +117,10 @@ class GraniteConfig(PretrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_output_dtensor",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_output_dtensor",
-        "embed_tokens": "replicate_output_dtensor",
-        "layers.*.post_attention_layernorm": "replicate_output_dtensor",
-        "layers.*.input_layernorm": "replicate_output_dtensor",
-        "norm": "replicate_output_dtensor",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

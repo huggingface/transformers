@@ -2592,10 +2592,16 @@ class Trainer:
                                     args.max_grad_norm,
                                 )
                             else:
-                                _grad_norm = self.accelerator.clip_grad_norm_(
-                                    model.parameters(),
-                                    args.max_grad_norm,
-                                )
+                                grad_norm_context = contextlib.nullcontext
+                                if self.is_tp_enabled:
+                                    from torch.distributed._tensor.experimental import implicit_replication
+
+                                    grad_norm_context = implicit_replication
+                                with grad_norm_context():
+                                    _grad_norm = self.accelerator.clip_grad_norm_(
+                                        model.parameters(),
+                                        args.max_grad_norm,
+                                    )
 
                             if (
                                 is_accelerate_available()
