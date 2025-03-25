@@ -316,10 +316,10 @@ def mel_filter_bank(
     """
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
-    
+
     if num_frequency_bins < 2:
         raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
-    
+
     if min_frequency > max_frequency:
         raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
 

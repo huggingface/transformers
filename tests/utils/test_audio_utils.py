@@ -219,7 +219,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         # fmt: on
 
         # kaldi implementation does not compute values for last fft bin
-        # indeed, they enforce max_frequency <= sampling_rate / 2 and 
+        # indeed, they enforce max_frequency <= sampling_rate / 2 and
         # therefore they know that last fft bin filter bank values will be all 0
         # and pad after with zeros
         # to comply with our API for `mel_filter_bank`, we need to also pad here
