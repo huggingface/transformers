@@ -2699,6 +2699,7 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+            "InstructBlipModel",
         ]
     )
     _import_structure["models.instructblipvideo"].extend(
@@ -7702,6 +7703,7 @@ if TYPE_CHECKING:
         )
         from .models.instructblip import (
             InstructBlipForConditionalGeneration,
+            InstructBlipModel,
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,

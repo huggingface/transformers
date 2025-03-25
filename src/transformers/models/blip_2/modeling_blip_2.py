@@ -1985,6 +1985,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
     _keep_in_fp32_modules = ["query_tokens"]
+
+    _tied_weights_keys = ["lm_head.weight"]
     _key_mapping = {
         "language_model.lm_head": "lm_head",
         "language_model": "model.language_model",
@@ -1999,10 +2001,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         self.model = Blip2Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [
-                f"model.language_model.{k}" for k in self.model.language_model._tied_weights_keys
-            ]
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2018,12 +2016,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def _tie_weights(self):
         self.model._tie_weights()
@@ -2195,15 +2187,15 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        image_embeds = self.vision_model(
+        image_embeds = self.model.vision_model(
             pixel_values,
             return_dict=True,
             interpolate_pos_encoding=interpolate_pos_encoding,
         ).last_hidden_state
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_outputs = self.qformer(
+        query_tokens = self.model.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_outputs = self.model.qformer(
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
@@ -2211,7 +2203,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         )
         query_output = query_outputs.last_hidden_state
 
-        language_model_inputs = self.language_projection(query_output)
+        language_model_inputs = self.model.language_projection(query_output)
         language_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
@@ -2246,17 +2238,17 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
             # -1 is to account for the prepended BOS after `generate.`
             # TODO (joao, raushan): refactor `generate` to avoid these operations with VLMs
-            if not self.language_model.config.is_encoder_decoder:
+            if not self.model.language_model.config.is_encoder_decoder:
                 generate_kwargs["max_length"] = (
                     generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1] - 1
                 )
                 generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
-        if not self.language_model.config.is_encoder_decoder:
+        if not self.model.language_model.config.is_encoder_decoder:
             inputs["input_ids"] = input_ids
 
-        outputs = self.language_model.generate(**inputs, **generate_kwargs)
+        outputs = self.model.language_model.generate(**inputs, **generate_kwargs)
         return outputs
 
 
