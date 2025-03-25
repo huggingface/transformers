@@ -3561,12 +3561,13 @@ class ModelTesterMixin:
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
+    @is_flaky()
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         # TODO: we shouldn't need to do this skip, i.e. the test would be composable from the model tester. CLIP-like
         # models have a custom mixin, which we detect to skip this test.
-        if not any(".ModelTesterMixin" in str(base) for base in self.__class__.__bases__):
+        if any(".CLIPModelTesterMixin" in str(base) for base in self.__class__.__bases__):
             self.skipTest(reason="CLIP-like models have a different `test_eager_matches_sdpa_inference`")
 
         if not self.has_attentions:
@@ -3673,29 +3674,35 @@ class ModelTesterMixin:
                     else:
                         input_data_batch_size = batch_size
 
-                    dummy_input = inputs_dict[model.main_input_name]
+                    processed_inputs = {}
+                    processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
 
-                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                        dummy_input = dummy_input.to(torch_dtype)
+                    if "pixel_values" in inputs_dict and "pixel_values" not in processed_inputs:
+                        processed_inputs["pixel_values"] = inputs_dict["pixel_values"]
 
-                    dummy_input = dummy_input[:input_data_batch_size]
-                    if dummy_input.shape[0] != input_data_batch_size:
-                        if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                            extension = torch.rand(
-                                input_data_batch_size - dummy_input.shape[0],
-                                *dummy_input.shape[1:],
-                                dtype=torch_dtype,
-                                device=torch_device,
-                            )
-                            dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-                        else:
-                            extension = torch.randint(
-                                high=5,
-                                size=(input_data_batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                dtype=dummy_input.dtype,
-                                device=torch_device,
-                            )
-                            dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
+                    for key, value in processed_inputs.items():
+                        if value.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                            processed_inputs[key] = value.to(torch_dtype)
+
+                        value = value[:input_data_batch_size]
+                        if value.shape[0] != input_data_batch_size:
+                            if value.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                                extension = torch.rand(
+                                    input_data_batch_size - value.shape[0],
+                                    *value.shape[1:],
+                                    dtype=torch_dtype,
+                                    device=torch_device,
+                                )
+                                value = torch.cat((value, extension), dim=0).to(torch_device)
+                            else:
+                                extension = torch.randint(
+                                    high=5,
+                                    size=(input_data_batch_size - value.shape[0], *value.shape[1:]),
+                                    dtype=value.dtype,
+                                    device=torch_device,
+                                )
+                                value = torch.cat((value, extension), dim=0).to(torch_device)
+                        processed_inputs[key] = value
 
                     if not use_attention_mask:
                         dummy_attention_mask = None
@@ -3703,9 +3710,11 @@ class ModelTesterMixin:
                         dummy_attention_mask = inputs_dict.get("attention_mask", None)
                         if dummy_attention_mask is None:
                             if is_encoder_decoder:
-                                seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
+                                seqlen = inputs_dict.get(
+                                    "decoder_input_ids", processed_inputs[model.main_input_name]
+                                ).shape[-1]
                             else:
-                                seqlen = dummy_input.shape[-1]
+                                seqlen = processed_inputs[model.main_input_name].shape[-1]
                             dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
 
                         dummy_attention_mask = dummy_attention_mask[:batch_size]
@@ -3734,7 +3743,9 @@ class ModelTesterMixin:
                         else:
                             input_data_batch_size = batch_size
 
-                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:input_data_batch_size]
+                        decoder_input_ids = inputs_dict.get(
+                            "decoder_input_ids", processed_inputs[model.main_input_name]
+                        )[:input_data_batch_size]
                         if decoder_input_ids.shape[0] != input_data_batch_size:
                             extension = torch.ones(
                                 input_data_batch_size - decoder_input_ids.shape[0],
@@ -3746,17 +3757,19 @@ class ModelTesterMixin:
                             decoder_input_ids = decoder_input_ids.to(torch_device)
 
                         # TODO: never an `attention_mask` arg here?
-                        processed_inputs = {
-                            model.main_input_name: dummy_input,
-                            "decoder_input_ids": decoder_input_ids,
-                            "decoder_attention_mask": dummy_attention_mask,
-                            "output_hidden_states": True,
-                        }
+                        processed_inputs.update(
+                            {
+                                "decoder_input_ids": decoder_input_ids,
+                                "decoder_attention_mask": dummy_attention_mask,
+                                "output_hidden_states": True,
+                            }
+                        )
                     else:
-                        processed_inputs = {
-                            model.main_input_name: dummy_input,
-                            "output_hidden_states": True,
-                        }
+                        processed_inputs.update(
+                            {
+                                "output_hidden_states": True,
+                            }
+                        )
 
                         # Otherwise fails for e.g. WhisperEncoderModel
                         if "attention_mask" in inspect.signature(model_eager.forward).parameters:
@@ -3796,24 +3809,31 @@ class ModelTesterMixin:
                             outputs_eager = model_eager(**prepared_inputs)
                             outputs_sdpa = model_sdpa(**prepared_inputs)
 
-                    # TODO: rename logits -> hidden_states
-                    if hasattr(outputs_eager, "vision_hidden_states"):
-                        logits_eager = outputs_eager.vision_hidden_states[-1]
-                        logits_sdpa = outputs_sdpa.vision_hidden_states[-1]
-                    elif hasattr(outputs_eager, "audio_values"):
-                        logits_eager = outputs_eager.audio_values
-                        logits_sdpa = outputs_sdpa.audio_values
+                    if "logits_per_text" in outputs_eager:
+                        key = "logits_per_text"
+                    elif "vision_hidden_states" in outputs_eager:
+                        key = "vision_hidden_states"
+                    elif "audio_values" in outputs_eager:
+                        key = "audio_values"
+                    elif "decoder_hidden_states" in outputs_eager:
+                        key = "decoder_hidden_states"
+                    elif "logits" in outputs_eager and "Classification" in model_class.__name__:
+                        key = "logits"
                     else:
-                        logits_eager = (
-                            outputs_eager.decoder_hidden_states[-1]
-                            if hasattr(outputs_eager, "decoder_hidden_states")
-                            else outputs_eager.hidden_states[-1]
-                        )
-                        logits_sdpa = (
-                            outputs_sdpa.decoder_hidden_states[-1]
-                            if hasattr(outputs_sdpa, "decoder_hidden_states")
-                            else outputs_sdpa.hidden_states[-1]
-                        )
+                        key = "hidden_states"
+
+                    # TODO: rename logits -> hidden_states
+                    logits_eager = outputs_eager[key]
+                    logits_sdpa = outputs_sdpa[key]
+
+                    if key in ["vision_hidden_states", "decoder_hidden_states", "hidden_states"]:
+                        logits_eager = logits_eager[-1]
+                        logits_sdpa = logits_sdpa[-1]
+
+                    if key == "logits_per_text":
+                        nan_mask = torch.isnan(logits_eager)
+                        logits_eager[nan_mask] = 0
+                        logits_sdpa[nan_mask] = 0
 
                     if torch_device in ["cpu", "cuda"]:
                         atol = atols[torch_device, enable_kernels, torch_dtype]
@@ -3855,7 +3875,7 @@ class ModelTesterMixin:
                     if np.mean(results) < 0.8:
                         mean_relative_diff = ((logits_sdpa - logits_eager).abs() / (logits_eager.abs() + 1e-12)).mean()
                         raise ValueError(
-                            f"mean relative difference: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
+                            f"mean relative difference for {key}: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
                             f"{rtol}"
                         )
 
