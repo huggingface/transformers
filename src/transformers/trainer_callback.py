@@ -749,12 +749,12 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "Using EarlyStoppingCallback without load_best_model_at_end=True. "
                 "Once training is finished, the best model will not be loaded automatically."
             )
-        assert (
-            args.metric_for_best_model is not None
-        ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
-        assert (
-            args.eval_strategy != IntervalStrategy.NO
-        ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+        assert args.metric_for_best_model is not None, (
+            "EarlyStoppingCallback requires metric_for_best_model to be defined"
+        )
+        assert args.eval_strategy != IntervalStrategy.NO, (
+            "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+        )
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model
