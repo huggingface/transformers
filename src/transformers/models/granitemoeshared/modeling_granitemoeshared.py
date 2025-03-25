@@ -148,6 +148,7 @@ class GraniteMoeSharedTopKGating(nn.Module):
     def __init__(self, input_size: int, num_experts: int, top_k: int):
         """
         Initialize the top-k gating mechanism.
+
         Args:
             input_size (`int`):
                 Size of the input.
@@ -172,7 +173,9 @@ class GraniteMoeSharedTopKGating(nn.Module):
 
         # compute number of input given to each expert
         zeros = torch.zeros(
-            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
+            [top_k_gates.size(0), self.num_experts],
+            dtype=top_k_gates.dtype,
+            device=top_k_gates.device,
         )  # [num_tokens, num_experts]
         gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
         expert_size = gates.long().sum(0)  # [num_experts,]
@@ -1170,7 +1173,10 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
