@@ -1070,13 +1070,21 @@ def is_flash_attn_greater_or_equal(library_version: str):
 
 
 @lru_cache()
-def is_torch_greater_or_equal(library_version: str):
+def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
     if not _is_package_available("torch"):
         return False
 
-    return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
-        library_version
-    )
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
