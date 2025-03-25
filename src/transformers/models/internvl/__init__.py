@@ -19,8 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_internvl import *
-    from .image_processing_internvl import *
-    from .image_processing_internvl_fast import *
     from .modeling_internvl import *
     from .processing_internvl import *
 else:

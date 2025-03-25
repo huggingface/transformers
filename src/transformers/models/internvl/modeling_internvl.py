@@ -35,7 +35,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -45,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 
@@ -58,89 +57,6 @@ _CHECKPOINT_FOR_DOC = "yonigozlan/InternVL2_5-1B-MPO-hf"
 _CONFIG_FOR_DOC = "InternVLConfig"
 
 
-class InternVLVisionRelativePositionBias(nn.Module):
-    def __init__(self, config: InternVLVisionConfig, window_size: tuple) -> None:
-        super().__init__()
-        self.window_size = window_size
-        self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
-        self.relative_position_bias_table = nn.Parameter(
-            torch.zeros(self.num_relative_distance, config.num_attention_heads)
-        )  # 2*Wh-1 * 2*Ww-1, nH
-        # cls to token & token 2 cls & cls to cls
-
-    @compile_compatible_method_lru_cache(maxsize=10)
-    def generate_relative_position_index(self, window_size: Tuple[int, int]) -> torch.Tensor:
-        """
-        This method creates the relative position index, modified to support arbitrary window sizes,
-        as introduced in [MiDaS v3.1](https://arxiv.org/abs/2307.14460).
-        """
-        num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
-        # cls to token & token 2 cls & cls to cls
-        # get pair-wise relative position index for each token inside the window
-        window_area = window_size[0] * window_size[1]
-        grid = torch.meshgrid(torch.arange(window_size[0]), torch.arange(window_size[1]), indexing="ij")
-        coords = torch.stack(grid)  # 2, Wh, Ww
-        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
-        relative_coords[:, :, 1] += window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * window_size[1] - 1
-        relative_position_index = torch.zeros(size=(window_area + 1,) * 2, dtype=relative_coords.dtype)
-        relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
-        relative_position_index[0, 0:] = num_relative_distance - 3
-        relative_position_index[0:, 0] = num_relative_distance - 2
-        relative_position_index[0, 0] = num_relative_distance - 1
-        return relative_position_index
-
-    def forward(self, window_size, interpolate_pos_encoding: bool = False, dim_size=None) -> torch.Tensor:
-        """
-        Modification of timm.models.internvl_vision.py: Attention._get_rel_pos_bias to support arbitrary window sizes.
-        """
-        old_height = 2 * self.window_size[0] - 1
-        old_width = 2 * self.window_size[1] - 1
-
-        new_height = 2 * window_size[0] - 1
-        new_width = 2 * window_size[1] - 1
-
-        old_relative_position_bias_table = self.relative_position_bias_table
-
-        old_num_relative_distance = self.num_relative_distance
-        new_num_relative_distance = new_height * new_width + 3
-
-        old_sub_table = old_relative_position_bias_table[: old_num_relative_distance - 3]
-
-        old_sub_table = old_sub_table.reshape(1, old_width, old_height, -1).permute(0, 3, 1, 2)
-        new_sub_table = nn.functional.interpolate(
-            old_sub_table, size=(torch_int(new_height), torch_int(new_width)), mode="bilinear"
-        )
-        new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
-
-        new_relative_position_bias_table = torch.cat(
-            [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3 :]]
-        )
-
-        relative_position_index = self.generate_relative_position_index(window_size)
-        relative_position_bias = new_relative_position_bias_table[relative_position_index.view(-1)]
-
-        # patch_size*num_patches_height, patch_size*num_patches_width, num_attention_heads
-        relative_position_bias = relative_position_bias.view(
-            window_size[0] * window_size[1] + 1, window_size[0] * window_size[1] + 1, -1
-        )
-        # num_attention_heads, patch_size*num_patches_width, patch_size*num_patches_height
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
-
-        if interpolate_pos_encoding:
-            relative_position_bias = nn.functional.interpolate(
-                relative_position_bias.unsqueeze(1),
-                size=(dim_size, dim_size),
-                mode="bilinear",
-                align_corners=False,
-            ).squeeze(1)
-
-        return relative_position_bias.unsqueeze(0)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -148,7 +64,6 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     scaling: float,
-    head_mask: Optional[torch.Tensor] = None,
     dropout: float = 0.0,
     **kwargs,
 ):
@@ -162,9 +77,6 @@ def eager_attention_forward(
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    # Mask heads if we want to
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -172,7 +84,7 @@ def eager_attention_forward(
 
 
 class InternVLVisionSelfAttention(nn.Module):
-    def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -193,77 +105,45 @@ class InternVLVisionSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-        self.has_relative_position_bias = bool(window_size)
-        if self.has_relative_position_bias:
-            self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, self.num_attention_heads, self.attention_head_size)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.query(hidden_states).view(hidden_shape).permute(0, 2, 1, 3)
+        key_layer = self.key(hidden_states).view(hidden_shape).permute(0, 2, 1, 3)
+        value_layer = self.value(hidden_states).view(hidden_shape).permute(0, 2, 1, 3)
 
-        attn_bias = None
-        if self.has_relative_position_bias:
-            height, width = resolution
-            window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            attn_bias = self.relative_position_bias(
-                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
-            )
-
-        # Add shared relative position bias if provided.
-        if relative_position_bias is not None:
-            if attn_bias is None:
-                attn_bias = relative_position_bias
-            else:
-                attn_bias += relative_position_bias
+        attention_mask = None
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and (output_attentions or head_mask is not None):
+            if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
                     "`sdpa` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
-                    "support `output_attentions=True` or `head_mask`. Falling back to the eager implementation, "
+                    "support `output_attentions=True`. Falling back to the eager implementation, "
                     "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                     'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            elif self.config._attn_implementation == "flash_attention_2" and head_mask is not None:
-                logger.warning_once(
-                    "`flash_attention_2` is used but it does not support `head_mask`. Falling back to the eager implementation, "
-                    "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                    'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
             query_layer,
             key_layer,
             value_layer,
-            attn_bias,
+            attention_mask,
             output_attentions=output_attentions,
-            head_mask=head_mask,
             dropout=0.0 if not self.training else self.config.attention_probs_dropout_prob,
             scaling=self.scaling,
             is_causal=self.is_causal,  # Force to `self.is_causal` for SDPA
@@ -331,40 +211,6 @@ class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class InternVLVisionDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
 
 
 class InternVLVisionPatchEmbeddings(nn.Module):
@@ -527,42 +373,17 @@ class InternVLVisionSelfOutput(nn.Module):
 
 
 class InternVLVisionAttention(nn.Module):
-    def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
-        self.attention = InternVLVisionSelfAttention(config, window_size=window_size)
+        self.attention = InternVLVisionSelfAttention(config)
         self.output = InternVLVisionSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        self_outputs = self.attention(
-            hidden_states, head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
-        )
+        self_outputs = self.attention(hidden_states, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -602,17 +423,14 @@ class InternVLVisionOutput(nn.Module):
 class InternVLVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(
-        self, config: InternVLVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0
-    ) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = InternVLVisionAttention(config, window_size=window_size)
+        self.attention = InternVLVisionAttention(config)
         self.intermediate = InternVLVisionIntermediate(config)
         self.output = InternVLVisionOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.drop_path = InternVLVisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
@@ -625,19 +443,11 @@ class InternVLVisionLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
-            head_mask,
             output_attentions=output_attentions,
-            relative_position_bias=relative_position_bias,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            resolution=resolution,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -647,7 +457,7 @@ class InternVLVisionLayer(nn.Module):
             attention_output = self.lambda_1 * attention_output
 
         # first residual connection
-        hidden_states = self.drop_path(attention_output) + hidden_states
+        hidden_states = attention_output + hidden_states
 
         # in InternVLVision, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -659,7 +469,7 @@ class InternVLVisionLayer(nn.Module):
             layer_output = self.lambda_2 * layer_output
 
         # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
+        layer_output = layer_output + hidden_states
 
         outputs = (layer_output,) + outputs
 
@@ -667,35 +477,17 @@ class InternVLVisionLayer(nn.Module):
 
 
 class InternVLVisionEncoder(nn.Module):
-    def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.has_relative_position_bias = config.use_shared_relative_position_bias
-        if self.has_relative_position_bias:
-            self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
-
-        # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layer = nn.ModuleList(
-            [
-                InternVLVisionLayer(
-                    config,
-                    window_size=window_size if config.use_relative_position_bias else None,
-                    drop_path_rate=dpr[i],
-                )
-                for i in range(config.num_hidden_layers)
-            ]
-        )
+        self.layer = nn.ModuleList([InternVLVisionLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        interpolate_pos_encoding: bool = False,
-        resolution: Optional[Tuple[int, int]] = None,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -705,36 +497,12 @@ class InternVLVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.has_relative_position_bias:
-                height, width = resolution
-                window_size = (height // self.config.patch_size, width // self.config.patch_size)
-                relative_position_bias = self.relative_position_bias(
-                    window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=hidden_states.shape[1]
-                )
-            else:
-                relative_position_bias = None
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
+                    layer_module.__call__, hidden_states, output_attentions
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                    relative_position_bias,
-                    interpolate_pos_encoding,
-                    resolution,
-                )
+                layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -751,25 +519,6 @@ class InternVLVisionEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-class InternVLVisionPooler(nn.Module):
-    def __init__(self, config: InternVLVisionConfig) -> None:
-        super().__init__()
-        self.layernorm = (
-            nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.layernorm is not None:
-            # Mean pool the final hidden states of the patch tokens
-            patch_tokens = hidden_states[:, 1:, :]
-            pooled_output = self.layernorm(patch_tokens.mean(1))
-        else:
-            # Pool by simply taking the final hidden state of the [CLS] token
-            pooled_output = hidden_states[:, 0]
-
-        return pooled_output
 
 
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
@@ -793,21 +542,12 @@ INTERNVL_VISION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`InternVLVisionImageProcessor.__call__`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -816,37 +556,24 @@ INTERNVL_VISION_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare InternVLVision Model transformer outputting raw hidden-states without any specific head on top.",
     INTERNVL_VISION_START_DOCSTRING,
-    """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-                Whether or not to apply pooling layer.
-    """,
 )
 class InternVLVisionModel(InternVLVisionPreTrainedModel):
-    def __init__(self, config: InternVLVisionConfig, add_pooling_layer: bool = True) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__(config)
         self.config = config
 
         self.embeddings = InternVLVisionEmbeddings(config)
-        self.encoder = InternVLVisionEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
+        self.encoder = InternVLVisionEncoder(config)
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         )
-        self.pooler = InternVLVisionPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -860,10 +587,8 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
@@ -876,36 +601,23 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            resolution=resolution,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            head_outputs = (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
         return InternVLVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1109,7 +821,7 @@ INTERNVL_INPUTS_DOCSTRING = r"""
 class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
-        self.vision_tower = InternVLVisionModel(config.vision_config, add_pooling_layer=False)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = InternVLMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size

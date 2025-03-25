@@ -226,7 +226,6 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
-        print("processor", processor)
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )

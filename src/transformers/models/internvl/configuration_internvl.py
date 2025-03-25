@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,14 +55,8 @@ class InternVLVisionConfig(PretrainedConfig):
             Whether to use a mask token for masked image modeling.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use BERT-style absolute position embeddings.
-        use_relative_position_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use T5-style relative position embeddings in the self-attention layers.
-        use_shared_relative_position_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use the same relative position embeddings across all self-attention layers of the Transformer.
         layer_scale_init_value (`float`, *optional*, defaults to 0.1):
             Scale to use in the self-attention layers. 0.1 for base, 1e-5 for large. Set 0 to disable layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
@@ -101,10 +95,7 @@ class InternVLVisionConfig(PretrainedConfig):
         num_channels=3,
         use_mask_token=False,
         use_absolute_position_embeddings=True,
-        use_relative_position_bias=False,
-        use_shared_relative_position_bias=False,
         layer_scale_init_value=0.1,
-        drop_path_rate=0.1,
         use_mean_pooling=True,
         **kwargs,
     ):
@@ -125,10 +116,7 @@ class InternVLVisionConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.use_mask_token = use_mask_token
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
-        self.use_relative_position_bias = use_relative_position_bias
-        self.use_shared_relative_position_bias = use_shared_relative_position_bias
         self.layer_scale_init_value = layer_scale_init_value
-        self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
 
 
@@ -192,52 +180,18 @@ class InternVLConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_layer = vision_feature_layer
 
-        if vision_config is None:
-            self.vision_config = InternVLVisionConfig(
-                attention_probs_dropout_prob=0.0,
-                drop_path_rate=0.0,
-                hidden_dropout_prob=0.0,
-                hidden_act="gelu",
-                hidden_size=1024,
-                image_size=448,
-                layer_scale_init_value=1.0,
-                initializer_range=0.02,
-                intermediate_size=4096,
-                layer_norm_eps=1e-06,
-                num_attention_heads=16,
-                num_channels=3,
-                num_hidden_layers=24,
-                patch_size=14,
-                use_absolute_position_embeddings=True,
-                _attn_implementation="eager",
-            )
-        elif isinstance(vision_config, dict):
+        if isinstance(vision_config, dict):
             self.vision_config = InternVLVisionConfig(**vision_config)
         elif isinstance(vision_config, InternVLVisionConfig):
             self.vision_config = vision_config
+        elif vision_config is None:
+            self.vision_config = InternVLVisionConfig()
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"](
-                _attn_implementation="eager",
-                bos_token_id=151643,
-                eos_token_id=151645,
-                hidden_act="silu",
-                hidden_size=896,
-                initializer_range=0.02,
-                intermediate_size=4864,
-                max_position_embeddings=32768,
-                max_window_layers=21,
-                num_attention_heads=14,
-                num_hidden_layers=24,
-                num_key_value_heads=2,
-                rms_norm_eps=1e-06,
-                rope_theta=1000000.0,
-                torch_dtype="bfloat16",
-                vocab_size=151674,
-            )
+            text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
 

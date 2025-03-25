@@ -45,6 +45,7 @@ LM_TYPE_CORRESPONDENCE = {
 
 UNNECESSARY_CONFIG_KEYS = [
     "_name_or_path",
+    "_attn_implementation_autoset",
     "auto_map",
     "use_bfloat16",
     "use_flash_attn",
@@ -182,8 +183,6 @@ def get_internvl_config(input_base_path):
         text_config=language_config_class(**llm_config),
         vision_config=InternVLVisionConfig(**vision_config),
         image_token_index=image_token_index,
-        # force default attention implementation to eager as the original model doesn't use sdpa
-        attn_implementation="eager",
     )
 
 
@@ -287,23 +286,23 @@ def write_model(
     if push_to_hub:
         processor.push_to_hub(hub_dir, use_temp_dir=True)
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-                {"type": "text", "text": "Please describe the image shortly."},
-            ],
-        }
-    ]
-    inputs = processor.apply_chat_template(
-        messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-    ).to(model.device, torch.bfloat16)
+    # messages = [
+    #     {
+    #         "role": "user",
+    #         "content": [
+    #             {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+    #             {"type": "text", "text": "Please describe the image shortly."},
+    #         ],
+    #     }
+    # ]
+    # inputs = processor.apply_chat_template(
+    #     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+    # ).to(model.device, torch.bfloat16)
 
-    output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
-    decoded_output = processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True)
+    # output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
+    # decoded_output = processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True)
 
-    print("Decoded output:", decoded_output)
+    # print("Decoded output:", decoded_output)
     # expected_output = "The image shows two cats lying on a pink couch. One cat is curled up with its head resting on the couch, while the other is lying on its side with its head on the pink surface. There are two remote controls placed on the couch next to the cats."
     # assert decoded_output == expected_output
     print("Model reloaded successfully.")
@@ -374,7 +373,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="InternVLTest-8B",
+        default="InternVLTest-8B-sdpa",
         help="Location to write HF model and processors",
     )
     parser.add_argument(
