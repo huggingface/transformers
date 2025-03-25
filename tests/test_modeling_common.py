@@ -3743,9 +3743,8 @@ class ModelTesterMixin:
                     else:
                         input_data_batch_size = batch_size
 
-                    decoder_input_ids = inputs_dict.get(
-                        "decoder_input_ids", processed_inputs[model.main_input_name]
-                    )[:input_data_batch_size]
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", processed_inputs[model.main_input_name])
+                    decoder_input_ids = decoder_input_ids[:input_data_batch_size]
                     if decoder_input_ids.shape[0] != input_data_batch_size:
                         extension = torch.ones(
                             input_data_batch_size - decoder_input_ids.shape[0],
@@ -3775,10 +3774,7 @@ class ModelTesterMixin:
                     if "attention_mask" in inspect.signature(model_eager.forward).parameters:
                         processed_inputs["attention_mask"] = dummy_attention_mask
 
-                    if (
-                        self.has_attentions
-                        and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                    ):
+                    if self.has_attentions and "output_attentions" in inspect.signature(model_sdpa.forward).parameters:
                         processed_inputs["output_attentions"] = output_attentions
                 if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
                     dummy_mask = torch.ones((self.model_tester.num_masks,))
