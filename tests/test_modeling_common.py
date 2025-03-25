@@ -3684,22 +3684,15 @@ class ModelTesterMixin:
                     if torch.is_floating_point(value):
                         value = value.to(torch_dtype)
 
-                    if value.shape[0] != input_data_batch_size:
+                    # extend value to have at least `input_data_batch_size` elements
+                    if value.shape[0] < input_data_batch_size:
+                        size = (input_data_batch_size - value.shape[0], *value.shape[1:])
                         if torch.is_floating_point(value):
-                            extension = torch.rand(
-                                input_data_batch_size - value.shape[0],
-                                *value.shape[1:],
-                                dtype=value.dtype,
-                                device=torch_device,
-                            )
+                            extension = torch.rand(size=size, dtype=value.dtype, device=torch_device)
                         else:
-                            extension = torch.randint(
-                                high=5,
-                                size=(input_data_batch_size - value.shape[0], *value.shape[1:]),
-                                dtype=value.dtype,
-                                device=torch_device,
-                            )
-                    value = torch.cat((value, extension), dim=0).to(torch_device)
+                            extension = torch.randint(high=5, size=size, dtype=value.dtype, device=torch_device)
+                        value = torch.cat((value, extension), dim=0).to(torch_device)
+
                     processed_inputs[key] = value[:input_data_batch_size]
 
                 if not use_attention_mask:
@@ -3715,16 +3708,13 @@ class ModelTesterMixin:
                             seqlen = processed_inputs[model.main_input_name].shape[-1]
                         dummy_attention_mask = torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
 
-                    dummy_attention_mask = dummy_attention_mask[:batch_size]
-                    if dummy_attention_mask.shape[0] != batch_size:
-                        extension = torch.ones(
-                            batch_size - dummy_attention_mask.shape[0],
-                            *dummy_attention_mask.shape[1:],
-                            dtype=dummy_attention_mask.dtype,
-                            device=torch_device,
-                        )
+                    # extend dummy_attention_mask to have at least `batch_size` elements
+                    if dummy_attention_mask.shape[0] < batch_size:
+                        size = (batch_size - dummy_attention_mask.shape[0], *dummy_attention_mask.shape[1:])
+                        extension = torch.ones(size=size, dtype=dummy_attention_mask.dtype, device=torch_device)
                         dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                        dummy_attention_mask = dummy_attention_mask.to(torch_device)
+
+                    dummy_attention_mask = dummy_attention_mask[:batch_size].to(torch_device)
 
                     dummy_attention_mask[:] = 1
                     if padding_side == "left":
