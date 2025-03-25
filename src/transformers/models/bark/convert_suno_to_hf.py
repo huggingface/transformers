@@ -190,12 +190,12 @@ def load_model(pytorch_dump_folder_path, use_small=False, model_type="text"):
         output_new_model = output_new_model_total.logits[:, [-1], :]
 
     else:
-        prediction_codeboook_channel = 3
+        prediction_codebook_channel = 3
         n_codes_total = 8
         vec = torch.randint(256, (batch_size, sequence_length, n_codes_total), dtype=torch.int)
 
-        output_new_model_total = model(prediction_codeboook_channel, vec)
-        output_old_model = bark_model(prediction_codeboook_channel, vec)
+        output_new_model_total = model(prediction_codebook_channel, vec)
+        output_old_model = bark_model(prediction_codebook_channel, vec)
 
         output_new_model = output_new_model_total.logits
 
