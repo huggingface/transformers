@@ -773,7 +773,7 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_quantized
+    is_meta_state_dict = shard_file.endswith(".safetensors")# and not is_quantized
 
     file_pointer = None
     if is_meta_state_dict:
@@ -789,7 +789,7 @@ def _load_state_dict_into_meta_model(
             serialized_param_name = reverse_renaming_mapping[param_name]
             param = file_pointer.get_slice(serialized_param_name)
         else:
-            param = empty_param  # It is actually not empty!
+            param = empty_param.to(tensor_device)  # It is actually not empty!
 
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
@@ -1362,8 +1362,10 @@ def _get_device_map(
             max_memory = hf_quantizer.adjust_max_memory(max_memory)
         device_map_kwargs["max_memory"] = max_memory
 
+        print(device_map)
         device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
-
+        print(device_map)
+        exit(0)
         if hf_quantizer is not None:
             hf_quantizer.validate_environment(device_map=device_map)
 
@@ -4145,11 +4147,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
             tp_device = torch.device(device_type, torch.cuda.current_device())
-            if tp_device.index > 0:
-                import sys
-                sys.stdout = open(os.devnull, "w")
+            # if tp_device.index > 0:
+            #     import sys
+            #     sys.stdout = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
+            print("DEVICE MAP:", device_map)
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
@@ -5030,7 +5033,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
-                f" initializing {model.__class__.__name__}: {update_key_name(unexpected_keys)}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__}: {"\n\t".join(update_key_name(unexpected_keys))}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
                 " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
                 " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
@@ -5041,8 +5044,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
-                f" {pretrained_model_name_or_path} and are newly initialized: {update_key_name(missing_keys)}\nYou should probably"
+                f"\nSome weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {"\n\t".join(update_key_name(missing_keys))}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
@@ -5060,7 +5063,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f"\nSome weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
                 " to use it for predictions and inference."

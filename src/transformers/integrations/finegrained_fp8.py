@@ -291,7 +291,7 @@ def w8a8_block_fp8_matmul_compile(
     return output.to(output_dtype)
 
 
-class FP8Linear(nn.Module):
+class FP8Linear(nn.Linear):
     dtype = torch.float8_e4m3fn
 
     def __init__(
@@ -304,11 +304,11 @@ class FP8Linear(nn.Module):
         device=None,
         activation_scheme="dynamic",
     ):
-        super().__init__()
+        super().__init__(in_features,out_features)
         self.in_features = in_features
         self.out_features = out_features
 
-        self.register_buffer("weight", torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
+        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
 
         scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
         scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
@@ -404,7 +404,7 @@ def replace_with_fp8_linear(
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
-
+    print(modules_to_not_convert)
     model, has_been_replaced = _replace_with_fp8_linear(
         model,
         modules_to_not_convert=modules_to_not_convert,
