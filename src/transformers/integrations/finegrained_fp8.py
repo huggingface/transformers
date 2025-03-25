@@ -334,7 +334,7 @@ class FP8Linear(nn.Linear):
                 qinput, scale = act_quant(input, self.block_size[1])
             # Blocks the CPU until all CUDA operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
-            torch.cuda.synchronize(device=input.device)
+            # torch.cuda.synchronize(device=self.weight.device)
             with torch.cuda.device(input.device):
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
@@ -344,7 +344,7 @@ class FP8Linear(nn.Linear):
                     self.block_size,
                     output_dtype=input.dtype,
                 )
-            torch.cuda.synchronize(device=input.device)
+            # torch.cuda.synchronize(device=self.weight.device)
             if self.bias is not None:
                 output = output + self.bias
             return output.to(dtype=input.dtype)
