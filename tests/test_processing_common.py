@@ -1252,7 +1252,7 @@ class ProcessorTesterMixin:
 
     @require_torch
     @require_librosa
-    def test_audiO_chat_template_dict_torch(self):
+    def test_audio_chat_template_dict_torch(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")

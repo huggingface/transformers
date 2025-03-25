@@ -943,6 +943,7 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        possible_modality_keywords = {"text", "audio", "videos", "images"}
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
@@ -1000,7 +1001,7 @@ class ProcessorMixin(PushToHubMixin):
                 if key not in used_keys:
                     if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
                         output_kwargs["common_kwargs"][key] = kwargs[key]
-                    else:
+                    elif key not in possible_modality_keywords:
                         logger.warning_once(
                             f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                         )

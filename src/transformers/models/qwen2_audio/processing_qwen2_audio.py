@@ -60,6 +60,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
+    valid_kwargs = ["chat_template", "audio_token", "audio_bos_token", "audio_eos_token"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
@@ -84,8 +85,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio: Union[np.ndarray, List[np.ndarray]] = None,
-        videos=None,
-        images=None,
         audios=None,  # kept for BC
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
@@ -208,6 +207,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
 
     @property
+    # NOTE: we don't have default templates anymore, and the below is kept only because the hub config is not yet updated!
     def default_chat_template(self):
         """
         This default vicuna template formats inputs in the form of a chat history. For each message in the chat history:
