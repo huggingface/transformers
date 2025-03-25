@@ -388,8 +388,12 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         if min_pixels is not None:
             size["shortest_edge"] = min_pixels
+        elif self.min_pixels is not None:
+            size["shortest_edge"] = self.min_pixels
         if max_pixels is not None:
             size["longest_edge"] = max_pixels
+        elif self.max_pixels is not None:
+            size["longest_edge"] = self.max_pixels
 
         do_resize = do_resize if do_resize is not None else self.do_resize
 
