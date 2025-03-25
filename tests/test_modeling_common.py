@@ -3681,19 +3681,17 @@ class ModelTesterMixin:
                     processed_inputs[key] = inputs_dict[key]
 
                 for key, value in processed_inputs.items():
-                    if value.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                        processed_inputs[key] = value.to(torch_dtype)
+                    if torch.is_floating_point(value):
+                        value = value.to(torch_dtype)
 
-                    value = value[:input_data_batch_size]
                     if value.shape[0] != input_data_batch_size:
-                        if value.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                        if torch.is_floating_point(value):
                             extension = torch.rand(
                                 input_data_batch_size - value.shape[0],
                                 *value.shape[1:],
-                                dtype=torch_dtype,
+                                dtype=value.dtype,
                                 device=torch_device,
                             )
-                            value = torch.cat((value, extension), dim=0).to(torch_device)
                         else:
                             extension = torch.randint(
                                 high=5,
@@ -3701,8 +3699,8 @@ class ModelTesterMixin:
                                 dtype=value.dtype,
                                 device=torch_device,
                             )
-                            value = torch.cat((value, extension), dim=0).to(torch_device)
-                    processed_inputs[key] = value
+                    value = torch.cat((value, extension), dim=0).to(torch_device)
+                    processed_inputs[key] = value[:input_data_batch_size]
 
                 if not use_attention_mask:
                     dummy_attention_mask = None
