@@ -3802,6 +3802,10 @@ class ModelTesterMixin:
                         enable_mem_efficient=enable_kernels,
                     ):
                         prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                        prepared_inputs = {
+                            k: v.to(torch_device) if isinstance(v, torch.Tensor) else v
+                            for k, v in prepared_inputs.items()
+                        }
                         outputs_eager = model_eager(**prepared_inputs)
                         outputs_sdpa = model_sdpa(**prepared_inputs)
 
