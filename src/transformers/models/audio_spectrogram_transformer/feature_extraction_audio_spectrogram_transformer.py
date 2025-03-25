@@ -101,6 +101,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
                 triangularize_in_mel_space=True,
             )
 
+            self.mel_filters = mel_filters
             self.window = window_function(400, "hann", periodic=False)
 
     def _extract_fbank_features(

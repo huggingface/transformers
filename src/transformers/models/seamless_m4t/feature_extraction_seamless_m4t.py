@@ -84,6 +84,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             triangularize_in_mel_space=True,
         )
 
+        self.mel_filters = mel_filters
         self.window = window_function(400, "povey", periodic=False)
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
