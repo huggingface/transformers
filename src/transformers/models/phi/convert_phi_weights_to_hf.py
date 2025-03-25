@@ -121,7 +121,7 @@ def convert_phi_weights(
             if model_path.endswith("safetensors"):
                 loaded_weights = safetensors.torch.load_file(model_path, device=device)
             else:
-                loaded_weights = torch.load(model_path, map_location=device)
+                loaded_weights = torch.load(model_path, map_location=device, weights_only=True)
             model_checkpoint.update(**loaded_weights)
 
         model_type = model_name.split("/")[1]  # phi-1 or phi-1_5 or phi-2

@@ -113,7 +113,7 @@ if is_torch_available():
             with FileLock(lock_path):
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
-                    self.features = torch.load(cached_features_file)
+                    self.features = torch.load(cached_features_file, weights_only=True)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
                     label_list = processor.get_labels()
