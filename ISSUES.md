@@ -263,9 +263,9 @@ You are not required to read the following guidelines before opening an issue. H
     But if you're replying to a comment that happened some comments back it's always a good practice to quote just the relevant lines you're replying it. The `>` is used for quoting, or you can always use the menu to do so. For example your editor box will look like:
 
     ```
-    > How big is your gpu cluster?
+    > How big is your GPU cluster?
 
-    Our cluster is made of 256 gpus.
+    Our cluster is made of 256 GPUs.
     ```
 
     If you are addressing multiple comments, quote the relevant parts of each before your answer. Some people use the same comment to do multiple replies, others separate them into separate comments. Either way works. The latter approach helps for linking to a specific comment.
