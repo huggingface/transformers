@@ -1402,7 +1402,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1457,7 +1457,12 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                pooled_logits=pooled_logits,
+                config=self.config,
+            )
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1514,7 +1519,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
