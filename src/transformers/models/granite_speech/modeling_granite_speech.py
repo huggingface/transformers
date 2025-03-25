@@ -800,7 +800,6 @@ class GraniteSpeechCTCModel(nn.Module):
                     attn_dropout=config.dropout,
                     ff_dropout=config.dropout,
                     conv_dropout=config.dropout,
-                    use_max_pos_emb_in_pos_emb_calc=config.use_max_pos_emb_in_pos_emb_calc,
                 )
                 for layer_idx in range(config.num_layers)
             ]
@@ -888,7 +887,6 @@ class GraniteSpeechConformerAttention(nn.Module):
         dropout=0.0,
         context_size=200,
         max_pos_emb=512,
-        use_max_pos_emb_in_pos_emb_calc=True,
     ):
         super().__init__()
         inner_dim = dim_head * heads
@@ -903,7 +901,6 @@ class GraniteSpeechConformerAttention(nn.Module):
         self.rel_pos_emb = nn.Embedding(2 * max_pos_emb + 1, dim_head)
 
         self.dropout = nn.Dropout(dropout)
-        self.offset = max_pos_emb if use_max_pos_emb_in_pos_emb_calc else context_size
 
     def forward(self, x, context_size):
         device, h, max_pos_emb = x.device, self.heads, self.max_pos_emb
@@ -924,7 +921,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         # shaw's relative positional embedding
         seq = torch.arange(context_size, device=device)
         dist = seq.view(-1, 1) - seq.view(1, -1)
-        dist = torch.clamp(dist, -context_size, context_size) + self.offset
+        dist = torch.clamp(dist, -context_size, context_size) + max_pos_emb
         rel_pos_emb = self.rel_pos_emb(dist).to(q)
         pos_attn = einsum("b m h c d, c r d -> b m h c r", q, rel_pos_emb) * self.scale
         dots = dots + pos_attn
@@ -998,7 +995,6 @@ class GraniteSpeechConformerBlock(nn.Module):
         attn_dropout=0.0,
         ff_dropout=0.0,
         conv_dropout=0.0,
-        use_max_pos_emb_in_pos_emb_calc=True,
     ):
         super().__init__()
         self.ff1 = GraniteSpeechConformerFeedForward(dim=dim, mult=ff_mult, dropout=ff_dropout)
@@ -1008,7 +1004,6 @@ class GraniteSpeechConformerBlock(nn.Module):
             heads=heads,
             dropout=attn_dropout,
             context_size=context_size,
-            use_max_pos_emb_in_pos_emb_calc=use_max_pos_emb_in_pos_emb_calc,
         )
         self.conv = GraniteSpeechConformerConvModule(
             dim=dim,
