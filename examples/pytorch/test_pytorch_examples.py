@@ -667,7 +667,7 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --do_eval
-            --evaluation_strategy epoch
+            --eval_strategy epoch
             --seed 32
         """.split()
 
