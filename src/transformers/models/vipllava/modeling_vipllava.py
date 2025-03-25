@@ -263,16 +263,14 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
     VIPLLAVA_START_DOCSTRING,
 )
 class VipLlavaModel(VipLlavaPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = VipLlavaMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
-
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -396,17 +394,22 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The AriaMultiModalProjector model which consists of a vision backbone and a language model.""",
+    """The VipLlavaForConditionalGeneration model which consists of a vision backbone and a language model.""",
     VIPLLAVA_START_DOCSTRING,
 )
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.model = VipLlavaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -420,12 +423,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

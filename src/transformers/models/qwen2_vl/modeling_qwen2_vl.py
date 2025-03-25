@@ -967,7 +967,7 @@ QWEN2VL_START_DOCSTRING = r"""
 )
 class Qwen2VLPreTrainedModel(PreTrainedModel):
     config_class = Qwen2VLConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -1453,10 +1453,12 @@ QWEN2_VL_INPUTS_DOCSTRING = r"""
 
 
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
+    _key_mapping = {"model": "language_model"}
+
     def __init__(self, config: Qwen2VLConfig):
         super().__init__(config)
         self.visual = Qwen2VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.language_model = Qwen2VLTextModel._from_config(config.text_config)
+        self.language_model = Qwen2VLTextModel(config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1731,6 +1733,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
 
 class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "model": "model.language_model",
+        "visual": "model.visual",
+    }
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

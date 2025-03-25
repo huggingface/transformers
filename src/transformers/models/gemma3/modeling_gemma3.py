@@ -44,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
 
@@ -527,7 +527,7 @@ GEMMA3_START_DOCSTRING = r"""
 )
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
-    base_model_prefix = "language_model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -918,7 +918,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = Gemma3TextConfig
-    base_model_prefix = "language_model"
+    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -1147,16 +1147,15 @@ class Gemma3MultiModalProjector(nn.Module):
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3Model(Gemma3PreTrainedModel, GenerationMixin):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = Gemma3MultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
-        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
-
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
+        language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
@@ -1362,13 +1361,18 @@ class Gemma3Model(Gemma3PreTrainedModel, GenerationMixin):
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         self.model = Gemma3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1378,10 +1382,10 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
@@ -1549,4 +1553,10 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Gemma3PreTrainedModel", "Gemma3TextModel", "Gemma3ForCausalLM", "Gemma3ForConditionalGeneration"]
+__all__ = [
+    "Gemma3PreTrainedModel",
+    "Gemma3TextModel",
+    "Gemma3ForCausalLM",
+    "Gemma3ForConditionalGeneration",
+    "Gemma3Model",
+]

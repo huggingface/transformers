@@ -357,6 +357,10 @@ GOT_OCR2_INPUTS_DOCSTRING = r"""
 
 
 class GotOcr2Model(LlavaModel):
+    def __init__(self, config: GotOcr2Config):
+        super().__init__(config)
+        self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -494,5 +498,6 @@ __all__ = [
     "GotOcr2VisionConfig",
     "GotOcr2Config",
     "GotOcr2PreTrainedModel",
+    "GotOcr2Model",
     "GotOcr2ForConditionalGeneration",
 ]

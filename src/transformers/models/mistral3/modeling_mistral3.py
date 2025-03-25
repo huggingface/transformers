@@ -338,16 +338,14 @@ MISTRAL3_INPUTS_DOCSTRING = r"""
     MISTRAL3_START_DOCSTRING,
 )
 class Mistral3Model(Mistral3PreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = Mistral3MultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
-
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -484,17 +482,22 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """The AriaMultiModalProjector model which consists of a vision backbone and a language model.""",
+    """The Mistral3ForConditionalGeneration model which consists of a vision backbone and a language model.""",
     MISTRAL3_START_DOCSTRING,
 )
 class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.model = Mistral3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -508,12 +511,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(MISTRAL3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Mistral3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -670,4 +667,4 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
         return model_inputs
 
 
-__all__ = ["Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]
+__all__ = ["Mistral3Model", "Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]

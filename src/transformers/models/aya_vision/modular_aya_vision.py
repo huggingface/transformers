@@ -288,4 +288,4 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
 
-__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"]
+__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel", "AyaVisionModel"]

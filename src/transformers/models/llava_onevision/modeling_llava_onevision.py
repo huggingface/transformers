@@ -12,11 +12,13 @@ import numpy as np
 import torch
 from torch import nn
 
+from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, is_torchdynamo_compiling, is_torchvision_v2_available
+from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
 
 
@@ -166,6 +168,28 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+
+class LlavaOnevisionMultiModalProjector(nn.Module):
+    def __init__(self, config: LlavaOnevisionConfig):
+        super().__init__()
+        # We have hidden_size * the number of vision feature layers
+        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size * num_feature_layers,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
+        )
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        )
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -360,8 +384,20 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
     LLAVA_ONEVISION_START_DOCSTRING,
 )
 class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config):
-        pass
+        super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+
+        self.multi_modal_projector = LlavaOnevisionMultiModalProjector(config)
+        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
+
+        self.vocab_size = config.text_config.vocab_size
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -698,13 +734,19 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     LLAVA_ONEVISION_START_DOCSTRING,
 )
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "image_newline": "model.image_newline",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         self.model = LlavaOnevisionModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -718,12 +760,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(

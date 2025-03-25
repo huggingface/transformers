@@ -657,7 +657,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = AriaConfig
+    config_class = AriaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
@@ -706,14 +706,14 @@ ARIA_TEXT_START_DOCSTRING = r"""
     ARIA_TEXT_START_DOCSTRING,
 )
 class AriaPreTrainedModel(PreTrainedModel):
-    config_class = AriaTextConfig
-    base_model_prefix = "model"
+    config_class = AriaConfig
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["AriaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
@@ -1160,7 +1160,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = AriaTextConfig
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1411,11 +1410,7 @@ ARIA_START_DOCSTRING = r"""
     ARIA_START_DOCSTRING,
 )
 class AriaModel(AriaPreTrainedModel):
-    config_class = AriaConfig
-    _supports_flash_attn_2 = False
-    _supports_flex_attn = False
-    _supports_sdpa = False
-    base_model_prefix = ""
+    _key_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
@@ -1575,11 +1570,12 @@ class AriaModel(AriaPreTrainedModel):
     ARIA_START_DOCSTRING,
 )
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
-    config_class = AriaConfig
-    _supports_flash_attn_2 = False
-    _supports_flex_attn = False
-    _supports_sdpa = False
-    base_model_prefix = ""
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
@@ -1601,12 +1597,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1769,5 +1759,6 @@ __all__ = [
     "AriaPreTrainedModel",
     "AriaTextPreTrainedModel",
     "AriaTextModel",
+    "AriaModel",
     "AriaTextForCausalLM",
 ]

@@ -23,9 +23,9 @@ from torch import nn
 
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    BaseModelOutputWithPast,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -40,7 +40,7 @@ from .configuration_paligemma import PaliGemmaConfig
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 
 
 logger = logging.get_logger(__name__)
@@ -224,7 +224,7 @@ PALIGEMMA_START_DOCSTRING = r"""
 )
 class PaliGemmaPreTrainedModel(PreTrainedModel):
     config_class = PaliGemmaConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
@@ -331,16 +331,15 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     PALIGEMMA_START_DOCSTRING,
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel, GenerationMixin):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
-        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
-
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
+        language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
@@ -556,13 +555,18 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel, GenerationMixin):
     PALIGEMMA_START_DOCSTRING,
 )
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.model = PaliGemmaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -572,10 +576,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
@@ -742,4 +746,4 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         return model_inputs
 
 
-__all__ = ["PaliGemmaForConditionalGeneration", "PaliGemmaPreTrainedModel"]
+__all__ = ["PaliGemmaForConditionalGeneration", "PaliGemmaPreTrainedModel", "PaliGemmaModel"]

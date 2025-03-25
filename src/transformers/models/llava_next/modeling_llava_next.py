@@ -390,6 +390,8 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
     LLAVA_NEXT_START_DOCSTRING,
 )
 class LlavaNextModel(LlavaNextPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -400,9 +402,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -652,13 +651,19 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
     LLAVA_NEXT_START_DOCSTRING,
 )
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "image_newline": "model.image_newline",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.model = LlavaNextModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -672,12 +677,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -836,4 +835,4 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         return model_inputs
 
 
-__all__ = ["LlavaNextForConditionalGeneration", "LlavaNextPreTrainedModel"]
+__all__ = ["LlavaNextForConditionalGeneration", "LlavaNextPreTrainedModel", "LlavaNextModel"]

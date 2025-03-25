@@ -299,6 +299,8 @@ AYA_VISION_INPUTS_DOCSTRING = """
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionModel(AyaVisionPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -468,6 +470,13 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
+
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
         self.model = AyaVisionModel(config)
@@ -488,12 +497,6 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(AYA_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AyaVisionCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -659,4 +662,4 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         return model_inputs
 
 
-__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"]
+__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel", "AyaVisionModel"]

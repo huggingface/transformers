@@ -504,7 +504,7 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "language_model"
+    base_model_prefix = ""
     _no_split_modules = [
         "Gemma3DecoderLayer",
         "SiglipVisionEmbeddings",
@@ -686,7 +686,7 @@ class Gemma3TextModel(Gemma2Model):
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config_class = Gemma3TextConfig
-    base_model_prefix = "language_model"
+    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -1075,4 +1075,5 @@ __all__ = [
     "Gemma3TextModel",
     "Gemma3ForCausalLM",
     "Gemma3ForConditionalGeneration",
+    "Gemma3Model",
 ]

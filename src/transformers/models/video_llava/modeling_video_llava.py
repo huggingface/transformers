@@ -171,7 +171,7 @@ VIDEO_LLAVA_START_DOCSTRING = r"""
 )
 class VideoLlavaPreTrainedModel(PreTrainedModel):
     config_class = VideoLlavaConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -287,6 +287,8 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
     VIDEO_LLAVA_START_DOCSTRING,
 )
 class VideoLlavaModel(VideoLlavaPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
         self.video_tower = AutoModel.from_config(config.vision_config)
@@ -295,9 +297,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self.multi_modal_projector = VideoLlavaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -306,18 +305,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def get_image_features(
         self,
@@ -506,13 +493,19 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     VIDEO_LLAVA_START_DOCSTRING,
 )
 class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "image_tower": "model.image_tower",
+        "video_tower": "model.video_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
         self.model = VideoLlavaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -526,12 +519,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @add_start_docstrings_to_model_forward(VIDEO_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VideoLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

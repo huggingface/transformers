@@ -147,6 +147,8 @@ FUYU_INPUTS_DOCSTRING = r"""
     FUYU_START_DOCSTRING,
 )
 class FuyuModel(FuyuPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -305,6 +307,12 @@ class FuyuModel(FuyuPreTrainedModel):
     FUYU_START_DOCSTRING,
 )
 class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_embed_tokens": "model.vision_embed_tokens",
+        "language_model.lm_head": "lm_head",
+    }
+
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.model = FuyuModel(config)
@@ -466,4 +474,4 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel"]
+__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

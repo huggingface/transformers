@@ -439,6 +439,8 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
 class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
     def __init__(
         self,
         config: LlavaNextVideoConfig,
@@ -452,9 +454,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
@@ -768,21 +767,24 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         return video_features
 
 
-LLAVA_NEXT_INPUTS_DOCSTRING = None
-
-
 @add_start_docstrings(
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
 class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_tower": "model.vision_tower",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "image_newline": "model.image_newline",
+        "language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: LlavaNextVideoConfig):
         super().__init__(config)
         self.model = LlavaNextVideoModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -797,13 +799,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    @add_start_docstrings_to_model_forward(LLAVA_NEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1003,4 +999,4 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         return model_inputs
 
 
-__all__ = ["LlavaNextVideoForConditionalGeneration", "LlavaNextVideoPreTrainedModel"]
+__all__ = ["LlavaNextVideoForConditionalGeneration", "LlavaNextVideoModel", "LlavaNextVideoPreTrainedModel"]

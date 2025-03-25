@@ -1210,7 +1210,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = AriaConfig
+    config_class = AriaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
@@ -1238,6 +1238,11 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
+    config_class = AriaConfig
+    base_model_prefix = ""
+    _supports_flash_attn_2 = False
+    _supports_flex_attn = False
+    _supports_sdpa = False
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = False
 
@@ -1278,7 +1283,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
     """
 
     _tied_weights_keys = ["lm_head.weight"]
-    config_class = AriaTextConfig
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1356,12 +1360,6 @@ ARIA_START_DOCSTRING = r"""
 
 
 class AriaModel(LlavaModel):
-    config_class = AriaConfig
-    _supports_flash_attn_2 = False
-    _supports_flex_attn = False
-    _supports_sdpa = False
-    base_model_prefix = ""
-
     def _create_patch_attention_mask(self, pixel_mask):
         if pixel_mask is None:
             return None
@@ -1486,12 +1484,6 @@ class AriaModel(LlavaModel):
 
 
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    config_class = AriaConfig
-    _supports_flash_attn_2 = False
-    _supports_flex_attn = False
-    _supports_sdpa = False
-    base_model_prefix = ""
-
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1657,5 +1649,6 @@ __all__ = [
     "AriaPreTrainedModel",
     "AriaTextPreTrainedModel",
     "AriaTextModel",
+    "AriaModel",
     "AriaTextForCausalLM",
 ]

@@ -1985,6 +1985,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
     _keep_in_fp32_modules = ["query_tokens"]
+    _key_mapping = {
+        "language_model.lm_head": "lm_head",
+        "language_model": "model.language_model",
+        "qformer": "model.qformer",
+        "vision_model": "model.vision_model",
+        "language_projection": "model.language_projection",
+        "query_tokens": "model.query_tokens",
+    }
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2018,9 +2026,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         return self.model.get_decoder()
 
     def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
+        self.model._tie_weights()
 
     def _preprocess_accelerate(self):
         r"""

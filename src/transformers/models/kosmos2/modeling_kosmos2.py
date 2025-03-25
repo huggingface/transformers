@@ -1924,7 +1924,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     config_class = Kosmos2Config
     main_input_name = "pixel_values"
-    _tied_weights_keys = ["text_model.lm_head.weight"]
+    base_model_prefix = "model"
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Kosmos2Config):
         super().__init__(config)
@@ -1933,7 +1934,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(
             in_features=config.text_config.embed_dim, out_features=config.text_config.vocab_size, bias=False
         )
-        self.image_to_text_projection = Kosmos2ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
         self.post_init()

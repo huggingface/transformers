@@ -1042,7 +1042,7 @@ class MllamaRotaryEmbedding(nn.Module):
 
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "MllamaVisionEncoderLayer",
@@ -1994,6 +1994,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     MLLAMA_START_DOCSTRING,
 )
 class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
+    _key_mapping = {"language_model.model": "language_model"}
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 
     def __init__(self, config: MllamaConfig):
@@ -2006,9 +2007,6 @@ class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
 
         self.vision_model = MllamaVisionModel._from_config(config.vision_config)
         self.language_model = MllamaTextModel._from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.multi_modal_projector = nn.Linear(
             config.vision_config.vision_output_dim,
             config.text_config.hidden_size,
@@ -2130,15 +2128,19 @@ class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "language_model.model": "model.language_model",
+        "vision_model": "model.vision_model",
+        "multi_modal_projector": "model.multi_modal_projector",
+        "language_model.lm_head": "lm_head",
+    }
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.model = MllamaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2148,10 +2150,10 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaConfig")
@@ -2352,4 +2354,5 @@ __all__ = [
     "MllamaTextModel",
     "MllamaVisionModel",
     "MllamaPreTrainedModel",
+    "MllamaModel",
 ]

@@ -380,7 +380,7 @@ Qwen2_5_VL_START_DOCSTRING = r"""
 )
 class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
     config_class = Qwen2_5_VLConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -1506,13 +1506,14 @@ QWEN2_5_VL_INPUTS_DOCSTRING = r"""
 
 
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
+    _key_mapping = {"model": "language_model"}
     config_class = Qwen2_5_VLConfig
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.language_model = Qwen2_5_VLTextModel._from_config(config.text_config)
+        self.language_model = Qwen2_5_VLTextModel(config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1862,6 +1863,10 @@ class Qwen2_5_VLCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
+    _key_mapping = {
+        "model": "model.language_model",
+        "visual": "model.visual",
+    }
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):

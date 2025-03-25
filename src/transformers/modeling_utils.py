@@ -1787,6 +1787,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     main_input_name = "input_ids"
     model_tags = None
 
+    _key_mapping = None  # used for BC support in VLMs, not meant to be used by new models
+
     _auto_class = None
     _no_split_modules = None
     _skip_keys_device_placement = None
@@ -4067,7 +4069,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
-        key_mapping = kwargs.pop("key_mapping", None)
+        key_mapping = kwargs.pop("key_mapping", cls._key_mapping)
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(

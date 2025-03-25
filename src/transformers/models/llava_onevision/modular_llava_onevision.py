@@ -68,6 +68,7 @@ class LlavaOnevisionCausalLMOutputWithPast(LlavaNextVideoCausalLMOutputWithPast)
 
 class LlavaOnevisionModel(LlavaNextVideoModel):
     def __init__(self, config):
+        super().__init__(config)
         del self.vision_resampler
 
     def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
