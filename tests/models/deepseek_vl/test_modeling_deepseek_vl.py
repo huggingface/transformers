@@ -71,7 +71,8 @@ class DeepseekVLModelTester:
             "num_attention_heads": 4,
             "pad_token_id": 1,
         },
-        use_high_res_vision=True,
+        # to keep model size below 80M
+        use_high_res_vision=False,
         low_res_vision_config={
             "num_hidden_layers": 1,
             "hidden_size": 16,
