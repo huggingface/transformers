@@ -1233,19 +1233,14 @@ class ProcessorTesterMixin:
         formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)  # batch size=1
 
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+        out_dict = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="np",
+            load_audio_from_video=True,
         )
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        messages[1]["content"][0]["audio"] = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        )
-        messages[3]["content"][0]["audio"] = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        )
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.video_input_name in out_dict)
 

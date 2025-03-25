@@ -1444,11 +1444,12 @@ class ProcessorMixin(PushToHubMixin):
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 kwargs["add_special_tokens"] = False
 
+            print(batch_audios[0].shape)
             out = self(
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
-                audios=batch_audios if batch_audios else None,
+                audio=batch_audios if batch_audios else None,
                 **kwargs,
             )
             if return_dict:
