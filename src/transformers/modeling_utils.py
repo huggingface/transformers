@@ -1393,29 +1393,52 @@ def _find_missing_and_unexpected_keys(
 
 
 def _find_mismatched_keys(
-    model_to_load: "PreTrainedModel",
-    state_dict: Dict,
+    model: "PreTrainedModel",
+    state_dict: Optional[Dict],
+    checkpoint_files: Optional[List[str]],
     ignore_mismatched_sizes: bool,
-    prefix: str,
-) -> List:
-    """Find mismatch of shapes between the model parameters and the loaded state dict, and optionally remove the
-    problematic keys from `state_dict` if `ignore_mismatched_sizes` is `True`."""
+    key_renaming_mapping: Dict[str, str],
+    is_quantized: bool,
+    weights_only: bool,
+) -> List[str]:
+    """
+    Find mismatch of shapes between the model parameters and the loaded state dict, and optionally remove the
+    problematic keys from `state_dict` if `ignore_mismatched_sizes` is `True`. In this case, reinitialize the
+    weights correctly.
+    """
+
+    # An error will be raised later on anyway if there is a mismatch - this avoids running the rest of this function
+    # if there are no mismatch (which is almost always the case)
+    if not ignore_mismatched_sizes:
+        return []
+
+    if state_dict is not None:
+        checkpoint_files = [""]
+
+    model_state_dict = model.state_dict()
     mismatched_keys = []
-    if ignore_mismatched_sizes:
-        model_state_dict = model_to_load.state_dict()
-        state_dict_keys = list(state_dict.keys())
-        for key in state_dict_keys:
-            if key in model_state_dict and state_dict[key].shape != model_state_dict[key].shape:
-                if state_dict[key].shape[-1] == 1 and state_dict[key].numel() * 2 == model_state_dict[key].numel():
-                    # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
-                    # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
-                    pass
-                else:
-                    # Add prefix if we removed it before, to add the correct state dict key to the warnings
-                    key_with_prefix = prefix + key
-                    mismatched_keys.append((key_with_prefix, state_dict[key].shape, model_state_dict[key].shape))
-                    del state_dict[key]
-    return mismatched_keys
+    mismatched_shapes = []
+    for shard_file in checkpoint_files:
+        # If shard_file is "", we use the existing state_dict instead of loading it
+        if shard_file != "":
+            state_dict = load_state_dict(
+                shard_file, is_quantized=is_quantized, map_location="meta", weights_only=weights_only
+            )
+
+        # Fix the key names
+        new_state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
+
+        for key in new_state_dict.keys():
+            if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
+                # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
+                # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
+                if not (
+                    state_dict[key].shape[-1] == 1 and state_dict[key].numel() * 2 == model_state_dict[key].numel()
+                ):
+                    mismatched_keys.append(key)
+                    mismatched_shapes.append((new_state_dict[key].shape, model_state_dict[key].shape))
+
+    return mismatched_keys, mismatched_shapes
 
 
 class PipelineParallel(Enum):
@@ -4661,10 +4684,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             hf_quantizer,
             device_map,
         )
+        # Find all the keys with shape mismatch (if we ignore the mismatch, the weights need to be newly initialized the
+        # same way as missing keys)
+        mismatched_keys, mismatched_shapes = _find_mismatched_keys(
+            model,
+            state_dict,
+            checkpoint_files,
+            ignore_mismatched_sizes,
+            key_renaming_mapping,
+            is_quantized,
+            weights_only,
+        )
 
-        # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
-        # they are not in the loaded state dict)
-        model._move_missing_keys_from_meta_to_cpu(missing_keys, unexpected_keys, dtype, hf_quantizer)
+        # We need to update both the mapping and the list of checkpoint keys to remove the mismatched ones
+        key_renaming_mapping = {k: v for k, v in key_renaming_mapping.items() if v not in mismatched_keys}
+        checkpoint_keys = list(key_renaming_mapping.values())
+
+        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
+        # loading the weights as they are not in the loaded state dict)
+        model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, unexpected_keys, dtype, hf_quantizer)
         # In this case we also need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
             # We only do it for the parameters, are the buffers are not initialized on the meta device by default
@@ -4672,7 +4710,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
                 _load_parameter_into_model(model, key, value)
 
-        # correctly initialize the missing keys if it was skipped before
+        # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
@@ -4780,7 +4818,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
         error_msgs = []
-        mismatched_keys = []
         # Iterate on all the shards to load the weights
         for shard_file in checkpoint_files:
             # Skip the load for shards that only contain disk-offloaded weights
@@ -4806,15 +4843,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Fix the key names
             state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
-
-            # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
-            # matching the weights in the model.
-            mismatched_keys += _find_mismatched_keys(
-                model_to_load,
-                state_dict,
-                ignore_mismatched_sizes,
-                prefix if loading_base_model_from_task_state_dict else "",
-            )
 
             if is_deepspeed_zero3_enabled():
                 error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
@@ -4935,7 +4963,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mismatched_warning = "\n".join(
                 [
                     f"- {key}: found shape {shape1} in the checkpoint and {shape2} in the model instantiated"
-                    for key, shape1, shape2 in mismatched_keys
+                    for key, (shape1, shape2) in zip(mismatched_keys, mismatched_shapes)
                 ]
             )
             logger.warning(
