@@ -57,6 +57,7 @@ class PlainDetrSinePositionEmbedding(DeformableDetrSinePositionEmbedding):
     pass
 
 
+
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
@@ -70,3 +71,5 @@ def build_position_encoding(config):
         raise ValueError(f"Not supported {config.position_embedding_type}")
 
     return position_embedding
+
+
