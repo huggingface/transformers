@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -34,7 +33,13 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -311,16 +316,12 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    @require_torch_sdpa
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_generate(self):
-        self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="Idefics has a hard requirement on SDPA, skipping this test")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
 
 
 @require_torch
@@ -349,10 +350,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         return inputs_dict
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self):
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -519,7 +521,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(attentions[0] is None)
             out_len = len(outputs)
 
@@ -537,7 +539,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(self_attentions[0] is None)
 
     def test_hidden_states_output(self):
@@ -597,10 +599,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self, torch_dtype):
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @pytest.mark.generate

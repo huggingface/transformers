@@ -524,6 +524,7 @@ OBJECTS_TO_IGNORE = [
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
+    "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
@@ -683,7 +684,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
 
     Args:
         description (`str`): The description of an argument in a docstring to process.
-        default (`Any`): The default value that whould be in the docstring of that argument.
+        default (`Any`): The default value that would be in the docstring of that argument.
 
     Returns:
        `str`: The description updated with the new default value.
@@ -906,7 +907,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
 def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
     """
-    Fixes the docstring of an object by replacing its arguments documentaiton by the one matched with the signature.
+    Fixes the docstring of an object by replacing its arguments documentation by the one matched with the signature.
 
     Args:
         obj (`Any`):

@@ -124,6 +124,9 @@ VLM_CLASS_NAMES = [
     "qwen2vl",
     "qwen2_5_vl",
     "ayavision",
+    "gemma3",
+    "mistral3",
+    "chameleon",
 ]
 
 
@@ -172,7 +175,7 @@ class GenerationTesterMixin:
     def _check_similar_generate_outputs(self, output_1, output_2, atol=1e-5, rtol=1e-5):
         """
         Checks whether a pair of generate outputs are similar. Two `generate` call outputs are considered similar in
-        the following siturations:
+        the following situations:
         1. The sequences are the same
         2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
         """
@@ -1097,72 +1100,8 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
-    @pytest.mark.generate
-    def test_beam_search_low_memory(self):
-        # Check that choosing 'low_memory' does not change the model output
-        for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="May fix in the future: need custom cache handling")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "ctrl",
-                    "gptbigcode",
-                    "transo_xl",
-                    "xlnet",
-                    "cpm",
-                    "jamba",
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
-            set_model_tester_for_less_flaky_test(self)
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            set_config_for_less_flaky_test(config)
-            # batch_size=1 is ok, but batch_size>1 will cause non-identical output
-
-            config.use_cache = True
-            config.is_decoder = True
-
-            # test output equality of low versus high memory
-            model = model_class(config).to(torch_device).eval()
-            set_model_for_less_flaky_test(model)
-
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            low_output = model.generate(
-                **inputs_dict,
-                max_new_tokens=8,
-                num_beams=5,
-                early_stopping=True,
-                low_memory=True,
-                use_cache=True,
-                output_scores=True,
-                output_logits=True,
-                return_dict_in_generate=True,
-                **logits_processor_kwargs,
-            )
-
-            high_output = model.generate(
-                **inputs_dict,
-                max_new_tokens=8,
-                num_beams=5,
-                early_stopping=True,
-                low_memory=False,
-                use_cache=True,
-                output_scores=True,
-                output_logits=True,
-                return_dict_in_generate=True,
-                **logits_processor_kwargs,
-            )
-            # The two outputs must match and their shape must be as expected
-            self._check_similar_generate_outputs(low_output, high_output)
-
-    @pytest.mark.generate
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535 for more info.
@@ -1616,7 +1555,7 @@ class GenerationTesterMixin:
             embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
-            # some models have diffent num-head for query vs key/value so we need to assign correct value
+            # some models have different num-head for query vs key/value so we need to assign correct value
             # BUT only after `per_head_embed_dim` is set
             num_attention_heads = (
                 text_config.num_key_value_heads
@@ -2118,6 +2057,9 @@ class GenerationTesterMixin:
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
+        # Monkey-patching the HybridCache at test-time to continue testing compilation support
+        HybridCache.is_compileable = True
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2214,6 +2156,9 @@ class GenerationTesterMixin:
         Tests that all optional outputs are behaving as expected when compilation is triggered.
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
+        # Monkey-patching the HybridCache at test-time to continue testing compilation support
+        HybridCache.is_compileable = True
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
@@ -2298,44 +2243,6 @@ class GenerationTesterMixin:
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     @pytest.mark.generate
-    def test_assisted_decoding_with_logits_to_keep(self):
-        for model_class in self.all_generative_model_classes:
-            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
-            # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config.get_text_config(), "use_cache"):
-                self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
-            config.use_cache = True
-            config.is_decoder = True
-
-            model = model_class(config).to(torch_device).eval()
-            assistant_model = model
-            # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
-            # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
-            # other methods will work as well)
-            generation_kwargs = {
-                "max_new_tokens": 10,
-                "do_sample": False,
-                "assistant_model": assistant_model,
-                "return_dict_in_generate": True,
-                "output_scores": True,
-            }
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            # Setting logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(
-                **generation_kwargs, **inputs_dict, **logits_processor_kwargs, logits_to_keep=0
-            )
-            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
-            without_all_logits = model.generate(**inputs_dict, **generation_kwargs, **logits_processor_kwargs)
-
-            self._check_similar_generate_outputs(with_all_logits, without_all_logits)
-
-    @pytest.mark.generate
     def test_inherits_generation_mixin(self):
         """
         Tests that the model class directly inherits `GenerationMixin`, as opposed to relying on `PreTrainedModel`
@@ -2347,7 +2254,7 @@ class GenerationTesterMixin:
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.
-        NOTE: despite the test logic being the same, different implementations actually need diferent decorators, hence
+        NOTE: despite the test logic being the same, different implementations actually need different decorators, hence
         this separate function.
         """
         max_new_tokens = 30
@@ -2993,19 +2900,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         transition_scores_sum = transition_scores.sum(-1)
 
         torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
-
-    def test_beam_search_low_memory(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
-        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
-
-        low_output = model.generate(model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=True)
-
-        high_output = model.generate(
-            model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
-        )
-        self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @slow
     def test_green_red_watermark_generation(self):
@@ -4341,6 +4235,42 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(decoded_assisted, [expected_output])
 
     @slow
+    def test_beam_search_advanced_stopping_criteria(self):
+        """
+        Tests that beam search works with a stopping criteria that is not max length or EOS token. Prior to the beam
+        search vectorization PR (#35802), beam search was not accepting other stopping criteria. Test inspired on
+        the original issue (#34843).
+        """
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct").to(torch_device)
+
+        prompt = (
+            "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. "
+            "How many clips did Natalia sell altogether in April and May?"
+        )
+        tokens = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        generation_config = GenerationConfig(num_beams=3, do_sample=False, length_penalty=1.0, max_new_tokens=100)
+
+        # This particular prompt should result in a ":" being present in the answer
+        out = model.generate(**tokens, generation_config=generation_config, tokenizer=tokenizer)
+        output_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        last_non_special_token_decoded = tokenizer.decode(out[out != tokenizer.pad_token_id][-1])
+        self.assertTrue(":" in output_text)
+        self.assertFalse(":" in output_text[-5:])
+        self.assertFalse(":" in last_non_special_token_decoded)
+
+        # Adding an advanced stopping criteria: text generation should stop when a ":" is generated.
+        # Note that:
+        # 1 - the text up to ":" doesn't have to be the same, it can belong to a different beam
+        # 2 - ":" may not be the last char, but it must be in the last non-special token
+        generation_config.stop_strings = ":"
+        out = model.generate(**tokens, generation_config=generation_config, tokenizer=tokenizer)
+        output_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        last_non_special_token_decoded = tokenizer.decode(out[out != tokenizer.pad_token_id][-1])
+        self.assertTrue(":" in output_text)
+        self.assertTrue(":" in output_text[-5:])
+        self.assertTrue(":" in last_non_special_token_decoded)
+
     def test_max_time(self):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
         model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
@@ -4650,7 +4580,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(diff < 1e-4)
 
     def test_generate_input_ids_as_kwarg(self):
-        """Test that `input_ids` work equaly as a positional and keyword argument in decoder-only models"""
+        """Test that `input_ids` work equally as a positional and keyword argument in decoder-only models"""
         article = "I need input_ids to generate"
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=15)
@@ -4667,7 +4597,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sequences.shape, (1, 15))
 
     def test_generate_input_ids_as_encoder_kwarg(self):
-        """Test that `input_ids` work equaly as a positional and keyword argument in encoder-decoder models"""
+        """Test that `input_ids` work equally as a positional and keyword argument in encoder-decoder models"""
         article = "Justin Timberlake and Jessica Biel, welcome to parenthood."
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")

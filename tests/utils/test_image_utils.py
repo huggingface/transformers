@@ -429,7 +429,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(videos_list), 1)
         self.assertTrue(np.array_equal(videos_list[0][0], images))
 
-        # Test a 4d array of images is converted to a a list of 1 video
+        # Test a 4d array of images is converted to a list of 1 video
         images = np.random.randint(0, 256, (4, 16, 32, 3))
         videos_list = make_batched_videos(images)
         self.assertIsInstance(videos_list[0], list)
@@ -996,7 +996,7 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image), (32, 64))
 
-        # Test the channel dimension can be overriden
+        # Test the channel dimension can be overridden
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
 

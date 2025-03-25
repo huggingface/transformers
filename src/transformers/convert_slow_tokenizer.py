@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
-from typing import Dict, List, Tuple
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -91,7 +89,7 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -105,7 +103,7 @@ class SentencePieceExtractor:
 
 
 class GemmaSentencePieceExtractor(SentencePieceExtractor):
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -113,10 +111,10 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        # there is a missing token in the vocab. We have to do this to support merges
+        # If "\t" is missing in the vocab, we have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
-        vocab["\t"] = vocab.get("<0x09>")
-
+        if "\t" not in vocab:
+            vocab["\t"] = vocab.get("<0x09>")
         merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
@@ -328,7 +326,7 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -397,7 +395,7 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1296,12 +1294,14 @@ class GemmaConverter(SpmConverter):
             (self.original_tokenizer.eos_token, 0.0),
             (self.original_tokenizer.bos_token, 0.0),
         ]
-        for piece in proto.pieces[3:]:
-            if piece.piece == "<0x09>":
-                vocab += [("\t", piece.score)]
-            else:
-                vocab += [(piece.piece, piece.score)]
-        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+
+        # Older gemma tokenizers had a missing tab token, so we fix that here
+        if not any(x[0] == "\t" for x in vocab):
+            override_index = next((i for i, x in enumerate(vocab) if x[0] == "<0x09>"), None)
+            if override_index is not None:
+                vocab[override_index] = ("\t", 0.0)
+
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
@@ -1578,14 +1578,16 @@ class TikTokenConverter:
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = additional_special_tokens
+        self.additional_special_tokens = (
+            additional_special_tokens.keys() if type(additional_special_tokens) is dict else additional_special_tokens
+        )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+                "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
 
         bpe_ranks = load_tiktoken_bpe(tiktoken_url)
@@ -1627,7 +1629,10 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
+
+        tokenizer.add_special_tokens(
+            [AddedToken(token, normalized=False, special=True) for token in self.additional_special_tokens]
+        )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 

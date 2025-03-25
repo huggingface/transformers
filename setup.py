@@ -129,6 +129,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "kernels>=0.3.2,<0.4",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -150,8 +151,10 @@ _deps = [
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
     "pytest-asyncio",
+    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
+    "pytest-order",
     "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
@@ -162,7 +165,7 @@ _deps = [
     "ruff==0.5.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.1",
+    "safetensors>=0.4.3",
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
@@ -299,8 +302,9 @@ extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
+extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
@@ -324,6 +328,8 @@ extras["testing"] = (
         "pytest-asyncio",
         "pytest-rich",
         "pytest-xdist",
+        "pytest-order",
+        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
@@ -440,7 +446,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.50.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.51.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
