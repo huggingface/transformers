@@ -94,6 +94,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             batch_size - 2
         )
 
+    @require_av
     @require_torch
     def test_process_interleaved_images_videos(self):
         processor = self.get_processor()
