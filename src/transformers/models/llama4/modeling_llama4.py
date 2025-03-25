@@ -1617,7 +1617,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         final_embeddings = reference_embedding.view(-1, reference_embedding.size(-1))
         expanded_mask = mask_1d.unsqueeze(-1).expand(-1, final_embeddings.size(-1))
         final_embeddings.masked_scatter_(expanded_mask, partial_embeddings)
-
+        final_embeddings = final_embeddings.view(reference_embedding.size())
         return final_embeddings
 
 
