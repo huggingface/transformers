@@ -140,9 +140,10 @@ DEEPSEEK_VL_INPUTS_DOCSTRING = r"""
 
 
 class DeepseekVLSamVisionNeck(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, output_size:int=24):
         super().__init__()
         self.config = config
+        self.output_size = output_size
 
         self.conv1 = nn.Conv2d(
             config.output_channels, config.output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
@@ -152,9 +153,10 @@ class DeepseekVLSamVisionNeck(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
+        # interpolate Sam encodings to match Siglip encodings
         features = F.interpolate(
             features,
-            size=(96, 96),
+            size=(4 * self.output_size, 4 * self.output_size),
             mode="bilinear",
             align_corners=False,
         )
@@ -164,14 +166,15 @@ class DeepseekVLSamVisionNeck(nn.Module):
 
 
 class DeepseekVLSamVisionEncoder(nn.Module):
-    def __init__(self, config: SamVisionConfig):
+    def __init__(self, config: SamVisionConfig, output_size:int=24):
         super().__init__()
         self.config = config
+        self.output_size = output_size
         self.global_attn_index = config.global_attn_indexes[0]
 
         self.model = SamVisionEncoder(config)
         self.global_neck = deepcopy(self.model.neck)
-        self.neck = DeepseekVLSamVisionNeck(config)
+        self.neck = DeepseekVLSamVisionNeck(config, output_size=output_size)
         self.alpha = nn.Parameter(torch.zeros(1))
 
         self.register_buffer("image_mean", torch.tensor(OPENAI_CLIP_MEAN).reshape(1, 3, 1, 1), persistent=False)
@@ -298,7 +301,8 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
 
         self.low_res_vision_encoder = DeepseekVLSiglipVisionEncoder(config.low_res_vision_config)
         if self.use_high_res_vision:
-            self.high_res_vision_encoder = DeepseekVLSamVisionEncoder(config.high_res_vision_config)
+            output_size = config.low_res_vision_config.image_size // config.low_res_vision_config.patch_size
+            self.high_res_vision_encoder = DeepseekVLSamVisionEncoder(config.high_res_vision_config, output_size=output_size)
 
         self.language_model = LlamaModel(config.text_config)
         self.aligner = DeepseekVLAligner(config)
