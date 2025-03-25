@@ -28,6 +28,7 @@ from typing import Any, Callable, Optional, TypedDict, Union
 import numpy as np
 import typing_extensions
 
+from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .image_utils import (
     ChannelDimension,
@@ -419,6 +420,7 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
+    sampling_rate: Optional[int] = 16_000
     sample_indices_fn: Optional[Callable] = None
 
 
@@ -938,6 +940,7 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        possible_modality_keywords = {"text", "audio", "videos", "images"}
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
@@ -995,7 +998,7 @@ class ProcessorMixin(PushToHubMixin):
                 if key not in used_keys:
                     if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
                         output_kwargs["common_kwargs"][key] = kwargs[key]
-                    else:
+                    elif key not in possible_modality_keywords:
                         logger.warning_once(
                             f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                         )
@@ -1111,12 +1114,12 @@ class ProcessorMixin(PushToHubMixin):
             if isinstance(class_name, tuple):
                 classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
                 if attribute_name == "image_processor":
-                    # TODO: @yoni, change logic in v4.50 (when use_fast set to True by default)
+                    # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
                     use_fast = kwargs.get("use_fast", None)
                     if use_fast is None:
                         logger.warning_once(
                             "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                            "`use_fast=True` will be the default behavior in v4.50, even if the model was saved with a slow processor. "
+                            "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
                             "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
                         )
                 else:
@@ -1336,15 +1339,23 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = chat_template_kwargs.get("tokenize")
         return_dict = chat_template_kwargs.get("return_dict")
         sample_indices_fn = chat_template_kwargs.get("sample_indices_fn")
+        sampling_rate = chat_template_kwargs.pop("sampling_rate")
 
         if tokenize:
             batch_images, batch_videos = [], []
+            batch_audios = []
             batch_video_metadata = []
             for conversation in conversations:
                 images, videos = [], []
                 video_metadata = []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    audio_fnames = [
+                        content[key]
+                        for content in message["content"]
+                        for key in ["audio", "url", "path"]
+                        if key in content and content["type"] == "audio"
+                    ]
                     image_fnames = [
                         vision_info[key]
                         for vision_info in visuals
@@ -1357,6 +1368,10 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
                     ]
+
+                    # Audio models do not accept nested list of audios (yet!)
+                    for fname in audio_fnames:
+                        batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     for fname in image_fnames:
                         images.append(load_image(fname))
                     for fname in video_fnames:
@@ -1423,6 +1438,7 @@ class ProcessorMixin(PushToHubMixin):
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
+                audios=batch_audios if batch_audios else None,
                 **kwargs,
             )
             if return_dict:

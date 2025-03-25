@@ -204,7 +204,7 @@ visualizer("<img>What is shown in this image?")
     +   do_pan_and_scan=True,
         ).to("cuda")
     ```
-- For text-only inputs, use [`AutoModelForCausalLM`] instead to skip loading the vision components and save resources.
+- For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
     ```py
     import torch

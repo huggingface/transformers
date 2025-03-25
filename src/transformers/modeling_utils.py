@@ -4327,6 +4327,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
             )
 
+        if gguf_file and device_map is not None and "disk" in device_map.values():
+            raise RuntimeError(
+                "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
+                "loaded from GGUF files."
+            )
+
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             subfolder=subfolder,
@@ -4448,7 +4454,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            config._pre_quantization_dtype = torch_dtype
+            config._pre_quantization_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
 
         # Prepare the full device map
         if device_map is not None:
@@ -5864,7 +5870,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
         if device.type == "cuda":
-            device_memory = torch.cuda.mem_get_info(device)[0]
+            index = device.index if device.index is not None else torch.cuda.current_device()
+            device_memory = torch.cuda.mem_get_info(index)[0]
             # Allow up to 95% of max device memory
             byte_count = min(byte_count, int(0.95 * device_memory))
         # Allocate memory
