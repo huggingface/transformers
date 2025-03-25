@@ -247,7 +247,7 @@ def mel_filter_bank(
 
     Args:
         num_frequency_bins (`int`):
-            Number of frequencies used to compute the spectrogram (should be the same as in `stft`).
+            Number of frequency bins in STFT.
         num_mel_filters (`int`):
             Number of mel filters to generate.
         min_frequency (`float`):
@@ -270,6 +270,12 @@ def mel_filter_bank(
     """
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
+    
+    if num_frequency_bins < 2:
+        raise ValueError(f"Require num_frequency_bins: {num_frequency_bins} >= 2")
+    
+    if min_frequency > max_frequency:
+        raise ValueError(f"Require min_frequency: {min_frequency} <= max_frequency: {max_frequency}")
 
     # center points of the triangular mel filters
     mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
