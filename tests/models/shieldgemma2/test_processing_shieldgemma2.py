@@ -140,7 +140,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        # Test policies adapated from https://ailuminate.mlcommons.org/benchmarks/ hazard categories
+        # Test policies adapted from https://ailuminate.mlcommons.org/benchmarks/ hazard categories
         custom_policies = {
             "cbrne": "Test policy related to indiscriminate weapons.",
             "ip": "Test policy related to intellectual property.",
