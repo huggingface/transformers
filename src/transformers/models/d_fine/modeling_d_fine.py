@@ -1315,9 +1315,7 @@ class DFineDecoder(DFinePreTrainedModel):
                 # Lqe does not affect the performance here.
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
-                intermediate_reference_points += (
-                    (inter_ref_bbox.clamp(min=0, max=1),) if self.training else (inter_ref_bbox,)
-                )
+                intermediate_reference_points += (inter_ref_bbox,)
                 initial_reference_points += (ref_points_initial,)
                 intermediate_predicted_corners += (pred_corners,)
 
