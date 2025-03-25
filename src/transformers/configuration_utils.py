@@ -1157,7 +1157,7 @@ def get_configuration_file(configuration_files: list[str]) -> str:
     """
     configuration_files_map = {}
     for file_name in configuration_files:
-        if file_name.startswith("config.") and file_name.endswith(".json"):
+        if file_name.startswith("config.") and file_name.endswith(".json") and file_name != "config.json":
             v = file_name.removeprefix("config.").removesuffix(".json")
             configuration_files_map[v] = file_name
     available_versions = sorted(configuration_files_map.keys())
