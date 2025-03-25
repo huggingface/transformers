@@ -1400,7 +1400,7 @@ def _find_mismatched_keys(
     key_renaming_mapping: Dict[str, str],
     is_quantized: bool,
     weights_only: bool,
-) -> List[str]:
+) -> Tuple[List[str], List[Tuple[int, int]]]:
     """
     Find potential shape mismatch between the different state dicts and the model parameters, but only if `ignore_mismatched_sizes`
     is True. Otherwise, return immediately and any shape mismatch that may exist will be raised later on. This avoids checking
@@ -1416,7 +1416,7 @@ def _find_mismatched_keys(
     # An error will be raised later on anyway if there is a mismatch - this avoids running the rest of this function
     # if there are no mismatch (which is almost always the case)
     if not ignore_mismatched_sizes:
-        return []
+        return [], []
 
     if state_dict is not None:
         checkpoint_files = [""]
