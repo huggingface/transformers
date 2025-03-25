@@ -585,7 +585,7 @@ def _flatten_dynamic_cache_for_fx(cache, spec):
     return torch.utils._pytree.tree_flatten(dictionary)[0]
 
 
-if is_torch_greater_or_equal("2.2"):
+if is_torch_greater_or_equal("2.3"):
     torch.utils._pytree.register_pytree_node(
         DynamicCache,
         _flatten_dynamic_cache,
