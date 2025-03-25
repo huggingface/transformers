@@ -344,17 +344,15 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                vision_attn = None if model.vision_model._supports_sdpa else "eager"
-                perceiver_attn = None if model.connector.perceiver_resampler._supports_sdpa else "eager"
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == perceiver_attn)
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.connector.perceiver_resampler.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
