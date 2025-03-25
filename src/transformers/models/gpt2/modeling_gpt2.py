@@ -461,7 +461,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
 
     config_class = GPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
-    base_model_prefix = "transformer"  # transformers
+    base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
