@@ -883,7 +883,9 @@ class GenerationMixin:
                     self.config.vocab_size,
                     assistant_prune_LM_head=generation_config.assistant_prune_LM_head,
                 )
-                assistant_model.generation_config.repetition_penalty = None
+                if generation_config.assistant_prune_LM_head:
+                    # If we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismaches between token ids and logits index
+                    assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,
                     assistant_model=assistant_model,

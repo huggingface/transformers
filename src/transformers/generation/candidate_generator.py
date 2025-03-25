@@ -699,7 +699,7 @@ class AssistantToTargetTranslator:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int],
-        assistant_prune_LM_head: Optional[bool] = False,
+        assistant_prune_LM_head: Optional[bool] = True,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -724,9 +724,9 @@ class AssistantToTargetTranslator:
                 del original_lm_head
                 assistant_model.set_output_embeddings(pruned_lm_head)
 
-                originial_input_embeddings = assistant_model.get_input_embeddings()
-                map_input_embeddings = MapInputEmbedding(originial_input_embeddings, self.assistant_overlap_token_ids)
-                del originial_input_embeddings
+                original_input_embeddings = assistant_model.get_input_embeddings()
+                map_input_embeddings = MapInputEmbedding(original_input_embeddings, self.assistant_overlap_token_ids)
+                del original_input_embeddings
                 assistant_model.set_input_embeddings(map_input_embeddings)
                 self.map_input_embeddings = map_input_embeddings
             else:
@@ -835,7 +835,7 @@ class AssistantVocabTranslatorCache:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model: "PreTrainedModel",
         target_vocab_size: Optional[int] = None,
-        assistant_prune_LM_head=False,
+        assistant_prune_LM_head=True,
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
         if assistant_dict is None:
