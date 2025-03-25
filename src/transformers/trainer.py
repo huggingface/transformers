@@ -5239,6 +5239,9 @@ class Trainer:
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
 
+                if num_items_in_batch.dim() == 0:
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
+
         return batch_samples, num_items_in_batch
 
     def set_initial_training_values(
