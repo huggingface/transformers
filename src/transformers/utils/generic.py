@@ -153,13 +153,6 @@ def is_numpy_array(x):
     return _is_numpy(x)
 
 
-def is_py_number(x):
-    """
-    Tests if `x` is a Python number or not.
-    """
-    return isinstance(x, (int, float))
-
-
 def _is_torch(x):
     import torch
 
@@ -264,7 +257,7 @@ def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
-    if is_py_number(obj):
+    if isinstance(obj, (int, float)):
         return obj
     elif isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
