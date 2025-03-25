@@ -339,7 +339,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
         state.update(
-            {k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"]}
+            dict.fromkeys(["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"])
         )
         return state
 

@@ -78,6 +78,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("nat", "ViTFeatureExtractor"),
         ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
+        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),

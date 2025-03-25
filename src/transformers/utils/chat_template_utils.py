@@ -412,7 +412,7 @@ def _compile_jinja_template(chat_template):
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
         raise ImportError(
-            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
         )
 
     def raise_exception(message):
