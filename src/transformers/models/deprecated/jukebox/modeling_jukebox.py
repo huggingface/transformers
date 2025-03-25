@@ -2205,12 +2205,12 @@ class JukeboxPrior(PreTrainedModel):
         loss += next_token_prediction_loss * self.next_token_prediction_loss_dims / self.total_loss_dims
 
         metrics = {
-            "bpd": next_token_prediction_loss.clone().detach(),
-            "encoder_loss": encoder_loss.clone().detach(),
-            "next_token_prediction_loss": next_token_prediction_loss.clone().detach(),
+            "bpd": next_token_prediction_loss.detach().clone(),
+            "encoder_loss": encoder_loss.detach().clone(),
+            "next_token_prediction_loss": next_token_prediction_loss.detach().clone(),
         }
         if get_preds:
-            metrics["preds"] = preds.clone().detach()
+            metrics["preds"] = preds.detach().clone()
         if get_attn_weights:
             saved_attn_weights = self.prior.transformer.saved_attn_weights
             self.prior.transformer.set_record_attn(False)
