@@ -807,7 +807,7 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                tensor_device,  # the rank
+                int(os.environ["RANK"]),  # the rank
                 device_mesh,
             )
         else:
@@ -4096,7 +4096,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not torch.distributed.is_initialized():
                 try:
                     logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
-                    rank = int(os.environ["RANK"])
+                    rank = int(os.environ["LOCAL_RANK"])
                     world_size = int(os.environ["WORLD_SIZE"])
                     torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
                     torch.cuda.set_device(rank)
@@ -4110,10 +4110,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_type = torch._C._get_accelerator().type
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            tp_device = torch.device(device_type, torch.cuda.current_device())
+            if tp_device.index > 0:
+                import sys
+                sys.stdout = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
@@ -5848,7 +5850,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
-
+    print(accelerator_device_map)
     total_byte_count = defaultdict(lambda: 0)
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)

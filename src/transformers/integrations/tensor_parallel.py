@@ -484,7 +484,10 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
     # 1. We add hooks to the layer being loaded:
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        tp_layer.prepare_module_tp(module, device_mesh)
+        try:
+            tp_layer.prepare_module_tp(module, device_mesh)
+        except NotImplementedError as e:
+            print(f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan")
 
     # 2. We add hooks to the parrent module if needed
     if "." in layer_name:

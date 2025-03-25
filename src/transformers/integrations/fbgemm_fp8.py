@@ -28,7 +28,7 @@ if is_fbgemm_gpu_available():
 logger = logging.get_logger(__name__)
 
 
-class FbgemmFp8Linear(torch.nn.Module):
+class FbgemmFp8Linear(torch.nn.Linear):
     def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
         super().__init__()
         self.in_features = in_features
