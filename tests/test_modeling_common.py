@@ -3677,8 +3677,8 @@ class ModelTesterMixin:
                 processed_inputs = {}
                 processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
 
-                if "pixel_values" in inputs_dict and "pixel_values" not in processed_inputs:
-                    processed_inputs["pixel_values"] = inputs_dict["pixel_values"]
+                for key in getattr(self, "additional_model_inputs", []):
+                    processed_inputs[key] = inputs_dict[key]
 
                 for key, value in processed_inputs.items():
                     if value.dtype in [torch.float32, torch.bfloat16, torch.float16]:
