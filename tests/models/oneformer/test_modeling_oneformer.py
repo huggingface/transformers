@@ -173,7 +173,7 @@ class OneFormerModelTester:
 
             output = model(pixel_values=pixel_values, task_inputs=task_inputs, pixel_mask=pixel_mask)
             output = model(pixel_values, task_inputs=task_inputs, output_hidden_states=True)
-        # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
+        # the correct shape of output.transformer_decoder_hidden_states ensure the correctness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
             output.transformer_decoder_object_queries.shape,

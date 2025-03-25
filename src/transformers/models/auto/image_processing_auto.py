@@ -124,9 +124,11 @@ else:
             ("owlvit", ("OwlViTImageProcessor",)),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor",)),
+            ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor",)),
+            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
@@ -137,6 +139,7 @@ else:
             ("sam", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
+            ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("superglue", "SuperGlueImageProcessor"),
@@ -491,7 +494,7 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
-        # TODO: @yoni, change logic in v4.50 (when use_fast set to True by default)
+        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
         if image_processor_type is not None:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
@@ -499,7 +502,7 @@ class AutoImageProcessor:
                 if not use_fast:
                     logger.warning_once(
                         "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                        "`use_fast=True` will be the default behavior in v4.50, even if the model was saved with a slow processor. "
+                        "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
                         "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
                     )
             # Update class name to reflect the use_fast option. If class is not found, we fall back to the slow version.

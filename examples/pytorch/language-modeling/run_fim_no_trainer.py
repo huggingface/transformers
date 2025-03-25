@@ -60,7 +60,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.50.0.dev0")
+check_min_version("4.51.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -234,9 +234,7 @@ def parse_args():
         "--fim_pad_token",
         type=str,
         default="<fim_pad>",
-        help=(
-            "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True." " Defaults to '<fim_pad>'."
-        ),
+        help=("Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. Defaults to '<fim_pad>'."),
     )
     parser.add_argument(
         "--preprocessing_num_workers",

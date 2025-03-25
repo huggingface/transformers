@@ -86,7 +86,7 @@ class DonutProcessor(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
         [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
-        [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         if self._in_target_context_manager:
             return self.current_processor(images, text, **kwargs)

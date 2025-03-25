@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 import numpy as np
 import torch
 import torch.distributed as dist
+from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
@@ -343,7 +344,22 @@ GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 class GenerationMixin:
     """
-    A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
+    A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
+    Inheriting from this class causes the model to have special generation-related behavior, such as loading a
+    `GenerationConfig` at initialization time or ensuring `generate`-related tests are run in `transformers` CI.
+
+    A model class should inherit from `GenerationMixin` to enable calling methods like `generate`, or when it
+    has defined a custom `generate` method that relies on `GenerationMixin`, directly or indirectly, which
+    approximately shares the same interface to public methods like `generate`. Three examples:
+        - `LlamaForCausalLM` should inherit from `GenerationMixin` to enable calling `generate` and other public
+            methods in the mixin;
+        - `BlipForQuestionAnswering` has a custom `generate` method that approximately shares the same interface as
+           `GenerationMixin.generate` (it has a few extra arguments, and the same output). That function also calls
+           `GenerationMixin.generate` indirectly, through an inner model. As such, `BlipForQuestionAnswering` should
+           inherit from `GenerationMixin` to benefit from all generation-related automation in our codebase;
+        - `BarkModel` has a custom `generate` method and one of its inner models calls `GenerationMixin.generate`.
+            However, its `generate` does not share the same interface as `GenerationMixin.generate`. In this case,
+            `BarkModel` shoud NOT inherit from `GenerationMixin`, as it breaks the `generate` interface.
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
@@ -1537,7 +1553,7 @@ class GenerationMixin:
         return generation_config
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], **kwargs: Dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
     ) -> Tuple[GenerationConfig, Dict]:
         """
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
@@ -1576,23 +1592,38 @@ class GenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
 
-        # If `generation_config` is provided, let's fallback ALL default values to the model's generation config
         if not using_model_generation_config:
-            modified_values = {}
-            default_generation_config = GenerationConfig()
-            for key, default_value in default_generation_config.__dict__.items():
-                if key.startswith("_"):  # metadata
-                    continue
-                custom_gen_config_value = getattr(generation_config, key)
-                model_gen_config_value = getattr(self.generation_config, key)
-                if custom_gen_config_value == default_value and model_gen_config_value != default_value:
-                    modified_values[key] = model_gen_config_value
-                    setattr(generation_config, key, model_gen_config_value)
-            if len(modified_values) > 0:
-                logger.warning_once(
-                    f"`generation_config` default values have been modified to match model-specific defaults: "
-                    f"{modified_values}. If this is not desired, please set these values explicitly."
-                )
+            # If `generation_config` is provided:
+            # - `use_model_defaults`: let's fallback ALL default values to the model's generation config
+            # - otherwise: legacy behavior, let's just make sure we have the tokens defined
+            model_base_version = version.parse(version.parse(self.generation_config.transformers_version).base_version)
+            if use_model_defaults is True or (
+                use_model_defaults is None and model_base_version >= version.parse("4.50.0")
+            ):
+                modified_values = {}
+                default_generation_config = GenerationConfig()
+                for key, default_value in default_generation_config.__dict__.items():
+                    if key.startswith("_") or key == "transformers_version":  # metadata
+                        continue
+                    custom_gen_config_value = getattr(generation_config, key)
+                    model_gen_config_value = getattr(self.generation_config, key)
+                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                        modified_values[key] = model_gen_config_value
+                        setattr(generation_config, key, model_gen_config_value)
+                if len(modified_values) > 0:
+                    logger.warning_once(
+                        f"`generation_config` default values have been modified to match model-specific defaults: "
+                        f"{modified_values}. If this is not desired, please set these values explicitly."
+                    )
+            else:
+                if generation_config.bos_token_id is None:
+                    generation_config.bos_token_id = self.generation_config.bos_token_id
+                if generation_config.eos_token_id is None:
+                    generation_config.eos_token_id = self.generation_config.eos_token_id
+                if generation_config.pad_token_id is None:
+                    generation_config.pad_token_id = self.generation_config.pad_token_id
+                if generation_config.decoder_start_token_id is None:
+                    generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
 
         # Finally, apply any passed kwargs
         model_kwargs = generation_config.update(**kwargs)
@@ -1647,7 +1678,7 @@ class GenerationMixin:
         if execution_device_map is None:
             return None
         elif len(execution_device_map) == 1 and "" in execution_device_map:
-            return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
+            return dict.fromkeys(range(num_hidden_layers), execution_device_map[""])
         layer_device_map = {}
         for layer in execution_device_map:
             for idx in range(num_hidden_layers):
@@ -1952,6 +1983,7 @@ class GenerationMixin:
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        use_model_defaults: Optional[bool] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2016,6 +2048,11 @@ class GenerationMixin:
                 size. This is an experimental feature, subject to breaking API changes in future versions.
             negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Attention_mask for `negative_prompt_ids`.
+            use_model_defaults (`bool`, *optional*):
+                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
+                generation configuration (`model.generation_config`), as opposed to the global defaults
+                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
+                `True`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2043,7 +2080,9 @@ class GenerationMixin:
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
 
-        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
 
@@ -2658,7 +2697,7 @@ class GenerationMixin:
             )
 
             # .float() is needed to retain precision for later logits manipulations
-            final_layer_next_token_logits = outputs.logits[:, -1, :].detach().clone().float()
+            final_layer_next_token_logits = outputs.logits[:, -1, :].detach().to(copy=True, dtype=torch.float32)
             final_logits = outputs.logits[:, -1, :].float()
             candidate_premature_logits = {}
             for candidate_premature_layer in candidate_premature_layers:
@@ -2846,11 +2885,12 @@ class GenerationMixin:
                     last_hidden_states = outputs.hidden_states[-1]
 
                 # next logit for contrastive search to select top-k candidate tokens
-                # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for this first iteration
+                # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for this first iteration
                 # (the clone itself is always small)
-                # .float() is needed to retain precision for later logits manipulations
-                logit_for_next_step = outputs.logits[:, -1, :].clone().float()
-                logit_for_next_step = logit_for_next_step.to(input_ids.device)
+                # torch.float32 is needed to retain precision for later logits manipulations
+                logit_for_next_step = outputs.logits[:, -1, :].to(
+                    copy=True, dtype=torch.float32, device=input_ids.device
+                )
 
                 model_kwargs = self._update_model_kwargs_for_generation(
                     outputs,
@@ -3258,10 +3298,9 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue
 
-            # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
+            # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
-            next_token_logits = outputs.logits[:, -1, :].clone().float()
-            next_token_logits = next_token_logits.to(input_ids.device)
+            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
@@ -3729,8 +3768,8 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue
 
-            logits = model_outputs.logits[:, -1, :].clone().float()  # Clone is needed to avoid keeping a hanging ref
-            logits = logits.to(input_ids.device)
+            # Copy is needed to avoid keeping a hanging ref
+            logits = model_outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
@@ -4006,10 +4045,9 @@ class GenerationMixin:
             if output_scores:
                 processed_score = torch.zeros_like(outputs.logits[:, -1, :])
             if output_logits:
-                # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
+                # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
                 # (the clone itself is always small)
-                raw_logit_score = outputs.logits[:, -1, :].clone()
-                raw_logit_score = raw_logit_score.to(input_ids.device)
+                raw_logit_score = outputs.logits[:, -1, :].to(copy=True, device=input_ids.device)
 
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
@@ -4028,8 +4066,9 @@ class GenerationMixin:
                 # select outputs of beams of current group only
                 # No need to clone() the logits here as they will not retain outputs.logits at the end of the loop
                 # .float() is needed to retain precision for later logits manipulations
-                next_token_logits = outputs.logits[batch_group_indices, -1, :].float()
-                next_token_logits = next_token_logits.to(input_ids.device)
+                next_token_logits = outputs.logits[batch_group_indices, -1, :].to(
+                    dtype=torch.float32, device=input_ids.device
+                )
 
                 next_token_scores = nn.functional.log_softmax(
                     next_token_logits, dim=-1
@@ -4283,11 +4322,10 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue
 
-            # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
+            # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
             # (the clone itself is always small)
             # .float() is needed to retain precision for later logits manipulations
-            next_token_logits = outputs.logits[:, -1, :].clone().float()
-            next_token_logits = next_token_logits.to(input_ids.device)
+            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -4535,8 +4573,9 @@ class GenerationMixin:
 
             # 2.3. Process the new logits
             # .float() is needed to retain precision for later logits manipulations
-            new_logits = outputs.logits[:, -candidate_length - 1 :].float()  # excludes the input prompt if present
-            new_logits = new_logits.to(input_ids.device)
+            new_logits = outputs.logits[:, -candidate_length - 1 :].to(
+                dtype=torch.float32, device=input_ids.device
+            )  # excludes the input prompt if present
             next_token_logits = new_logits.clone()
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
