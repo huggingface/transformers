@@ -5850,6 +5850,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
+    print("Preallocating memory with cache allocator to improve loading perfs")
     print(accelerator_device_map)
     total_byte_count = defaultdict(lambda: 0)
     for param_name, device in accelerator_device_map.items():
