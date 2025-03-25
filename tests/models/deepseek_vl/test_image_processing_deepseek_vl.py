@@ -12,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import unittest
+
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
 
 
 if is_torch_available():
@@ -30,6 +29,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import DeepseekVLImageProcessor
+
 
 class DeepseekVLImageProcessingTester:
     def __init__(
@@ -83,12 +83,13 @@ class DeepseekVLImageProcessingTester:
             torchify=torchify,
         )
 
+
 @require_torch
 @require_vision
 class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DeepseekVLImageProcessor if is_vision_available() else None
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Janus
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->DeepseekVL
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DeepseekVLImageProcessingTester(self)
@@ -98,11 +99,6 @@ class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-    
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -111,40 +107,40 @@ class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-    
+
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"height": 384, "width": 384})
         self.assertEqual(image_processor.image_mean, [1.0, 1.0, 1.0])
 
         image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size = 42, image_mean = [1.0, 2.0, 1.0]
+            self.image_processor_dict, size=42, image_mean=[1.0, 2.0, 1.0]
         )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-        self.assertEqual(image_processor.image_mean, [1.0, 2.0, 1.0])    
-    
+        self.assertEqual(image_processor.image_mean, [1.0, 2.0, 1.0])
+
     def test_call_pil(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
-        
+
         # Test non batched input
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = (1, 3, 384, 384)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-        
+
         # Test batched input
         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
         expected_output_image_shape = (7, 3, 384, 384)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-    
+
     def test_call_numpy(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
-        
+
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = (1, 3, 384, 384)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
@@ -153,13 +149,12 @@ class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         expected_output_image_shape = (7, 3, 384, 384)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-    
     def test_call_pytorch(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
-        
+
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = (1, 3, 384, 384)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)

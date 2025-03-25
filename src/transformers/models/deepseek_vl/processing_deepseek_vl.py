@@ -16,7 +16,7 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -65,7 +65,7 @@ class DeepseekVLProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         self.num_image_tokens = 576
-        self.image_token = "<image_placeholder>" # TODO: remove this
+        self.image_token = tokenizer.image_token
         self.use_default_system_prompt = use_default_system_prompt
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
