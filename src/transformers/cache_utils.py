@@ -631,8 +631,10 @@ class OffloadedCache(DynamicCache):
     def prefetch_layer(self, layer_idx: int):
         "Starts prefetching the next layer cache"
         if layer_idx < len(self):
-            with self.prefetch_stream if is_torch_greater_or_equal("2.7", accept_dev=True) else torch.cuda.stream(
+            with (
                 self.prefetch_stream
+                if is_torch_greater_or_equal("2.7", accept_dev=True)
+                else torch.cuda.stream(self.prefetch_stream)
             ):
                 # Prefetch next layer tensors to GPU
                 device = self.original_device[layer_idx]
