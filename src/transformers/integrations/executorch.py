@@ -11,6 +11,7 @@
 # specific language governing permissions and limitations under the License.
 
 import torch
+import inspect
 
 from ..utils.import_utils import is_torch_available
 
@@ -113,14 +114,22 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         position_ids = cache_position.unsqueeze(0)
         past_key_values = self.static_cache
 
-        outs = self.model(
-            input_ids=input_ids,
-            attention_mask=attn_mask,
-            position_ids=position_ids,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            use_cache=True,
-        )
+        model_params = inspect.signature(self.model.forward).parameters
+
+        kwargs = {
+            "input_ids": input_ids,
+            "attention_mask": attn_mask,
+            "position_ids": position_ids,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+            "use_cache": True,
+        }
+
+        for k in list(kwargs.keys()):
+            if k not in model_params:
+                kwargs.pop(k)
+
+        outs = self.model(**kwargs)
         return outs.logits
 
     @staticmethod
