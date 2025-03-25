@@ -1276,27 +1276,27 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
 
         >>> messages = [
-        >>>     {
-        >>>         "role": "system",
-        >>>         "content": [
-        >>>             {"type": "text", "text": "You are a helpful assistant."}
-        >>>         ]
-        >>>     },
-        >>>     {
-        >>>         "role": "user", "content": [
-        >>>             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-        >>>             {"type": "text", "text": "Where is the cat standing?"},
-        >>>         ]
-        >>>     },
-        >>> ]
+        ...     {
+        ...         "role": "system",
+        ...         "content": [
+        ...             {"type": "text", "text": "You are a helpful assistant."}
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user", "content": [
+        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Where is the cat standing?"},
+        ...         ]
+        ...     },
+        ... ]
 
         >>> inputs = processor.apply_chat_template(
-        >>>     messages,
-        >>>     tokenizer=True,
-        >>>     return_dict=True,
-        >>>     return_tensors="pt",
-        >>>     add_generation_prompt=True
-        >>> )
+        ...     messages,
+        ...     tokenizer=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ...     add_generation_prompt=True
+        ... )
         >>> # Generate
         >>> generate_ids = model.generate(**inputs)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
