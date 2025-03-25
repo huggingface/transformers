@@ -293,7 +293,7 @@ def mel_filter_bank(
 
     Args:
         num_frequency_bins (`int`):
-            Number of frequency bins in STFT.
+            Number of frequency bins (should be the same as `n_fft // 2 + 1` where `n_fft` is the size of the FFT).
         num_mel_filters (`int`):
             Number of mel filters to generate.
         min_frequency (`float`):
