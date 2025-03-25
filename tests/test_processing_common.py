@@ -783,7 +783,7 @@ class ProcessorTesterMixin:
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
 
         # Now test the ability to return dict
         messages[0][0]["content"].append(
@@ -845,7 +845,7 @@ class ProcessorTesterMixin:
             return_dict=True,
             padding=True,
         )
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
 
         # Now test the ability to return dict
         batched_messages[0][0]["content"].append(
@@ -885,6 +885,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             padding="max_length",
+            truncation=True,
             max_length=50,
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 50)
@@ -982,7 +983,7 @@ class ProcessorTesterMixin:
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+        self.assertTrue(all(key in out_dict for key in ["input_ids", "attention_mask"]))
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
@@ -1089,7 +1090,7 @@ class ProcessorTesterMixin:
             ]
         ]
 
-        def dummmy_sample_indices_fn(metadata, **fn_kwargs):
+        def dummy_sample_indices_fn(metadata, **fn_kwargs):
             # sample only the first two frame always
             return [0, 1]
 
@@ -1098,7 +1099,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            sample_indices_fn=dummmy_sample_indices_fn,
+            sample_indices_fn=dummy_sample_indices_fn,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

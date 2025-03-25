@@ -40,7 +40,7 @@ class SiglipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "SiglipImageProcessor"
+    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
@@ -59,7 +59,7 @@ class SiglipProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to SiglipTokenizer's [`~SiglipTokenizer.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` argument to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:

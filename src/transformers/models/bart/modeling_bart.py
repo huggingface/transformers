@@ -298,7 +298,7 @@ class BartFlashAttention2(BartAttention):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
@@ -1442,8 +1442,15 @@ class BartModel(BartPreTrainedModel):
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens, need check here, see issue #36247
+            if self.shared.weight.device == torch.device(
+                "meta"
+            ) and self.decoder.embed_tokens.weight.device != torch.device("meta"):
+                self._tie_or_clone_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
+                self._tie_or_clone_weights(self.shared, self.decoder.embed_tokens)
+            else:
+                self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+                self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     def get_input_embeddings(self):
         return self.shared
@@ -1598,6 +1605,11 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self.model._tie_weights()
+            self._tie_or_clone_weights(self.lm_head, self.model.shared)
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

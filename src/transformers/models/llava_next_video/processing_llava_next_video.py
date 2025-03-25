@@ -85,7 +85,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         "video_token",
         "num_additional_image_tokens",
     ]
-    image_processor_class = "LlavaNextImageProcessor"
+    image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
     video_processor_class = "LlavaNextVideoImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
@@ -123,7 +123,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
         this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
-        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the doctsring
+        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:

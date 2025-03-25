@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,9 +9,9 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.5.1'
+ARG PYTORCH='2.6.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu118'
+ARG CUDA='cu121'
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
@@ -26,8 +26,6 @@ RUN echo torch=$VERSION
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
 RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
-
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
 # needed in bnb and awq
@@ -36,10 +34,9 @@ RUN python3 -m pip install --no-cache-dir einops
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-# Add auto-gptq for gtpq quantization testing, installed from source for pytorch==2.5.1 compatibility
-# TORCH_CUDA_ARCH_LIST="7.5+PTX" is added to make the package compile for Tesla T4 gpus available for the CI.
-RUN pip install gekko
-RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && TORCH_CUDA_ARCH_LIST="7.5+PTX" python3 setup.py install
+# Add gptqmodel for gtpq quantization testing, installed from source for pytorch==2.6.0 compatibility
+RUN python3 -m pip install lm_eval
+RUN git clone https://github.com/ModelCloud/GPTQModel.git && cd GPTQModel && pip install -v . --no-build-isolation
 
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
@@ -51,10 +48,11 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
 # Add vptq for quantization testing
-RUN python3 -m pip install --no-cache-dir vptq
+RUN pip install vptq
 
 # Add spqr for quantization testing
-RUN python3 -m pip install --no-cache-dir spqr_quant[gpu]
+# Commented for now as No matching distribution found we need to reach out to the authors
+# RUN python3 -m pip install --no-cache-dir spqr_quant[gpu]
 
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
@@ -63,21 +61,29 @@ RUN python3 -m pip install --no-cache-dir hqq
 RUN python3 -m pip install --no-cache-dir gguf
 
 # Add autoawq for quantization testing
-# >=v0.2.7 needed for compatibility with transformers > 4.46
-RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.7.post2/autoawq-0.2.7.post2-py3-none-any.whl
+# New release v0.2.8
+RUN python3 -m pip install --no-cache-dir autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
 
 # Add eetq for quantization testing
-RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git
+RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submodule update --init --recursive && pip install .
 
-# Add flute-kernel and fast_hadamard_transform for quantization testing
-RUN python3 -m pip install --no-cache-dir flute-kernel==0.3.0 -i https://flute-ai.github.io/whl/cu118
-RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
+# # Add flute-kernel and fast_hadamard_transform for quantization testing
+# # Commented for now as they cause issues with the build
+# # TODO: create a new workflow to test them
+# RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
+# RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
 
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
+
+# Add AMD Quark for quantization testing
+RUN python3 -m pip install --no-cache-dir amd-quark
+
+# Add transformers in editable mode
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

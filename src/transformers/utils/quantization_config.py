@@ -2,6 +2,7 @@
 # coding=utf-8
 
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,6 +32,7 @@ from ..utils import (
     is_compressed_tensors_available,
     is_gptqmodel_available,
     is_hqq_available,
+    is_quark_available,
     is_torch_available,
     is_torchao_available,
     logging,
@@ -60,6 +62,7 @@ class QuantizationMethod(str, Enum):
     BITNET = "bitnet"
     SPQR = "spqr"
     FP8 = "fp8"
+    QUARK = "quark"
 
 
 class AWQLinearVersion(str, Enum):
@@ -902,6 +905,9 @@ class AwqConfig(QuantizationConfigMixin):
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
+            # Only cuda device can run this function
+            if not torch.cuda.is_available():
+                raise ValueError("LLM-AWQ backend is only supported on CUDA")
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if major < 8:
@@ -1354,7 +1360,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if value != default_config_dict[key]:
+            if key not in default_config_dict or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
@@ -1424,8 +1430,6 @@ class HiggsConfig(QuantizationConfigMixin):
         tune_metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        if modules_to_not_convert is None:
-            modules_to_not_convert = ["lm_head"]
         if tune_metadata is None:
             tune_metadata = {}
         self.quant_method = QuantizationMethod.HIGGS
@@ -1454,11 +1458,18 @@ class HiggsConfig(QuantizationConfigMixin):
 
 @dataclass
 class TorchAoConfig(QuantizationConfigMixin):
+    quant_method: QuantizationMethod
+    quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
+    modules_to_not_convert: Optional[List]
+    quant_type_kwargs: Dict[str, Any]
+
     """This is a config class for torchao quantization/sparsity techniques.
 
     Args:
-        quant_type (`str`):
-            The type of quantization we want to use, currently supporting: `int4_weight_only`, `int8_weight_only`, `int8_dynamic_activation_int8_weight` and `autoquant`.
+        quant_type (`Union[str, AOBaseConfig]`):
+            The type of quantization we want to use. Can be either:
+            - A string: currently supporting: `int4_weight_only`, `int8_weight_only` and `int8_dynamic_activation_int8_weight`.
+            - An AOBaseConfig instance: for more advanced configuration options.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1470,9 +1481,12 @@ class TorchAoConfig(QuantizationConfigMixin):
     Example:
 
     ```python
-    from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+    # AOBaseConfig-based configuration
+    config = Int4WeightOnlyConfig(group_size=32)
+    quantization_config = TorchAoConfig(config)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
 
-    # specific quantization method
+    # String-based configuration
     quantization_config = TorchAoConfig("int4_weight_only", group_size=32)
     # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
     model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
@@ -1495,104 +1509,151 @@ class TorchAoConfig(QuantizationConfigMixin):
     if hasattr(quantized_model, "finalize_autoquant"):
       print("finalizing autoquant")
       quantized_model.finalize_autoquant()
+
     ```
     """
 
-    def __init__(self, quant_type: str, modules_to_not_convert: Optional[List] = None, **kwargs):
+    def __init__(
+        self,
+        quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
-        # when we load from serailized config, "quant_type_kwargs" will be the key
-        if "quant_type_kwargs" in kwargs:
-            self.quant_type_kwargs = kwargs["quant_type_kwargs"]
-        else:
-            self.quant_type_kwargs = kwargs
-
+        self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
         self.post_init()
 
+    @staticmethod
+    def _get_ao_version() -> version.Version:
+        """Centralized check for TorchAO availability and version requirements."""
+        if not is_torchao_available():
+            raise ValueError("TorchAoConfig requires torchao to be installed. Install with `pip install torchao`")
+
+        return version.parse(importlib.metadata.version("torchao"))
+
     def post_init(self):
-        r"""
-        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
-        """
-        if is_torchao_available():
-            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.7.0"):
-                raise ValueError("Requires torchao 0.7.0 version and above")
+        """Validate configuration and set defaults."""
+        ao_version = self._get_ao_version()
+
+        # Handle quant_type based on type and version
+        if isinstance(self.quant_type, str):
+            self._validate_string_quant_type()
+        elif ao_version >= version.parse("0.10.0"):
+            from torchao.quantization.quant_api import AOBaseConfig
+
+            if not isinstance(self.quant_type, AOBaseConfig):
+                raise ValueError(
+                    f"quant_type must be either a string or an AOBaseConfig instance, got {type(self.quant_type)}"
+                )
         else:
             raise ValueError(
-                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+                f"In torchao < 0.10.0, quant_type must be a string. Got {type(self.quant_type)}. "
+                f"Please upgrade to torchao >= 0.10.0 to use AOBaseConfig instances."
             )
 
-        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
-        if self.quant_type not in _STR_TO_METHOD.keys():
+    def _validate_string_quant_type(self):
+        """Validate string quant_type and its kwargs."""
+        methods = self._get_torchao_quant_type_to_method()
+
+        if self.quant_type not in methods:
             raise ValueError(
-                f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
+                f"Unsupported string quantization type: {self.quant_type}. "
+                f"Supported types: {', '.join(methods.keys())}"
             )
 
-        method = _STR_TO_METHOD[self.quant_type]
+        # Validate kwargs against method signature
+        method = methods[self.quant_type]
         sig = signature(method)
-        all_kwargs = [
+        valid_kwargs = {
             param.name
             for param in sig.parameters.values()
             if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
-        ]
-        for k in self.quant_type_kwargs:
-            if k not in all_kwargs:
-                raise ValueError(
-                    f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
-                )
+        }
+
+        invalid_kwargs = set(self.quant_type_kwargs) - valid_kwargs
+        if invalid_kwargs:
+            raise ValueError(
+                f"Unexpected keyword arg for {self.quant_type}: {', '.join(invalid_kwargs)}. "
+                f"Valid kwargs: {', '.join(valid_kwargs)}"
+            )
 
     def _get_torchao_quant_type_to_method(self):
-        if is_torchao_available():
-            from torchao.quantization import (
-                autoquant,
-                int4_weight_only,
-                int8_dynamic_activation_int8_weight,
-                int8_weight_only,
-            )
+        """Get mapping of quant_type strings to their corresponding methods."""
+        from torchao.quantization import (
+            autoquant,
+            int4_weight_only,
+            int8_dynamic_activation_int8_weight,
+            int8_weight_only,
+        )
 
-            return {
-                "int4_weight_only": int4_weight_only,
-                "int8_weight_only": int8_weight_only,
-                "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-                "autoquant": autoquant,
-            }
-        else:
-            raise ValueError(
-                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
-            )
+        return {
+            "int4_weight_only": int4_weight_only,
+            "int8_weight_only": int8_weight_only,
+            "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
+            "autoquant": autoquant,
+        }
 
     def get_apply_tensor_subclass(self):
-        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
-        quant_type_kwargs = self.quant_type_kwargs.copy()
-        if (
-            not torch.cuda.is_available()
-            and is_torchao_available()
-            and self.quant_type == "int4_weight_only"
-            and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
-        ):
-            from torchao.dtypes import Int4CPULayout
+        """Create the appropriate quantization method based on configuration."""
+        if isinstance(self.quant_type, str):
+            methods = self._get_torchao_quant_type_to_method()
+            quant_type_kwargs = self.quant_type_kwargs.copy()
+            if (
+                not torch.cuda.is_available()
+                and is_torchao_available()
+                and self.quant_type == "int4_weight_only"
+                and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+            ):
+                from torchao.dtypes import Int4CPULayout
 
-            quant_type_kwargs["layout"] = Int4CPULayout()
-        return _STR_TO_METHOD[self.quant_type](**quant_type_kwargs)
+                quant_type_kwargs["layout"] = Int4CPULayout()
 
-    def __repr__(self):
-        config_dict = self.to_dict()
-        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+            return methods[self.quant_type](**quant_type_kwargs)
+        else:
+            return self.quant_type
 
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary, converting any `torchao.dtypes.Layout`
-        dataclasses to simple dicts.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
+    def to_dict(self):
+        """Convert configuration to a dictionary."""
         d = super().to_dict()
-        if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
-            layout = d["quant_type_kwargs"]["layout"]
-            layout = dataclasses.asdict(layout)
-            d["quant_type_kwargs"]["layout"] = layout
+
+        if isinstance(self.quant_type, str):
+            # Handle layout serialization if present
+            if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
+                d["quant_type_kwargs"]["layout"] = dataclasses.asdict(d["quant_type_kwargs"]["layout"])
+        else:
+            # Handle AOBaseConfig serialization
+            from torchao.core.config import config_to_dict
+
+            # For now we assume there is 1 config per Transfomer, however in the future
+            # We may want to support a config per fqn.
+            d["quant_type"] = {"default": config_to_dict(self.quant_type)}
+
         return d
+
+    @classmethod
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+        """Create configuration from a dictionary."""
+        ao_verison = cls._get_ao_version()
+        assert ao_verison >= version.parse(
+            "0.10.0"
+        ), "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
+        config_dict = config_dict.copy()
+        quant_type = config_dict.pop("quant_type")
+        # Check if we only have one key which is "default"
+        # In the future we may update this
+        assert (
+            len(quant_type) == 1 and "default" in quant_type
+        ), "Expected only one key 'default' in quant_type dictionary"
+        quant_type = quant_type["default"]
+
+        # Deserialize quant_type if needed
+        from torchao.core.config import config_from_dict
+
+        quant_type = config_from_dict(quant_type)
+
+        return cls(quant_type=quant_type, **config_dict)
 
 
 @dataclass
@@ -1652,8 +1713,6 @@ class SpQRConfig(QuantizationConfigMixin):
         self.bits = bits
         self.beta1 = beta1
         self.beta2 = beta2
-        if modules_to_not_convert is None:
-            modules_to_not_convert = []
         self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
@@ -1674,10 +1733,6 @@ class SpQRConfig(QuantizationConfigMixin):
             raise ValueError("SpQR currently only supports beta1 = 16")
         if self.beta2 != 16:
             raise ValueError("SpQR currently only supports beta2 = 16")
-
-        if self.modules_to_not_convert is not None and not isinstance(self.modules_to_not_convert, list):
-            raise ValueError("modules_to_not_convert must be a list of strings")
-
         if not isinstance(self.shapes, dict):
             raise TypeError("shapes must be a dict")
 
@@ -1720,3 +1775,41 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+
+
+class QuarkConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        **kwargs,
+    ):
+        if is_torch_available() and is_quark_available():
+            from quark import __version__ as quark_version
+            from quark.torch.export.config.config import JsonExporterConfig
+            from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
+            from quark.torch.quantization.config.config import Config
+
+        # This might be e.g. `"fp8"` or `"awq"`.
+        self.custom_mode = kwargs["quant_method"]
+        self.legacy = "export" not in kwargs
+
+        if self.custom_mode in ["awq", "fp8"]:
+            # Legacy (quark<1.0) or custom export.
+            self.quant_config = QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
+            self.json_export_config = JsonExporterConfig()
+        else:
+            self.quant_config = Config.from_dict(kwargs)
+
+            if "export" in kwargs:
+                # TODO: Remove this check once configuration version is handled natively by Quark.
+                if "min_kv_scale" in kwargs["export"] and version.parse(quark_version) < version.parse("0.8"):
+                    min_kv_scale = kwargs["export"].pop("min_kv_scale")
+                    logger.warning(
+                        f"The parameter `min_kv_scale={min_kv_scale}` was found in the model config.json's `quantization_config.export` configuration, but this parameter is supported only for quark>=0.8. Ignoring this configuration parameter. Please update the `amd-quark` package."
+                    )
+
+                self.json_export_config = JsonExporterConfig(**kwargs["export"])
+            else:
+                # Legacy (quark<1.0) or custom export.
+                self.json_export_config = JsonExporterConfig()
+
+        self.quant_method = QuantizationMethod.QUARK

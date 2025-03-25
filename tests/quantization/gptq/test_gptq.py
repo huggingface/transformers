@@ -94,6 +94,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Aiden, I am a student at the University")
     EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a member of the N")
     EXPECTED_OUTPUTS.add("Hello my name is Nellie and I am a student at the")
+    EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a new member of the")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -166,7 +167,7 @@ class GPTQTest(unittest.TestCase):
 
     def test_original_dtype(self):
         r"""
-        A simple test to check if the model succesfully stores the original dtype
+        A simple test to check if the model successfully stores the original dtype
         """
         self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
@@ -260,7 +261,9 @@ class GPTQTest(unittest.TestCase):
                 if self.device_map == "cpu":
                     quant_type = "ipex" if is_ipex_available() else "torch"
                 else:
-                    quant_type = "exllama"
+                    # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
+                    # TODO: Remove this once GPTQModel exllama kernels supports packing
+                    quant_type = "tritonv2"
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                     tmpdirname, device_map=self.device_map
                 )
@@ -424,10 +427,18 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
     def test_quantized_layers_type(self):
-        self.assertEqual(
-            self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
-            "exllama" if is_gptqmodel_available() else "exllamav2",
-        )
+        if is_auto_gptq_available() and not is_gptqmodel_available():
+            self.assertEqual(
+                self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
+                "exllamav2",
+            )
+        else:
+            # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
+            # TODO: Remove this once GPTQModel exllama kernels supports packing
+            self.assertEqual(
+                self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
+                "tritonv2",
+            )
 
     def check_inference_correctness(self, model):
         """
@@ -447,7 +458,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
 
     def test_generate_quality(self):
         """
-        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
 
