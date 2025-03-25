@@ -46,7 +46,7 @@ if is_torch_available():
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
-    string.ascii_letters + string.digits + string.whitespace + ".!\"#$%&'()*+,\\-/:<=>?@\\[\\]^_`{|}~"
+    string.ascii_letters + string.digits + string.whitespace + r".!\"#$%&'()*+,\-/:<=>?@[]^_`{|}~"
 )
 
 HELP_STRING = """\
