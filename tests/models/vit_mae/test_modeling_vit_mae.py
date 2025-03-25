@@ -250,20 +250,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
     def test_model_outputs_equivalence(self):
         pass
