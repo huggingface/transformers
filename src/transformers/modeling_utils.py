@@ -713,6 +713,12 @@ def _infer_parameter_dtype(
     return old_param is not None and old_param.is_contiguous(), casting_dtype
 
 
+def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
+    """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
+    module, param_type = get_module_from_name(model, param_name)
+    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+
+
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
@@ -819,17 +825,12 @@ def _load_state_dict_into_meta_model(
             ):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                module, param_type = get_module_from_name(model, param_name)
 
                 # avoid tied weights
                 if param.data_ptr() in data_ptrs:
                     param = param.clone()
 
-                module.load_state_dict(
-                    {param_type: param.to(param_device)},
-                    strict=False,
-                    assign=True,
-                )
+                _load_parameter_into_model(model, param_name, param.to(param_device))
 
                 # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
                 data_ptrs.add(model.state_dict()[param_name].data_ptr())
@@ -4666,11 +4667,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model._move_missing_keys_from_meta_to_cpu(missing_keys, unexpected_keys, dtype, hf_quantizer)
         # In this case we also need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-            for key, param in model.state_dict().items():
-                module, param_type = get_module_from_name(model, key)
-                module.load_state_dict(
-                    {param_type: torch.empty(*param.size(), dtype=dtype, device="cpu")}, strict=False, assign=True
-                )
+            # We only do it for the parameters, are the buffers are not initialized on the meta device by default
+            for key, param in model.named_parameters():
+                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                _load_parameter_into_model(model, key, value)
 
         # correctly initialize the missing keys if it was skipped before
         model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
@@ -5193,16 +5193,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model_state_dict = self.state_dict()
         for key in missing_keys:
             param = model_state_dict[key]
-            value = torch.empty(*param.size(), dtype=dtype, device="cpu")
-            if (
-                not is_quantized
-                or (getattr(hf_quantizer, "requires_parameters_quantization", False))
-                or not hf_quantizer.check_quantized_param(self, param_value=value, param_name=key, state_dict={})
-            ):
-                module, param_type = get_module_from_name(self, key)
-                self.load_state_dict({param_type: value}, strict=False, assign=True)
-            else:
-                hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict, unexpected_keys)
+            # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
+            if param.device == torch.device("meta"):
+                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                if (
+                    not is_quantized
+                    or (getattr(hf_quantizer, "requires_parameters_quantization", False))
+                    or not hf_quantizer.check_quantized_param(self, param_value=value, param_name=key, state_dict={})
+                ):
+                    _load_parameter_into_model(self, key, value)
+                else:
+                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict, unexpected_keys)
 
     def _initialize_missing_keys(
         self,
