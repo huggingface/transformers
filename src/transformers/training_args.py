@@ -1451,7 +1451,7 @@ class TrainingArguments:
             )
         },
     )
-    ddp_timeout: Optional[int] = field(
+    ddp_timeout: int = field(
         default=1800,
         metadata={
             "help": "Overrides the default timeout for distributed training (value should be given in seconds)."
@@ -2140,7 +2140,7 @@ class TrainingArguments:
                     f"Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
-        accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
+        accelerator_state_kwargs: dict[str, Any] = {"enabled": True, "use_configured_state": False}
         if isinstance(self.accelerator_config, AcceleratorConfig):
             accelerator_state_kwargs["use_configured_state"] = self.accelerator_config.pop(
                 "use_configured_state", False
