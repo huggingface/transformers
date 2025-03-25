@@ -19,7 +19,7 @@ and remove unnecessary dependencies.
 import os
 import warnings
 from io import BytesIO
-from typing import Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -62,6 +62,11 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
             "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
         )
     return audio
+
+
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+]
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
