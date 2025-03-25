@@ -46,8 +46,6 @@ NOT_DEVICE_TESTS = {
     "test_keep_in_fp32_modules",
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
-    "test_fast_init_context_manager",
-    "test_fast_init_tied_embeddings",
     "test_torch_save_load",
     "test_initialization",
     "test_forward_signature",

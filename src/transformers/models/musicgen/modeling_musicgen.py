@@ -1807,27 +1807,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import MusicgenForConditionalGeneration
-
-        >>> model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
-        ```"""
-
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for MusicgenForConditionalGeneration. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-    @classmethod
     def from_sub_models_pretrained(
         cls,
         text_encoder_pretrained_model_name_or_path: Optional[str] = None,
