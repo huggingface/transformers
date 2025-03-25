@@ -644,7 +644,7 @@ class MapInputEmbedding(nn.Module):
 
         Args:
             original_embedding (nn.Embedding): Pre-trained or existing embedding layer.
-            id_map (dict): Mapping from original token IDs to new token IDs.
+            assistant_overlap_token_ids (dict): Mapping from original token IDs to new token IDs.
                           Example: {old_id: new_id}
         """
         super().__init__()
