@@ -13,6 +13,7 @@
 # limitations under the License.
 """Utilities to dynamically load objects from the Hub."""
 
+import ast
 import filecmp
 import hashlib
 import importlib
@@ -149,21 +150,43 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
     with open(filename, encoding="utf-8") as f:
         content = f.read()
 
-    # filter out try/except block so in custom code we can have try/except imports
-    content = re.sub(r"\s*try\s*:.*?except.*?:", "", content, flags=re.DOTALL)
+    def is_optional_import(node, parents):
+        for parent in parents:
+            # Anything in a Try block is optional
+            if isinstance(parent, ast.Try):
+                return True
+            # Anything in an `if is_flash_attn` block is optional
+            if isinstance(parent, ast.If):
+                test = parent.test
+                if isinstance(test, ast.Call) and test.func.id.startswith("is_flash_attn"):
+                    return True
+        return False
 
-    # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
-    content = re.sub(
-        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
-    )
+    imported_modules = set()
 
-    # Imports of the form `import xxx`
-    imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
-    # Imports of the form `from xxx import yyy`
-    imports += re.findall(r"^\s*from\s+(\S+)\s+import", content, flags=re.MULTILINE)
-    # Only keep the top-level module
-    imports = [imp.split(".")[0] for imp in imports if not imp.startswith(".")]
-    return list(set(imports))
+    def visit(node, parents):
+        # Handle 'import x' statements
+        if isinstance(node, ast.Import):
+            if not is_optional_import(node, parents):
+                for alias in node.names:
+                    top_module = alias.name.split(".")[0]
+                    imported_modules.add(top_module)
+
+        # Handle 'from x import y' statements, ignoring relative imports
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module and not is_optional_import(node, parents):
+                top_module = node.module.split(".")[0]
+                imported_modules.add(top_module)
+
+        # Recursively visit all children
+        for child in ast.iter_child_nodes(node):
+            visit(child, parents + [node])
+
+    tree = ast.parse(content)
+    visit(tree, [])
+    imported_modules.discard("")
+
+    return sorted(imported_modules)
 
 
 def check_imports(filename: Union[str, os.PathLike]) -> list[str]:
