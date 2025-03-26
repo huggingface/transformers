@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch.nn import CrossEntropyLoss, LayerNorm
+from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
@@ -41,6 +41,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1453,7 +1454,7 @@ QWEN2_VL_INPUTS_DOCSTRING = r"""
 
 
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
-    _key_mapping = {"model": "language_model"}
+    _key_mapping = {"^model": "language_model"}
 
     def __init__(self, config: Qwen2VLConfig):
         super().__init__(config)
@@ -1645,13 +1646,13 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            inputs_embeds = self.model.embed_tokens(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.get_dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_embeds.shape[0]
-                if n_image_tokens != n_image_features:
+                if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                     raise ValueError(
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                     )
@@ -1667,9 +1668,9 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                n_video_tokens = (input_ids == self.config.video_token_id).sum()
                 n_video_features = video_embeds.shape[0]
-                if n_video_tokens != n_video_features:
+                if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                     raise ValueError(
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
@@ -1709,7 +1710,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
-        outputs = self.language_modelmodel(
+        outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -1718,7 +1719,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
         )
 
@@ -1734,8 +1735,8 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
 class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     _key_mapping = {
-        "model": "model.language_model",
-        "visual": "model.visual",
+        "^visual": "model.visual",
+        r"^model(?!\.(language_model|visual))": "model.language_model",
     }
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1852,18 +1853,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1875,7 +1865,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(

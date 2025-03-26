@@ -1572,6 +1572,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
+            input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             attention_mask=attention_mask,
@@ -1582,7 +1583,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            logits_to_keep=logits_to_keep,
             cache_position=cache_position,
         )
 

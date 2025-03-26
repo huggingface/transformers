@@ -1808,7 +1808,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         self.text_model.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Kosmos2ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1826,39 +1825,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Kosmos2Model
-
-        >>> model = Kosmos2Model.from_pretrained("microsoft/kosmos-2-patch14-224")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
-
-        >>> url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> text = (
-        ...     "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863>"
-        ...     "</object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911>"
-        ...     "</object>"
-        ... )
-
-        >>> inputs = processor(text=text, images=image, return_tensors="pt", add_eos_token=True)
-
-        >>> last_hidden_state = model(
-        ...     pixel_values=inputs["pixel_values"],
-        ...     input_ids=inputs["input_ids"],
-        ...     attention_mask=inputs["attention_mask"],
-        ...     image_embeds_position_mask=inputs["image_embeds_position_mask"],
-        ... ).last_hidden_state
-        >>> list(last_hidden_state.shape)
-        [1, 91, 2048]
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1924,31 +1890,30 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     config_class = Kosmos2Config
     main_input_name = "pixel_values"
-    base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(self, config: Kosmos2Config):
         super().__init__(config)
 
-        self.model = Kosmos2Model(config)
-        self.lm_head = nn.Linear(
-            in_features=config.text_config.embed_dim, out_features=config.text_config.vocab_size, bias=False
-        )
+        self.text_model = Kosmos2TextForCausalLM(config.text_config)
+        self.vision_model = Kosmos2VisionModel(config.vision_config)
+
+        self.image_to_text_projection = Kosmos2ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.model.get_input_embeddings()
+        return self.text_model.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.text_model.model.embed_tokens = value
 
     def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
+        return self.text_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.text_model.set_output_embeddings(new_embeddings)
 
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2ForConditionalGenerationModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -2021,50 +1986,53 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        vision_model_output = None
+        projection_attentions = None
+        if image_embeds is None:
+            if pixel_values is None:
+                raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
+
+            vision_model_output = self.vision_model(
+                pixel_values=pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+            # normalized features
+            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+
+        lm_outputs = self.text_model(
             input_ids=input_ids,
-            pixel_values=pixel_values,
             attention_mask=attention_mask,
+            image_embeds=image_embeds,
             image_embeds_position_mask=image_embeds_position_mask,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
+            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        logits = self.lm_head(outputs[0])
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            batch_size, seq_length, vocab_size = shift_logits.shape
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
-            )
-
         if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            outputs = lm_outputs + (image_embeds, projection_attentions, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ForConditionalGenerationModelOutput(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_embeds=outputs.image_embeds,
-            projection_attentions=outputs.projection_attentions,
-            vision_model_output=outputs.vision_model_output,
+            loss=lm_outputs.loss,
+            logits=lm_outputs.logits,
+            past_key_values=lm_outputs.past_key_values,
+            hidden_states=lm_outputs.hidden_states,
+            attentions=lm_outputs.attentions,
+            image_embeds=image_embeds,
+            projection_attentions=projection_attentions,
+            vision_model_output=vision_model_output,
         )
 
     def generate(

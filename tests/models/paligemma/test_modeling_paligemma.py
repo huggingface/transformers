@@ -21,6 +21,7 @@ import requests
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
+    PaliGemmaModel,
     PaliGemmaProcessor,
     is_torch_available,
     is_vision_available,
@@ -178,7 +179,14 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
-    all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            PaliGemmaModel,
+            PaliGemmaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     fx_compatible = False
     test_pruning = False

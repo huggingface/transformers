@@ -29,7 +29,12 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torchdynamo_compiling,
+    replace_return_docstrings,
+)
 from ..auto import AutoModel
 from .configuration_aya_vision import AyaVisionConfig
 
@@ -430,8 +435,9 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
                 n_image_tokens = (input_ids == self.config.image_token_index).sum()
 
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            if n_image_tokens != n_image_features:
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
@@ -467,10 +473,10 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 )
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
     _key_mapping = {
-        "language_model.model": "model.language_model",
-        "vision_tower": "model.vision_tower",
-        "multi_modal_projector": "model.multi_modal_projector",
-        "language_model.lm_head": "lm_head",
+        "^language_model.model": "model.language_model",
+        "^vision_tower": "model.vision_tower",
+        "^multi_modal_projector": "model.multi_modal_projector",
+        "^language_model.lm_head": "lm_head",
     }
     _tied_weights_keys = ["lm_head.weight"]
 

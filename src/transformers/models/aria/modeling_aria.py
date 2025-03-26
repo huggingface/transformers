@@ -1567,10 +1567,10 @@ class AriaModel(AriaPreTrainedModel):
 )
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     _key_mapping = {
-        "language_model.model": "model.language_model",
-        "vision_tower": "model.vision_tower",
-        "multi_modal_projector": "model.multi_modal_projector",
-        "language_model.lm_head": "lm_head",
+        "^language_model.model": "model.language_model",
+        "^vision_tower": "model.vision_tower",
+        "^multi_modal_projector": "model.multi_modal_projector",
+        "^language_model.lm_head": "lm_head",
     }
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1680,6 +1680,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
+            input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             attention_mask=attention_mask,
@@ -1690,7 +1691,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            logits_to_keep=logits_to_keep,
             cache_position=cache_position,
         )
 

@@ -154,9 +154,6 @@ class FuyuModel(FuyuPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )
@@ -170,18 +167,6 @@ class FuyuModel(FuyuPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def gather_continuous_embeddings(
         self,
@@ -308,20 +293,16 @@ class FuyuModel(FuyuPreTrainedModel):
 )
 class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     _key_mapping = {
-        "language_model.model": "model.language_model",
-        "vision_embed_tokens": "model.vision_embed_tokens",
-        "language_model.lm_head": "lm_head",
+        "^language_model.model": "model.language_model",
+        "^vision_embed_tokens": "model.vision_embed_tokens",
+        "^language_model.lm_head": "lm_head",
     }
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.model = FuyuModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        if self.model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.model._tied_weights_keys]
-
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -331,10 +312,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)
@@ -422,7 +403,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

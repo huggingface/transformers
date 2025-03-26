@@ -2020,18 +2020,6 @@ class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -2110,7 +2098,7 @@ class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
         )
 
@@ -2129,10 +2117,10 @@ class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     _key_mapping = {
-        "language_model.model": "model.language_model",
-        "vision_model": "model.vision_model",
-        "multi_modal_projector": "model.multi_modal_projector",
-        "language_model.lm_head": "lm_head",
+        "^language_model.model": "model.language_model",
+        "^vision_model": "model.vision_model",
+        "^multi_modal_projector": "model.multi_modal_projector",
+        "^language_model.lm_head": "lm_head",
     }
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
     _tied_weights_keys = ["lm_head.weight"]
@@ -2221,6 +2209,12 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         [', it would be:.\\nA stop sign in Chinatown.\\n']
         ```
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -2235,7 +2229,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
         )
 
@@ -2246,7 +2240,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size, **loss_kwargs)
 
         output = CausalLMOutputWithPast(
             loss=loss,
@@ -2254,7 +2248,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
         )
         return output if return_dict else output.to_tuple()
 
@@ -2276,58 +2269,28 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        if past_key_values is not None:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        # TODO: we have no attention_mask so this won't work, check if we really won't need attention mask and find another way
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-        else:
-            # The clone here is for the same reason as for `position_ids`.
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
-
-        if logits_to_keep is not None:
-            model_inputs["logits_to_keep"] = logits_to_keep
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-                "cross_attention_mask": cross_attention_mask,
-            }
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            aspect_ratio_ids=aspect_ratio_ids,
+            aspect_ratio_mask=aspect_ratio_mask,
+            cross_attention_mask=cross_attention_mask,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
         # If we're in pre-fill or cacheless decoding step, then we need pixel_values and aspect ratios
         # to compute image hidden states, otherwise they are cached within each cross attn layer
-        if cache_position[0] == 0:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["aspect_ratio_ids"] = aspect_ratio_ids
-            model_inputs["aspect_ratio_mask"] = aspect_ratio_mask
+        if cache_position[0] != 0:
+            model_inputs["pixel_values"] = None
+            model_inputs["aspect_ratio_ids"] = None
+            model_inputs["aspect_ratio_mask"] = None
 
         return model_inputs
 

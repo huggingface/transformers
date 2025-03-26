@@ -988,7 +988,11 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             **lm_kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -1060,7 +1064,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         is_training = token_type_ids is not None and labels is not None
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
-            causal_mask = self._update_causal_mask(
+            causal_mask = self.model._update_causal_mask(
                 attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
             )
             model_inputs["attention_mask"] = causal_mask
