@@ -548,7 +548,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6, padding_idx=self.padding_idx).to(
             torch_device
         )
-        emb1.make_weight((*emb1.weight.shape, emb1.padding_idx)
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         emb = emb1(input_ids)
         desired_weights = torch.tensor(
             [
