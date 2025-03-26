@@ -479,6 +479,8 @@ class AIMv2PreTrainedModel(PreTrainedModel):
 
 
 class AIMv2VisionModel(AIMv2PreTrainedModel):
+    main_input_name = "pixel_values"
+
     def __init__(self, config: AIMv2VisionConfig):
         super().__init__(config)
         self.config = config
@@ -534,6 +536,8 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
 
 class AIMv2TextModel(AIMv2PreTrainedModel):
+    main_input_name = "input_ids"
+
     def __init__(self, config: AIMv2TextConfig):
         super().__init__(config)
         self.config = config
@@ -941,4 +945,4 @@ class AIMv2Model(AIMv2PreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
-__all__ = ["AIMv2VisionModel", "AIMv2Model", "AIMv2PreTrainedModel"]
+__all__ = ["AIMv2VisionModel", "AIMv2Model", "AIMv2PreTrainedModel", "AIMv2TextModel"]

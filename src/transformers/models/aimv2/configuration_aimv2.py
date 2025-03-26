@@ -93,7 +93,7 @@ class AIMv2VisionConfig(PretrainedConfig):
         use_bias: bool = False,
         hidden_act="silu",
         initializer_range=0.02,
-        use_head=True,
+        use_head=False,
         **kwargs,
     ):
         super().__init__(**kwargs)

@@ -360,6 +360,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("aimv2", "AIMv2"),
+        ("aimv2_text_model", "AIMv2TextModel"),
         ("aimv2_vision_model", "AIMv2VisionModel"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),

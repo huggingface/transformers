@@ -1858,11 +1858,7 @@ else:
         ]
     )
     _import_structure["models.aimv2"].extend(
-        [
-            "AIMv2Model",
-            "AIMv2PreTrainedModel",
-            "AIMv2VisionModel",
-        ]
+        ["AIMv2Model", "AIMv2PreTrainedModel", "AIMv2VisionModel", "AIMv2TextModel"]
     )
     _import_structure["models.clipseg"].extend(
         [
@@ -6720,6 +6716,7 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
         from .models.aimv2 import (
             AIMv2Model,
+            AIMv2TextModel,
             AIMv2VisionModel,
         )
         from .models.albert import (
