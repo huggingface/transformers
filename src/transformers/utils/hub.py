@@ -159,9 +159,9 @@ def list_repo_templates(
     if not local_files_only:
         try:
             return [
-                entry.path.removeprefix("templates/")
+                entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
                 for entry in list_repo_tree(
-                    repo_id=repo_id, revision=revision, path_in_repo="templates", recursive=False
+                    repo_id=repo_id, revision=revision, path_in_repo=CHAT_TEMPLATE_DIR, recursive=False
                 )
                 if entry.path.endswith(".jinja")
             ]
@@ -177,7 +177,7 @@ def list_repo_templates(
         )
     except LocalEntryNotFoundError:  # No local repo means no local files
         return []
-    templates_dir = Path(snapshot_dir, "templates")
+    templates_dir = Path(snapshot_dir, CHAT_TEMPLATE_DIR)
     if not templates_dir.is_dir():
         return []
     return [entry.stem for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
