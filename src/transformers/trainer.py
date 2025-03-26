@@ -4320,7 +4320,7 @@ class Trainer:
         observed_num_examples = 0
 
         #setting the maximum number of samples the evaluation loop processes 
-        max_eval_samples = self.args.max_eval_samples if limit_eval_sample_size else -1
+        max_eval_samples = self.args.max_eval_samples * self.args.eval_batch_size if limit_eval_sample_size else -1
 
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
@@ -4394,6 +4394,10 @@ class Trainer:
 
                 del losses, logits, labels, inputs
                 torch.cuda.empty_cache()
+        
+        #for testing purposes
+        self.observed_num_examples = observed_num_examples
+        self.max_eval_samples = max_eval_samples
 
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
         self.gather_function = self.accelerator.gather_for_metrics
