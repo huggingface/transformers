@@ -14,36 +14,40 @@
 # limitations under the License.
 """Fast Image processor class for Kosmos2_5."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from typing import Dict, List, Optional, Union
+
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...processing_utils import Unpack
 from ...utils import add_start_docstrings
+
+
+class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    # Q: should we use `SizeDict`?
+    patch_size: Optional[Dict[str, int]]
+    max_patches: Optional[int]
 
 
 @add_start_docstrings(
     "Constructs a fast Kosmos2_5 image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    """
+        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+            The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
+        max_patches (`int`, *optional*, defaults to 4096):
+            The maximum number of patches to extract from the image as per the
+            [KOSMOS 2.5 paper](https://arxiv.org/pdf/2309.11419).
+    """,
 )
 class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
+    # To be checked against the slow image processor
     # None values left after checking can be removed
-    resample = None
-    image_mean = None
-    image_std = None
-    size = None
-    default_to_square = None
-    crop_size = None
-    do_resize = None
-    do_center_crop = None
-    do_rescale = None
     do_normalize = True
     do_convert_rgb = True
+    patch_size = {"height": 16, "width": 16}
+    max_patches = 4096
+
+    def __init__(self, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
 
 __all__ = ["Kosmos2_5ImageProcessorFast"]
