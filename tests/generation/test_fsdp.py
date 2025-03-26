@@ -20,7 +20,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
 )
 
 
@@ -112,7 +112,7 @@ if is_torch_available():
 
 
 class TestFSDPGeneration(TestCasePlus):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_fsdp_generate(self):
         if is_torch_mlu_available():
             device_count = torch.mlu.device_count()
@@ -127,7 +127,7 @@ class TestFSDPGeneration(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_fsdp2_generate(self):
         if is_torch_mlu_available():
             device_count = torch.mlu.device_count()
