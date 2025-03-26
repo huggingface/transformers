@@ -642,7 +642,9 @@ class ProcessorMixin(PushToHubMixin):
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
         output_chat_template_file_jinja = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
-        output_chat_template_file_legacy = os.path.join(save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE)  # Legacy filename
+        output_chat_template_file_legacy = os.path.join(
+            save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
+        )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         processor_dict = self.to_dict()
