@@ -810,11 +810,10 @@ def is_torch_hpu_available():
         return False
 
     import torch
+    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
 
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
-
-    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
 
     # IlyasMoutawwakil: We patch masked_fill_ for int64 tensors to avoid a bug on Gaudi1
     # synNodeCreateWithId failed for node: masked_fill_fwd_i64 with synStatus 26 [Generic failure]
