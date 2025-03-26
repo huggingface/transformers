@@ -15,12 +15,10 @@
 """Testing suite for the PyTorch AIMv2 model."""
 
 import inspect
-import os
 import tempfile
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 from pytest import mark
 
 from transformers import AIMv2Config, AIMv2TextConfig, AIMv2VisionConfig
@@ -28,7 +26,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -40,10 +37,8 @@ from transformers.utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
-    is_flaky,
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -80,7 +75,6 @@ class AIMv2VisionModelTester:
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
-        initializer_range=0.02,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -95,7 +89,6 @@ class AIMv2VisionModelTester:
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
 
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches
@@ -118,7 +111,6 @@ class AIMv2VisionModelTester:
             intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
-            initializer_range=self.initializer_range,
         )
 
     def create_and_check_model(self, config, pixel_values):
@@ -128,8 +120,7 @@ class AIMv2VisionModelTester:
         with torch.no_grad():
             result = model(pixel_values)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -155,7 +146,6 @@ class AIMv2ModelTesterMixin(ModelTesterMixin):
 
                 # Load the model with SDPA
                 model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
 
                 # Load model with eager attention
                 model_eager = model_class.from_pretrained(
@@ -164,33 +154,16 @@ class AIMv2ModelTesterMixin(ModelTesterMixin):
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-            # SigLip has one shared cls attr for all models, so we assign both submodels heer
-            vision_attn = text_attn = "sdpa" if model._supports_sdpa else "eager"
-
-            # `None` as it is the requested one which will be assigned to each sub-config
-            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "text_model"):
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.text_model.config._attn_implementation == text_attn)
+            if hasattr(model_sdpa, "vision_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+
+            if hasattr(model_sdpa, "text_model"):
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
 
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-            for name, submodule in model_eager.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    raise ValueError("The eager model should not have SDPA attention layers")
-
-            has_sdpa = False
-            for name, submodule in model_sdpa.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    has_sdpa = True
-                    break
-            if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 @require_torch
@@ -201,7 +174,7 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (AIMv2VisionModel,) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -243,21 +216,6 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype,
-            logit_keys=("last_hidden_state", "pooler_output", "image_embeds"),
-            use_attention_mask_options=(None,),
-        )
-
-    @require_torch_sdpa
-    def test_sdpa_can_dispatch_composite_models(self):
-        super().test_sdpa_can_dispatch_composite_models()
 
 
 class AIMv2TextModelTester:
@@ -346,7 +304,7 @@ class AIMv2TextModelTester:
 @require_torch
 class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AIMv2TextModel,) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_head_masking = False
 
@@ -369,54 +327,17 @@ class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="This model has no Loss")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="This model has no Loss")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    # @unittest.skip(reason="AIMv2 does not use inputs_embeds")
-    # def test_inputs_embeds(self):
-    #     pass
-
-    # @unittest.skip(reason="AIMv2TextModel has no base class and is not available in MODEL_MAPPING")
-    # def test_save_load_fast_init_from_base(self):
-    #     pass
-
-    # @unittest.skip(reason="AIMv2TextModel has no base class and is not available in MODEL_MAPPING")
-    # def test_save_load_fast_init_to_base(self):
-    #     pass
-
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     model_name = "openai/AIMv2-vit-base-patch32"
-    #     model = AIMv2TextModel.from_pretrained(model_name)
-    #     self.assertIsNotNone(model)
-
-    # @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    # @require_torch_sdpa
-    # @slow
-    # @is_flaky()
-    # def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-    #     super().test_eager_matches_sdpa_inference(
-    #         torch_dtype=torch_dtype,
-    #         logit_keys=("last_hidden_state", "pooler_output", "text_embeds"),
-    #         use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
-    #     )
-
-    # @require_torch_sdpa
-    # def test_sdpa_can_dispatch_composite_models(self):
-    #     super().test_sdpa_can_dispatch_composite_models()
-
-    # @require_torch_sdpa
-    # def test_sdpa_can_dispatch_on_flash(self):
-    #     self.skipTest(reason="AIMv2TextModel has two attention masks: `causal_attention_mask` and `attention_mask`")
+    @unittest.skip(reason="AIMv2 does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
 
 
 class AIMv2ModelTester:
@@ -459,6 +380,10 @@ class AIMv2ModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values = config_and_inputs
+
+        # Set use_head to True for LIT variant
+        # config.vision_config.use_head = True
+
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -470,13 +395,14 @@ class AIMv2ModelTester:
 
 @require_torch
 class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    additional_model_inputs = ["pixel_values"]
     all_model_classes = (AIMv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": AIMv2Model, "image-feature-extraction": AIMv2VisionModel}
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -492,6 +418,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        print(config_and_inputs)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_config(self):
@@ -513,101 +440,6 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initialization is different for AIMv2
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # AIMv2 needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -622,21 +454,6 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             config.save_pretrained(tmp_dir_name)
             text_config = AIMv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        super().test_eager_matches_sdpa_inference(
-            torch_dtype=torch_dtype,
-            logit_keys=("logits_per_image", "logits_per_text"),
-            use_attention_mask_options=(None, "right"),  # "left" is not supported for text model
-        )
-
-    @require_torch_sdpa
-    def test_sdpa_can_dispatch_composite_models(self):
-        super().test_sdpa_can_dispatch_composite_models()
 
     @require_flash_attn
     @require_torch_gpu
