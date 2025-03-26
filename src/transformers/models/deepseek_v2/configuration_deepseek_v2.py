@@ -78,8 +78,8 @@ class DeepseekV2Config(PretrainedConfig):
             The dropout probability applied to attention weights.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias term in the MLP layers.
-        head_dim (`int`, *optional*):
-            The dimension of each attention head.
+        head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
+            The attention head dimension.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -116,8 +116,6 @@ class DeepseekV2Config(PretrainedConfig):
             Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
-        head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
-            The attention head dimension.
 
     ```python
     >>> from transformers import DeepseekV2Model, DeepseekV2Config
