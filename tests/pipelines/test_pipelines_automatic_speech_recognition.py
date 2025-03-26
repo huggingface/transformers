@@ -1458,9 +1458,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         chunked_output = speech_recognizer(inputs.copy(), chunk_length_s=30)
         non_chunked_output = speech_recognizer(inputs.copy())
-        assert (
-            chunked_output.keys() == non_chunked_output.keys()
-        ), "The output structure should be the same for chunked vs non-chunked versions of asr pipelines."
+        assert chunked_output.keys() == non_chunked_output.keys(), (
+            "The output structure should be the same for chunked vs non-chunked versions of asr pipelines."
+        )
 
     @require_torch
     def test_return_timestamps_ctc_fast(self):
