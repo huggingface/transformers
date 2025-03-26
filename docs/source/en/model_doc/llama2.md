@@ -116,6 +116,10 @@ visualizer = AttentionMaskVisualizer("meta-llama/Llama-2-7b-hf")
 visualizer("Plants create energy through a process known as")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-2-attn-mask.png"/>
+</div>
+
 ## Notes
 
 - Setting `config.pretraining_tp` to a value besides `1` activates a more accurate but slower computation of the linear layers. This matches the original logits better.
