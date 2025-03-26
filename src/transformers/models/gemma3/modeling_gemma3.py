@@ -1146,7 +1146,7 @@ class Gemma3MultiModalProjector(nn.Module):
     """Base Gemma3 model which consists of a vision backbone and a language model withou language modeling head.""",
     GEMMA3_START_DOCSTRING,
 )
-class Gemma3Model(Gemma3PreTrainedModel, GenerationMixin):
+class Gemma3Model(Gemma3PreTrainedModel):
     _key_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: Gemma3Config):
