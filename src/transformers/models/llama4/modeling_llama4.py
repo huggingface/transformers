@@ -217,7 +217,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4TextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        self.rope_type = "llama3"
+        self.rope_type = "llama3" if config.rope_scaling != "default" else "default"
 
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings

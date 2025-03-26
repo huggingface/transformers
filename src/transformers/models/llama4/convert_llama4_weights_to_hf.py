@@ -204,13 +204,16 @@ def write_model(
     rope_theta = params["rope_theta"]
 
     # some constans from original code
-    rope_scaling = {
-        "rope_type": "llama3",
-        "factor": 8.0,
-        "low_freq_factor": 1.0,
-        "high_freq_factor": 4.0,
-        "original_max_position_embeddings": 8192,
-    }
+    if params["use_scaled_rope"]:
+        rope_scaling = {
+            "rope_type": "llama3",
+            "factor": 8.0,
+            "low_freq_factor": 1.0,
+            "high_freq_factor": 4.0,
+            "original_max_position_embeddings": 8192,
+        }
+    else:
+        rope_scaling = "default"
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
@@ -473,7 +476,7 @@ def write_model(
 
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
-        out = model.generate(**inputs, max_new_tokens=2)
+        out = model.generate(**inputs, max_new_tokens=4)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:
