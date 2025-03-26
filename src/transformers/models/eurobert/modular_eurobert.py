@@ -415,6 +415,8 @@ class EuroBertModel(LlamaModel):
 
         if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
             mask = self.mask_converter.to_4d(attention_mask, attention_mask.shape[1], inputs_embeds.dtype)
+        else:
+            mask = attention_mask
 
         hidden_states = inputs_embeds
 
