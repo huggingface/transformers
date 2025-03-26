@@ -16,14 +16,14 @@ class BlipImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class CLIPImageProcessorFast(metaclass=DummyObject):
+class ChineseCLIPImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
 
-class ChineseCLIPImageProcessorFast(metaclass=DummyObject):
+class CLIPImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
