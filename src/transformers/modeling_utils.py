@@ -2084,7 +2084,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if (
                 not isinstance(config._attn_implementation, dict)
-                and config._attn_implementation not in ["eager"] + AttentionInterface.valid_keys()
+                and config._attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
             ):
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
@@ -2150,7 +2150,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
-        elif requested_attn_implementation in AttentionInterface.valid_keys():
+        elif requested_attn_implementation in ALL_ATTENTION_FUNCTIONS.valid_keys():
             config._attn_implementation = requested_attn_implementation
         elif isinstance(requested_attn_implementation, dict):
             config._attn_implementation = None
@@ -5935,9 +5935,8 @@ class AttentionInterface(MutableMapping):
     def register(cls, key: str, value: Callable):
         cls._global_mapping.update({key: value})
 
-    @classmethod
     def valid_keys(self) -> List[str]:
-        return list(self._global_mapping.keys())
+        return list(self._global_mapping.keys() | self._local_mapping.keys())
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
