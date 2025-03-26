@@ -790,6 +790,12 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
                 module.mask_token.data.zero_()
             if module.position_embeddings is not None:
                 module.position_embeddings.data.zero_()
+        elif isinstance(module, Data2VecVisionRelativePositionBias):
+            module.relative_position_bias_table.data.zero_()
+        elif isinstance(module, Data2VecVisionLayer):
+            if module.lambda_1 is not None:
+                module.lambda_1.data.fill_(self.config.layer_scale_init_value)
+                module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 DATA2VEC_VISION_START_DOCSTRING = r"""

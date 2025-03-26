@@ -795,6 +795,8 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
                 module.mask_token.data.zero_()
             if module.position_embeddings is not None:
                 module.position_embeddings.data.zero_()
+        elif isinstance(module, MaskFormerSwinSelfAttention):
+            module.relative_position_bias_table.data.zero_()
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):

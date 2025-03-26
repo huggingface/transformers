@@ -647,6 +647,10 @@ class FocalNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, FocalNetEmbeddings):
             if module.mask_token is not None:
                 module.mask_token.data.zero_()
+        elif isinstance(module, FocalNetLayer):
+            if self.config.use_layerscale:
+                module.gamma_1.data.fill_(self.config.layerscale_value)
+                module.gamma_2.data.fill_(self.config.layerscale_value)
 
 
 FOCALNET_START_DOCSTRING = r"""

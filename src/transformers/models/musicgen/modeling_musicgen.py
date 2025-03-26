@@ -720,10 +720,10 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, MusicgenSinusoidalPositionalEmbedding):
-            weight = module.get_embedding(*module.weight.shape)
-            weight = nn.Parameter(weight, requires_grad=False)
-            weight.detach_()
-            module.weight = weight
+            weights = module.get_embedding(*module.weights.shape)
+            weights = nn.Parameter(weights, requires_grad=False)
+            weights.detach_()
+            module.weights = weights
 
 
 MUSICGEN_START_DOCSTRING = r"""

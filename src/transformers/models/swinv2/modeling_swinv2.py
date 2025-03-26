@@ -976,7 +976,6 @@ class Swinv2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->Swinv2,swin->swinv2
 class Swinv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1005,6 +1004,8 @@ class Swinv2PreTrainedModel(PreTrainedModel):
                 module.mask_token.data.zero_()
             if module.position_embeddings is not None:
                 module.position_embeddings.data.zero_()
+        elif isinstance(module, Swinv2SelfAttention):
+            module.logit_scale.data.fill_(math.log(10))
 
 
 SWINV2_START_DOCSTRING = r"""
