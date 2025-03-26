@@ -1859,9 +1859,9 @@ else:
     )
     _import_structure["models.aimv2"].extend(
         [
-            "AIMv2ForImageClassification",
             "AIMv2Model",
             "AIMv2PreTrainedModel",
+            "AIMv2VisionModel",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -6719,13 +6719,8 @@ if TYPE_CHECKING:
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
         from .models.aimv2 import (
-            AIMv2ForImageClassification,
             AIMv2Model,
-            AIMv2PreTrainedModel,
-            AIMv2TextModel,
-            AIMv2TextModelWithProjection,
             AIMv2VisionModel,
-            AIMv2VisionModelWithProjection,
         )
         from .models.albert import (
             AlbertForMaskedLM,
