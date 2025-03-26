@@ -874,6 +874,11 @@ class FlavaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, FlavaImageEmbeddings):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
 @add_start_docstrings(

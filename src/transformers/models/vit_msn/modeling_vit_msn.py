@@ -480,6 +480,10 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ViTMSNEmbeddings):
+            module.cls_token.data.zero_()
+            module.mask_token.data.zero_()
+            module.position_embeddings.data.zero_()
 
 
 VIT_MSN_START_DOCSTRING = r"""

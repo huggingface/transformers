@@ -133,6 +133,7 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int):
         super().__init__()
         self.embedding_dim = embedding_dim
+        self.make_weights(num_positions, embedding_dim)
 
     def make_weights(self, num_embeddings: int, embedding_dim: int):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim)
