@@ -40,6 +40,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     is_torch_available,
+    is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
@@ -50,6 +51,11 @@ if is_torch_available():
 
 if is_vision_available():
     from ...image_utils import pil_torch_interpolation_mapping
+
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
