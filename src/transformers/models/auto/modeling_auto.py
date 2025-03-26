@@ -34,6 +34,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("aimv2", "AIMv2Model"),
+        ("aimv2_vision_model", "AIMv2VisionModel"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
