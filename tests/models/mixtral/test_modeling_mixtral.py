@@ -499,6 +499,9 @@ class MixtralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input).logits
 
+        # Fix the error: the values for attribute 'dtype' do not match: torch.bfloat16 != torch.float32.
+        logits = logits.float()
+
         torch.testing.assert_close(
             logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
         )
@@ -561,6 +564,8 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
+        # Fix the error: the values for attribute 'dtype' do not match: torch.bfloat16 != torch.float32.
+        logits = logits.float()
 
         torch.testing.assert_close(
             logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
