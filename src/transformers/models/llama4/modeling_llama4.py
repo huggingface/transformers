@@ -1601,42 +1601,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         hidden_state = image_outputs.last_hidden_state
         return hidden_state
 
-    @staticmethod
-    def create_image_embeddings_with_placeholders(pixel_values, image_mask, h_image, projected_embeddings):
-        """
-        pixel_values is a list of list of image tensors.
-        image_mask
-        h_image is an empty tensor of shape identical to that of the token sequence
-                (including image tokens)
-        projected_embedding is the output of vision_model.forward() on image inputs.
-
-        The result will be an embedding tensor with the image embeddings placed at the "right positions".
-        """
-        # FIXME This expects pixel_values to be a list of list
-        # it is currently a tensor, so we bracket with [[]]
-        # WILL FAIL with batching with several images per sample
-        num_images_per_sequence = [sum(image.size(0) for image in sample_images) for sample_images in [[pixel_values]]]
-        image_mask = image_mask[:, :, 0, None]
-        encoded_patches_list = projected_embeddings.split(num_images_per_sequence, dim=0)
-        for index in range(h_image.size(0)):
-            encoded_patches_per_sample = encoded_patches_list[index]
-            sample_image_mask = image_mask[index]
-
-            if encoded_patches_per_sample.numel() == 0:
-                continue
-            encoded_patches_per_sample = encoded_patches_per_sample.contiguous().view(
-                -1, encoded_patches_per_sample.size(-1)
-            )
-
-            n_tokens_to_fill = sample_image_mask.sum()
-            assert n_tokens_to_fill <= encoded_patches_per_sample.size(0)
-
-            h_image[index].masked_scatter_(
-                sample_image_mask.expand(-1, h_image.size(-1)),
-                encoded_patches_per_sample[:n_tokens_to_fill],
-            )
-
-        return h_image
 
     @replace_return_docstrings(output_type=Llama4CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1731,37 +1695,29 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
+            original_inputs_embeds_shape = inputs_embeds.shape
+
+            vision_flat = image_features.view(-1, image_features.size(-1))
+            projected_vision_flat = self.multi_modal_projector(vision_flat)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            n_image_tokens = (input_ids == self.config.image_token_index).sum()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
+            final_mask = special_image_mask.to(inputs_embeds.device) 
+            inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
-            if not is_torchdynamo_compiling() and n_image_features != n_image_tokens:
+            final_mask_1d = final_mask[..., 0].reshape(-1)
+            num_tokens_to_fill = final_mask_1d.sum()
+
+            if num_tokens_to_fill != projected_vision_flat.size(0):
                 raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    f"Mismatch: final_mask wants {num_tokens_to_fill} embeddings, "
+                    f"but multi_modal_projector returned {projected_vision_flat.size(0)}"
                 )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            reference_embedding = torch.zeros(
-                (inputs_embeds.shape[0], inputs_embeds.shape[1], image_features.shape[-1]),
-                dtype=inputs_embeds.dtype,
-                device=inputs_embeds.device,
-            )
 
-            image_embeddings_pre_scatter = self.create_image_embeddings_with_placeholders(
-                pixel_values=pixel_values,
-                image_mask=special_image_mask,
-                h_image=reference_embedding,
-                projected_embeddings=image_features,
-            )
-            projected_image_embeddings = self.multi_modal_projector(image_embeddings_pre_scatter)
-            projected_image_embeddings = torch.load("/fsx/arthur/projected_image_embeddings")
-            # FIXME This should be more or less robust but
-            # it is not elegant at all. We can do a lot better
-            final_mask = special_image_mask[:, :, 0, None]
-            inputs_embeds = inputs_embeds * ~final_mask.to(
-                inputs_embeds.device
-            ) + projected_image_embeddings.to(inputs_embeds.device) * final_mask.to(inputs_embeds.device)
+            expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
+            inputs_embeds.masked_scatter_(expanded_mask, projected_vision_flat)
+
+            inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
+
 
         outputs = self.language_model(
             attention_mask=attention_mask,
