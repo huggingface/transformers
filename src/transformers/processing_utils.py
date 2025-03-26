@@ -649,14 +649,14 @@ class ProcessorMixin(PushToHubMixin):
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         save_as_jinja = kwargs.get("save_raw_chat_template", False)
-        is_single_file = isinstance(self.chat_template, str)
+        is_single_template = isinstance(self.chat_template, str)
 
-        if kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, str):
+        if save_as_jinja and is_single_template:
             # New format for single templates is to save them as chat_template.jinja
             with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
                 f.write(self.chat_template)
             logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-        elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
+        elif save_as_jinja and not is_single_template:
             # New format for multiple templates is to save the default as chat_template.jinja
             # and the other templates in the chat_templates/ directory
             for template_name, template in self.chat_template.items():
@@ -670,21 +670,7 @@ class ProcessorMixin(PushToHubMixin):
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")
-        elif isinstance(self.chat_template, dict):
-            # Legacy format for multiple templates:
-            # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
-            chat_template_json_string = (
-                json.dumps(
-                    {"chat_template": [{"name": k, "template": v} for k, v in self.chat_template.items()]},
-                    indent=2,
-                    sort_keys=True,
-                )
-                + "\n"
-            )
-            with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
-                writer.write(chat_template_json_string)
-            logger.info(f"chat template saved in {output_chat_template_file_legacy}")
-        elif self.chat_template is not None:
+        elif is_single_template:
             # Legacy format for single templates: Put them in chat_template.json
             chat_template_json_string = (
                 json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
@@ -692,6 +678,13 @@ class ProcessorMixin(PushToHubMixin):
             with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
             logger.info(f"chat template saved in {output_chat_template_file_legacy}")
+        elif self.chat_template is not None:
+            # At this point we have multiple templates in the legacy format, which is not supported
+            # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
+            raise ValueError(
+                "Multiple chat templates are not supported in the legacy format. Please save them as separate files "
+                "using the `save_raw_chat_template` argument."
+            )
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
