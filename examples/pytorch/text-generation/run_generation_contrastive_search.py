@@ -68,7 +68,7 @@ def main():
     parser.add_argument(
         "--use_cpu",
         action="store_true",
-        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+        help="Whether or not to use cpu. If set to False, we will use gpu/npu or mps device if available",
     )
     parser.add_argument(
         "--fp16",
