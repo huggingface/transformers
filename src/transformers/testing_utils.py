@@ -3056,7 +3056,7 @@ DeviceProperties = tuple[Union[str, None], Union[int, None]]
 
 
 @cache
-def get_device_properties(self) -> DeviceProperties:
+def get_device_properties() -> DeviceProperties:
     """
     Get environment device properties.
     """
