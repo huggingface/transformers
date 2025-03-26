@@ -14,64 +14,75 @@
 # limitations under the License.
 import argparse
 import gc
+import json
 import os
+from typing import Optional
 
 import regex as re
 import torch
-from huggingface_hub import hf_hub_download
+from accelerate import init_empty_weights
+from huggingface_hub import snapshot_download
+from huggingface_hub.errors import HFValidationError
+from safetensors.torch import load_file
 
 from transformers import (
-    DepthProConfig,
-    DepthProForDepthEstimation,
-    DepthProImageProcessorFast,
+    AutoTokenizer,
+    DeepseekVLConfig,
+    DeepseekVLForConditionalGeneration,
+    DeepseekVLImageProcessor,
+    DeepseekVLProcessor,
+)
+from transformers.image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
 )
 
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    # Sam (High Resolution)
-    r"vision_model.vision_tower_high.vision_tower.pos_embed": r"model.high_res_vision_encoder.model.pos_embed",
-    r"vision_model.vision_tower_high.vision_tower.patch_embed.proj.(weight|bias)": r"model.high_res_vision_encoder.model.patch_embed.projection.\1",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.layer_norm\2.\3",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.rel_pos_(h|w)": r"model.high_res_vision_encoder.model.layers.\1.attn.rel_pos_\2",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.attn.qkv.\2",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.proj.(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.attn.proj.\2",
-    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).mlp.lin(\d+).(weight|bias)": r"model.high_res_vision_encoder.model.layers.\1.mlp.lin\2.\3",
-    r"vision_model.vision_tower_high.vision_tower.neck.0.weight": r"model.high_res_vision_encoder.model.neck.conv1.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck.1.(weight|bias)": r"model.high_res_vision_encoder.model.neck.layer_norm1.\1",
-    r"vision_model.vision_tower_high.vision_tower.neck.2.weight": r"model.high_res_vision_encoder.model.neck.conv2.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck.3.(weight|bias)": r"model.high_res_vision_encoder.model.neck.layer_norm2.\1",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.0.weight": r"model.high_res_vision_encoder.global_neck.conv1.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.1.(weight|bias)": r"model.high_res_vision_encoder.global_neck.layer_norm1.\1",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.2.weight": r"model.high_res_vision_encoder.global_neck.conv2.weight",
-    r"vision_model.vision_tower_high.vision_tower.neck_hd.3.(weight|bias)": r"model.high_res_vision_encoder.global_neck.layer_norm2.\1",
-    r"vision_model.vision_tower_high.vision_tower.downsamples.0.weight": r"model.high_res_vision_encoder.neck.conv1.weight",
-    r"vision_model.vision_tower_high.vision_tower.downsamples.1.weight": r"model.high_res_vision_encoder.neck.conv2.weight",
-    r"vision_model.vision_tower_high.vision_tower.hd_alpha_downsamples": r"model.high_res_vision_encoder.alpha",
+    # # Sam (High Resolution)
+    r"vision_model.vision_tower_high.vision_tower.pos_embed":                                 r"model.high_res_vision_encoder.model.pos_embed",
+    r"vision_model.vision_tower_high.vision_tower.patch_embed.proj.(weight|bias)":            r"model.high_res_vision_encoder.model.patch_embed.projection.\1",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)":      r"model.high_res_vision_encoder.model.layers.\1.layer_norm\2.\3",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.rel_pos_(h|w)":           r"model.high_res_vision_encoder.model.layers.\1.attn.rel_pos_\2",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)":       r"model.high_res_vision_encoder.model.layers.\1.attn.qkv.\2",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).attn.proj.(weight|bias)":      r"model.high_res_vision_encoder.model.layers.\1.attn.proj.\2",
+    r"vision_model.vision_tower_high.vision_tower.blocks.(\d+).mlp.lin(\d+).(weight|bias)":   r"model.high_res_vision_encoder.model.layers.\1.mlp.lin\2.\3",
+    r"vision_model.vision_tower_high.vision_tower.neck.0.weight":                             r"model.high_res_vision_encoder.model.neck.conv1.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck.1.(weight|bias)":                      r"model.high_res_vision_encoder.model.neck.layer_norm1.\1",
+    r"vision_model.vision_tower_high.vision_tower.neck.2.weight":                             r"model.high_res_vision_encoder.model.neck.conv2.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck.3.(weight|bias)":                      r"model.high_res_vision_encoder.model.neck.layer_norm2.\1",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.0.weight":                          r"model.high_res_vision_encoder.global_neck.conv1.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.1.(weight|bias)":                   r"model.high_res_vision_encoder.global_neck.layer_norm1.\1",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.2.weight":                          r"model.high_res_vision_encoder.global_neck.conv2.weight",
+    r"vision_model.vision_tower_high.vision_tower.neck_hd.3.(weight|bias)":                   r"model.high_res_vision_encoder.global_neck.layer_norm2.\1",
+    r"vision_model.vision_tower_high.vision_tower.downsamples.0.weight":                      r"model.high_res_vision_encoder.neck.conv1.weight",
+    r"vision_model.vision_tower_high.vision_tower.downsamples.1.weight":                      r"model.high_res_vision_encoder.neck.conv2.weight",
+    r"vision_model.vision_tower_high.vision_tower.hd_alpha_downsamples":                      r"model.high_res_vision_encoder.alpha",
 
     # Siglip (Low Resolution)
-    r"vision_model(?:.vision_tower_low)?.vision_tower.pos_embed": r"model.low_res_vision_encoder.model.vision_model.embeddings.position_embedding.weight",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.patch_embed.proj.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.embeddings.patch_embedding.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.(q|k|v)_proj.\2",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.proj.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.layer_norm\2.\3",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).mlp.fc(\d+).(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.norm.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.post_layernorm.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.latent": r"model.low_res_vision_encoder.model.vision_model.head.probe",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.proj.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.head.attention.out_proj.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.norm.(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.head.layernorm.\1",
-    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.mlp.fc(\d+).(weight|bias)": r"model.low_res_vision_encoder.model.vision_model.head.mlp.fc\1.\2",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.pos_embed":                                  r"model.low_res_vision_encoder.model.vision_model.embeddings.position_embedding.weight",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.patch_embed.proj.(weight|bias)":             r"model.low_res_vision_encoder.model.vision_model.embeddings.patch_embedding.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.qkv.(weight|bias)":        r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.(q|k|v)_proj.\2",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).attn.proj.(weight|bias)":       r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).norm(\d+).(weight|bias)":       r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.layer_norm\2.\3",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.blocks.(\d+).mlp.fc(\d+).(weight|bias)":     r"model.low_res_vision_encoder.model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.norm.(weight|bias)":                         r"model.low_res_vision_encoder.model.vision_model.post_layernorm.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.latent":                           r"model.low_res_vision_encoder.model.vision_model.head.probe",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.proj.(weight|bias)":               r"model.low_res_vision_encoder.model.vision_model.head.attention.out_proj.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.norm.(weight|bias)":               r"model.low_res_vision_encoder.model.vision_model.head.layernorm.\1",
+    r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.mlp.fc(\d+).(weight|bias)":        r"model.low_res_vision_encoder.model.vision_model.head.mlp.fc\1.\2",
 
     # Vision Projection (1.3B)
-    r"aligner.layers.0.(weight|bias)": r"model.aligner.low_res_vision_proj.\1",
-    r"aligner.layers.2.(weight|bias)": r"model.aligner.proj.\1",
+    r"aligner.layers.0.(weight|bias)":               r"model.aligner.low_res_vision_proj.\1",
+    r"aligner.layers.2.(weight|bias)":               r"model.aligner.proj.\1",
     # Vision Projection (7B)
-    r"aligner.(high|low)_up_proj.(weight|bias)": r"model.aligner.\1_res_vision_proj.\2",
-    r"aligner.layers.1.(weight|bias)": r"model.aligner.proj.\1",
+    r"aligner.(high|low)_up_proj.(weight|bias)":     r"model.aligner.\1_res_vision_proj.\2",
+    r"aligner.layers.1.(weight|bias)":               r"model.aligner.proj.\1",
 
     # Llama (Text Model)
-    r"language_model.model.(\w+)": r"model.language_model.\1",
-    r"language_model.lm_head.(weight|bias)": r"lm_head.\1",
+    r"language_model.model.(\w+)":                   r"model.language_model.\1",
+    r"language_model.lm_head.(weight|bias)":         r"lm_head.\1",
 }
 # fmt: on
 
@@ -183,33 +194,97 @@ def update_state_dict(old_state_dict):
     return state_dict
 
 
-def write_model(
+def load_model_state_dict(input_path: str) -> dict:
+    """
+    Load model state dict, handling both single and sharded files.
+    """
+    index_path = os.path.join(input_path, "model.safetensors.index.json")
+    single_file_path = os.path.join(input_path, "model.safetensors")
+
+    # Check if we have a sharded model
+    if os.path.exists(index_path):
+        print("Loading sharded model...")
+        state_dict = {}
+        with open(index_path, "r") as f:
+            index = json.load(f)
+
+        # Get unique shard files and load each one only once
+        unique_shard_files = sorted(set(index["weight_map"].values()))
+        for shard_file in unique_shard_files:
+            print(f"Loading shard {shard_file}...")
+            shard_path = os.path.join(input_path, shard_file)
+            shard_dict = torch.load(shard_path, map_location="cpu")
+            state_dict.update(shard_dict)
+
+        return state_dict
+
+    # Single file model
+    elif os.path.exists(single_file_path):
+        print("Loading single file model...")
+        return load_file(single_file_path, device="cpu")
+
+    else:
+        raise ValueError(f"No model files found in {input_path}")
+
+
+def convert_model(
     hf_repo_id: str,
     output_dir: str,
+    output_hub_path: Optional[str] = None,
     safe_serialization: bool = True,
 ):
     os.makedirs(output_dir, exist_ok=True)
+    is_large = "7b" in hf_repo_id
+
+    try:
+        input_path = snapshot_download(hf_repo_id)
+    except HFValidationError:
+        # If the input path is not a HF repo ID, assume it's a local path
+        input_path = hf_repo_id
 
     # ------------------------------------------------------------
     # Create and save config
     # ------------------------------------------------------------
 
-    # create config
-    backbone_config = {
-        "model_type": "dinov2",
-        "num_hidden_layers": 24,
-        "patch_size": 16,
-        "hidden_size": 1024,
-        "num_attention_heads": 16,
-        "image_size": 384,
-        "use_mask_token": False,
-    }
-    config = DepthProConfig(
-        # original implementation uses same config for all 3 models
-        image_model_config=backbone_config,
-        patch_model_config=backbone_config,
-        fov_model_config=backbone_config,
-        use_fov_model=True,
+    config = DeepseekVLConfig(
+        text_config={
+            # -- temporary
+            "num_hidden_layers": 1,
+            "vocab_size": 20 if is_large else 102400,
+            # -- conversion script changes
+            "hidden_size": 4096 if is_large else 2048,
+            "intermediate_size": 11008 if is_large else 5632,
+            "max_position_embeddings": 16384,
+            "num_attention_heads": 32 if is_large else 16,
+            # "num_hidden_layers": 30 if is_large else 24,
+            # "vocab_size": 102400,
+        },
+        use_high_res_vision=is_large,
+        low_res_vision_config={
+            # -- temporary
+            "num_hidden_layers": 1,
+            # -- conversion script changes
+            "hidden_size": 1024,
+            "intermediate_size": 4096,
+            "image_size": 384,
+            "patch_size": 16,
+            "hidden_act": "gelu",
+            "vision_use_head": False,
+            "num_attention_heads": 16,
+            # "num_hidden_layers": 24,
+        },
+        high_res_vision_config={
+            # -- temporary
+            "num_hidden_layers": 1,
+            "global_attn_indexes": [0],
+            # -- conversion script changes
+            "hidden_size": 768,
+            "intermediate_size": 3072,
+            "image_size": 1024,
+            "patch_size": 16,
+            "num_attention_heads": 12,
+            # "num_hidden_layers": 12,
+        },
     )
 
     # save config
@@ -217,92 +292,109 @@ def write_model(
     print("Model config saved successfully...")
 
     # ------------------------------------------------------------
+    # Convert processor
+    # ------------------------------------------------------------
+
+    if is_large:
+        image_processor = DeepseekVLImageProcessor(
+            size={"height": 384, "width": 384},
+            image_mean=OPENAI_CLIP_MEAN,
+            image_std=OPENAI_CLIP_STD,
+        )
+    else:
+        image_processor = DeepseekVLImageProcessor()
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        input_path,
+        extra_special_tokens={
+            "pad_token": "<｜end▁of▁sentence｜>",
+            "image_token": "<image_placeholder>",
+        },
+    )
+
+    processor = DeepseekVLProcessor(
+        image_processor=image_processor,
+        tokenizer=tokenizer,
+        chat_template=CHAT_TEMPLATE,
+    )
+
+    if output_dir:
+        print(f"Saving processor to {output_dir}...")
+        processor.save_pretrained(output_dir)
+    if output_hub_path:
+        print(f"Pushing processor to hub at {output_hub_path}...")
+        processor.push_to_hub(output_hub_path)
+
+    # ------------------------------------------------------------
     # Convert weights
     # ------------------------------------------------------------
 
-    # download and load state_dict from hf repo
-    file_path = hf_hub_download(hf_repo_id, "depth_pro.pt")
-    loaded = torch.load(file_path, weights_only=True)
+    print("Creating empty model...")
+    with init_empty_weights():
+        model = DeepseekVLForConditionalGeneration(config)
 
-    print("Converting model...")
-    all_keys = list(loaded.keys())
-    new_keys = convert_old_keys_to_new_keys(all_keys)
+    # Load and convert state dict
+    print("Loading state dict...")
+    state_dict = load_model_state_dict(input_path)
+    state_dict = update_state_dict(state_dict)
 
-    state_dict = {}
-    for key in all_keys:
-        new_key = new_keys[key]
-        current_parameter = loaded.pop(key)
+    # Load converted state dict
+    print("Loading converted weights into model...")
+    info = model.load_state_dict(state_dict, strict=False, assign=True)
+    if len(info.missing_keys) > 0:
+        raise ValueError(f"Missing keys: {info.missing_keys}")
 
-        if "qkv" in key:
-            qkv_state_dict = get_qkv_state_dict(new_key, current_parameter)
-            state_dict.update(qkv_state_dict)
-        else:
-            state_dict[new_key] = current_parameter
+    # Tie weights before any device mapping
+    print("Tying weights...")
+    model.tie_weights()
 
-    print("Loading the checkpoint in a DepthPro model.")
-    model = DepthProForDepthEstimation(config)
-    model.load_state_dict(state_dict, strict=True, assign=True)
-    print("Checkpoint loaded successfully.")
+    # Save the model
+    if output_dir:
+        print(f"Saving model to {output_dir}...")
+        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    if output_hub_path:
+        print(f"Pushing model to hub at {output_hub_path}...")
+        model.push_to_hub(output_hub_path, safe_serialization=safe_serialization)
 
-    print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
     del state_dict, model
-
-    # Safety check: reload the converted model
     gc.collect()
-    print("Reloading the model to check if it's saved correctly.")
-    model = DepthProForDepthEstimation.from_pretrained(output_dir, device_map="auto")
-    print("Model reloaded successfully.")
-    return model
 
-
-def write_image_processor(output_dir: str):
-    image_processor = DepthProImageProcessorFast()
-    image_processor.save_pretrained(output_dir)
-    return image_processor
+    # Validate the saved model if saved locally
+    if output_dir:
+        print("Reloading the local model to check if it's saved correctly...")
+        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
+        DeepseekVLForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
+        print("Local model reloaded successfully.")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--hf_repo_id",
-        default="apple/DepthPro",
-        help="Location of official weights from apple on HF",
+        default="deepseek-ai/deepseek-vl-1.3b-chat",
+        help="Location of official weights from DeepseekAI on HF",
     )
     parser.add_argument(
         "--output_dir",
-        default="apple_DepthPro",
+        default="geetu040/deepseek-vl-1.3b-chat-hf",
         help="Location to write the converted model and processor",
+    )
+    parser.add_argument(
+        "--output_hub_path",
+        help="Repository ID to push model to hub (e.g. 'username/model-name')",
+        default=None,
     )
     parser.add_argument(
         "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
     )
-    parser.add_argument(
-        "--push_to_hub",
-        action=argparse.BooleanOptionalAction,
-        help="Whether or not to push the converted model to the huggingface hub.",
-    )
-    parser.add_argument(
-        "--hub_repo_id",
-        default="apple/DepthPro-hf",
-        help="Huggingface hub repo to write the converted model and processor",
-    )
     args = parser.parse_args()
 
-    model = write_model(
+    convert_model(
         hf_repo_id=args.hf_repo_id,
         output_dir=args.output_dir,
+        output_hub_path=args.output_hub_path,
         safe_serialization=args.safe_serialization,
     )
-
-    image_processor = write_image_processor(
-        output_dir=args.output_dir,
-    )
-
-    if args.push_to_hub:
-        print("Pushing to hub...")
-        model.push_to_hub(args.hub_repo_id)
-        image_processor.push_to_hub(args.hub_repo_id)
 
 
 if __name__ == "__main__":
