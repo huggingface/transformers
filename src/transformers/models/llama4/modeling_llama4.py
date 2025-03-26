@@ -96,13 +96,17 @@ class Llama4TextExperts(nn.Module):
 
 # Phi3MLP
 class Llama4TextMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, intermediate_size_factor=1):
         """This is used for the shared expert."""
         super().__init__()
+
+        # In the layers that don't use MoEs, the intermediate size is double the expert's
+        intermediate_size = intermediate_size_factor * config.intermediate_size
+
         self.config = config
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -424,7 +428,7 @@ class Llama4TextDecoderLayer(nn.Module):
         if self.is_moe_layer:
             self.feed_forward = Llama4TextMoe(config)
         else:
-            self.feed_forward = Llama4TextFusedMLP(config)
+            self.feed_forward = Llama4TextMLP(config, intermediate_size_factor=2)
 
         self.input_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

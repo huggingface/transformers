@@ -57,9 +57,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r'layers.(\d+).attention.wo._extra_state':               None,
 
     # MLP layer variant
-    # r"layers.(\d+).feed_forward.w1":                         r"language_model.model.layers.\1.feed_forward.gate_proj",               # might need to be fused for efficiency?
-    # r"layers.(\d+).feed_forward.w3":                         r"language_model.model.layers.\1.feed_forward.up_proj",                 # might need to be fused for efficiency?
-    r"layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.feed_forward.gate_up_proj.weight",
+    r"layers.(\d+).feed_forward.w1.weight":                  r"language_model.model.layers.\1.feed_forward.gate_proj.weight",               # might need to be fused for efficiency?
+    r"layers.(\d+).feed_forward.w3.weight":                  r"language_model.model.layers.\1.feed_forward.up_proj.weight",                 # might need to be fused for efficiency?
+    # r"layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.feed_forward.gate_up_proj.weight",
     r"layers.(\d+).feed_forward.mlp.fc2_weight":             r"language_model.model.layers.\1.feed_forward.down_proj.weight",
     r"layers.(\d+).feed_forward.mlp.layer_norm.weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
 
@@ -150,6 +150,8 @@ def get_concat_dim(key):
         "experts.gate_proj",
         "experts.up_proj",
         "expert.down_proj",
+        # "feed_forward.up_proj",
+        # "feed_forward.gate_proj",
         "feed_forward.down_proj",
         "global_gate_stats",
         # vision dim1 sharded stuff
@@ -173,6 +175,20 @@ def safe_load(filename):
     shard = torch.load(filename, weights_only=True, map_location="cpu", mmap=True)
     shard = {k: v for k, v in shard.items() if not isinstance(v, io.BytesIO)}
     return shard
+
+
+# Unpack mlp projections - possibly to be removed when they are fused
+def preprocess_keys(state_dict):
+    new_state_dict = dict()
+    for key, value in state_dict.items():
+        if "mlp.fc1_weight" in key:
+            prefix = key.split("mlp.fc1_weight")[0]
+            w1, w3 = value.chunk(2, dim=0)
+            new_state_dict[prefix + "w1.weight"] = w1
+            new_state_dict[prefix + "w3.weight"] = w3
+        else:
+            new_state_dict[key] = value
+    return new_state_dict
 
 
 def write_model(
@@ -288,6 +304,7 @@ def write_model(
                 safe_load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"))
                 for i in tqdm(range(num_shards), desc="Loading shards", unit="shard")
             ]
+        loaded = [preprocess_keys(d) for d in loaded]
 
         all_keys_raw = list(loaded[0].keys())
         repeated_keys = []
@@ -370,7 +387,7 @@ def write_model(
                     if gate_key == new_key:
                         state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                     elif new_key == up_key:
-                        if "shared" in new_key:
+                        if "experts" not in new_key:
                             gate_proj = state_dict.pop(gate_key)
                             up_proj = torch.cat(current_parameter, dim=concat_dim)
                             state_dict[gate_key] = gate_proj
