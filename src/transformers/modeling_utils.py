@@ -5899,6 +5899,7 @@ class AttentionInterface(MutableMapping):
     with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
     it needs to declare a new instance of this class inside the `modeling.py`, and declare it on that instance.
     """
+
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
@@ -5926,7 +5927,7 @@ class AttentionInterface(MutableMapping):
     def __iter__(self):
         # Ensure we use all keys, with the overwritten ones on top
         return iter(self._global_mapping.update(self._local_mapping))
-    
+
     def __len__(self):
         return len(self._global_mapping.keys() | self._local_mapping.keys())
 
