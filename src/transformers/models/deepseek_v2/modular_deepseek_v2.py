@@ -103,7 +103,7 @@ class DeepseekV2Config(LlamaConfig):
             Whether to use a bias term in the MLP layers.
         head_dim (`int`, *optional*):
             The dimension of each attention head.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers in the shallow layers before switching to MoE layers.
@@ -111,11 +111,13 @@ class DeepseekV2Config(LlamaConfig):
             Rank of the LoRA decomposition for key-value projections.
         q_lora_rank (`int`, *optional*, defaults to 1536):
             Rank of the LoRA decomposition for query projections.
-        n_group (`int`, *optional*):
+            Specifically, it determines the dimensionality to which the query (q) vectors are compressed before being expanded back to their original size.
+            It reduces computational overhead while maintaining model performance.
+        num_group (`int`, *optional*):
             Number of groups for routed experts.
-        n_routed_experts (`int`, *optional*):
+        num_local_experts (`int`, *optional*):
             Number of routed experts (None indicates a dense model).
-        n_shared_experts (`int`, *optional*):
+        num_shared_experts (`int`, *optional*):
             Number of shared experts (None indicates a dense model).
         qk_nope_head_dim (`int`, *optional*, defaults to 128):
             The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
@@ -133,12 +135,12 @@ class DeepseekV2Config(LlamaConfig):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
             The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        scoring_func (`str`, *optional*, defaults to `"softmax"`):
-            The function used to compute expert scores in the MoE mechanism (e.g., `"softmax"`).
         norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
+        head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
+            The attention head dimension.
 
     ```python
     >>> from transformers import DeepseekV2Model, DeepseekV2Config
@@ -166,13 +168,13 @@ class DeepseekV2Config(LlamaConfig):
 
     def __init__(
         self,
-        aux_loss_alpha=0.001,
+        router_aux_loss_coef=0.001,
         first_k_dense_replace=0,
         kv_lora_rank=512,
         q_lora_rank=1536,
-        n_group=None,
-        n_routed_experts=None,
-        n_shared_experts=None,
+        num_group=None,
+        num_local_experts=None,
+        num_shared_experts=None,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
@@ -181,20 +183,20 @@ class DeepseekV2Config(LlamaConfig):
         topk_method="greedy",
         v_head_dim=128,
         num_experts_per_tok=None,
-        scoring_func="softmax",
         norm_topk_prob=False,
         moe_intermediate_size=1407,
+        head_dim=None,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
 
-        self.aux_loss_alpha = aux_loss_alpha
+        self.router_aux_loss_coef = router_aux_loss_coef
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
-        self.n_group = n_group
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
+        self.num_group = num_group
+        self.num_local_experts = num_local_experts
+        self.num_shared_experts = num_shared_experts
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor
@@ -203,10 +205,9 @@ class DeepseekV2Config(LlamaConfig):
         self.topk_method = topk_method
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
-        self.scoring_func = scoring_func
         self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
-        self.head_dim = qk_rope_head_dim
+        self.head_dim = head_dim if head_dim is not None else qk_rope_head_dim
 
 
 def yarn_get_mscale(scale=1, mscale=1):
@@ -264,41 +265,37 @@ class DeepseekV2MoEGate(nn.Module):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.scoring_func = config.scoring_func
-        self.alpha = config.aux_loss_alpha
+        self.alpha = config.router_aux_loss_coef
         self.seq_aux = config.seq_aux
         self.topk_method = config.topk_method
-        self.n_group = config.n_group
+        self.num_group = config.num_group
         self.topk_group = config.topk_group
 
         # topk selection algorithm
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
+        self.weight = nn.Parameter(torch.empty((self.num_experts, self.gating_dim)))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = hidden_states.shape
         ### compute gating score
         hidden_states = hidden_states.view(-1, hidden_dim)
         logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        if self.scoring_func == "softmax":
-            scores = logits.softmax(dim=-1, dtype=torch.float32)
-        else:
-            raise NotImplementedError(f"insupportable scoring function for MoE gating: {self.scoring_func}")
+        scores = logits.softmax(dim=-1, dtype=torch.float32)
 
         ### select top-k experts
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(batch_size * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
+            group_scores = scores.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values  # [n, num_group]
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-            group_mask = torch.zeros_like(group_scores)  # [n, n_group]
-            group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
+            group_mask = torch.zeros_like(group_scores)  # [n, num_group]
+            group_mask.scatter_(1, group_idx, 1)  # [n, num_group]
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(batch_size * seq_len, self.n_group, self.n_routed_experts // self.n_group)
+                .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
                 .reshape(batch_size * seq_len, -1)
             )  # [n, e]
             tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
@@ -327,15 +324,15 @@ class DeepseekV2MoE(nn.Module):
         self.experts = nn.ModuleList(
             [
                 (DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
-                for _ in range(config.n_routed_experts)
+                for _ in range(config.num_local_experts)
             ]
         )
         self.gate = DeepseekV2MoEGate(config)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+        if config.num_shared_experts is not None:
+            intermediate_size = config.moe_intermediate_size * config.num_shared_experts
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
         self.ep_rank = 0
-        self.experts_per_rank = config.n_routed_experts
+        self.experts_per_rank = config.num_local_experts
 
     def moe(self, hidden_states: torch.Tensor, topk_ids: torch.Tensor, topk_weight: torch.Tensor) -> torch.Tensor:
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
@@ -343,8 +340,6 @@ class DeepseekV2MoE(nn.Module):
         tokens_per_expert = cnts.sum(dim=0)
         indicies = topk_ids.view(-1).argsort()
         sorted_tokens = hidden_states[indicies // topk_ids.shape[1]]
-
-        tokens_per_expert = tokens_per_expert.cpu().numpy()
 
         # Process experts
         outputs = []

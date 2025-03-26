@@ -65,41 +65,37 @@ class DeepseekV2MoEGate(nn.Module):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.scoring_func = config.scoring_func
-        self.alpha = config.aux_loss_alpha
+        self.alpha = config.router_aux_loss_coef
         self.seq_aux = config.seq_aux
         self.topk_method = config.topk_method
-        self.n_group = config.n_group
+        self.num_group = config.num_group
         self.topk_group = config.topk_group
 
         # topk selection algorithm
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
+        self.weight = nn.Parameter(torch.empty((self.num_experts, self.gating_dim)))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = hidden_states.shape
         ### compute gating score
         hidden_states = hidden_states.view(-1, hidden_dim)
         logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        if self.scoring_func == "softmax":
-            scores = logits.softmax(dim=-1, dtype=torch.float32)
-        else:
-            raise NotImplementedError(f"insupportable scoring function for MoE gating: {self.scoring_func}")
+        scores = logits.softmax(dim=-1, dtype=torch.float32)
 
         ### select top-k experts
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(batch_size * seq_len, self.n_group, -1).max(dim=-1).values  # [n, n_group]
+            group_scores = scores.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values  # [n, num_group]
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-            group_mask = torch.zeros_like(group_scores)  # [n, n_group]
-            group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
+            group_mask = torch.zeros_like(group_scores)  # [n, num_group]
+            group_mask.scatter_(1, group_idx, 1)  # [n, num_group]
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(batch_size * seq_len, self.n_group, self.n_routed_experts // self.n_group)
+                .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
                 .reshape(batch_size * seq_len, -1)
             )  # [n, e]
             tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
@@ -128,15 +124,15 @@ class DeepseekV2MoE(nn.Module):
         self.experts = nn.ModuleList(
             [
                 (DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
-                for _ in range(config.n_routed_experts)
+                for _ in range(config.num_local_experts)
             ]
         )
         self.gate = DeepseekV2MoEGate(config)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+        if config.num_shared_experts is not None:
+            intermediate_size = config.moe_intermediate_size * config.num_shared_experts
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
         self.ep_rank = 0
-        self.experts_per_rank = config.n_routed_experts
+        self.experts_per_rank = config.num_local_experts
 
     def moe(self, hidden_states: torch.Tensor, topk_ids: torch.Tensor, topk_weight: torch.Tensor) -> torch.Tensor:
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
@@ -144,8 +140,6 @@ class DeepseekV2MoE(nn.Module):
         tokens_per_expert = cnts.sum(dim=0)
         indicies = topk_ids.view(-1).argsort()
         sorted_tokens = hidden_states[indicies // topk_ids.shape[1]]
-
-        tokens_per_expert = tokens_per_expert.cpu().numpy()
 
         # Process experts
         outputs = []
@@ -843,7 +837,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -1173,7 +1167,7 @@ class DeepseekV2ForSequenceClassification(DeepseekV2PreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

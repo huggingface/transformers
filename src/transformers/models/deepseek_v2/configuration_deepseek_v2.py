@@ -80,7 +80,7 @@ class DeepseekV2Config(PretrainedConfig):
             Whether to use a bias term in the MLP layers.
         head_dim (`int`, *optional*):
             The dimension of each attention head.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers in the shallow layers before switching to MoE layers.
@@ -88,11 +88,13 @@ class DeepseekV2Config(PretrainedConfig):
             Rank of the LoRA decomposition for key-value projections.
         q_lora_rank (`int`, *optional*, defaults to 1536):
             Rank of the LoRA decomposition for query projections.
-        n_group (`int`, *optional*):
+            Specifically, it determines the dimensionality to which the query (q) vectors are compressed before being expanded back to their original size.
+            It reduces computational overhead while maintaining model performance.
+        num_group (`int`, *optional*):
             Number of groups for routed experts.
-        n_routed_experts (`int`, *optional*):
+        num_local_experts (`int`, *optional*):
             Number of routed experts (None indicates a dense model).
-        n_shared_experts (`int`, *optional*):
+        num_shared_experts (`int`, *optional*):
             Number of shared experts (None indicates a dense model).
         qk_nope_head_dim (`int`, *optional*, defaults to 128):
             The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
@@ -110,12 +112,12 @@ class DeepseekV2Config(PretrainedConfig):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
             The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        scoring_func (`str`, *optional*, defaults to `"softmax"`):
-            The function used to compute expert scores in the MoE mechanism (e.g., `"softmax"`).
         norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
+        head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
+            The attention head dimension.
 
     ```python
     >>> from transformers import DeepseekV2Model, DeepseekV2Config
@@ -170,13 +172,13 @@ class DeepseekV2Config(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        aux_loss_alpha=0.001,
+        router_aux_loss_coef=0.001,
         first_k_dense_replace=0,
         kv_lora_rank=512,
         q_lora_rank=1536,
-        n_group=None,
-        n_routed_experts=None,
-        n_shared_experts=None,
+        num_group=None,
+        num_local_experts=None,
+        num_shared_experts=None,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
@@ -185,7 +187,6 @@ class DeepseekV2Config(PretrainedConfig):
         topk_method="greedy",
         v_head_dim=128,
         num_experts_per_tok=None,
-        scoring_func="softmax",
         norm_topk_prob=False,
         moe_intermediate_size=1407,
         **kwargs,
@@ -219,20 +220,20 @@ class DeepseekV2Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.head_dim = qk_rope_head_dim
+        self.head_dim = head_dim if head_dim is not None else qk_rope_head_dim
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        self.aux_loss_alpha = aux_loss_alpha
+        self.router_aux_loss_coef = router_aux_loss_coef
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
-        self.n_group = n_group
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
+        self.num_group = num_group
+        self.num_local_experts = num_local_experts
+        self.num_shared_experts = num_shared_experts
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor
@@ -241,7 +242,6 @@ class DeepseekV2Config(PretrainedConfig):
         self.topk_method = topk_method
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
-        self.scoring_func = scoring_func
         self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
 
