@@ -63,11 +63,11 @@ def make_choice_type_function(choices: list) -> Callable[[str], Any]:
 
 def HfArg(
     *,
-    aliases: Union[str, list[str]] = None,
-    help: str = None,
+    aliases: Optional[Union[str, list[str]]] = None,
+    help: Optional[str] = None,
     default: Any = dataclasses.MISSING,
     default_factory: Callable[[], Any] = dataclasses.MISSING,
-    metadata: dict = None,
+    metadata: Optional[dict] = None,
     **kwargs,
 ) -> dataclasses.Field:
     """Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.

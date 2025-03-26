@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
@@ -22,7 +24,7 @@ from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
-def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
+def fixed_cross_entropy(source, target, num_items_in_batch: Optional[int] = None, ignore_index: int = -100, **kwargs):
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
@@ -34,7 +36,7 @@ def ForCausalLMLoss(
     logits,
     labels,
     vocab_size: int,
-    num_items_in_batch: int = None,
+    num_items_in_batch: Optional[int] = None,
     ignore_index: int = -100,
     shift_labels=None,
     **kwargs,
@@ -58,7 +60,7 @@ def ForCausalLMLoss(
 
 
 def ForMaskedLMLoss(
-    logits, labels, vocab_size: int, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
+    logits, labels, vocab_size: int, num_items_in_batch: Optional[int] = None, ignore_index: int = -100, **kwargs
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
