@@ -153,6 +153,7 @@ from . import (
     llava_onevision,
     longformer,
     longt5,
+    longvita,
     luke,
     lxmert,
     m2m_100,
