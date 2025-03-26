@@ -27,7 +27,6 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import list_repo_templates
 from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import load_audio
@@ -68,6 +67,7 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    list_repo_templates,
     logging,
 )
 
