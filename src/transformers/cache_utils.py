@@ -1144,16 +1144,16 @@ class StaticCache(Cache):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used. If you are manually setting the batch size, make sure to take into account the
             number of beams if you are running beam search
-        max_cache_len (`int`):
+        max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`):
+        device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. If you're using more than 1 computation device, you
             should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is splitted between differents gpus. You can know which layers mapped to which device by
+            and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
 
 
@@ -1184,7 +1184,7 @@ class StaticCache(Cache):
         config: PretrainedConfig,
         max_batch_size: int,
         max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
@@ -1312,16 +1312,16 @@ class SlidingWindowCache(StaticCache):
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
-        max_cache_len (`int`):
+        max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
-        device (`torch.device` or `str`):
+        device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. If you're using more than 1 computation device, you
             should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is splitted between differents gpus. You can know which layers mapped to which device by
+            and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
 
     Example:
@@ -1352,7 +1352,7 @@ class SlidingWindowCache(StaticCache):
         config: PretrainedConfig,
         max_batch_size: int,
         max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
@@ -1615,16 +1615,16 @@ class HybridCache(Cache):
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a
             smaller batch size is used.
-        max_cache_len (`int`):
+        max_cache_len (`int`, *optional*):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. If you're using more than 1 computation device, you
             should pass the `layer_device_map` argument instead.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
+        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is splitted between differents gpus. You can know which layers mapped to which device by
+            and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
 
     Example:
@@ -1843,7 +1843,7 @@ class MambaCache:
         config: PretrainedConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float16,
-        device: Optional[Union[torch.device, str]] = None,
+        device: Union[torch.device, str, None] = None,
     ):
         self.dtype = dtype
         self.max_batch_size = max_batch_size
