@@ -29,6 +29,8 @@
       title: The Transformer model family
     - local: attention
       title: Attention mechanisms
+    - local: attention_interface
+      title: Customizing attention function
     title: Models
   - sections:
     - local: fast_tokenizers
@@ -583,6 +585,8 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
+      - local: model_doc/phi4_multimodal
+        title: Phi4 Multimodal
       - local: model_doc/phimoe
         title: PhiMoE
       - local: model_doc/phobert
