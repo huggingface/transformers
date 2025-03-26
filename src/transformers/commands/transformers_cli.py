@@ -14,7 +14,6 @@
 # limitations under the License.
 
 from transformers import HfArgumentParser
-
 from transformers.commands.add_fast_image_processor import AddFastImageProcessorCommand
 from transformers.commands.add_new_model_like import AddNewModelLikeCommand
 from transformers.commands.chat import ChatCommand
