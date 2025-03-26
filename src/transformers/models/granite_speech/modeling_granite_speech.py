@@ -568,15 +568,6 @@ class GraniteSpeechQFormerModel(GraniteSpeechEncoderProjectorPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel._prune_heads
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2QFormerModel.get_extended_attention_mask
     def get_extended_attention_mask(
         self,
