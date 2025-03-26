@@ -331,8 +331,8 @@ class FP8Linear(nn.Linear):
             return F.linear(input, self.weight, self.bias)
         else:
             # Context manager used to switch among the available cuda devices
-            with torch.cuda.device(input.device):
-                qinput, scale = act_quant(input, self.block_size[1])
+            # with torch.cuda.device(input.device):
+            qinput, scale = act_quant(input, self.block_size[1])
             # Blocks the CPU until all CUDA operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             # torch.cuda.synchronize(device=self.weight.device)
@@ -345,7 +345,7 @@ class FP8Linear(nn.Linear):
                     self.block_size,
                     output_dtype=input.dtype,
                 )
-            # torch.cuda.synchronize(device=self.weight.device)
+            torch.cuda.synchronize()
             if self.bias is not None:
                 output = output + self.bias
             return output.to(dtype=input.dtype)
