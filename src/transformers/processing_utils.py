@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import list_repo_tree
+from huggingface_hub import list_repo_templates
 from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import load_audio
@@ -771,16 +771,13 @@ class ProcessorMixin(PushToHubMixin):
                         additional_chat_template_files[template_name] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
             else:
                 try:
-                    for template_file in list_repo_tree(
+                    for template in list_repo_templates(
                         pretrained_model_name_or_path,
-                        path_in_repo=CHAT_TEMPLATE_DIR,
-                        recursive=False,
+                        local_files_only=local_files_only,
                         revision=revision,
+                        cache_dir=cache_dir,
                     ):
-                        if not template_file.path.endswith(".jinja"):
-                            continue
-                        template_name = template_file.path.split("/")[-1].removesuffix(".jinja")
-                        additional_chat_template_files[template_name] = template_file.path
+                        additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
                 except EntryNotFoundError:
                     pass  # No template dir means no template files
             processor_file = PROCESSOR_NAME
@@ -869,10 +866,7 @@ class ProcessorMixin(PushToHubMixin):
             # This is the legacy path
             with open(resolved_chat_template_file, encoding="utf-8") as reader:
                 chat_template_json = json.loads(reader.read())
-                chat_templates = chat_template_json["chat_template"]
-                if isinstance(chat_templates, (list, tuple)):
-                    # Un-flatten the list storage
-                    chat_templates = {template["name"]: template["template"] for template in chat_templates}
+                chat_templates = {"default": chat_template_json["chat_template"]}
                 if resolved_additional_chat_template_files:
                     raise ValueError(
                         "Cannot load chat template due to conflicting files - this checkpoint combines "

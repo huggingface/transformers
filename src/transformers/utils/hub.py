@@ -175,7 +175,7 @@ def list_repo_templates(
     templates_dir = Path(snapshot_dir, "templates")
     if not templates_dir.is_dir():
         return []
-    return [entry.path for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
+    return [entry.stem for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
 
 
 def is_remote_url(url_or_filename):
