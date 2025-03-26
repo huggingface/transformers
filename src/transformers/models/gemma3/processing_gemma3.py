@@ -65,6 +65,7 @@ class Gemma3Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
         self.boi_token = tokenizer.boi_token
+        self.image_token = tokenizer.boi_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -113,7 +114,6 @@ class Gemma3Processor(ProcessorMixin):
 
             # Replace image tokens by the full expanded sequence
             batch_num_crops = to_py_obj(image_inputs.pop("num_crops"))
-            text_with_crops = text
             for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, batched_images, batch_num_crops)):
                 image_indexes = [m.start() for m in re.finditer(self.boi_token, prompt)]
 
@@ -130,7 +130,7 @@ class Gemma3Processor(ProcessorMixin):
                             + " ".join([self.boi_token] * num)
                         )
                         prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.boi_token) :]
-                        text_with_crops[batch_idx] = prompt
+                        text[batch_idx] = prompt
 
             # Expand placeholder image tokens to the full image token sequence
             text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
