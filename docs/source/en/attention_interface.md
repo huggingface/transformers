@@ -75,7 +75,7 @@ This allows to quickly change an attention function, without needing to reload t
 ## What about new args needed in my custom attention function?
 
 But indeed, what if the new function requires a new arg to be properly used? It's no issue! Models supporting the
-`AttentionInterface` propagates kwargs all the way to the Attention layers, and to the used attention function. That way,
+`AttentionInterface` propagate kwargs all the way to the Attention layers, and to the used attention function. That way,
 you can simply pass the arg (as a kwargs, i.e. you need to qualify the name of the arg) in the model's forward, and it will be correctly used in the attention. However, custom attention functions have some limitations. In particular, it must follow the signature and return format of other attention functions, i.e.
 
 ```python
