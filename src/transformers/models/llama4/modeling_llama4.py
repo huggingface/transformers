@@ -1601,25 +1601,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         hidden_state = image_outputs.last_hidden_state
         return hidden_state
 
-    @staticmethod
-    def create_image_embeddings_with_placeholders(image_mask, reference_embedding, projected_embeddings):
-        partial_embeddings = projected_embeddings.view(-1, projected_embeddings.size(-1))
-        image_mask_2d = image_mask[..., 0]    
-        mask_1d = image_mask_2d.view(-1)
-        num_masked_positions = mask_1d.sum()
-
-        if num_masked_positions != partial_embeddings.size(0):
-            raise ValueError(
-                f"Mismatch: needed {num_masked_positions} patch embeddings, "
-                f"but have {partial_embeddings.size(0)} from the vision tower."
-            )
-
-        final_embeddings = reference_embedding.view(-1, reference_embedding.size(-1))
-        expanded_mask = mask_1d.unsqueeze(-1).expand(-1, final_embeddings.size(-1))
-        final_embeddings.masked_scatter_(expanded_mask, partial_embeddings)
-        final_embeddings = final_embeddings.view(reference_embedding.size())
-        return final_embeddings
-
 
     @replace_return_docstrings(output_type=Llama4CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1714,33 +1695,29 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
+            original_inputs_embeds_shape = inputs_embeds.shape
+
+            vision_flat = image_features.view(-1, image_features.size(-1))
+            projected_vision_flat = self.multi_modal_projector(vision_flat)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            n_image_tokens = (input_ids == self.config.image_token_index).sum()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
+            final_mask = special_image_mask.to(inputs_embeds.device) 
+            inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
-            if not is_torchdynamo_compiling() and n_image_features != n_image_tokens:
+            final_mask_1d = final_mask[..., 0].reshape(-1)
+            num_tokens_to_fill = final_mask_1d.sum().item()
+
+            if num_tokens_to_fill != projected_vision_flat.size(0):
                 raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    f"Mismatch: final_mask wants {num_tokens_to_fill} embeddings, "
+                    f"but multi_modal_projector returned {projected_vision_flat.size(0)}"
                 )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            reference_embedding = torch.zeros(
-                (inputs_embeds.shape[0], inputs_embeds.shape[1], image_features.shape[-1]),
-                dtype=inputs_embeds.dtype,
-                device=inputs_embeds.device,
-            )
 
-            image_embeddings_pre_scatter = self.create_image_embeddings_with_placeholders(
-                image_mask=special_image_mask,
-                reference_embedding=reference_embedding,
-                projected_embeddings=image_features,
-            )
-            projected_image_embeddings = self.multi_modal_projector(image_embeddings_pre_scatter)
-            final_mask = special_image_mask[:, :, 0, None]
-            inputs_embeds = inputs_embeds * ~final_mask.to(
-                inputs_embeds.device
-            ) + projected_image_embeddings.to(inputs_embeds.device) * final_mask.to(inputs_embeds.device)
+            expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
+            inputs_embeds.masked_scatter_(expanded_mask, projected_vision_flat)
+
+            inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
+
 
         outputs = self.language_model(
             attention_mask=attention_mask,
