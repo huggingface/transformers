@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 import numpy as np
 import typing_extensions
 from huggingface_hub import list_repo_tree
-from huggingface_hub.errors import EntryNotFoundError  # Should this be refactored into a util instead?
+from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
@@ -641,29 +641,29 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_raw_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
-        output_chat_template_file = os.path.join(save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE)  # Legacy filename
+        output_chat_template_file_jinja = os.path.join(save_directory, CHAT_TEMPLATE_FILE)
+        output_chat_template_file_legacy = os.path.join(save_directory, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE)  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-save_as_jinja = kwargs.get("save_raw_chat_template", False)
-is_single_file = isinstance(self.chat_template, str)
+        save_as_jinja = kwargs.get("save_raw_chat_template", False)
+        is_single_file = isinstance(self.chat_template, str)
 
         if kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, str):
             # New format for single templates is to save them as chat_template.jinja
-            with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
+            with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
                 f.write(self.chat_template)
-            logger.info(f"chat template saved in {output_raw_chat_template_file}")
+            logger.info(f"chat template saved in {output_chat_template_file_jinja}")
         elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
             # New format for multiple templates is to save the default as chat_template.jinja
             # and the other templates in the chat_templates/ directory
             for template_name, template in self.chat_template.items():
                 if template_name == "default":
-                    with open(output_raw_chat_template_file, "w", encoding="utf-8") as f:
+                    with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
                         f.write(self.chat_template["default"])
-                    logger.info(f"chat template saved in {output_raw_chat_template_file}")
+                    logger.info(f"chat template saved in {output_chat_template_file_jinja}")
                 else:
                     os.makedirs(chat_template_dir, exist_ok=True)
                     template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
@@ -681,17 +681,17 @@ is_single_file = isinstance(self.chat_template, str)
                 )
                 + "\n"
             )
-            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+            with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
-            logger.info(f"chat template saved in {output_chat_template_file}")
+            logger.info(f"chat template saved in {output_chat_template_file_legacy}")
         elif self.chat_template is not None:
             # Legacy format for single templates: Put them in chat_template.json
             chat_template_json_string = (
                 json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
             )
-            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+            with open(output_chat_template_file_legacy, "w", encoding="utf-8") as writer:
                 writer.write(chat_template_json_string)
-            logger.info(f"chat template saved in {output_chat_template_file}")
+            logger.info(f"chat template saved in {output_chat_template_file_legacy}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
