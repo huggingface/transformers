@@ -1,25 +1,10 @@
-# coding=utf-8
-# Copyright 2022 SenseTime and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Deformable DETR model configuration"""
-
-from typing import List
+from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
+from .configuration_rf_detr_dinov2_with_registers import RFDetrDinov2WithRegistersConfig
 
 
 logger = logging.get_logger(__name__)
@@ -28,20 +13,18 @@ logger = logging.get_logger(__name__)
 class RFDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RFDetrModel`]. It is used to instantiate
-    a Deformable DETR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Deformable DETR
+    an RF DETR model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the RF DETR
     [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
+
+    TODO: Add more details about the architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
+            The configuration of the backbone model.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 300):
@@ -135,9 +118,10 @@ class RFDetrConfig(PretrainedConfig):
         out_feature_indexes (`List`, *optional*, defaults to `[2, 5, 8, 11]`): <fill_docstring>
         scale_factors (`List`, *optional*, defaults to `[1.0]`): <fill_docstring>
         layer_norm (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        rms_norm (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        projector_out_channels (`int`, *optional*, defaults to 256): <fill_docstring>
+        projector_in_channels (`int`, *optional*, defaults to 256): <fill_docstring>
         projector_num_blocks (`int`, *optional*, defaults to 3): <fill_docstring>
+        projector_survival_prob (`float`, *optional*, defaults to 1.0): <fill_docstring>
+        projector_force_drop_last_n_features (`int`, *optional*, defaults to 0): <fill_docstring>
 
     Examples:
 
@@ -162,32 +146,32 @@ class RFDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
+        init_std=0.02,
+        init_xavier_std=1.0,
+        # backbone
+        use_timm_backbone=False,
         backbone_config=None,
-        num_channels=3,
+        backbone=None,
+        use_pretrained_backbone=False,
+        backbone_kwargs=None,
+        # RFDetrModel
         num_queries=300,
-        max_position_embeddings=1024,
+        # RFDetrEncoder
         encoder_layers=6,
         encoder_ffn_dim=1024,
         encoder_attention_heads=8,
+        encoder_layerdrop=0.0,
+        # RFDetrDecoder
         decoder_layers=6,
         decoder_ffn_dim=1024,
         decoder_attention_heads=8,
-        encoder_layerdrop=0.0,
-        is_encoder_decoder=True,
         activation_function="relu",
         d_model=256,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        init_std=0.02,
-        init_xavier_std=1.0,
-        return_intermediate=True,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         dilation=False,
         num_feature_levels=4,
         encoder_n_points=4,
@@ -208,28 +192,28 @@ class RFDetrConfig(PretrainedConfig):
         out_feature_indexes: List[int] = [2, 5, 8, 11],
         scale_factors: List[float] = [1.0],
         layer_norm: bool = False,
-        rms_norm: bool = False,
-        projector_out_channels: int = 256,
+        projector_in_channels: Optional[List[int]] = None,
         projector_num_blocks: int = 3,  # TODO rename
+        projector_survival_prob: float = 1.0,
+        projector_force_drop_last_n_features: int = 0,
+        projector_activation_function: str = "silu",
+        hidden_expansion: float = 0.5,
+        batch_norm_eps: float = 1e-5,
+        is_encoder_decoder=True,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [2, 3, 4] if num_feature_levels > 1 else [4]
-            backbone_kwargs["in_chans"] = num_channels
-        # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        if backbone_config is None and backbone is None:
+            logger.info(
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetr-ResNet` backbone."
+            )
+            backbone_config = RFDetrDinov2WithRegistersConfig(
+                out_features=[f"stage{i}" for i in out_feature_indexes],
+                return_dict=False,
+            )
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         verify_backbone_config_arguments(
             use_timm_backbone=use_timm_backbone,
@@ -241,9 +225,7 @@ class RFDetrConfig(PretrainedConfig):
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
         self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
@@ -288,15 +270,27 @@ class RFDetrConfig(PretrainedConfig):
 
         self.scale_factors = [1.0] if scale_factors is None else scale_factors
         assert len(self.scale_factors) > 0, "scale_factors must be a list of at least one element"
-        assert sorted(self.scale_factors) == self.scale_factors, "scale_factors must be sorted"
+        assert sorted(self.scale_factors, reverse=True) == self.scale_factors, "scale_factors must be reverse sorted"
         assert all(scale in [2.0, 1.0, 0.5, 0.25] for scale in self.scale_factors), (
             "scale_factors must be a consecutive list subset of [2.0, 1.0, 0.5, 0.25]"
         )
 
         self.layer_norm = layer_norm
-        self.rms_norm = rms_norm
-        self.projector_out_channels = projector_out_channels
+        self.projector_in_channels = (
+            projector_in_channels
+            if projector_in_channels is not None
+            else [backbone_config.hidden_size] * len(out_feature_indexes)
+        )
+        assert len(self.projector_in_channels) == len(out_feature_indexes), (
+            "projector_in_channels must have the same length as out_feature_indexes"
+        )
         self.projector_num_blocks = projector_num_blocks
+        self.projector_survival_prob = projector_survival_prob
+        self.projector_force_drop_last_n_features = projector_force_drop_last_n_features
+        self.projector_activation_function = projector_activation_function
+        self.hidden_expansion = hidden_expansion
+        self.batch_norm_eps = batch_norm_eps
+        self.encoder_hidden_dim = backbone_config.hidden_size
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

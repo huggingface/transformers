@@ -261,7 +261,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rembert", "RemBertConfig"),
         ("resnet", "ResNetConfig"),
         ("retribert", "RetriBertConfig"),
-        ("rf_detr_dinov2_with_registers", "RFDetrDinov2WithRegistersConfig"),
         ("rf_detr", "RFDetrConfig"),
         ("roberta", "RobertaConfig"),
         ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
