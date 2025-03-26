@@ -71,6 +71,10 @@ from .import_utils import (
     is_training_run_on_sagemaker,
 )
 
+LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
+CHAT_TEMPLATE_FILE = "chat_template.jinja"
+CHAT_TEMPLATE_DIR = "additional_chat_templates"
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 

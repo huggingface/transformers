@@ -97,6 +97,9 @@ from .hub import (
     list_repo_templates,
     send_example_telemetry,
     try_to_load_from_cache,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
+    CHAT_TEMPLATE_FILE,
+    CHAT_TEMPLATE_DIR,
 )
 from .import_utils import (
     ACCELERATE_MIN_VERSION,
@@ -271,9 +274,7 @@ IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 PROCESSOR_NAME = "processor_config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
-LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
-CHAT_TEMPLATE_FILE = "chat_template.jinja"
-CHAT_TEMPLATE_DIR = "additional_chat_templates"
+
 
 SENTENCEPIECE_UNDERLINE = "▁"
 SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
