@@ -19,9 +19,11 @@ import math
 from typing import Callable, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
-from transformers.modeling_outputs import BaseModelOutput
+from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
@@ -53,6 +55,8 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         qkv_bias: bool = False,
         use_bias: bool = False,
         hidden_act="silu",
+        initializer_range=0.02,
+        use_head=True,
         **kwargs,
     ):
         super().__init__(
@@ -68,6 +72,8 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
+        self.use_head = use_head
+        self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
         self.use_bias = use_bias
         self.qkv_bias = qkv_bias
@@ -90,10 +96,12 @@ class AIMv2TextConfig(SiglipTextConfig):
         projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         use_bias: bool = False,
+        hidden_act="silu",
         pad_token_id=None,
         bos_token_id=None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(
@@ -102,32 +110,38 @@ class AIMv2TextConfig(SiglipTextConfig):
             intermediate_size=intermediate_size,
             num_hidden_layers=num_hidden_layers,
             num_attention_heads=num_attention_heads,
+            hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
-            qkv_bias=qkv_bias,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
         )
 
+        self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
+        self.use_bias = use_bias
+        self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.use_bias = use_bias
 
         del self.bos_token_id
         del self.pad_token_id
         del self.projection_size
-        del self.hidden_act
         del self.layer_norm_eps
 
 
 class AIMv2Config(SiglipConfig):
-    # Modify default logit scale value accordingly with aimv2 configs
-    def __init__(self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs):
+
+    def __init__(
+        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+    ):
         super().__init__(text_config, vision_config, **kwargs)
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
+        self.max_logit_scale = 100.0
+
+        del self.initializer_factor
 
     pass
 
@@ -170,7 +184,7 @@ class AIMv2VisionEmbeddings(nn.Module):
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         num_patches = (config.image_size // config.patch_size) ** 2
-        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
+        self.position_embedding = nn.Embedding(num_patches, config.hidden_size)
         self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     @staticmethod
@@ -200,7 +214,7 @@ class AIMv2VisionEmbeddings(nn.Module):
                 height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
             )
         else:
-            pos_embed = self.position_embeddings(self.position_ids)
+            pos_embed = self.position_embedding(self.position_ids)
 
         hidden_states = hidden_states + pos_embed
         return hidden_states
@@ -215,15 +229,14 @@ def eager_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    head_mask: Optional[torch.Tensor],
-    scaling: float,
+    attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
-    if head_mask is not None:
-        attn_weights = attn_weights + head_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
 
@@ -250,7 +263,6 @@ class AIMv2Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        self.scale = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
@@ -261,7 +273,7 @@ class AIMv2Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -292,9 +304,8 @@ class AIMv2Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            head_mask,
+            attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
             is_causal=False,
             **kwargs,
         )
@@ -320,12 +331,12 @@ class AIMv2EncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_wights = self.attention(
-            hidden_states=norm_hidden_states, head_mask=head_mask, output_attentions=output_attentions
+        attn_output, attn_weights = self.attention(
+            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
 
         hidden_states = hidden_states + attn_output
@@ -333,11 +344,40 @@ class AIMv2EncoderLayer(nn.Module):
         mlp_output = self.ffn(norm_hidden_states)
 
         hidden_states = hidden_states + mlp_output
-        return (hidden_states, attn_wights) if output_attentions else (hidden_states, None)
+        return (hidden_states, attn_weights) if output_attentions else (hidden_states, None)
 
 
 class AIMv2Encoder(SiglipEncoder):
     pass
+
+
+class AIMv2AttentionPoolingHead(nn.Module):
+    def __init__(self, config: AIMv2VisionConfig):
+        super().__init__()
+        dim = config.hidden_size
+        qkv_bias = config.qkv_bias
+
+        self.num_heads = config.num_attention_heads
+
+        self.k = nn.Linear(dim, dim, bias=qkv_bias)
+        self.v = nn.Linear(dim, dim, bias=qkv_bias)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, dim) * 0.02)
+        self.linear = nn.Linear(dim, dim, bias=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, N, C = x.shape
+        cls_token = self.cls_token.expand(B, -1, -1)
+
+        q = cls_token.reshape(B, 1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        k = self.k(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        v = self.v(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        x_cls = F.scaled_dot_product_attention(q, k, v)
+        x_cls = x_cls.transpose(1, 2).reshape(B, 1, C)
+        x_cls = x_cls.mean(dim=1)
+
+        out = self.linear(x_cls)
+        return out
 
 
 class AIMv2PreTrainedModel(PreTrainedModel):
@@ -354,7 +394,11 @@ class AIMv2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -373,13 +417,18 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         self.encoder = AIMv2Encoder(config)
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
+        # Use attention pooling head only for lit vairant
+        self.use_head = config.use_head
+        if self.use_head:
+            self.head = AIMv2AttentionPoolingHead(config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
         self,
         pixel_values,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -394,38 +443,44 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            head_mask=head_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.rms_norm(last_hidden_state)
 
-        return BaseModelOutput(
+        if self.use_head:
+            last_hidden_state = self.head(last_hidden_state)
+
+        output = BaseModelOutput(
             last_hidden_state=last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
+        return output if return_dict else output.to_tuple()
+
 
 class AIMv2TextModel(AIMv2PreTrainedModel):
-    def __init__(self, config: AIMv2VisionConfig):
+    def __init__(self, config: AIMv2TextConfig):
         super().__init__(config)
         self.config = config
         self.embeddings = AIMv2TextEmbeddings(config)
         self.encoder = AIMv2Encoder(config)
-        # Here comes the eos extract class
-        self.head = nn.Identity()
+        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+        self.eos_token_id = config.eos_token_id
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
         self,
-        pixel_values,
-        head_mask: Optional[torch.Tensor] = None,
+        input_ids,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -436,52 +491,66 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(input_ids)
+        _, seq_len, _ = hidden_states.shape
+
+        mask_converter = AttentionMaskConverter(True)
+        attention_mask = mask_converter.to_4d(
+            attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
+        )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            head_mask=head_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.rms_norm(last_hidden_state)
 
-        return BaseModelOutput(
+        # Get pooled output
+        pooled_output = last_hidden_state[
+            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
+        ]
+
+        output = BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
+        return output if return_dict else output.to_tuple()
+
 
 class AIMv2Model(CLIPModel, nn.Module):
     def __init__(self, config: AIMv2Config):
-        nn.Module().__init__()
-
-        if not isinstance(config.text_config, AIMv2VisionConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type CLIPTextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
+        nn.Module().__init__(config)
 
         if not isinstance(config.vision_config, AIMv2VisionConfig):
             raise TypeError(
-                "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
+                "config.vision_config is expected to be of type AIMv2VisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
-        text_config = config.text_config
+        if not isinstance(config.text_config, AIMv2TextConfig):
+            raise TypeError(
+                "config.text_config is expected to be of type AIMv2TextConfig but is of type"
+                f" {type(config.text_config)}."
+            )
+
         vision_config = config.vision_config
+        text_config = config.text_config
 
         self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
-
-        self.text_model = AIMv2TextModel._from_config(text_config)
+        self.text_embed_dim = text_config.hidden_size
 
         self.vision_model = AIMv2VisionModel._from_config(vision_config)
+        self.text_model = AIMv2TextModel._from_config(text_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -500,11 +569,9 @@ class AIMv2Model(CLIPModel, nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AIMv2Output]:
         r"""
@@ -542,23 +609,21 @@ class AIMv2Model(CLIPModel, nn.Module):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -566,21 +631,12 @@ class AIMv2Model(CLIPModel, nn.Module):
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
         logit_scale = self.log_logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
-        logits_per_text = text_embeds * logit_scale.exp().to(text_embeds.device)
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
-
+        logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
         loss = None
-        # if return_loss:
-        # Use the loss used in aimv2
-        # loss = clip_loss(logits_per_text)
 
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
-
-        return AIMv2Output(
+        output = AIMv2Output(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -589,6 +645,8 @@ class AIMv2Model(CLIPModel, nn.Module):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+        return output if return_dict else output.to_tuple()
 
 
 __all__ = ["AIMv2Config", "AIMv2VisionConfig", "AIMv2TextConfig", "AIMv2VisionModel", "AIMv2Model"]
