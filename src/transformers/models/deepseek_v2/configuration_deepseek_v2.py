@@ -90,11 +90,11 @@ class DeepseekV2Config(PretrainedConfig):
             Rank of the LoRA decomposition for query projections.
             Specifically, it determines the dimensionality to which the query (q) vectors are compressed before being expanded back to their original size.
             It reduces computational overhead while maintaining model performance.
-        n_group (`int`, *optional*, defaults to 1):
+        n_group (`int`, *optional*):
             Number of groups for routed experts.
-        n_routed_experts (`int`, *optional*, defaults to 64):
+        n_routed_experts (`int`, *optional*):
             Number of routed experts (None indicates a dense model).
-        n_shared_experts (`int`, *optional*, defaults to 2):
+        n_shared_experts (`int`, *optional*):
             Number of shared experts (None indicates a dense model).
         qk_nope_head_dim (`int`, *optional*, defaults to 128):
             The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
@@ -174,9 +174,9 @@ class DeepseekV2Config(PretrainedConfig):
         first_k_dense_replace=0,
         kv_lora_rank=512,
         q_lora_rank=1536,
-        n_group=1,
-        n_routed_experts=64,
-        n_shared_experts=2,
+        n_group=None,
+        n_routed_experts=None,
+        n_shared_experts=None,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
@@ -225,13 +225,13 @@ class DeepseekV2Config(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        self.router_aux_loss_coef = aux_loss_alpha
+        self.aux_loss_alpha = aux_loss_alpha
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
-        self.num_group = n_group
-        self.num_local_experts = n_routed_experts
-        self.num_shared_experts = n_shared_experts
+        self.n_group = n_group
+        self.n_routed_experts = n_routed_experts
+        self.n_shared_experts = n_shared_experts
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor

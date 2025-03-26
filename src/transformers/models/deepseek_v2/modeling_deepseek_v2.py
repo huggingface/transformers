@@ -65,12 +65,12 @@ class DeepseekV2MoEGate(nn.Module):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.n_routed_experts
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.alpha = config.router_aux_loss_coef
+        self.alpha = config.aux_loss_alpha
         self.seq_aux = config.seq_aux
         self.topk_method = config.topk_method
-        self.num_group = config.num_group
+        self.num_group = config.n_group
         self.topk_group = config.topk_group
 
         # topk selection algorithm
@@ -124,15 +124,15 @@ class DeepseekV2MoE(nn.Module):
         self.experts = nn.ModuleList(
             [
                 (DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
-                for _ in range(config.num_local_experts)
+                for _ in range(config.n_routed_experts)
             ]
         )
         self.gate = DeepseekV2MoEGate(config)
-        if config.num_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.num_shared_experts
+        if config.n_shared_experts is not None:
+            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
         self.ep_rank = 0
-        self.experts_per_rank = config.num_local_experts
+        self.experts_per_rank = config.n_routed_experts
 
     def moe(self, hidden_states: torch.Tensor, topk_ids: torch.Tensor, topk_weight: torch.Tensor) -> torch.Tensor:
         cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
