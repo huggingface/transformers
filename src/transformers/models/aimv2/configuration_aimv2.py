@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -93,6 +92,8 @@ class AIMv2VisionConfig(PretrainedConfig):
         qkv_bias: bool = False,
         use_bias: bool = False,
         hidden_act="silu",
+        initializer_range=0.02,
+        use_head=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -104,9 +105,11 @@ class AIMv2VisionConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
-
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
+
+        self.use_head = use_head
+        self.initializer_range = initializer_range
         self.use_bias = use_bias
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
@@ -184,10 +187,12 @@ class AIMv2TextConfig(PretrainedConfig):
         projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         use_bias: bool = False,
+        hidden_act="silu",
         pad_token_id=None,
         bos_token_id=None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -198,11 +203,14 @@ class AIMv2TextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-
+        self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
+
+        self.initializer_range = initializer_range
+        self.use_bias = use_bias
+        self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.use_bias = use_bias
 
 
 class AIMv2Config(PretrainedConfig):
@@ -265,10 +273,9 @@ class AIMv2Config(PretrainedConfig):
 
         self.text_config = AIMv2TextConfig(**text_config)
         self.vision_config = AIMv2VisionConfig(**vision_config)
-
-        self.initializer_factor = 1.0
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
+        self.max_logit_scale = 100.0
 
     @classmethod
     def from_text_vision_configs(cls, text_config: AIMv2TextConfig, vision_config: AIMv2VisionConfig, **kwargs):
