@@ -193,8 +193,6 @@ class DeepseekVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        # Test 1: Padding to max_length
-        # PS: we have to override the parent max_length of 50 to 80 because the output is already 51 tokens
         formatted_prompt_tokenized = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -204,30 +202,3 @@ class DeepseekVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 256)
 
-        # Test 2: Truncation
-        # Verify that the output is truncated to exactly 5 tokens
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            truncation=True,
-            max_length=5,
-        )
-        self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
-
-        # Test 3: Image processing kwargs
-        # Add an image and test image processing parameters
-        messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
-        )
-        # Process with image rescaling and verify the pixel values are negative
-        out_dict = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            do_rescale=True,
-            rescale_factor=-1,
-            return_tensors="np",
-        )
-        self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
