@@ -358,7 +358,7 @@ doc_test_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [torch_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
-EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
+EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]

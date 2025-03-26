@@ -1159,7 +1159,6 @@ JOB_TO_TEST_FILE = {
     "tests_tokenization": r"tests/models/.*/test_tokenization.*",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
-    "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
