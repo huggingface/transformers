@@ -51,6 +51,16 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+def permute_for_rope(input_tensor, n_heads, dim1, dim2):
+    """
+    When you go from the complex ROPE formulation to sin and cos one, you need
+    to permute the query and key weights (to avoid doing it on the fly)
+    """
+    input_tensor = input_tensor.reshape(dim1, dim2)
+    input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+    input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
+    return input_tensor
+
 
 def convert_key(key, mapping):
     for pattern, replacement in mapping.items():
@@ -68,6 +78,23 @@ def write_model(
     os.makedirs(output_dir, exist_ok=True)
 
     config = ConversationalSpeechModelConfig()
+    params = {
+        "backbone": {
+            "num_attention_heads": config.backbone_config.num_attention_heads,
+            "num_key_value_heads": config.backbone_config.num_key_value_heads,
+            "dim_per_head": config.backbone_config.head_dim,
+            "key_value_dim": config.backbone_config.head_dim * config.backbone_config.num_key_value_heads,
+            "dim": config.backbone_config.hidden_size,
+        },
+        "depth_decoder": {
+            "num_attention_heads": config.depth_decoder_config.num_attention_heads,
+            "num_key_value_heads": config.depth_decoder_config.num_key_value_heads,
+            "dim_per_head": config.depth_decoder_config.head_dim,
+            "key_value_dim": config.depth_decoder_config.head_dim * config.depth_decoder_config.num_key_value_heads,
+            "dim": config.depth_decoder_config.hidden_size,
+        },
+    }
+
     model_path = get_file_from_repo(
         input_path_or_repo,
         model_name,
@@ -83,7 +110,27 @@ def write_model(
     # -----------------------
 
     for key, value in loaded.items():
-        state_dict[convert_key(key, ORIGINAL_TO_CONVERTED_KEY_MAPPING)] = value
+        new_key = convert_key(key, ORIGINAL_TO_CONVERTED_KEY_MAPPING)
+        current_parameter = value
+        
+        # Post-process the current_parameter.
+        if re.search("(k|q)_proj.weight", new_key):
+            params_keys = "backbone" if "backbone" in new_key else "depth_decoder"
+            if "q_proj" in new_key:
+                num_heads = params[params_keys]["num_attention_heads"]
+                dim_per_head = params[params_keys]["dim_per_head"]
+                param_dim = params[params_keys]["dim"]
+                dim = params[params_keys]["dim"]
+            else:
+                num_heads = params[params_keys]["num_key_value_heads"]
+                dim_per_head = params[params_keys]["dim_per_head"]
+                param_dim = params[params_keys]["key_value_dim"]
+                dim = params[params_keys]["dim"]
+
+            current_parameter = permute_for_rope(value, num_heads, param_dim, dim)
+            state_dict[new_key] = current_parameter.reshape(num_heads * dim_per_head, dim)
+
+        state_dict[new_key] = current_parameter
 
     # add the depth decoder embed audio tokens weights, latter tied to the backbone embed audio tokens weights
     state_dict["depth_decoder.model.embed_tokens.embed_audio_tokens.weight"] = state_dict["backbone_model.embed_tokens.embed_audio_tokens.weight"]
