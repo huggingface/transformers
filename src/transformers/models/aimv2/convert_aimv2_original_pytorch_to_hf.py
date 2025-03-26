@@ -23,13 +23,13 @@ import torch
 from huggingface_hub import snapshot_download
 from safetensors import safe_open
 
-from transformers import AIMv2Config, AIMv2Model, AutoProcessor
+from transformers import AIMv2Config, AIMv2Model, AIMv2VisionConfig, AIMv2VisionModel, AutoProcessor
 
 
-NEW_MODEL_KEY_MAPPING = {
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL = {
     # Embeddings
     r"preprocessor.patchifier.proj": r"embeddings.patch_embed",
-    r"preprocessor.pos_embed": r"embeddings.position_embeddings.weight",
+    r"preprocessor.pos_embed": r"embeddings.position_embedding.weight",
     r"preprocessor.patchifier.norm.weight": r"embeddings.rms_norm.weight",
     # Encoder Layers
     r"trunk.blocks.(\d+).attn.qkv": r"encoder.layers.\1.attention.qkv",
@@ -42,6 +42,40 @@ NEW_MODEL_KEY_MAPPING = {
     r"trunk.blocks.(\d+).norm_2": r"encoder.layers.\1.rms_norm2",
     # Final Norm
     r"trunk.post_trunk_norm": r"rms_norm",
+}
+
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Vision Embeddings
+    r"image_encoder.preprocessor.patchifier.proj": r"vision_model.embeddings.patch_embed",
+    r"image_encoder.preprocessor.pos_embed": r"vision_model.embeddings.position_embedding.weight",
+    r"image_encoder.preprocessor.patchifier.norm.weight": r"vision_model.embeddings.rms_norm.weight",
+    # Vision Encoder Layers
+    r"image_encoder.trunk.blocks.(\d+).attn.qkv": r"vision_model.encoder.layers.\1.attention.qkv",
+    r"image_encoder.trunk.blocks.(\d+).attn.proj": r"vision_model.encoder.layers.\1.attention.proj_out",
+    r"image_encoder.trunk.blocks.(\d+).mlp.fc1": r"vision_model.encoder.layers.\1.ffn.fc1",
+    r"image_encoder.trunk.blocks.(\d+).mlp.fc2": r"vision_model.encoder.layers.\1.ffn.fc2",
+    r"image_encoder.trunk.blocks.(\d+).mlp.fc3": r"vision_model.encoder.layers.\1.ffn.fc3",
+    # Normalization Layers
+    r"image_encoder.trunk.blocks.(\d+).norm_1": r"vision_model.encoder.layers.\1.rms_norm1",
+    r"image_encoder.trunk.blocks.(\d+).norm_2": r"vision_model.encoder.layers.\1.rms_norm2",
+    r"image_encoder.trunk.post_trunk_norm": r"vision_model.rms_norm",
+    r"image_projector": r"visual_projection",
+    # Vision Head
+    r"image_encoder.head": r"vision_model.head",
+    # Text Embeddings
+    r"text_encoder.preprocessor.text_embedding.weight": r"text_model.embeddings.token_embedding.weight",
+    r"text_encoder.preprocessor.positional_embedding": r"text_model.embeddings.position_embedding.weight",
+    # Text Encoder Layers
+    r"text_encoder.trunk.blocks.(\d+).attn.qkv": r"text_model.encoder.layers.\1.attention.qkv",
+    r"text_encoder.trunk.blocks.(\d+).attn.proj": r"text_model.encoder.layers.\1.attention.proj_out",
+    r"text_encoder.trunk.blocks.(\d+).mlp.fc1": r"text_model.encoder.layers.\1.ffn.fc1",
+    r"text_encoder.trunk.blocks.(\d+).mlp.fc2": r"text_model.encoder.layers.\1.ffn.fc2",
+    r"text_encoder.trunk.blocks.(\d+).mlp.fc3": r"text_model.encoder.layers.\1.ffn.fc3",
+    # Text Normalization Layers
+    r"text_encoder.trunk.blocks.(\d+).norm_1": r"text_model.encoder.layers.\1.rms_norm1",
+    r"text_encoder.trunk.blocks.(\d+).norm_2": r"text_model.encoder.layers.\1.rms_norm2",
+    r"text_encoder.trunk.post_trunk_norm": r"text_model.rms_norm",
+    r"text_projector": r"text_projection",
 }
 
 
@@ -63,14 +97,14 @@ def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> D
     return original_state_dict
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict, ORIGINAL_TO_CONVERTED_KEY_MAPPING: dict):
     """Converts state dict keys from the old format to the new format."""
 
     output_dict = {}
     if state_dict_keys is not None:
         old_text = "\n".join(state_dict_keys)
         new_text = old_text
-        for pattern, replacement in NEW_MODEL_KEY_MAPPING.items():
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
             if replacement is None:
                 new_text = re.sub(pattern, "", new_text)  # an empty line
                 continue
@@ -89,22 +123,51 @@ def split_qkv_tensor(key, tensor):
     return {key.replace("qkv", new_key): split_tensors[i] for i, new_key in enumerate(new_keys)}
 
 
+def get_model_config_mapping(model_id: str):
+    """Determines the correct model, config, and key mappings based on the checkpoint name."""
+
+    if model_id == "apple/aimv2-large-patch14-224-lit":
+        return AIMv2Model, AIMv2Config, ORIGINAL_TO_CONVERTED_KEY_MAPPING
+    else:
+        return AIMv2VisionModel, AIMv2VisionConfig, ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL
+
+
 def write_model(
     hf_repo_id: str,
     output_dir: str,
     safe_serialization: bool = True,
 ):
+    """
+    Converts a model checkpoint to Hugging Face format and saves it.
+
+    Args:
+        hf_repo_id (str): The Hugging Face repo ID to load from.
+        output_dir (str): The directory to save the converted model.
+        safe_serialization (bool): Whether to use safe serialization.
+
+    Returns:
+        model: The reloaded Hugging Face model.
+    """
     os.makedirs(output_dir, exist_ok=True)
 
-    # create config
-    config = AIMv2Config.from_pretrained(hf_repo_id)
+    # Get the appropriate model, config, and key mapping
+    model_class, config_class, key_mapping = get_model_config_mapping(hf_repo_id)
 
-    # Load original model state dict
+    # Load config and original state dict
+    config = config_class.from_pretrained(hf_repo_id)
+
+    # Checkpoint `apple/aimv2-large-patch14-224-lit` uses AttentionPoolingHead hence set the required attr in config.
+    if hf_repo_id == "apple/aimv2-large-patch14-224-lit":
+        config.vision_config.use_head = True
+
     original_state_dict = load_original_state_dict(hf_repo_id)
 
     print("Converting model...")
+
     state_dict = {}
-    result = convert_old_keys_to_new_keys(original_state_dict)
+    # For `apple/aimv2-large-patch14-native` we don't have position_embedding in state_dict
+    strict_loading = False
+    result = convert_old_keys_to_new_keys(original_state_dict, key_mapping)
     all_keys = list(original_state_dict.keys())
 
     for key in all_keys:
@@ -117,18 +180,13 @@ def write_model(
         else:
             state_dict[new_key] = value
 
-    # Check if position embeddings exist before squeezing
-    if "embeddings.position_embeddings.weight" in state_dict:
-        state_dict["embeddings.position_embeddings.weight"] = state_dict[
-            "embeddings.position_embeddings.weight"
-        ].squeeze(0)
-        strict_loading = True
-    else:
-        # For `apple/aimv2-large-patch14-native` we don't have position_embeddings in state_dict
-        strict_loading = False
+        # Check if position embeddings exist before squeezing
+        if new_key.endswith("position_embedding.weight"):
+            state_dict[new_key] = value.squeeze(0)
+            strict_loading = True
 
-    print("Loading the checkpoint in a DepthPro model.")
-    model = AIMv2Model(config)
+    print(f"Loading the checkpoint in a {model_class.__name__}.")
+    model = model_class(config)
     model.load_state_dict(state_dict, strict=strict_loading, assign=True)
     print("Checkpoint loaded successfully.")
 
@@ -139,7 +197,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    model = AIMv2Model.from_pretrained(output_dir, device_map="auto")
+    model = model_class.from_pretrained(output_dir, device_map="auto")
     print("Model reloaded successfully.")
     return model
 
@@ -197,4 +255,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-# python src/transformers/models/aimv2/convert_aimv2_original_pytorch_to_hf.py.py --hf_repo_id apple/aimv2-large-patch14-224 --output_dir tmp/aimv2 --safe_serialization
