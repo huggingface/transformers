@@ -870,7 +870,8 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, DonutSwinEmbeddings):
-            module.mask_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
             if module.position_embeddings is not None:
                 module.position_embeddings.data.zero_()
 

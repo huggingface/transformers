@@ -621,7 +621,6 @@ class FocalNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->FocalNet,swin->focalnet
 class FocalNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -646,10 +645,8 @@ class FocalNetPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, FocalNetEmbeddings):
-            module.mask_token.data.zero_()
-            if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
-
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 FOCALNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
