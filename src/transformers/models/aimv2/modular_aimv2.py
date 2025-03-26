@@ -16,21 +16,23 @@
 """Pytorch implementation of AIMv2 Model"""
 
 import math
-from typing import Callable, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
 from ...utils import (
+    ModelOutput,
     logging,
 )
-from ..clip.modeling_clip import CLIPModel, CLIPOutput, CLIPTextEmbeddings, _get_vector_norm
+from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipEncoder
@@ -56,7 +58,7 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         use_bias: bool = False,
         hidden_act="silu",
         initializer_range=0.02,
-        use_head=False,
+        use_head=True,
         **kwargs,
     ):
         super().__init__(
@@ -145,8 +147,39 @@ class AIMv2Config(SiglipConfig):
     pass
 
 
-class AIMv2Output(CLIPOutput):
-    pass
+@dataclass
+class AIMv2Output(ModelOutput):
+    """
+    Args:
+
+        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            similarity scores.
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+            similarity scores.
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
+        text_model_output (`BaseModelOutputWithPooling`):
+            The output of the [`CLIPTextModel`].
+        vision_model_output (`BaseModelOutput`):
+            The output of the [`CLIPVisionModel`].
+    """
+
+    logits_per_image: torch.FloatTensor = None
+    logits_per_text: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    image_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutputWithPooling = None
+    vision_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 class AIMv2RMSNorm(LlamaRMSNorm):
@@ -387,16 +420,15 @@ class AIMv2PreTrainedModel(PreTrainedModel):
 
     config_class = AIMv2Config
     base_model_prefix = "aimv2"
-    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AIMv2SwiGLUFFN"]
     _supports_sdpa = True
 
     def _init_weights(self, module):
         std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            self.config.vision_config.initializer_range
+            if hasattr(self.config, "vision_config")
+            else self.config.initializer_range
         )
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -426,6 +458,9 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.patch_embed
+
     def forward(
         self,
         pixel_values,
@@ -453,11 +488,13 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.rms_norm(last_hidden_state)
 
+        pooler_output = None
         if self.use_head:
-            last_hidden_state = self.head(last_hidden_state)
+            pooler_output = self.head(last_hidden_state)
 
-        output = BaseModelOutput(
+        output = BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -480,6 +517,12 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.embeddings.token_embedding = value
+
     def forward(
         self,
         input_ids,
@@ -497,10 +540,11 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
         hidden_states = self.embeddings(input_ids)
         _, seq_len, _ = hidden_states.shape
 
-        mask_converter = AttentionMaskConverter(True)
-        attention_mask = mask_converter.to_4d(
-            attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
-        )
+        if attention_mask is not None:
+            mask_converter = AttentionMaskConverter(True)
+            attention_mask = mask_converter.to_4d(
+                attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
+            )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -623,7 +667,7 @@ class AIMv2Model(CLIPModel, nn.Module):
             return_dict=True,
         )
 
-        image_embeds = vision_outputs.last_hidden_state
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
         text_embeds = text_outputs.pooler_output
@@ -637,10 +681,7 @@ class AIMv2Model(CLIPModel, nn.Module):
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
-        loss = None
-
         output = AIMv2Output(
-            loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,

@@ -50,8 +50,7 @@ logger = logging.get_logger(__name__)
 class AIMv2Output(ModelOutput):
     """
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
+
         logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
             The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
             similarity scores.
@@ -59,16 +58,15 @@ class AIMv2Output(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`AIMv2TextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`AIMv2VisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
         text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AIMv2TextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AIMv2VisionModel`].
+            The output of the [`CLIPTextModel`].
+        vision_model_output (`BaseModelOutput`):
+            The output of the [`CLIPVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
     logits_per_image: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
@@ -457,16 +455,15 @@ class AIMv2PreTrainedModel(PreTrainedModel):
 
     config_class = AIMv2Config
     base_model_prefix = "aimv2"
-    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AIMv2SwiGLUFFN"]
     _supports_sdpa = True
 
     def _init_weights(self, module):
         std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            self.config.vision_config.initializer_range
+            if hasattr(self.config, "vision_config")
+            else self.config.initializer_range
         )
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -496,6 +493,9 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.patch_embed
+
     def forward(
         self,
         pixel_values,
@@ -523,11 +523,13 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.rms_norm(last_hidden_state)
 
+        pooler_output = None
         if self.use_head:
-            last_hidden_state = self.head(last_hidden_state)
+            pooler_output = self.head(last_hidden_state)
 
-        output = BaseModelOutput(
+        output = BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -550,6 +552,12 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.embeddings.token_embedding = value
+
     def forward(
         self,
         input_ids,
@@ -567,10 +575,11 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
         hidden_states = self.embeddings(input_ids)
         _, seq_len, _ = hidden_states.shape
 
-        mask_converter = AttentionMaskConverter(True)
-        attention_mask = mask_converter.to_4d(
-            attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
-        )
+        if attention_mask is not None:
+            mask_converter = AttentionMaskConverter(True)
+            attention_mask = mask_converter.to_4d(
+                attention_mask, key_value_length=seq_len, query_length=seq_len, dtype=hidden_states.dtype
+            )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -916,7 +925,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
             return_dict=True,
         )
 
-        image_embeds = vision_outputs.last_hidden_state
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
         text_embeds = text_outputs.pooler_output
@@ -930,10 +939,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
-        loss = None
-
         output = AIMv2Output(
-            loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
