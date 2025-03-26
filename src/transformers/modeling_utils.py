@@ -28,6 +28,7 @@ import shutil
 import tempfile
 import warnings
 from collections import defaultdict
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -2083,7 +2084,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if (
                 not isinstance(config._attn_implementation, dict)
-                and config._attn_implementation not in {"eager"} | ALL_ATTENTION_FUNCTIONS.valid_keys()
+                and config._attn_implementation not in ["eager"] + AttentionInterface.valid_keys()
             ):
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
@@ -2149,7 +2150,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
                 )
                 torch.backends.cuda.enable_flash_sdp(False)
-        elif requested_attn_implementation in list(ALL_ATTENTION_FUNCTIONS.valid_keys()):
+        elif requested_attn_implementation in AttentionInterface.valid_keys():
             config._attn_implementation = requested_attn_implementation
         elif isinstance(requested_attn_implementation, dict):
             config._attn_implementation = None
@@ -5892,9 +5893,9 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-class AttentionInterface(object):
+class AttentionInterface(MutableMapping):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
-    # they are `imported from`, i.e. local object copy
+    # a new instance is created (in order to locally override a given function)
     _global_mapping = {
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
@@ -5904,12 +5905,8 @@ class AttentionInterface(object):
     def __init__(self):
         self._local_mapping = {}
 
-    @classmethod
-    def register(cls, key: str, value: Callable):
-        cls._global_mapping.update({key: value})
-
     def __getitem__(self, key):
-        # Allow local update of the default functions without impacting other instances
+        # First check if instance has a local override
         if key in self._local_mapping:
             return self._local_mapping[key]
         return self._global_mapping[key]
@@ -5918,8 +5915,23 @@ class AttentionInterface(object):
         # Allow local update of the default functions without impacting other instances
         self._local_mapping.update({key: value})
 
-    def valid_keys(self) -> Set[str]:
-        return set(self._global_mapping.keys()) | set(self._local_mapping.keys())
+    def __delitem__(self, key):
+        del self._local_mapping[key]
+
+    def __iter__(self):
+        # Ensure we use all keys, with the overwritten ones on top
+        return iter(self._global_mapping.update(self._local_mapping))
+    
+    def __len__(self):
+        return len(self._global_mapping.keys() | self._local_mapping.keys())
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    @classmethod
+    def valid_keys(self) -> List[str]:
+        return list(self._global_mapping.keys())
 
 
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
