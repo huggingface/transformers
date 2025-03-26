@@ -774,7 +774,7 @@ is_single_file = isinstance(self.chat_template, str)
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
                 if template_dir.is_dir():
                     for template_file in template_dir.glob("*.jinja"):
-                        template_name = template_file.name.removesuffix(".jinja")
+                        template_name = template_file.stem
                         additional_chat_template_files[template_name] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
             else:
                 try:
