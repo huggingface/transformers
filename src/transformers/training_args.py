@@ -263,7 +263,6 @@ class TrainingArguments:
             The batch size per device accelerator core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
             The batch size per device accelerator core/CPU for evaluation.
-        eval_
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
