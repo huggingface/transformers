@@ -762,6 +762,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
+    "models.rf_detr": ["RFDetrConfig", "RFDetrDinov2WithRegistersConfig"],
     "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
     "models.rt_detr_v2": ["RTDetrV2Config"],
     "models.rwkv": ["RwkvConfig"],
@@ -3536,6 +3537,15 @@ else:
             "load_tf_weights_in_roformer",
         ]
     )
+    _import_structure["models.rf_detr"].extend(
+        [
+            "RFDetrForObjectDetection",
+            "RFDetrModel",
+            "RFDetrPreTrainedModel",
+            "RFDetrDinov2WithRegistersBackbone",
+            "RFDetrDinov2WithRegistersPreTrainedModel",
+        ]
+    )
     _import_structure["models.rt_detr"].extend(
         [
             "RTDetrForObjectDetection",
@@ -5987,6 +5997,7 @@ if TYPE_CHECKING:
     from .models.regnet import RegNetConfig
     from .models.rembert import RemBertConfig
     from .models.resnet import ResNetConfig
+    from .models.rf_detr import RFDetrConfig, RFDetrDinov2WithRegistersConfig
     from .models.roberta import (
         RobertaConfig,
         RobertaTokenizer,
@@ -8315,6 +8326,13 @@ if TYPE_CHECKING:
             ResNetForImageClassification,
             ResNetModel,
             ResNetPreTrainedModel,
+        )
+        from .models.rf_detr import (
+            RFDetrDinov2WithRegistersBackbone,
+            RFDetrDinov2WithRegistersPreTrainedModel,
+            RFDetrForObjectDetection,
+            RFDetrModel,
+            RFDetrPreTrainedModel,
         )
         from .models.roberta import (
             RobertaForCausalLM,

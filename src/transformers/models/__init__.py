@@ -235,6 +235,7 @@ from . import (
     regnet,
     rembert,
     resnet,
+    rf_detr,
     roberta,
     roberta_prelayernorm,
     roc_bert,
