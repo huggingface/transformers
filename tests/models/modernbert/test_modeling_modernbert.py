@@ -40,6 +40,7 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
+        ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
@@ -224,6 +225,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
+            ModernBertForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -235,6 +237,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
+            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -289,7 +292,12 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
                 if param.requires_grad and not (
                     name == "classifier.weight"
-                    and model_class in [ModernBertForSequenceClassification, ModernBertForTokenClassification]
+                    and model_class
+                    in [
+                        ModernBertForSequenceClassification,
+                        ModernBertForTokenClassification,
+                        ModernBertForQuestionAnswering,
+                    ]
                 ):
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
