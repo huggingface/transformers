@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.50.0.dev0"
+__version__ = "4.51.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -699,6 +699,13 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phi4_multimodal": [
+        "Phi4MultimodalAudioConfig",
+        "Phi4MultimodalConfig",
+        "Phi4MultimodalFeatureExtractor",
+        "Phi4MultimodalProcessor",
+        "Phi4MultimodalVisionConfig",
+    ],
     "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
@@ -711,6 +718,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.prompt_depth_anything": ["PromptDepthAnythingConfig"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -774,6 +782,10 @@ _import_structure = {
     "models.seggpt": ["SegGptConfig"],
     "models.sew": ["SEWConfig"],
     "models.sew_d": ["SEWDConfig"],
+    "models.shieldgemma2": [
+        "ShieldGemma2Config",
+        "ShieldGemma2Processor",
+    ],
     "models.siglip": [
         "SiglipConfig",
         "SiglipProcessor",
@@ -1042,6 +1054,7 @@ _import_structure = {
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "QuarkConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -1294,6 +1307,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.prompt_depth_anything"].extend(["PromptDepthAnythingImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
@@ -1341,6 +1355,7 @@ else:
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
@@ -1369,6 +1384,10 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["model_debugging_utils"] = [
+        "model_addition_debugger",
+        "model_addition_debugger_context",
+    ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
         "Cache",
@@ -2791,6 +2810,17 @@ else:
             "LlavaNextPreTrainedModel",
         ]
     )
+    _import_structure["models.phi4_multimodal"].extend(
+        [
+            "Phi4MultimodalForCausalLM",
+            "Phi4MultimodalPreTrainedModel",
+            "Phi4MultimodalAudioModel",
+            "Phi4MultimodalAudioPreTrainedModel",
+            "Phi4MultimodalModel",
+            "Phi4MultimodalVisionModel",
+            "Phi4MultimodalVisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.llava_next_video"].extend(
         [
             "LlavaNextVideoForConditionalGeneration",
@@ -3330,6 +3360,12 @@ else:
             "Pop2PianoPreTrainedModel",
         ]
     )
+    _import_structure["models.prompt_depth_anything"].extend(
+        [
+            "PromptDepthAnythingForDepthEstimation",
+            "PromptDepthAnythingPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "ProphetNetDecoder",
@@ -3581,6 +3617,7 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
+    _import_structure["models.shieldgemma2"].append("ShieldGemma2ForImageClassification")
     _import_structure["models.siglip"].extend(
         [
             "SiglipForImageClassification",
@@ -5896,6 +5933,13 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phi4_multimodal import (
+        Phi4MultimodalAudioConfig,
+        Phi4MultimodalConfig,
+        Phi4MultimodalFeatureExtractor,
+        Phi4MultimodalProcessor,
+        Phi4MultimodalVisionConfig,
+    )
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
@@ -5915,6 +5959,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prompt_depth_anything import PromptDepthAnythingConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -5982,6 +6027,10 @@ if TYPE_CHECKING:
     from .models.seggpt import SegGptConfig
     from .models.sew import SEWConfig
     from .models.sew_d import SEWDConfig
+    from .models.shieldgemma2 import (
+        ShieldGemma2Config,
+        ShieldGemma2Processor,
+    )
     from .models.siglip import (
         SiglipConfig,
         SiglipProcessor,
@@ -6278,6 +6327,7 @@ if TYPE_CHECKING:
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        QuarkConfig,
         SpQRConfig,
         TorchAoConfig,
         VptqConfig,
@@ -6519,6 +6569,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.prompt_depth_anything import PromptDepthAnythingImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
@@ -6562,6 +6613,7 @@ if TYPE_CHECKING:
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
+        from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
@@ -6584,6 +6636,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
+        # Debugging
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6668,6 +6721,10 @@ if TYPE_CHECKING:
         from .integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
+        )
+        from .model_debugging_utils import (
+            model_addition_debugger,
+            model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
@@ -8123,6 +8180,15 @@ if TYPE_CHECKING:
             Phi3Model,
             Phi3PreTrainedModel,
         )
+        from .models.phi4_multimodal import (
+            Phi4MultimodalAudioModel,
+            Phi4MultimodalAudioPreTrainedModel,
+            Phi4MultimodalForCausalLM,
+            Phi4MultimodalModel,
+            Phi4MultimodalPreTrainedModel,
+            Phi4MultimodalVisionModel,
+            Phi4MultimodalVisionPreTrainedModel,
+        )
         from .models.phimoe import (
             PhimoeForCausalLM,
             PhimoeForSequenceClassification,
@@ -8154,6 +8220,10 @@ if TYPE_CHECKING:
         from .models.pop2piano import (
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
+        )
+        from .models.prompt_depth_anything import (
+            PromptDepthAnythingForDepthEstimation,
+            PromptDepthAnythingPreTrainedModel,
         )
         from .models.prophetnet import (
             ProphetNetDecoder,
@@ -8349,6 +8419,9 @@ if TYPE_CHECKING:
             SEWDForSequenceClassification,
             SEWDModel,
             SEWDPreTrainedModel,
+        )
+        from .models.shieldgemma2 import (
+            ShieldGemma2ForImageClassification,
         )
         from .models.siglip import (
             SiglipForImageClassification,
