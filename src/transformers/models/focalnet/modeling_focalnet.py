@@ -648,6 +648,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
             if module.mask_token is not None:
                 module.mask_token.data.zero_()
 
+
 FOCALNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
