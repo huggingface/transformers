@@ -90,6 +90,11 @@ Currently, following scales of pretrained Chinese-CLIP models are available on ð
 [[autodoc]] ChineseCLIPImageProcessor
     - preprocess
 
+## ChineseCLIPImageProcessorFast
+
+[[autodoc]] ChineseCLIPImageProcessorFast
+    - preprocess
+
 ## ChineseCLIPFeatureExtractor
 
 [[autodoc]] ChineseCLIPFeatureExtractor

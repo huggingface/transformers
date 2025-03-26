@@ -1344,6 +1344,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["models.blip"].append("BlipImageProcessorFast")
+    _import_structure["models.chinese_clip"].append("ChineseCLIPImageProcessorFast")
     _import_structure["models.clip"].append("CLIPImageProcessorFast")
     _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
@@ -6602,6 +6603,7 @@ if TYPE_CHECKING:
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.blip import BlipImageProcessorFast
+        from .models.chinese_clip import ChineseCLIPImageProcessorFast
         from .models.clip import CLIPImageProcessorFast
         from .models.convnext import ConvNextImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
