@@ -790,6 +790,8 @@ class LxmertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LxmertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 LXMERT_START_DOCSTRING = r"""
