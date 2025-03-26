@@ -206,6 +206,9 @@ torch_job = CircleCIJob(
 generate_job = CircleCIJob(
     "generate",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    # networkx==3.3 (after #36957) cause some issues
+    # TODO: remove this once it works directly
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="generate",
     parallelism=6,
 )
@@ -328,6 +331,9 @@ repo_utils_job = CircleCIJob(
 non_model_job = CircleCIJob(
     "non_model",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    # networkx==3.3 (after #36957) cause some issues
+    # TODO: remove this once it works directly
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="not generate",
     parallelism=6,
 )
