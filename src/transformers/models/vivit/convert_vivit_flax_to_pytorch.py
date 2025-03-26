@@ -73,7 +73,7 @@ def transform_attention(current: np.ndarray):
         return transform_attention_kernel(current)
 
     else:
-        raise Exception(f"Invalid number of dimesions: {np.ndim(current)}")
+        raise Exception(f"Invalid number of dimensions: {np.ndim(current)}")
 
 
 def transform_attention_bias(current: np.ndarray):
