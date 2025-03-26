@@ -33,6 +33,8 @@ from ...utils.backbone_utils import BackboneConfigMixin, BackboneMixin, get_alig
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 
+# TODO: Modular conversion for resnet must be fixed as
+# it provides incorrect import for configuration like resnet_resnet
 class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`HGNetV2Backbone`]. It is used to instantiate a HGNet-V2

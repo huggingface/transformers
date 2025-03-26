@@ -101,6 +101,28 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.decoder_n_points = [3, 6, 3]
         if model_name == "dfine_l_obj365":
             config.num_labels = 366
+    elif model_name in ["dfine_n_coco", "dfine_n_obj2coco_e25", "dfine_n_obj365"]:
+        config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
+        config.backbone_config.stem_channels = [3, 16, 16]
+        config.backbone_config.stage_in_channels = [16, 64, 256, 512]
+        config.backbone_config.stage_mid_channels = [16, 32, 64, 128]
+        config.backbone_config.stage_out_channels = [64, 256, 512, 1024]
+        config.backbone_config.stage_num_blocks = [1, 1, 2, 1]
+        config.backbone_config.stage_downsample = [False, True, True, True]
+        config.backbone_config.stage_light_block = [False, False, True, True]
+        config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
+        config.backbone_config.stage_numb_of_layers = [3, 3, 3, 3]
+        config.backbone_config.out_indices = [2, 3]
+        config.encoder_ffn_dim = 512
+        config.encoder_hidden_dim = 128
+        config.encoder_in_channels = [512, 1024]
+        config.decoder_n_points = [3, 6, 3]
+        config.feat_strides = [16, 32]
+        config.depth_mult = 0.5
+        config.decoder_layers = 3
+        config.hidden_expansion = 0.34
+        if model_name == "dfine_n_obj365":
+            config.num_labels = 366
     else:
         config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
         config.backbone_config.stem_channels = [3, 16, 16]
