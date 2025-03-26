@@ -71,7 +71,7 @@ class ConversationalSpeechModelDepthDecoderConfig(LlamaConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=0,
+        pad_token_id=2050,
         bos_token_id=None,
         eos_token_id=None, 
         pretraining_tp=1,
@@ -148,10 +148,10 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=0,
-        codebook_pad_token_id=0,
-        bos_token_id=None,
-        eos_token_id=0,
+        pad_token_id=128002,
+        codebook_pad_token_id=2050,
+        bos_token_id=128000,
+        eos_token_id=128001,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=500000,
@@ -799,7 +799,13 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
                 max_new_tokens=31,
             )
             codebook_ids = depth_decoder_outputs.sequences
-            next_tokens = torch.cat([codebook_ids, torch.zeros((codebook_ids.shape[0], 1), dtype=torch.long, device=codebook_ids.device)], dim=-1)
+            next_tokens = torch.cat(
+                [
+                    codebook_ids, 
+                    torch.ones((codebook_ids.shape[0], 1), dtype=torch.long, device=codebook_ids.device) * self.backbone_model.padding_idx
+                ],
+                dim=-1,
+            )
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:

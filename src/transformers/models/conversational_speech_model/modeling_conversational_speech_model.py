@@ -1571,7 +1571,11 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
             )
             codebook_ids = depth_decoder_outputs.sequences
             next_tokens = torch.cat(
-                [codebook_ids, torch.zeros((codebook_ids.shape[0], 1), dtype=torch.long, device=codebook_ids.device)],
+                [
+                    codebook_ids,
+                    torch.ones((codebook_ids.shape[0], 1), dtype=torch.long, device=codebook_ids.device)
+                    * self.backbone_model.padding_idx,
+                ],
                 dim=-1,
             )
 
