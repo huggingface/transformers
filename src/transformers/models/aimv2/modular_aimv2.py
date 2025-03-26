@@ -132,7 +132,6 @@ class AIMv2TextConfig(SiglipTextConfig):
 
 
 class AIMv2Config(SiglipConfig):
-
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
@@ -649,4 +648,4 @@ class AIMv2Model(CLIPModel, nn.Module):
         return output if return_dict else output.to_tuple()
 
 
-__all__ = ["AIMv2Config", "AIMv2VisionConfig", "AIMv2TextConfig", "AIMv2VisionModel", "AIMv2Model"]
+__all__ = ["AIMv2Config", "AIMv2VisionConfig", "AIMv2TextConfig", "AIMv2VisionModel", "AIMv2Model","AIMv2PreTrainedModel"]

@@ -941,4 +941,4 @@ class AIMv2Model(AIMv2PreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
-__all__ = ["AIMv2VisionModel", "AIMv2Model"]
+__all__ = ["AIMv2VisionModel", "AIMv2Model", "AIMv2PreTrainedModel"]
