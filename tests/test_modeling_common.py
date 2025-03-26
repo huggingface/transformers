@@ -3234,9 +3234,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             num_params = model.num_parameters()
-            assert num_params < 1000000, (
-                f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-            )
+            assert (
+                num_params < 1000000
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
     @require_flash_attn
     @require_torch_gpu

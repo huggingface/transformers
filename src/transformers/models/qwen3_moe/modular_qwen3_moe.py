@@ -19,6 +19,7 @@ from torch import nn
 from ...utils import (
     logging,
 )
+from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -26,9 +27,8 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, MixtralSparseMoeBlock
-from ..qwen3.modeling_qwen3 import Qwen3Attention
-from ..gemma.modeling_gemma import GemmaMLP
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
@@ -38,6 +38,7 @@ _CHECKPOINT_FOR_DOC = "Qwen/Qwen3-MoE-15B-A2B"
 
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
     pass
+
 
 class Qwen3MoeMLP(GemmaMLP):
     pass
@@ -56,8 +57,9 @@ class Qwen3MoeSparseMoeBlock(MixtralSparseMoeBlock):
             [Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
         )
 
+
 class Qwen3MoeRMSNorm(LlamaRMSNorm):
-    pass 
+    pass
 
 
 class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
@@ -73,6 +75,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
             self.mlp = Qwen3MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen3MoeMLP(config, intermediate_size=config.intermediate_size)
+
 
 class Qwen3MoeModel(MixtralModel):
     def __init__(self, config: Qwen3MoeConfig):
@@ -121,6 +124,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         return super().forward(**super_kwargs)
+
 
 class Qwen3MoeForSequenceClassification(LlamaForSequenceClassification):
     pass

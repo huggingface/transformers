@@ -126,14 +126,16 @@ class Qwen3DecoderLayer(LlamaDecoderLayer):
         super().__init__()
         self.self_attn = Qwen3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Qwen3MLP(config)
-        if config.sliding_window and config._attn_implementation != "flash_attention_2": # diff with Llama is this warning
+        if (
+            config.sliding_window and config._attn_implementation != "flash_attention_2"
+        ):  # diff with Llama is this warning
             logger.warning_once(
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
 
 
-class Qwen3Model(MistralModel): # mistral model creates sliding window
+class Qwen3Model(MistralModel):  # mistral model creates sliding window
     pass
 
 
