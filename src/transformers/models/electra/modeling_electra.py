@@ -670,7 +670,7 @@ class ElectraPreTrainedModel(PreTrainedModel):
     base_model_prefix = "electra"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->Electra
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -686,6 +686,8 @@ class ElectraPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ElectraLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @dataclass

@@ -510,6 +510,10 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LayoutLMv2SelfAttention):
+            if self.config.fast_qkv:
+                module.q_bias.data.zero_()
+                module.v_bias.data.zero_()
         elif isinstance(module, LayoutLMv2Model):
             if hasattr(module, "visual_segment_embedding"):
                 module.visual_segment_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)

@@ -520,7 +520,7 @@ class SplinterPreTrainedModel(PreTrainedModel):
     base_model_prefix = "splinter"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->Splinter
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -536,6 +536,8 @@ class SplinterPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, SplinterLMPredictionHead):
+            module.bias.data.zero_()
 
 
 SPLINTER_START_DOCSTRING = r"""
