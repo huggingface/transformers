@@ -26,6 +26,7 @@ from transformers import (
     MllamaConfig,
     MllamaForCausalLM,
     MllamaForConditionalGeneration,
+    MllamaModel,
     is_torch_available,
     is_vision_available,
 )
@@ -262,7 +263,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     Model tester for `MllamaForConditionalGeneration`.
     """
 
-    all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            MllamaModel,
+            MllamaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -326,7 +334,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
             model_vocab_size = config.get_text_config().vocab_size
             inputs = self._prepare_for_class(inputs, model_class, return_labels=True)
             # Resize embeddings and call forward

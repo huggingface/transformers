@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         Mistral3ForConditionalGeneration,
+        Mistral3Model,
     )
 
 
@@ -190,7 +191,14 @@ class Mistral3VisionText2TextModelTester:
 
 @require_torch
 class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Mistral3ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Mistral3Model,
+            Mistral3ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Mistral3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -304,6 +312,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @unittest.skip("Pixtral does not support attention interfaces.")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip("Pixtral does not support attention interfaces.")
+    def test_flex_attention_with_grads(self):
         pass
 
 

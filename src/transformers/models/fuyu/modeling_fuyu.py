@@ -21,9 +21,9 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...models.auto.modeling_auto import AutoModelForCausalLM
+from ...models.auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_fuyu import FuyuConfig
 
@@ -140,6 +140,151 @@ FUYU_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
+@add_start_docstrings(
+    """The Fuyu model which consists of a vision backbone and a language model, without a language modeling head.""",
+    FUYU_START_DOCSTRING,
+)
+class FuyuModel(FuyuPreTrainedModel):
+    _key_mapping = {"language_model.model": "language_model"}
+
+    def __init__(self, config: FuyuConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.text_config.vocab_size
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.vision_embed_tokens = nn.Linear(
+            config.patch_size * config.patch_size * config.num_channels, config.hidden_size
+        )
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def gather_continuous_embeddings(
+        self,
+        word_embeddings: torch.Tensor,
+        continuous_embeddings: List[torch.Tensor],
+        image_patch_input_indices: torch.Tensor,
+    ) -> torch.Tensor:
+        """This function places the continuous_embeddings into the word_embeddings at the locations
+        indicated by image_patch_input_indices. Different batch elements can have different numbers of continuous
+        embeddings.
+
+        Args:
+            word_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Tensor of word embeddings.
+            continuous_embeddings (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is shape
+                [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
+                indices in image_patch_input_indices for that batch element.
+            image_patch_input_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Tensor of indices of the image patches in the input_ids tensor.
+        """
+        if not (word_embeddings.shape[0] == len(continuous_embeddings)):
+            raise ValueError(
+                f"Batch sizes must match! Got {len(continuous_embeddings)=} and {word_embeddings.shape[0]=}"
+            )
+
+        output_embeddings = word_embeddings.clone()
+        for batch_idx in range(word_embeddings.shape[0]):
+            # First, find the positions of all the non-negative values in image_patch_input_indices, those are the
+            # positions in word_embeddings that we want to replace with content from continuous_embeddings.
+            dst_indices = torch.nonzero(image_patch_input_indices[batch_idx] >= 0, as_tuple=True)[0]
+            # Next look up those indices in image_patch_input_indices to find the indices in continuous_embeddings that we
+            # want to use to replace the values in word_embeddings.
+            src_indices = image_patch_input_indices[batch_idx][dst_indices]
+            # Check if we have more indices than embeddings. Note that we could have fewer indices if images got truncated.
+            if src_indices.shape[0] > continuous_embeddings[batch_idx].shape[0]:
+                raise ValueError(
+                    f"Number of continuous embeddings {continuous_embeddings[batch_idx].shape=} does not match "
+                    f"number of continuous token ids {src_indices.shape=} in batch element {batch_idx}."
+                )
+            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
+        return output_embeddings
+
+    @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches_indices: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            batch_size, seq_length = input_ids.shape
+        elif inputs_embeds is not None:
+            batch_size, seq_length, _ = inputs_embeds.shape
+        else:
+            raise ValueError("You have to specify either input_is or inputs_embeds")
+
+        seq_length_with_past = seq_length
+        past_key_values_length = 0
+
+        if past_key_values is not None:
+            past_key_values_length = past_key_values[0][0].shape[2]
+            seq_length_with_past = seq_length_with_past + past_key_values_length
+
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = torch.arange(
+                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+            )
+            position_ids = position_ids.unsqueeze(0)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+            if image_patches is not None and past_key_values is None:
+                patch_embeddings = [
+                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype))
+                    .squeeze(0)
+                    .to(inputs_embeds.device)
+                    for patch in image_patches
+                ]
+                inputs_embeds = self.gather_continuous_embeddings(
+                    word_embeddings=inputs_embeds,
+                    continuous_embeddings=patch_embeddings,
+                    image_patch_input_indices=image_patches_indices,
+                )
+
+        outputs = self.language_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            return_dict=return_dict,
+            **kwargs,
+        )
+
+        return outputs
 
 
 @add_start_docstrings(
@@ -371,4 +516,4 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel"]
+__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

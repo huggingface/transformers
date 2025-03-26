@@ -45,6 +45,7 @@ if is_torch_available():
 
     from transformers import (
         AyaVisionForConditionalGeneration,
+        AyaVisionModel,
     )
 
 
@@ -184,7 +185,14 @@ class AyaVisionVisionText2TextModelTester:
 
 @require_torch
 class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AyaVisionModel,
+            AyaVisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -351,6 +359,10 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # todo: yoni - fix or improve the test
     @unittest.skip("Difference is slightly higher than the threshold")
     def test_batching_equivalence(self):
+        pass
+
+    @unittest.skip("FLEX attn not yet supported on SigLIP, PR on the way")
+    def test_flex_attention_with_grads(self):
         pass
 
 

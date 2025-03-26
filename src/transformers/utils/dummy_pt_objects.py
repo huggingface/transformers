@@ -679,6 +679,13 @@ class AriaForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AriaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AriaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1155,6 +1162,13 @@ class AutoformerPreTrainedModel(metaclass=DummyObject):
 
 
 class AyaVisionForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AyaVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3990,6 +4004,13 @@ class Emu3ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Emu3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Emu3PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4540,6 +4561,13 @@ class FuyuForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class FuyuModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class FuyuPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4625,6 +4653,13 @@ class Gemma3ForCausalLM(metaclass=DummyObject):
 
 
 class Gemma3ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Gemma3Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4730,6 +4765,13 @@ class GLPNPreTrainedModel(metaclass=DummyObject):
 
 
 class GotOcr2ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GotOcr2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5413,6 +5455,13 @@ class InstructBlipForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class InstructBlipModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class InstructBlipPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5798,6 +5847,13 @@ class LlavaForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LlavaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LlavaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5806,6 +5862,13 @@ class LlavaPreTrainedModel(metaclass=DummyObject):
 
 
 class LlavaNextForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LlavaNextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5826,6 +5889,13 @@ class LlavaNextVideoForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LlavaNextVideoModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LlavaNextVideoPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5834,6 +5904,13 @@ class LlavaNextVideoPreTrainedModel(metaclass=DummyObject):
 
 
 class LlavaOnevisionForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LlavaOnevisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6407,6 +6484,13 @@ class Mistral3ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Mistral3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Mistral3PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6464,6 +6548,13 @@ class MllamaForCausalLM(metaclass=DummyObject):
 
 
 class MllamaForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MllamaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7425,6 +7516,13 @@ class OwlViTVisionModel(metaclass=DummyObject):
 
 
 class PaliGemmaForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PaliGemmaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -9894,6 +9992,13 @@ class VideoLlavaForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class VideoLlavaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class VideoLlavaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -9986,6 +10091,13 @@ class ViltPreTrainedModel(metaclass=DummyObject):
 
 
 class VipLlavaForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VipLlavaModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -1918,6 +1918,22 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
+    # def test_resize_embeddings_results_in_successful_loss(self):
+    #     if not self.test_resize_embeddings:
+    #         self.skipTest(reason="test_resize_embeddings is set to `False`")
+    #
+    #     # resizing embeddings should result in successful loss computation (#36840)
+    #     config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+    #
+    #     for model_class in self.all_model_classes:
+    #         model = model_class(config).to(torch_device)
+    #         model_vocab_size = config.get_text_config().vocab_size
+    #         inputs = self._prepare_for_class(inputs, model_class, return_labels=True)
+    #         # Resize embeddings and call forward
+    #         model.resize_token_embeddings(model_vocab_size + 10)
+    #         output = model(**inputs, return_dict=True)
+    #         self.assertTrue("loss" in output)
+
     def test_resize_tokens_embeddings(self):
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
@@ -3234,9 +3250,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             num_params = model.num_parameters()
-            assert num_params < 1000000, (
-                f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-            )
+            assert (
+                num_params < 1000000
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
     @require_flash_attn
     @require_torch_gpu
@@ -3529,14 +3545,15 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = getattr(model_sdpa, "model", model_sdpa)  # get base model if exists
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
                 vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
 
-                vision_model_sdpa = getattr(model, vision_model_name)
-                language_model_sdpa = getattr(model, language_model_name)
+                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
                 vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
 
@@ -3547,6 +3564,7 @@ class ModelTesterMixin:
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
+                model_eager = getattr(model_eager, "model", model_eager)
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 

@@ -1522,6 +1522,7 @@ else:
             "AriaPreTrainedModel",
             "AriaTextForCausalLM",
             "AriaTextModel",
+            "AriaModel",
             "AriaTextPreTrainedModel",
         ]
     )
@@ -1626,7 +1627,9 @@ else:
             "AutoformerPreTrainedModel",
         ]
     )
-    _import_structure["models.aya_vision"].extend(["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"])
+    _import_structure["models.aya_vision"].extend(
+        ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel", "AyaVisionModel"]
+    )
     _import_structure["models.bamba"].extend(
         [
             "BambaForCausalLM",
@@ -2338,6 +2341,7 @@ else:
             "Emu3PreTrainedModel",
             "Emu3TextModel",
             "Emu3VQVAE",
+            "Emu3Model",
         ]
     )
     _import_structure["models.encodec"].extend(
@@ -2457,7 +2461,7 @@ else:
             "load_tf_weights_in_funnel",
         ]
     )
-    _import_structure["models.fuyu"].extend(["FuyuForCausalLM", "FuyuPreTrainedModel"])
+    _import_structure["models.fuyu"].extend(["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"])
     _import_structure["models.gemma"].extend(
         [
             "GemmaForCausalLM",
@@ -2482,6 +2486,7 @@ else:
             "Gemma3ForConditionalGeneration",
             "Gemma3PreTrainedModel",
             "Gemma3TextModel",
+            "Gemma3Model",
         ]
     )
     _import_structure["models.git"].extend(
@@ -2512,6 +2517,7 @@ else:
         [
             "GotOcr2ForConditionalGeneration",
             "GotOcr2PreTrainedModel",
+            "GotOcr2Model",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -2701,6 +2707,7 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+            "InstructBlipModel",
         ]
     )
     _import_structure["models.instructblipvideo"].extend(
@@ -2802,11 +2809,13 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+            "LlavaModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
         [
             "LlavaNextForConditionalGeneration",
+            "LlavaNextModel",
             "LlavaNextPreTrainedModel",
         ]
     )
@@ -2825,12 +2834,14 @@ else:
         [
             "LlavaNextVideoForConditionalGeneration",
             "LlavaNextVideoPreTrainedModel",
+            "LlavaNextVideoModel",
         ]
     )
     _import_structure["models.llava_onevision"].extend(
         [
             "LlavaOnevisionForConditionalGeneration",
             "LlavaOnevisionPreTrainedModel",
+            "LlavaOnevisionModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -2975,6 +2986,7 @@ else:
         [
             "Mistral3ForConditionalGeneration",
             "Mistral3PreTrainedModel",
+            "Mistral3Model",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -2995,6 +3007,7 @@ else:
             "MllamaProcessor",
             "MllamaTextModel",
             "MllamaVisionModel",
+            "MllamaModel",
         ]
     )
     _import_structure["models.mobilebert"].extend(
@@ -3243,6 +3256,7 @@ else:
         [
             "PaliGemmaForConditionalGeneration",
             "PaliGemmaPreTrainedModel",
+            "PaliGemmaModel",
             "PaliGemmaProcessor",
         ]
     )
@@ -3878,6 +3892,7 @@ else:
             "VideoLlavaForConditionalGeneration",
             "VideoLlavaPreTrainedModel",
             "VideoLlavaProcessor",
+            "VideoLlavaModel",
         ]
     )
     _import_structure["models.videomae"].extend(
@@ -3903,6 +3918,7 @@ else:
         [
             "VipLlavaForConditionalGeneration",
             "VipLlavaPreTrainedModel",
+            "VipLlavaModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
@@ -6753,6 +6769,7 @@ if TYPE_CHECKING:
         )
         from .models.aria import (
             AriaForConditionalGeneration,
+            AriaModel,
             AriaPreTrainedModel,
             AriaTextForCausalLM,
             AriaTextModel,
@@ -6853,7 +6870,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
-        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel
+        from .models.aya_vision import AyaVisionForConditionalGeneration, AyaVisionModel, AyaVisionPreTrainedModel
         from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
@@ -7420,6 +7437,7 @@ if TYPE_CHECKING:
         from .models.emu3 import (
             Emu3ForCausalLM,
             Emu3ForConditionalGeneration,
+            Emu3Model,
             Emu3PreTrainedModel,
             Emu3TextModel,
             Emu3VQVAE,
@@ -7525,6 +7543,7 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import (
             FuyuForCausalLM,
+            FuyuModel,
             FuyuPreTrainedModel,
         )
         from .models.gemma import (
@@ -7544,6 +7563,7 @@ if TYPE_CHECKING:
         from .models.gemma3 import (
             Gemma3ForCausalLM,
             Gemma3ForConditionalGeneration,
+            Gemma3Model,
             Gemma3PreTrainedModel,
             Gemma3TextModel,
         )
@@ -7567,6 +7587,7 @@ if TYPE_CHECKING:
         )
         from .models.got_ocr2 import (
             GotOcr2ForConditionalGeneration,
+            GotOcr2Model,
             GotOcr2PreTrainedModel,
         )
         from .models.gpt2 import (
@@ -7709,6 +7730,7 @@ if TYPE_CHECKING:
         )
         from .models.instructblip import (
             InstructBlipForConditionalGeneration,
+            InstructBlipModel,
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
@@ -7788,18 +7810,22 @@ if TYPE_CHECKING:
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
+            LlavaModel,
             LlavaPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
+            LlavaNextModel,
             LlavaNextPreTrainedModel,
         )
         from .models.llava_next_video import (
             LlavaNextVideoForConditionalGeneration,
+            LlavaNextVideoModel,
             LlavaNextVideoPreTrainedModel,
         )
         from .models.llava_onevision import (
             LlavaOnevisionForConditionalGeneration,
+            LlavaOnevisionModel,
             LlavaOnevisionPreTrainedModel,
         )
         from .models.longformer import (
@@ -7910,6 +7936,7 @@ if TYPE_CHECKING:
         )
         from .models.mistral3 import (
             Mistral3ForConditionalGeneration,
+            Mistral3Model,
             Mistral3PreTrainedModel,
         )
         from .models.mixtral import (
@@ -7923,6 +7950,7 @@ if TYPE_CHECKING:
         from .models.mllama import (
             MllamaForCausalLM,
             MllamaForConditionalGeneration,
+            MllamaModel,
             MllamaPreTrainedModel,
             MllamaProcessor,
             MllamaTextModel,
@@ -8118,6 +8146,7 @@ if TYPE_CHECKING:
         )
         from .models.paligemma import (
             PaliGemmaForConditionalGeneration,
+            PaliGemmaModel,
             PaliGemmaPreTrainedModel,
             PaliGemmaProcessor,
         )
@@ -8620,6 +8649,7 @@ if TYPE_CHECKING:
         )
         from .models.video_llava import (
             VideoLlavaForConditionalGeneration,
+            VideoLlavaModel,
             VideoLlavaPreTrainedModel,
             VideoLlavaProcessor,
         )
@@ -8640,6 +8670,7 @@ if TYPE_CHECKING:
         )
         from .models.vipllava import (
             VipLlavaForConditionalGeneration,
+            VipLlavaModel,
             VipLlavaPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel

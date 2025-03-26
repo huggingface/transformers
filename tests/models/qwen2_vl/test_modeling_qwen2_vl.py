@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2-VL model."""
 
+import copy
 import gc
 import unittest
 
@@ -23,6 +24,7 @@ from transformers import (
     AutoProcessor,
     Qwen2VLConfig,
     Qwen2VLForConditionalGeneration,
+    Qwen2VLModel,
     is_torch_available,
     is_vision_available,
 )
@@ -170,17 +172,12 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
-        labels = torch.zeros(
-            (self.batch_size, self.seq_length),
-            dtype=torch.long,
-            device=torch_device,
-        )
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": labels,
         }
         return config, inputs_dict
 
@@ -224,7 +221,14 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen2VLModel,
+            Qwen2VLForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
     test_pruning = False
     test_head_masking = False
@@ -260,20 +264,21 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            curr_input_dicr = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dicr)  # successfull forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            input_dict["pixel_values"] = input_dict["pixel_values"][-one_img_length:, ...]
-            input_dict["image_grid_thw"] = input_dict["image_grid_thw"][-1:, ...]
+            curr_input_dicr["pixel_values"] = curr_input_dicr["pixel_values"][-one_img_length:, ...]
+            curr_input_dicr["image_grid_thw"] = curr_input_dicr["image_grid_thw"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dicr)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = input_dict["image_grid_thw"][:1]
+            input_ids = curr_input_dicr["input_ids"][:1]
+            pixel_values = curr_input_dicr["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dicr["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error

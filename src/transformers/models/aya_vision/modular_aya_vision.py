@@ -22,6 +22,7 @@ from torch import nn
 from transformers.models.llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
+    LlavaModel,
     LlavaPreTrainedModel,
 )
 
@@ -195,10 +196,10 @@ AYA_VISION_INPUTS_DOCSTRING = """
 """
 
 
-@add_start_docstrings(
-    """The AyaVision model which consists of a vision backbone and a language model.""",
-    AYA_VISION_START_DOCSTRING,
-)
+class AyaVisionModel(LlavaModel):
+    pass
+
+
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
     def tie_weights(self):
         return self.language_model.tie_weights()
@@ -297,4 +298,4 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
 
-__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel"]
+__all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel", "AyaVisionModel"]
