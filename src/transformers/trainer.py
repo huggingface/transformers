@@ -4320,7 +4320,8 @@ class Trainer:
         observed_num_examples = 0
 
         #setting the maximum number of samples the evaluation loop processes 
-        max_eval_samples = self.args.max_eval_samples * self.args.eval_batch_size if limit_eval_sample_size else -1
+        max_eval_samples_checker = limit_eval_sample_size and self.args.max_eval_samples  != -1
+        max_eval_samples = self.args.max_eval_samples * self.args.eval_batch_size if max_eval_samples_checker else -1
 
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):

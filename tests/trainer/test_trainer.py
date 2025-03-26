@@ -1293,7 +1293,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(isinstance(result.predictions, tuple))
         self.assertEqual(len(result.predictions), 2)
 
-    def test_number_of_eval_samples(self):
+    def test_number_of_eval_samples_set(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
 
@@ -1326,6 +1326,45 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.evaluate()
         self.assertNotEqual(trainer.max_eval_samples, trainer.observed_num_examples)
         self.assertEqual(trainer.max_eval_samples, -1)
+        self.assertEqual(trainer.observed_num_examples, len(eval_dataset))
+
+    
+    def test_number_of_eval_samples_unset(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        eval_dataset = RepeatDataset(x)
+
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            evaluation_strategy="epoch",  # Enable evaluation at the end of each epoch
+            num_train_epochs=2,  # Train for at least one epoch to trigger evaluation
+            per_device_train_batch_size=4,  # You'll likely want to set your batch size
+            per_device_eval_batch_size=4,  # You'll likely want to set your evaluation batch size
+        )
+
+
+        trainer = Trainer(
+            model=tiny_llama,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+        )  # noqa
+        trainer.train()
+        self.assertEqual(trainer.max_eval_samples, -1)
+        self.assertNotEqual(trainer.max_eval_samples, trainer.observed_num_examples)
+        self.assertEqual(trainer.observed_num_examples, len(eval_dataset))
+
+
+        trainer.evaluate()
+        self.assertNotEqual(trainer.max_eval_samples, trainer.observed_num_examples)
+        self.assertEqual(trainer.max_eval_samples, -1)
+        self.assertEqual(trainer.observed_num_examples, len(eval_dataset))
+
 
 
 
