@@ -580,6 +580,7 @@ WHISPER_ATTENTION_CLASSES = {
 }
 
 
+# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
