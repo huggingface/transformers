@@ -663,7 +663,7 @@ class ProcessorMixin(PushToHubMixin):
                         f.write(self.chat_template["default"])
                     logger.info(f"chat template saved in {output_raw_chat_template_file}")
                 else:
-                    Path(chat_template_dir).mkdir(exist_ok=True)
+                    os.makedirs(chat_template_dir, exist_ok=True)
                     template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
                     with open(template_filepath, "w", encoding="utf-8") as f:
                         f.write(template)
