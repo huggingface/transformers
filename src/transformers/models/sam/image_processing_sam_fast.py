@@ -60,6 +60,7 @@ logger = logging.get_logger(__name__)
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     mask_size: Optional[Dict[str, int]]
     mask_pad_size: Optional[Dict[str, int]]
+    pad_size: Optional[Dict[str, int]]
 
 @add_start_docstrings(
     "Constructs a fast SAM image processor.",
@@ -89,15 +90,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     mask_pad_size = {"height": 256, "width": 256}
     do_convert_rgb = True
     valid_kwargs = SamFastImageProcessorKwargs
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        
-        # Initialize size dictionaries properly
-        self.size = self.size if self.size is not None else {"longest_edge": 1024}
-        self.pad_size = self.pad_size if self.pad_size is not None else {"height": 1024, "width": 1024}
-        self.mask_size = self.mask_size if self.mask_size is not None else {"longest_edge": 256}
-        self.mask_pad_size = self.mask_pad_size if self.mask_pad_size is not None else {"height": 256, "width": 256}
 
     def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int):
         """
@@ -143,12 +135,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
             # Resize if needed
             if do_resize:
-                # Convert size dict to SizeDict
-                if isinstance(size, dict) and "longest_edge" in size:
-                    target_size = self._get_preprocess_shape(image.shape[-2:], size["longest_edge"])
-                    resized_image = F.resize(image, target_size, interpolation=interpolation)
-                else:
-                    resized_image = self.resize(image=image, size=size, interpolation=interpolation)
+                target_size = self._get_preprocess_shape(image.shape[-2:], size.longest_edge)
+                resized_image = F.resize(image, target_size, interpolation=interpolation)
                 reshaped_input_sizes.append(resized_image.shape[-2:])
             else:
                 resized_image = image
@@ -245,7 +233,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str = "pt",
     ):
         """
-        sushmanth
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
         """
         requires_backends(self, ["torch"])
