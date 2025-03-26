@@ -99,9 +99,9 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
     orig_config = load_orig_config_file(orig_cfg_file)
     assert getattr(orig_config, "model.classification.name", -1) == "mobilevit_v2", "Invalid model"
     config.width_multiplier = getattr(orig_config, "model.classification.mitv2.width_multiplier", 1.0)
-    assert (
-        getattr(orig_config, "model.classification.mitv2.attn_norm_layer", -1) == "layer_norm_2d"
-    ), "Norm layers other than layer_norm_2d is not supported"
+    assert getattr(orig_config, "model.classification.mitv2.attn_norm_layer", -1) == "layer_norm_2d", (
+        "Norm layers other than layer_norm_2d is not supported"
+    )
     config.hidden_act = getattr(orig_config, "model.classification.activation.name", "swish")
     # config.image_size == getattr(orig_config,  'sampler.bs.crop_size_width', 256)
 
