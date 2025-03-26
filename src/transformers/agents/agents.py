@@ -217,7 +217,7 @@ class Toolbox:
         """Get all tools currently in the toolbox"""
         return self._tools
 
-    def show_tool_descriptions(self, tool_description_template: str = None) -> str:
+    def show_tool_descriptions(self, tool_description_template: Optional[str] = None) -> str:
         """
         Returns the description of all tools in the toolbox
 
@@ -891,7 +891,7 @@ class ReactAgent(Agent):
 
         return final_answer
 
-    def planning_step(self, task, is_first_step: bool = False, iteration: int = None):
+    def planning_step(self, task, is_first_step: bool = False, iteration: Optional[int] = None):
         """
         Used periodically by the agent to plan the next steps to reach the objective.
 

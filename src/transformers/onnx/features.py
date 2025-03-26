@@ -53,7 +53,7 @@ if not is_torch_available() and not is_tf_available():
 
 
 def supported_features_mapping(
-    *supported_features: str, onnx_config_cls: str = None
+    *supported_features: str, onnx_config_cls: Optional[str] = None
 ) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
     """
     Generate the mapping between supported the features and their corresponding OnnxConfig for a given model.
@@ -626,7 +626,7 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
-    def determine_framework(model: str, framework: str = None) -> str:
+    def determine_framework(model: str, framework: Optional[str] = None) -> str:
         """
         Determines the framework to use for the export.
 
@@ -677,7 +677,7 @@ class FeaturesManager:
 
     @staticmethod
     def get_model_from_feature(
-        feature: str, model: str, framework: str = None, cache_dir: str = None
+        feature: str, model: str, framework: Optional[str] = None, cache_dir: Optional[str] = None
     ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
