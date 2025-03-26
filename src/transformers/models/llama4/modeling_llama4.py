@@ -1705,7 +1705,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
             final_mask_1d = final_mask[..., 0].reshape(-1)
-            num_tokens_to_fill = final_mask_1d.sum().item()
+            num_tokens_to_fill = final_mask_1d.sum()
 
             if num_tokens_to_fill != projected_vision_flat.size(0):
                 raise ValueError(
