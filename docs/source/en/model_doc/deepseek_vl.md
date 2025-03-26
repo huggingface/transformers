@@ -34,7 +34,7 @@ alt="DeepseekVL Outputs" width="600"/>
 
 <small> DeepseekVL Outputs. Taken from the <a href="https://github.com/deepseek-ai/DeepSeek-VL" target="_blank">official code</a>. </small>
 
-This model was contributed by [Armaghan](https://huggingface.co/geetu040).
+This model was contributed by [Armaghan](https://huggingface.co/geetu040) and [Shakib](https://github.com/Shakib-IO).
 The original code can be found [here](https://github.com/deepseek-ai/DeepSeek-VL).
 
 ## Usage Example
