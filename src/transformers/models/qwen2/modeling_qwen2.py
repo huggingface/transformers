@@ -980,6 +980,7 @@ class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         if not return_dict:

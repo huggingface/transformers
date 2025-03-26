@@ -51,6 +51,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
             # `importlib.metadata.packages_distributions()` is not available in Python 3.9.
 
             # Primary method to get the package version
+            if pkg_name == 'awq' : pkg_name='autoawq'
             package_version = importlib.metadata.version(pkg_name)
         except importlib.metadata.PackageNotFoundError:
             # Fallback method: Only for "torch" and versions containing "dev"
