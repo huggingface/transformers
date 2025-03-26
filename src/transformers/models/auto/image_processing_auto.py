@@ -155,6 +155,7 @@ else:
             ("udop", ("LayoutLMv3ImageProcessor",)),
             ("upernet", ("SegformerImageProcessor",)),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
+            ("video_llava", ("VideoLlavaImageProcessor", "VideoLlavaImageProcessorFast")),
             ("videomae", ("VideoMAEImageProcessor",)),
             ("vilt", ("ViltImageProcessor",)),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),

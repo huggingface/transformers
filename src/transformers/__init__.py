@@ -1362,6 +1362,7 @@ else:
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
+    _import_structure["models.video_llava"].append("VideoLlavaImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
@@ -6631,6 +6632,7 @@ if TYPE_CHECKING:
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.siglip import SiglipImageProcessorFast
         from .models.siglip2 import Siglip2ImageProcessorFast
+        from .models.video_llava import VideoLlavaImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     try:
