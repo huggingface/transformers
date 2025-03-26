@@ -89,6 +89,8 @@ PRIVATE_MODELS = [
     "SmolVLMVisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
+    "Phi4MultimodalAudioModel",
+    "Phi4MultimodalVisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -167,6 +169,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
+    "models/shieldgemma2/test_modeling_shieldgemma2.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and

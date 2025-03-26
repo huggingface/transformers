@@ -536,6 +536,10 @@ if is_torch_greater_or_equal("2.3.0"):
     str_to_torch_dtype["U32"] = torch.uint32
     str_to_torch_dtype["U64"] = torch.uint64
 
+if is_torch_greater_or_equal("2.1.0"):
+    str_to_torch_dtype["F8_E4M3"] = torch.float8_e4m3fn
+    str_to_torch_dtype["F8_E5M2"] = torch.float8_e5m2
+
 
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
@@ -712,7 +716,7 @@ def _infer_parameter_dtype(
     model: "PreTrainedModel",
     param_name: str,
     empty_param: torch.Tensor,
-    keep_in_fp32_modules: Optional[List[str]] = None,
+    keep_in_fp32_regex: Optional[re.Pattern] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
 ) -> Union[bool, Optional[torch.dtype]]:
     try:
@@ -729,7 +733,7 @@ def _infer_parameter_dtype(
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
     if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
         # First fp32 if part of the exception list
-        if keep_in_fp32_modules is not None and keep_in_fp32_modules.search(param_name):
+        if keep_in_fp32_regex is not None and keep_in_fp32_regex.search(param_name):
             casting_dtype = torch.float32
         # Then dtype that was instantiated in the meta model -- note that this respects subconfigs dtypes
         elif hf_quantizer is not None:
@@ -753,9 +757,9 @@ def _load_state_dict_into_meta_model(
     cpu_offload_index: Optional[Dict] = None,
     hf_quantizer: Optional[HfQuantizer] = None,
     is_safetensors: bool = False,
-    keep_in_fp32_modules: Optional[List[str]] = None,
+    keep_in_fp32_regex: Optional[re.Pattern] = None,
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
-    device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
+    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
     device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
@@ -792,7 +796,7 @@ def _load_state_dict_into_meta_model(
             model,
             param_name,
             empty_param,
-            keep_in_fp32_modules,
+            keep_in_fp32_regex,
             hf_quantizer,
         )
 
@@ -1250,13 +1254,13 @@ def _get_torch_dtype(
             for key, curr_dtype in torch_dtype.items():
                 if hasattr(config, key):
                     value = getattr(config, key)
+                    curr_dtype = curr_dtype if not isinstance(curr_dtype, str) else getattr(torch, curr_dtype)
                     value.torch_dtype = curr_dtype
             # main torch dtype for modules that aren't part of any sub-config
             torch_dtype = torch_dtype.get("")
+            torch_dtype = torch_dtype if not isinstance(torch_dtype, str) else getattr(torch, torch_dtype)
             config.torch_dtype = torch_dtype
-            if isinstance(torch_dtype, str) and hasattr(torch, torch_dtype):
-                torch_dtype = getattr(torch, torch_dtype)
-            elif torch_dtype is None:
+            if torch_dtype is None:
                 torch_dtype = torch.float32
         else:
             raise ValueError(
@@ -1267,7 +1271,7 @@ def _get_torch_dtype(
         dtype_orig = cls._set_default_torch_dtype(torch_dtype)
     else:
         # set fp32 as the default dtype for BC
-        default_dtype = str(torch.get_default_dtype()).split(".")[-1]
+        default_dtype = torch.get_default_dtype()
         config.torch_dtype = default_dtype
         for key in config.sub_configs.keys():
             value = getattr(config, key)
@@ -1282,7 +1286,7 @@ def _get_device_map(
     max_memory: Optional[Dict],
     hf_quantizer: Optional[HfQuantizer],
     torch_dtype: Optional[torch.dtype],
-    keep_in_fp32_modules: Optional[List[str]],
+    keep_in_fp32_regex: Optional[re.Pattern],
 ) -> Dict:
     """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
     Otherwise, we check for any device inconsistencies in the device_map.
@@ -1291,13 +1295,9 @@ def _get_device_map(
         special_dtypes = {}
         if hf_quantizer is not None:
             special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
-        if keep_in_fp32_modules is not None:
+        if keep_in_fp32_regex is not None:
             special_dtypes.update(
-                {
-                    name: torch.float32
-                    for name, _ in model.named_parameters()
-                    if any(m in name for m in keep_in_fp32_modules)
-                }
+                {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
             )
 
         target_dtype = torch_dtype
@@ -1909,6 +1909,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
+        # Make sure the modules correctly exist if the flag is active
+        if self._keep_in_fp32_modules is not None:
+            all_parameters = {name for name, _ in self.named_parameters() if len(name) > 0}
+            unique_module_names = set()
+            # Get all unique module names in the module graph, without the prefixes
+            for param in all_parameters:
+                unique_module_names.update(
+                    [name for name in param.split(".") if not name.isnumeric() and name not in ["weight", "bias"]]
+                )
+            # Check that every module in the keep_in_fp32 list is part of the module graph
+            for module in self._keep_in_fp32_modules:
+                if module not in unique_module_names:
+                    raise ValueError(
+                        f"{module} was specified in the `_keep_in_fp32_modules` list, but is not part of the modules in"
+                        f" {self.__class__.__name__}"
+                    )
+
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = (
@@ -2096,7 +2113,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if not isinstance(requested_attn_implementation, dict)
                 else requested_attn_implementation.get(key, None)
             )
-            sub_config._attn_implementation_internal = curr_attn_implementation
+            # For models with backbone sub-config might be not initialized
+            if sub_config is not None:
+                sub_config._attn_implementation_internal = curr_attn_implementation
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -2179,6 +2198,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def can_generate(cls) -> bool:
         """
         Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
+
+        Under the hood, on classes where this function returns True, some generation-specific changes are triggered:
+        for instance, the model instance will have a populated `generation_config` attribute.
 
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
@@ -2489,9 +2511,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             total_decoder_name="",
             total_encoder_name="",
         ):
-            assert isinstance(decoder_pointer, nn.Module) and isinstance(
-                encoder_pointer, nn.Module
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
+                f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
+            )
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -2505,9 +2527,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
-                assert (
-                    len(encoder_modules) > 0
-                ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
+                assert len(encoder_modules) > 0, (
+                    f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
+                )
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
@@ -3361,7 +3383,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.info(
                     "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                 )
-                state_dict = model_to_save.get_adapter_state_dict()
+                state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
 
                 if save_peft_format:
                     logger.info(
@@ -3551,7 +3573,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Please upgrade accelerate with `pip install -U accelerate`"
                     )
                 # init state_dict for this shard
-                shard_state_dict = {name: "" for name in shard}
+                shard_state_dict = dict.fromkeys(shard, "")
                 for module_name in shard:
                     # skip to collect this weight again
                     if shard_state_dict.get(module_name) != "":
@@ -3674,6 +3696,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
+
+        if dtype_present_in_args and getattr(self, "quantization_method", None) == QuantizationMethod.QUARK:
+            raise ValueError("Casting a Quark quantized model to a new `dtype` is not supported.")
+
         # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             if dtype_present_in_args:
@@ -4310,6 +4336,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
             )
 
+        if gguf_file and device_map is not None and "disk" in device_map.values():
+            raise RuntimeError(
+                "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
+                "loaded from GGUF files."
+            )
+
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             subfolder=subfolder,
@@ -4408,28 +4440,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config = model.config
 
         # Find fp32 modules if needed
-        keep_in_fp32_modules = None
-        if model._keep_in_fp32_modules is not None:
-            if is_accelerate_available() and not is_deepspeed_zero3_enabled():
-                low_cpu_mem_usage = True
-            keep_in_fp32_modules = model._keep_in_fp32_modules if len(model._keep_in_fp32_modules) > 0 else None
+        keep_in_fp32_regex = None
+        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+        # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
+        # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
+        if model._keep_in_fp32_modules is not None and (
+            torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+        ):
+            # Only the path with `low_cpu_mem_usage` will check every param for the correct dtype
+            low_cpu_mem_usage = True
+            # We need to match exact layers, so we add either `.` on each side, or start/end of string
+            keep_in_fp32_regex = re.compile(
+                "|".join([rf"((^|\.){module}($|\.))" for module in model._keep_in_fp32_modules])
+            )
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
+                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules
             )
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            config._pre_quantization_dtype = torch_dtype
+            config._pre_quantization_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(
-                model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_modules
-            )
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
 
         # Finalize model weight initialization
         if from_tf:
@@ -4461,7 +4499,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
                 hf_quantizer=hf_quantizer,
-                keep_in_fp32_modules=keep_in_fp32_modules,
+                keep_in_fp32_regex=keep_in_fp32_regex,
                 device_mesh=device_mesh,
                 key_mapping=key_mapping,
                 weights_only=weights_only,
@@ -4670,8 +4708,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict: Optional[bool] = None,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
-        keep_in_fp32_modules: Optional[List[str]] = None,
-        device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
+        keep_in_fp32_regex: Optional[re.Pattern] = None,
+        device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
         key_mapping: Optional[Dict[str, str]] = None,
         weights_only: bool = True,
         _fast_init: bool = True,
@@ -4732,10 +4770,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
-        if keep_in_fp32_modules is not None:
-            keep_in_fp32_modules = re.compile("|".join([re.escape(module) for module in keep_in_fp32_modules]))
+        if keep_in_fp32_regex is not None:
             for name, param in model.named_parameters():
-                if keep_in_fp32_modules.search(name):
+                if keep_in_fp32_regex.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
@@ -4786,7 +4823,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 param_device_map = expand_device_map(device_map, checkpoint_keys)
                 str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
                 if sharded_metadata is None:
-                    weight_map = {p: checkpoint_files[0] for p in checkpoint_keys}
+                    weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
                 else:
                     folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
                     # Fix the weight map keys according to the key mapping
@@ -4890,7 +4927,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         cpu_offload_index=cpu_offload_index,
                         hf_quantizer=hf_quantizer,
                         is_safetensors=is_offloaded_safetensors,
-                        keep_in_fp32_modules=keep_in_fp32_modules,
+                        keep_in_fp32_regex=keep_in_fp32_regex,
                         unexpected_keys=unexpected_keys,
                         device_mesh=device_mesh,
                     )
@@ -4947,7 +4984,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 }
                 for name, param in parameters_to_initialize.items():
                     # First move data to correct
-                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_modules)
+                    to_contiguous, casting_dtype = _infer_parameter_dtype(model, name, param, keep_in_fp32_regex)
                     shard_and_distribute_module(
                         model,
                         param.to(tp_device),
@@ -5418,9 +5455,9 @@ class PoolerEndLogits(nn.Module):
         Returns:
             `torch.FloatTensor`: The end logits for SQuAD.
         """
-        assert (
-            start_states is not None or start_positions is not None
-        ), "One of start_states, start_positions should be not None"
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -5486,9 +5523,9 @@ class PoolerAnswerClass(nn.Module):
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert (
-            start_states is not None or start_positions is not None
-        ), "One of start_states, start_positions should be not None"
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
@@ -5842,7 +5879,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
         if device.type == "cuda":
-            device_memory = torch.cuda.mem_get_info(device)[0]
+            index = device.index if device.index is not None else torch.cuda.current_device()
+            device_memory = torch.cuda.mem_get_info(index)[0]
             # Allow up to 95% of max device memory
             byte_count = min(byte_count, int(0.95 * device_memory))
         # Allocate memory
