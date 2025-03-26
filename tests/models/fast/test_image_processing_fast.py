@@ -158,16 +158,13 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         inputs = image_processor(image, return_tensor="pt")
 
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
-
-        # TODO: check how to not hard code this
         target_sizes = [(image.height, image.width)]
         threshold = 0.88
         final_out = image_processor.post_process_text_detection(
             output, target_sizes, threshold, bounding_box_type="rect"
         )
 
-        # TODO: align bbox format with transformer models
-        assert final_out[0]["boxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
+        assert final_out[0]["boxes"][0] == [(151, 151), (160, 56), (355, 74), (346, 169)]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.91862
 
     @require_cv2

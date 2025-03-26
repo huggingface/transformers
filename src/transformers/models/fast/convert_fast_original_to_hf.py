@@ -214,8 +214,6 @@ def convert_fast_checkpoint(
         content_model = json.loads(f.read())
 
     size = content[checkpoint_config_filename]["short_size"]
-
-    # TODO: add logic for py/json files maybe both
     model_config = content_model["model"]
     test_config = content_model.get("test_cfg", None)
     data_config = content_model["data"]

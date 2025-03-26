@@ -33,6 +33,30 @@ alt="drawing" width="600"/>
 
 This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari), [Raghavan](https://huggingface.co/Raghavan), and [qubvel-hf](https://huggingface.co/qubvel-hf).
 
+## Usage tips 
+```py
+>>> import torch
+>>> import requests
+
+>>> from PIL import Image
+>>> from transformers import FastForSceneTextRecognition, FastImageProcessor
+
+>>> image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
+>>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+
+>>> image_processor = FastImageProcessor.from_pretrained("jadechoghari/FAST-tiny-model")
+>>> model = FastForSceneTextRecognition.from_pretrained("jadechoghari/FAST-tiny-model")
+
+>>> inputs = image_processor(image, return_tensor="pt")
+
+>>> output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
+    target_sizes = [(image.height, image.width)]
+    threshold = 0.88
+    final_out = image_processor.post_process_text_detection(
+        output, target_sizes, threshold, bounding_box_type="rect"
+    )
+```
+
 ## FastConfig
 
 [[autodoc]] FastConfig
