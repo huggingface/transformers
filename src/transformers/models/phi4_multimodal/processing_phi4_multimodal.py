@@ -62,7 +62,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     tokenizer_class = "GPT2TokenizerFast"
     image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
-    valid_kwargs = ["chat_template", "fake_image_token_pattern", "fake_audio_token_pattern"]
+    valid_kwargs = ["chat_template"]
 
     def __init__(
         self,
@@ -136,7 +136,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         if concatenated_prompt.count(image_token) != len(num_img_tokens):
             raise ValueError(
                 "You should add as much image tokens `<|image|>` in your prompt as you pass `images` to the processor. ",
-                f"Input contains {concatenated_prompt.count(image_token)} tokens != {len(num_img_tokens)} images"
+                f"Input contains {concatenated_prompt.count(image_token)} tokens != {len(num_img_tokens)} images",
             )
         if concatenated_prompt.count(audio_token) != len(audio_embed_sizes):
             raise ValueError(
