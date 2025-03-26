@@ -1656,7 +1656,7 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_layer_device_map_for_cache_init(self) -> Optional[Dict[int, str | int]]:
+    def _get_layer_device_map_for_cache_init(self) -> Optional[Dict[int, Union[str, int]]]:
         """
         Returns the device map for each decoder layer, to allocate the cache on the right device.
         Inspired from `dispatch_model` in accelerate.
