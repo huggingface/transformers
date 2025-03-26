@@ -1659,7 +1659,7 @@ class GenerationMixin:
     def _get_layer_device_map_for_cache_init(self) -> Optional[Dict[int, str | int]]:
         """
         Returns the device map for each decoder layer, to allocate the cache on the right device.
-        Inspired from `dispatch_model` from accelerate.
+        Inspired from `dispatch_model` in accelerate.
         """
         execution_device_map = None
 
