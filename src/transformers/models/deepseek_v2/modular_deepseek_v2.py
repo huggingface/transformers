@@ -103,7 +103,7 @@ class DeepseekV2Config(LlamaConfig):
             Whether to use a bias term in the MLP layers.
         head_dim (`int`, *optional*, defaults to `qk_rope_head_dim`):
             The attention head dimension.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers in the shallow layers before switching to MoE layers.
@@ -113,11 +113,11 @@ class DeepseekV2Config(LlamaConfig):
             Rank of the LoRA decomposition for query projections.
             Specifically, it determines the dimensionality to which the query (q) vectors are compressed before being expanded back to their original size.
             It reduces computational overhead while maintaining model performance.
-        num_group (`int`, *optional*):
+        n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
-        num_local_experts (`int`, *optional*):
+        n_routed_experts (`int`, *optional*, defaults to 64):
             Number of routed experts (None indicates a dense model).
-        num_shared_experts (`int`, *optional*):
+        n_shared_experts (`int`, *optional*, defaults to 2):
             Number of shared experts (None indicates a dense model).
         qk_nope_head_dim (`int`, *optional*, defaults to 128):
             The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
@@ -166,13 +166,13 @@ class DeepseekV2Config(LlamaConfig):
 
     def __init__(
         self,
-        router_aux_loss_coef=0.001,
+        aux_loss_alpha=0.001,
         first_k_dense_replace=0,
         kv_lora_rank=512,
         q_lora_rank=1536,
-        num_group=None,
-        num_local_experts=None,
-        num_shared_experts=None,
+        n_group=1,
+        n_routed_experts=64,
+        n_shared_experts=2,
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
@@ -188,13 +188,13 @@ class DeepseekV2Config(LlamaConfig):
     ):
         super().__init__(**super_kwargs)
 
-        self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_aux_loss_coef = aux_loss_alpha 
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
-        self.num_group = num_group
-        self.num_local_experts = num_local_experts
-        self.num_shared_experts = num_shared_experts
+        self.num_group = n_group
+        self.num_local_experts = n_routed_experts
+        self.num_shared_experts = n_shared_experts
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor
