@@ -26,7 +26,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.amp import autocast
 from torch.nn import ConvTranspose1d, Parameter
 
 from transformers.models.llama.modeling_llama import rotate_half
@@ -49,7 +48,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_torch_greater_or_equal,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -74,21 +72,6 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
-
-if is_torch_greater_or_equal("1.8"):
-    from torch import sinc
-else:
-
-    def sinc(x: torch.Tensor):
-        """
-        Implementation of sinc, i.e. sin(pi * x) / (pi * x)
-        __Warning__: Different to julius.sinc, the input is multiplied by `pi`!
-        """
-        return torch.where(
-            x == 0,
-            torch.tensor(1.0, device=x.device, dtype=x.dtype),
-            torch.sin(math.pi * x) / math.pi / x,
-        )
 
 
 logger = logging.get_logger(__name__)
@@ -118,7 +101,6 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config_class = Qwen2_5OmniConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    # _no_split_modules = ["Qwen2_5OmniAudioAttention", "VisionAttention", "Qwen2_5OmniThinkerDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -128,7 +110,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of Qwen2.5OmniThinker isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed
-        std = self.config.init_std if hasattr(self.config, "init_std") else self.config.audio_config.init_std
+        std = self.config.init_std if hasattr(self.config, "init_std") else 0.02
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -988,7 +970,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         config: Qwen2_5OmniAudioEncoderConfig
     """
 
-    # Ignore copy
     config_class = Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
@@ -1010,7 +991,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         self.audio_bos_eos_token = nn.Embedding(2, config.output_dim)
         self.layers = nn.ModuleList([Qwen2_5OmniAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.ln_post = nn.LayerNorm(config.d_model)
-        # Ignore copy
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
         self.proj = nn.Linear(config.d_model, config.output_dim)
         self.gradient_checkpointing = False
@@ -1244,8 +1224,6 @@ class Qwen2_5OmniVisionFlashAttention2(nn.Module):
         v = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
         q = self._apply_rotary_pos_emb_flashatt(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = self._apply_rotary_pos_emb_flashatt(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        # q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        # k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
@@ -1439,6 +1417,7 @@ class Qwen2MLP(Qwen2_5_VLMLP):
 )
 class Qwen2_5OmniThinkerModel(Qwen2_5_VLModel):
     config_class = Qwen2_5OmniTextConfig
+    _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTextConfig):
         super().__init__(config)
@@ -1538,6 +1517,9 @@ QWEN2_5OMNITHINKER_INPUTS_DOCSTRING = r"""
     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniThinkerConfig"),
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+    config_class = Qwen2_5OmniThinkerConfig
+    _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
+
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
         super().__init__(config)
         self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(
@@ -1554,7 +1536,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         )
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.spatial_merge_size = self.config.vision_config.spatial_merge_size
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.post_init()
 
     @add_start_docstrings_to_model_forward(QWEN2_5OMNITHINKER_INPUTS_DOCSTRING)
@@ -2149,9 +2131,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
-        if cache_position[0] != 0:
-            pass
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {
@@ -2277,11 +2256,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half_codec(q) * sin)
     k_embed = (k * cos) + (rotate_half_codec(k) * sin)
     return q_embed, k_embed
-
-
-# class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
-#     def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
-#         super().__init__(config, device)
 
 
 class TDNNBlock(nn.Module):
@@ -2672,17 +2646,17 @@ class InputEmbedding(nn.Module):
         )
         self.spk_encoder = ECAPA_TDNN(config)
 
-    def forward(self, x, spk, cond, text_embed, drop_audio_cond=False, text_embed_uncond=None, cfg=True):
+    def forward(self, x, spk, cond, code_embed, drop_audio_cond=False, code_embed_uncond=None, cfg=True):
         if cfg:
             x = torch.cat([x, x], dim=0)
             spk = torch.cat([spk, torch.zeros_like(spk)], dim=0)
             cond = torch.cat([cond, torch.zeros_like(cond)], dim=0)
-            text_embed = torch.cat([text_embed, text_embed_uncond], dim=0)
+            code_embed = torch.cat([code_embed, code_embed_uncond], dim=0)
         elif drop_audio_cond:  # cfg for cond audio
             cond = torch.zeros_like(cond)
             spk = torch.zeros_like(spk)
         cond = self.spk_encoder(cond).unsqueeze(1).repeat(1, x.size(1), 1)
-        x = self.proj(torch.cat((x, cond, text_embed, spk), dim=-1))
+        x = self.proj(torch.cat((x, cond, code_embed, spk), dim=-1))
 
         return x
 
@@ -2694,13 +2668,13 @@ class CodecEmbedding(nn.Module):
         self.repeats = repeats
         self.codec_embed = nn.Embedding(codec_num_embeds + 1, codec_dim)
 
-    def forward(self, codec, drop_text=False):
-        if drop_text:
-            codec = torch.zeros_like(codec)
-        codec = self.codec_embed(codec)
+    def forward(self, code, drop_code=False):
+        if drop_code:
+            code = torch.zeros_like(code)
+        code_embed = self.codec_embed(code)
 
-        codec = torch.repeat_interleave(codec, repeats=self.repeats, dim=1)
-        return codec
+        code_embed = torch.repeat_interleave(code_embed, repeats=self.repeats, dim=1)
+        return code_embed
 
 
 # AdaLayerNormZero
@@ -2952,7 +2926,7 @@ def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):  # return filter [1,1
     if cutoff == 0:
         filter_ = torch.zeros_like(time)
     else:
-        filter_ = 2 * cutoff * window * sinc(2 * cutoff * time)
+        filter_ = 2 * cutoff * window * torch.sinc(2 * cutoff * time)
         # Normalize filter to have sum = 1, otherwise we will have a small leakage
         # of the constant component in the input signal.
         filter_ /= filter_.sum()
@@ -3186,30 +3160,30 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
 
         return mel_spec
 
-    def forward(self, x):
-        x = self.apm_to_db(x)
+    def forward(self, apm_mel):
+        mel_spec = self.apm_to_db(apm_mel)
         # pre conv
-        x = self.conv_pre(x)
+        hidden = self.conv_pre(mel_spec)
 
         for i in range(self.num_upsamples):
             # upsampling
             for i_up in range(len(self.ups[i])):
-                x = self.ups[i][i_up](x)
+                hidden = self.ups[i][i_up](hidden)
             # AMP blocks
             xs = None
             for j in range(self.num_kernels):
                 if xs is None:
-                    xs = self.resblocks[i * self.num_kernels + j](x)
+                    xs = self.resblocks[i * self.num_kernels + j](hidden)
                 else:
-                    xs += self.resblocks[i * self.num_kernels + j](x)
-            x = xs / self.num_kernels
+                    xs += self.resblocks[i * self.num_kernels + j](hidden)
+            hidden = xs / self.num_kernels
 
         # post conv
-        x = self.activation_post(x)
-        x = self.conv_post(x)
-        x = torch.clamp(x, min=-1.0, max=1.0)  # bound the output to [-1, 1]
+        hidden = self.activation_post(hidden)
+        hidden = self.conv_post(hidden)
+        audio = torch.clamp(hidden, min=-1.0, max=1.0)  # bound the output to [-1, 1]
 
-        return x.squeeze().cpu()
+        return audio.squeeze().cpu()
 
 
 class ODESolverRK4:
@@ -3314,40 +3288,40 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         x,  # nosied input audio
         cond,  # masked cond audio
         spk,  # spk embedding
-        text,  # text
+        code,  # code
         time,  # time step  # noqa: F821 F722
         drop_audio_cond=False,  # cfg for cond audio
-        drop_text=False,  # cfg for text
+        drop_code=False,  # cfg for code
         cfg=True,
     ):
         batch, seq_len = x.shape[0], x.shape[1]
         if time.ndim == 0:
             time = time.repeat(batch)
 
-        # t: conditioning time, c: context (text + masked cond audio), x: noised input audio
+        # t: conditioning time, c: context (code + masked cond audio), x: noised input audio
         t = self.time_embed(time)
-        text_embed = self.text_embed(text, drop_text=False if cfg else drop_text)
-        text_embed_uncond = self.text_embed(text, drop_text=True) if cfg else None
-        x = self.input_embed(
+        code_embed = self.text_embed(code, drop_code=False if cfg else drop_code)
+        code_embed_uncond = self.text_embed(code, drop_code=True) if cfg else None
+        hidden = self.input_embed(
             x,
             spk,
             cond,
-            text_embed,
+            code_embed,
             drop_audio_cond=drop_audio_cond,
-            text_embed_uncond=text_embed_uncond,
+            code_embed_uncond=code_embed_uncond,
             cfg=cfg,
         )
 
         # rope = self.rotary_embed(x, torch.arange(seq_len, device=x.device).repeat(batch, 1))
-        rope = self.rotary_embed(x)
+        rope = self.rotary_embed(hidden)
 
-        block_diff = self._create_block_diff(x)
+        block_diff = self._create_block_diff(hidden)
 
         for block in self.transformer_blocks:
-            x = block(x, t, rope=rope, block_diff=block_diff)
+            hidden = block(hidden, t, rope=rope, block_diff=block_diff)
 
-        x = self.norm_out(x, t)
-        output = self.proj_out(x)
+        hidden = self.norm_out(hidden, t)
+        output = self.proj_out(hidden)
 
         return output
 
@@ -3356,30 +3330,30 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         self,
         cond,
         ref_mel,
-        codec,
+        code,
         steps=10,
         cfg_strength=0.5,
         sway_sampling_coef=-1.0,
     ):
         y_all = torch.randn([1, 30000, self.mel_dim], dtype=ref_mel.dtype)
-        max_duration = codec.shape[1] * self.repeats
-        y0 = y_all[:, :max_duration].to(codec.device)
-        batch, _cond_seq_len, _device = *ref_mel.shape[:2], codec.device
+        max_duration = code.shape[1] * self.repeats
+        y0 = y_all[:, :max_duration].to(code.device)
+        batch = ref_mel.shape[0]
         cond = cond.unsqueeze(1).repeat(1, max_duration, 1)
         assert batch == 1, "only support batch size = 1 currently"
 
         def fn(t, x):
             if cfg_strength < 1e-5:
-                pred = self(x=x, spk=cond, cond=ref_mel, text=codec, time=t, drop_audio_cond=False, drop_text=False)
+                pred = self(x=x, spk=cond, cond=ref_mel, code=code, time=t, drop_audio_cond=False, drop_code=False)
                 return pred
 
-            out_put = self(x=x, text=codec, spk=cond, cond=ref_mel, time=t, cfg=True)
+            out_put = self(x=x, code=code, spk=cond, cond=ref_mel, time=t, cfg=True)
             pred, null_pred = torch.chunk(out_put, 2, dim=0)
 
             return pred + (pred - null_pred) * cfg_strength
 
         t_start = 0
-        t = torch.linspace(t_start, 1, steps, device=codec.device, dtype=cond.dtype)
+        t = torch.linspace(t_start, 1, steps, device=code.device, dtype=cond.dtype)
         if sway_sampling_coef is not None:
             t = t + sway_sampling_coef * (torch.cos(torch.pi / 2 * t) - 1 + t)
 
@@ -3404,9 +3378,14 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
         super().__init__(config)
         attn_impl = config._attn_implementation
         if config._attn_implementation == "flash_attention_2":
-            logger.warning(
+            logger.warning_once(
                 "Qwen2_5OmniToken2WavModel must inference with fp32, but flash_attention_2 only supports fp16 and bf16, "
                 "attention implementation of Qwen2_5OmniToken2WavModel will fallback to sdpa."
+            )
+            attn_impl = "sdpa"
+        elif config._attn_implementation == "eager":
+            logger.warning_once(
+                "Qwen2_5OmniToken2WavModel does not support eager attention implementation, " "fall back to sdpa"
             )
             attn_impl = "sdpa"
         self.code2wav_dit_model = Qwen2_5OmniToken2WavDiTModel._from_config(
@@ -3455,16 +3434,12 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """,
     QWEN2_5OMNI_START_DOCSTRING.format(config_class=Qwen2_5OmniConfig),
 )
-class Qwen2_5OmniModel(PreTrainedModel):
+class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2_5OmniTalker", "Qwen2_5OmniThinker", "Qwen2_5OmniToken2Wav"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_static_cache = True
+    _no_split_modules = [
+        "Qwen2_5OmniTalkerForConditionalGeneration",
+        "Qwen2_5OmniToken2WavModel",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -3550,7 +3525,6 @@ class Qwen2_5OmniModel(PreTrainedModel):
     def generate(
         self,
         input_ids: Optional[torch.tensor] = None,
-        input_embeds: Optional[torch.tensor] = None,
         spk: str = "Chelsie",
         use_audio_in_video: bool = False,
         return_audio: Optional[bool] = None,
@@ -3570,8 +3544,6 @@ class Qwen2_5OmniModel(PreTrainedModel):
         Args:
             input_ids (`Optional[torch.Tensor]`, *optional*):
                 Input ids, should obtain from processor.
-            input_embeds (`Optional[torch.Tensor]`, *optional*):
-                Input embeddings, should obtain from processor.
             spk (`str` , defaults to "Chelsie"):
                 Which speaker should be used in audio response.
             use_audio_in_video (`bool`, defaults to False):
@@ -3643,7 +3615,6 @@ class Qwen2_5OmniModel(PreTrainedModel):
         # 1. Generate from thinker module
         thinker_result = self.thinker.generate(
             input_ids=input_ids,
-            input_embeds=input_embeds,
             return_dict_in_generate=True,
             output_hidden_states=True,
             **thinker_kwargs,
@@ -3730,12 +3701,12 @@ class Qwen2_5OmniModel(PreTrainedModel):
 __all__ = [
     "Qwen2_5OmniModel",
     "Qwen2_5OmniThinkerModel",
-    "Qwen2_5OmniTalkerModel",
-    "Qwen2_5OmniToken2WavModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
+    "Qwen2_5OmniTalkerModel",
     "Qwen2_5OmniTalkerForConditionalGeneration",
     "Qwen2_5OmniToken2WavDiTModel",
     "Qwen2_5OmniToken2WavBigVGANModel",
+    "Qwen2_5OmniToken2WavModel",
     "Qwen2_5OmniPreTrainedModel",
     "Qwen2_5OmniPreTrainedModelForConditionalGeneration",
 ]
