@@ -165,4 +165,5 @@ LOSS_MAPPING = {
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
 }

@@ -333,6 +333,11 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
         ("resnet", "ResNetModel"),
+<<<<<<< HEAD
+=======
+        ("retribert", "RetriBertModel"),
+        ("rf_detr", "RfDetrModel"),
+>>>>>>> 961a89b17b (feat: Add RfDetr initial commit)
         ("roberta", "RobertaModel"),
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
         ("roc_bert", "RoCBertModel"),
@@ -1088,6 +1093,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("lw_detr", "LwDetrForObjectDetection"),
+        ("rf_detr", "RfDetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
         ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
@@ -1643,14 +1649,11 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetBackbone"),
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraBackbone"),
-<<<<<<< HEAD
         ("lw_detr_vit", "LwDetrViTBackbone"),
-=======
-        ("lw_detr_vit", "LwDetrVitBackbone"),
->>>>>>> 80aeba49af (feat: add LWDetr model)
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
+        ("rf_detr_dinov2_with_registers", "RfDetrDinov2WithRegistersBackbone"),
         ("rt_detr_resnet", "RTDetrResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),

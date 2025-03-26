@@ -242,11 +242,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
         ("lw_detr", "LwDetrConfig"),
-<<<<<<< HEAD
         ("lw_detr_vit", "LwDetrViTConfig"),
-=======
-        ("lw_detr_vit", "LwDetrVitConfig"),
->>>>>>> 80aeba49af (feat: add LWDetr model)
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
         ("mamba", "MambaConfig"),
@@ -346,6 +342,12 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("regnet", "RegNetConfig"),
         ("rembert", "RemBertConfig"),
         ("resnet", "ResNetConfig"),
+<<<<<<< HEAD
+=======
+        ("retribert", "RetriBertConfig"),
+        ("rf_detr", "RfDetrConfig"),
+        ("rf_detr_dinov2_with_registers", "RfDetrDinov2WithRegistersConfig"),
+>>>>>>> 961a89b17b (feat: Add RfDetr initial commit)
         ("roberta", "RobertaConfig"),
         ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
         ("roc_bert", "RoCBertConfig"),
@@ -796,6 +798,12 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("regnet", "RegNet"),
         ("rembert", "RemBERT"),
         ("resnet", "ResNet"),
+<<<<<<< HEAD
+=======
+        ("retribert", "RetriBERT"),
+        ("rf_detr", "RF-DETR"),
+        ("rf_detr_dinov2_with_registers", "RF-DETR-DINOv2 with Registers"),
+>>>>>>> 961a89b17b (feat: Add RfDetr initial commit)
         ("roberta", "RoBERTa"),
         ("roberta-prelayernorm", "RoBERTa-PreLayerNorm"),
         ("roc_bert", "RoCBert"),
@@ -951,6 +959,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("smolvlm_vision", "smolvlm"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("rf_detr_dinov2_with_registers", "rf_detr"),
         ("granitevision", "llava_next"),
         ("internvl_vision", "internvl"),
         ("qwen2_5_vl_text", "qwen2_5_vl"),
