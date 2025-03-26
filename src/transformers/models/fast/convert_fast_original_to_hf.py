@@ -289,11 +289,9 @@ def convert_fast_checkpoint(
         text_locations = fast_image_processor.post_process_text_detection(
             output, target_sizes, threshold, bounding_box_type="rect"
         )
-        breakpoint()
         if text_locations[0]["boxes"][0] != expected_slice_boxes:
             raise ValueError(f"Expected {expected_slice_boxes}, but got {text_locations[0]['boxes'][0]}")
-
-    breakpoint()
+            
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")
