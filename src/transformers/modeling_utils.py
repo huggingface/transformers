@@ -5939,4 +5939,5 @@ class AttentionInterface(MutableMapping):
         return list(self._global_mapping.keys())
 
 
+# Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
