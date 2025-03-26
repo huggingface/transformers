@@ -57,7 +57,7 @@ else:
         [
             ("align", ("EfficientNetImageProcessor",)),
             ("aria", ("AriaImageProcessor")),
-            ("beit", ("BeitImageProcessor",)),
+            ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("bit", ("BitImageProcessor",)),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
@@ -70,7 +70,7 @@ else:
             ("convnext", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("convnextv2", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("data2vec-vision", ("BeitImageProcessor",)),
+            ("data2vec-vision", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
             ("depth_anything", ("DPTImageProcessor",)),

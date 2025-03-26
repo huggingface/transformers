@@ -19,7 +19,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,6 +31,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import BeitImageProcessor
+
+    if is_torchvision_available():
+        from transformers import BeitImageProcessorFast
 
 
 class BeitImageProcessingTester:
@@ -119,6 +122,7 @@ def prepare_semantic_batch_inputs():
 @require_vision
 class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BeitImageProcessor if is_vision_available() else None
+    fast_image_processing_class = BeitImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
