@@ -121,14 +121,15 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.4.27,<=0.4.38",
-    "jaxlib>=0.4.27,<=0.4.38",
+    "jax>=0.4.1,<=0.4.13",
+    "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
     "jinja2>=3.1.0",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "kernels>=0.3.2,<0.4",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -161,7 +162,7 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.5.1",
+    "ruff==0.11.2",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.4.3",
@@ -301,8 +302,9 @@ extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
+extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
@@ -444,7 +446,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.50.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.51.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

@@ -326,7 +326,7 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
         return inputs_dict
 
-    # Overriden Tests
+    # Overridden Tests
     @unittest.skip
     def test_attention_outputs(self):
         pass

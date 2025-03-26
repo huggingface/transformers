@@ -2460,6 +2460,7 @@ class Trainer:
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
         grad_norm: Optional[float] = None
+        learning_rate = None
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         if args.eval_on_start:
@@ -2505,7 +2506,7 @@ class Trainer:
             for _ in range(total_updates):
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
-                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches)
+                batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
                 for i, inputs in enumerate(batch_samples):
                     step += 1
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
@@ -2608,6 +2609,9 @@ class Trainer:
 
                         self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
 
+                        # get leaning rate before update
+                        learning_rate = self._get_learning_rate()
+
                         if not self.accelerator.optimizer_step_was_skipped:
                             # Delay optimizer scheduling until metrics are generated
                             if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -2618,7 +2622,14 @@ class Trainer:
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
                         self._maybe_log_save_evaluate(
-                            tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time
+                            tr_loss,
+                            grad_norm,
+                            model,
+                            trial,
+                            epoch,
+                            ignore_keys_for_eval,
+                            start_time,
+                            learning_rate=learning_rate,
                         )
                     else:
                         self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
@@ -2644,7 +2655,9 @@ class Trainer:
                 self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time)
+            self._maybe_log_save_evaluate(
+                tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time, learning_rate=learning_rate
+            )
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_xla_available():
@@ -3064,7 +3077,9 @@ class Trainer:
                 ) from exc
         return metrics
 
-    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time):
+    def _maybe_log_save_evaluate(
+        self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time, learning_rate=None
+    ):
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_xla_available():
                 xm.mark_step()
@@ -3080,7 +3095,10 @@ class Trainer:
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
-            logs["learning_rate"] = self._get_learning_rate()
+            if learning_rate is not None:
+                logs["learning_rate"] = learning_rate
+            else:
+                logs["learning_rate"] = self._get_learning_rate()
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
@@ -5202,22 +5220,21 @@ class Trainer:
 
     def _fsdp_qlora_plugin_updates(self):
         if self.is_fsdp_enabled and _is_peft_model(self.model):
-            from peft import LoraConfig
+            from peft import PeftConfig
             from peft.utils.other import fsdp_auto_wrap_policy
 
-            if isinstance(self.model.active_peft_config, LoraConfig):
-                fsdp_plugin = self.accelerator.state.fsdp_plugin
-                fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
+            if isinstance(self.model.active_peft_config, PeftConfig):
+                self.accelerator.state.fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
             if (
                 getattr(self.model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
                 and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
                 and version.parse(accelerate_version) > version.parse("0.27.0")
             ):
-                fsdp_plugin.set_mixed_precision(
+                self.accelerator.state.fsdp_plugin.set_mixed_precision(
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def get_batch_samples(self, epoch_iterator, num_batches):
+    def get_batch_samples(self, epoch_iterator, num_batches, device):
         batch_samples = []
         num_items_in_batch = None
         for _ in range(num_batches):
@@ -5233,11 +5250,12 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
-            num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
+        if num_items_in_batch is not None:
+            if self.args.average_tokens_across_devices:
+                num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
 
-        if torch.is_tensor(num_items_in_batch):
-            num_items_in_batch = num_items_in_batch.item()
+            if torch.is_tensor(num_items_in_batch):
+                num_items_in_batch = num_items_in_batch.to(device)
 
         return batch_samples, num_items_in_batch
 

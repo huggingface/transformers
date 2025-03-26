@@ -15,21 +15,18 @@
 """PyTorch RT-DETR model."""
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -37,9 +34,6 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_ninja_available,
-    is_torch_cuda_available,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -50,94 +44,66 @@ from .configuration_rt_detr import RTDetrConfig
 
 logger = logging.get_logger(__name__)
 
-MultiScaleDeformableAttention = None
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global MultiScaleDeformableAttention
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
-    src_files = [
-        root / filename
-        for filename in [
-            "vision.cpp",
-            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
-            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
-        ]
-    ]
-
-    MultiScaleDeformableAttention = load(
-        "MultiScaleDeformableAttention",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cflags=["-DWITH_CUDA=1"],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=1",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
-class MultiScaleDeformableAttentionFunction(Function):
-    @staticmethod
-    def forward(
-        context,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
-    ):
-        context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            context.im2col_step,
-        )
-        context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
-        )
-        return output
-
-    @staticmethod
-    @once_differentiable
-    def backward(context, grad_output):
-        (
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-        ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
-        )
-
-        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
 # TODO: Replace all occurrences of the checkpoint with the final one
 _CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
+
+
+@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttention
+class MultiScaleDeformableAttention(nn.Module):
+    def forward(
+        self,
+        value: Tensor,
+        value_spatial_shapes: Tensor,
+        value_spatial_shapes_list: List[Tuple],
+        level_start_index: Tensor,
+        sampling_locations: Tensor,
+        attention_weights: Tensor,
+        im2col_step: int,
+    ):
+        batch_size, _, num_heads, hidden_dim = value.shape
+        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
+        sampling_grids = 2 * sampling_locations - 1
+        sampling_value_list = []
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
+            # batch_size, height*width, num_heads, hidden_dim
+            # -> batch_size, height*width, num_heads*hidden_dim
+            # -> batch_size, num_heads*hidden_dim, height*width
+            # -> batch_size*num_heads, hidden_dim, height, width
+            value_l_ = (
+                value_list[level_id]
+                .flatten(2)
+                .transpose(1, 2)
+                .reshape(batch_size * num_heads, hidden_dim, height, width)
+            )
+            # batch_size, num_queries, num_heads, num_points, 2
+            # -> batch_size, num_heads, num_queries, num_points, 2
+            # -> batch_size*num_heads, num_queries, num_points, 2
+            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            # batch_size*num_heads, hidden_dim, num_queries, num_points
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_,
+                sampling_grid_l_,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
+            )
+            sampling_value_list.append(sampling_value_l_)
+        # (batch_size, num_queries, num_heads, num_levels, num_points)
+        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+        attention_weights = attention_weights.transpose(1, 2).reshape(
+            batch_size * num_heads, 1, num_queries, num_levels * num_points
+        )
+        output = (
+            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+            .sum(-1)
+            .view(batch_size, num_heads * hidden_dim, num_queries)
+        )
+        return output.transpose(1, 2).contiguous()
 
 
 @dataclass
@@ -728,49 +694,6 @@ class RTDetrCSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
-def multi_scale_deformable_attention(
-    value: Tensor,
-    value_spatial_shapes: Union[Tensor, List[Tuple]],
-    sampling_locations: Tensor,
-    attention_weights: Tensor,
-) -> Tensor:
-    batch_size, _, num_heads, hidden_dim = value.shape
-    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
-    sampling_grids = 2 * sampling_locations - 1
-    sampling_value_list = []
-    for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, hidden_dim
-        # -> batch_size, height*width, num_heads*hidden_dim
-        # -> batch_size, num_heads*hidden_dim, height*width
-        # -> batch_size*num_heads, hidden_dim, height, width
-        value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
-        )
-        # batch_size, num_queries, num_heads, num_points, 2
-        # -> batch_size, num_heads, num_queries, num_points, 2
-        # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
-        sampling_value_l_ = nn.functional.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
-        )
-        sampling_value_list.append(sampling_value_l_)
-    # (batch_size, num_queries, num_heads, num_levels, num_points)
-    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_heads, 1, num_queries, num_levels * num_points
-    )
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .view(batch_size, num_heads * hidden_dim, num_queries)
-    )
-    return output.transpose(1, 2).contiguous()
-
-
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
 class RTDetrMultiscaleDeformableAttention(nn.Module):
     """
@@ -780,12 +703,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
-        kernel_loaded = MultiScaleDeformableAttention is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+        self.attn = MultiScaleDeformableAttention()
 
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -872,27 +790,16 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        if self.disable_custom_kernels or MultiScaleDeformableAttention is None or is_torchdynamo_compiling():
-            # PyTorch implementation
-            output = multi_scale_deformable_attention(
-                value, spatial_shapes_list, sampling_locations, attention_weights
-            )
-        else:
-            try:
-                # custom kernel
-                output = MultiScaleDeformableAttentionFunction.apply(
-                    value,
-                    spatial_shapes,
-                    level_start_index,
-                    sampling_locations,
-                    attention_weights,
-                    self.im2col_step,
-                )
-            except Exception:
-                # PyTorch implementation
-                output = multi_scale_deformable_attention(
-                    value, spatial_shapes_list, sampling_locations, attention_weights
-                )
+        output = self.attn(
+            value,
+            spatial_shapes,
+            spatial_shapes_list,
+            level_start_index,
+            sampling_locations,
+            attention_weights,
+            self.im2col_step,
+        )
+
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -2091,7 +1998,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(

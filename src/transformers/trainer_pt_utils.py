@@ -121,9 +121,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     nested list/tuples/dict of tensors.
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
-        assert (
-            type(tensors) is type(new_tensors)
-        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        assert type(tensors) is type(new_tensors), (
+            f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        )
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -291,7 +291,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
 
 class EvalLoopContainer:
     """
-    Container to store intermediate results of evaluation loop
+    Container to store intermediate results of evaluation loop.
 
     Args:
         do_nested_concat (`bool`, *optional*, defaults to `True`):
@@ -381,15 +381,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert (
-            len(indices) == self.total_size
-        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
+        assert len(indices) == self.total_size, (
+            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
+        )
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert (
-            len(indices) == self.num_samples
-        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+        assert len(indices) == self.num_samples, (
+            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+        )
 
         return iter(indices)
 
@@ -443,7 +443,7 @@ class DistributedTensorGatherer:
         - P1: `[6, 7, 8, 9, 10, 11]`
         - P2: `[12, 13, 14, 15, 0, 1]`
 
-    The first batch treated on each process will be
+    The first batch treated on each process will be:
 
         - P0: `[0, 1]`
         - P1: `[6, 7]`
@@ -506,9 +506,9 @@ class DistributedTensorGatherer:
         if isinstance(arrays, (list, tuple)):
             result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
             return result[0][0], type(arrays)(r[1] for r in result)
-        assert (
-            arrays.shape[0] % self.world_size == 0
-        ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
+        assert arrays.shape[0] % self.world_size == 0, (
+            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
+        )
 
         slice_len = arrays.shape[0] // self.world_size
         for i in range(self.world_size):
@@ -736,7 +736,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             # add extra samples to make it evenly divisible
             indices += indices[: (self.total_size - len(indices))]
         else:
-            # remove tail of data to make it evenly divisible.
+            # remove tail of data to make it evenly divisible
             indices = indices[: self.total_size]
         assert len(indices) == self.total_size
 
@@ -928,7 +928,7 @@ def _get_learning_rate(self):
 
 def _secs2timedelta(secs):
     """
-    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
     """
 
     msec = int(abs(secs - int(secs)) * 100)
@@ -937,7 +937,7 @@ def _secs2timedelta(secs):
 
 def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     """
-    Reformat Trainer metrics values to a human-readable format
+    Reformat Trainer metrics values to a human-readable format.
 
     Args:
         metrics (`Dict[str, float]`):
@@ -950,11 +950,11 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     metrics_copy = metrics.copy()
     for k, v in metrics_copy.items():
         if "_mem_" in k:
-            metrics_copy[k] = f"{ v >> 20 }MB"
+            metrics_copy[k] = f"{v >> 20}MB"
         elif "_runtime" in k:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
-            metrics_copy[k] = f"{ int(v) >> 30 }GF"
+            metrics_copy[k] = f"{int(v) >> 30}GF"
         elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
@@ -963,7 +963,7 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
 
 def log_metrics(self, split, metrics):
     """
-    Log metrics in a specially formatted way
+    Log metrics in a specially formatted way.
 
     Under distributed environment this is done only for a process with rank 0.
 
@@ -977,7 +977,7 @@ def log_metrics(self, split, metrics):
 
     In order to get memory usage report you need to install `psutil`. You can do that with `pip install psutil`.
 
-    Now when this method is run, you will see a report that will include: :
+    Now when this method is run, you will see a report that will include:
 
     ```
     init_mem_cpu_alloc_delta   =     1301MB
@@ -1006,7 +1006,7 @@ def log_metrics(self, split, metrics):
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
     main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
     use a different amount of gpu memory. This is also not the same under DataParallel where gpu0 may require much more
-    memory than the rest since it stores the gradient and optimizer states for all participating GPUS. Perhaps in the
+    memory than the rest since it stores the gradient and optimizer states for all participating GPUs. Perhaps in the
     future these reports will evolve to measure those too.
 
     The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
@@ -1091,7 +1091,7 @@ def save_metrics(self, split, metrics, combined=True):
 
 def save_state(self):
     """
-    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
 
     Under distributed environment this is done only for a process with rank 0.
     """
@@ -1104,7 +1104,7 @@ def save_state(self):
 
 def get_model_param_count(model, trainable_only=False):
     """
-    Calculate model's total param count. If trainable_only is True then count only those requiring grads
+    Calculate model's total param count. If trainable_only is True then count only those requiring grads.
     """
     if is_deepspeed_zero3_enabled():
 
@@ -1263,7 +1263,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: bool = field(
+    dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"

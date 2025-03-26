@@ -140,7 +140,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        # Test policies adapated from https://ailuminate.mlcommons.org/benchmarks/ hazard categories
+        # Test policies adapted from https://ailuminate.mlcommons.org/benchmarks/ hazard categories
         custom_policies = {
             "cbrne": "Test policy related to indiscriminate weapons.",
             "ip": "Test policy related to intellectual property.",
@@ -166,22 +166,22 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_chat_template_accepts_processing_kwargs(self):
+    def test_image_chat_template_accepts_processing_kwargs(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_chat_template_batched(self):
+    def test_image_chat_template_batched(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_chat_template_dict_torch(self):
+    def test_image_chat_template_dict_torch(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
-    def test_chat_template_single(self):
+    def test_image_chat_template_single(self):
         pass
 
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2

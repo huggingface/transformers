@@ -538,7 +538,22 @@ def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
 
 
+def model_addition_debugger(*args, **kwargs):
+    requires_backends(model_addition_debugger, ["torch"])
+
+
+def model_addition_debugger_context(*args, **kwargs):
+    requires_backends(model_addition_debugger_context, ["torch"])
+
+
 ROPE_INIT_FUNCTIONS = None
+
+
+class AttentionInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class PreTrainedModel(metaclass=DummyObject):
@@ -6677,6 +6692,13 @@ class ModernBertForMaskedLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class ModernBertForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ModernBertForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7732,6 +7754,55 @@ class Phi3Model(metaclass=DummyObject):
 
 
 class Phi3PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalAudioModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalAudioPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi4MultimodalVisionPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -2367,8 +2367,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
-            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:")),
-            _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:")),
+            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
         ],
         timeout=timeout,
     )
@@ -3056,7 +3056,7 @@ DeviceProperties = tuple[Union[str, None], Union[int, None]]
 
 
 @cache
-def get_device_properties(self) -> DeviceProperties:
+def get_device_properties() -> DeviceProperties:
     """
     Get environment device properties.
     """

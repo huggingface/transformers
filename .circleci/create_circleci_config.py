@@ -206,6 +206,9 @@ torch_job = CircleCIJob(
 generate_job = CircleCIJob(
     "generate",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    # networkx==3.3 (after #36957) cause some issues
+    # TODO: remove this once it works directly
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="generate",
     parallelism=6,
 )
@@ -328,6 +331,9 @@ repo_utils_job = CircleCIJob(
 non_model_job = CircleCIJob(
     "non_model",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    # networkx==3.3 (after #36957) cause some issues
+    # TODO: remove this once it works directly
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="not generate",
     parallelism=6,
 )
@@ -357,9 +363,9 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
-EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
-PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
+REGULAR_TESTS = [torch_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+EXAMPLES_TESTS = [examples_torch_job]
+PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
