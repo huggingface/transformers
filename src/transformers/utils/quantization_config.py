@@ -646,7 +646,7 @@ class GPTQConfig(QuantizationConfigMixin):
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
-        meta: Optional[Dict[str, any]] = None,
+        meta: Optional[Dict[str, Any]] = None,
         backend: Optional[str] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
