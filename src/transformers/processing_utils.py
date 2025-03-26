@@ -1402,8 +1402,8 @@ class ProcessorMixin(PushToHubMixin):
             elif isinstance(self.chat_template, dict):
                 raise ValueError(
                     'The processor has multiple chat templates but none of them are named "default". You need to specify'
-                    ' which one to use by passing the `chat_template` argument. Available templates are: '
-                    f'{", ".join(self.chat_template.keys())}'
+                    " which one to use by passing the `chat_template` argument. Available templates are: "
+                    f"{', '.join(self.chat_template.keys())}"
                 )
             elif self.chat_template is not None:
                 chat_template = self.chat_template
