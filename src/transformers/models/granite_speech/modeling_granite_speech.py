@@ -890,26 +890,23 @@ class GraniteSpeechConformerAttention(nn.Module):
         q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim=-1))
         q, k, v = [t.reshape(bs, nb, context_size, h, -1).transpose(2, 3) for t in (q, k, v)]
 
-        dots = einsum("b m h i d, b m h j d -> b m h i j", q, k) * self.scale
-
         # shaw's relative positional embedding
         seq = torch.arange(context_size, device=device)
         dist = seq.view(-1, 1) - seq.view(1, -1)
         dist = torch.clamp(dist, -context_size, context_size) + max_pos_emb
         rel_pos_emb = self.rel_pos_emb(dist).to(q)
-        pos_attn = einsum("b m h c d, c r d -> b m h c r", q, rel_pos_emb) * self.scale
-        dots = dots + pos_attn
+        rel_pos_emb_expanded = rel_pos_emb.view([1, 1, 1] + list(rel_pos_emb.shape))
+        pos_attn = torch.sum(q.unsqueeze(-2) * rel_pos_emb_expanded, dim=-1) * self.scale
 
         if nr > 0:
             # masked attention in the extended block
             mask = torch.ones(context_size, context_size, dtype=bool, device=device)
             mask[:nr, :nr] = 0
-            mask_value = -torch.finfo(dots.dtype).max
-            dots[:, -1, :].masked_fill_(mask, mask_value)
+            mask_value = -torch.finfo(pos_attn.dtype).max
+            pos_attn[:, -1, :].masked_fill_(mask, mask_value)
 
-        attn = dots.softmax(dim=-1)
-
-        out = einsum("b m h i j, b m h j d -> b m h i d", attn, v)
+        with torch.nn.attention.sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
+            out = F.scaled_dot_product_attention(q, k, v, attn_mask=pos_attn, scale=self.scale)
         out = out.transpose(2, 3).reshape(bs, x.shape[1], -1)
         out = self.to_out(out[:, :n, :])
         return self.dropout(out)
