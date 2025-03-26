@@ -60,17 +60,17 @@ def get_model_config(model_config, model_type, size, min_area, bounding_box_type
         "tiny": {
             "config_url": tiny_config_url,
             "expected_logits": torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523]),
-            "expected_boxes": [151, 151, 160, 56, 355, 74, 346, 169],
+            "expected_boxes": [(151, 151), (160, 56), (355, 74), (346, 169)],
         },
         "small": {
             "config_url": small_config_url,
             "expected_logits": torch.tensor([-13.1852, -17.2011, -16.9553, -16.8269]),
-            "expected_boxes": [154, 151, 155, 61, 351, 63, 350, 153],
+            "expected_boxes": [(154, 151), (155, 61), (351, 63), (350, 153)],
         },
         "base": {
             "config_url": base_config_url,
             "expected_logits": torch.tensor([-28.7481, -34.1635, -25.7430, -22.0260]),
-            "expected_boxes": [157, 149, 158, 66, 348, 68, 347, 151],
+            "expected_boxes": [(157, 149), (158, 66), (348, 68), (347, 151)],
         },
     }
 

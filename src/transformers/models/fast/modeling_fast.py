@@ -195,8 +195,8 @@ class FastPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class FASTNeck(nn.Module):
-    def __init__(self, config):
+class FastNeck(nn.Module):
+    def __init__(self, config: FastConfig):
         super().__init__()
         self.reduce_layers = nn.ModuleList()
         for in_channels, out_channels, kernel_size, stride in zip(
@@ -209,7 +209,7 @@ class FASTNeck(nn.Module):
             self.reduce_layers.append(layer)
         self.num_layers = len(self.reduce_layers)
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor :
         first_layer_hidden = hidden_states[0]
         first_layer_hidden = self.reduce_layers[0](first_layer_hidden)
         output_stages = [first_layer_hidden]
@@ -224,7 +224,7 @@ class FASTNeck(nn.Module):
         return combined_hidden_states
 
 
-class FASTHead(nn.Module):
+class FastHead(nn.Module):
     def __init__(self, config: FastConfig) -> None:
         super().__init__()
         self.conv = FastRepConvLayer(
@@ -293,8 +293,8 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         else:
             backbone = load_backbone(config.backbone_config)
         self.backbone = backbone
-        self.neck = FASTNeck(config=config)
-        self.text_detection_head = FASTHead(config=config)
+        self.neck = FastNeck(config=config)
+        self.text_detection_head = FastHead(config=config)
 
         self.pooling_1s = nn.MaxPool2d(
             kernel_size=config.head_pooling_size, stride=1, padding=(config.head_pooling_size - 1) // 2

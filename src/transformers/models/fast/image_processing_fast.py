@@ -141,39 +141,38 @@ def compute_min_area_rect(points):
 
 def get_box_points(rect):
     """
-    Computes the four corner points of a rotated rectangle in OpenCV's order.
+    Computes the four corner points of a rotated rectangle in OpenCV's order:
+    [Top-Left, Top-Right, Bottom-Right, Bottom-Left]
 
     Args:
-        rect (tuple): (cx, cy, w, h, angle)
-                    - Center (cx, cy)
-                    - Width (w) and Height (h)
-                    - Rotation angle in degrees
+        rect (tuple): ((cx, cy), (w, h), angle)
+                      - Center coordinates (cx, cy)
+                      - Width and height (w, h)
+                      - Rotation angle in degrees
 
     Returns:
-        np.ndarray: (4,2) array containing the rectangle's four corners in OpenCV order:
-                    [Top-Left, Top-Right, Bottom-Right, Bottom-Left]
+        np.ndarray: (4, 2) array of corner points in OpenCV order.
     """
-    (cx, cy), (w, h), angle = rect
+    (center_x, center_y), (width, height), angle_degrees = rect
+    angle_radians = np.radians(angle_degrees)
 
-    # convert angle from degrees to radians
-    angle = np.radians(angle)
+    cos_angle = np.cos(angle_radians) * 0.5
+    sin_angle = np.sin(angle_radians) * 0.5
 
-    # compute movement vectors using OpenCV's method
-    b = np.cos(angle) * 0.5
-    a = np.sin(angle) * 0.5
+    # compute top-left and top-right corners
+    top_left_x = center_x - sin_angle * height - cos_angle * width
+    top_left_y = center_y + cos_angle * height - sin_angle * width
+    top_left = [top_left_x, top_left_y]
 
-    # compute four corners
-    points = np.array(
-        [
-            [cx - a * h - b * w, cy + b * h - a * w],  # top-left
-            [cx + a * h - b * w, cy - b * h - a * w],  # Top-right
-            [2 * cx - (cx - a * h - b * w), 2 * cy - (cy + b * h - a * w)],  # bottom-right
-            [2 * cx - (cx + a * h - b * w), 2 * cy - (cy - b * h - a * w)],  # bottom-left
-        ],
-        dtype=np.float32,
-    )
+    top_right_x = center_x + sin_angle * height - cos_angle * width
+    top_right_y = center_y - cos_angle * height - sin_angle * width
+    top_right = [top_right_x, top_right_y]
 
-    return points
+    # mirror across the center to get the other two corners
+    bottom_right = [2 * center_x - top_left_x, 2 * center_y - top_left_y]
+    bottom_left = [2 * center_x - top_right_x, 2 * center_y - top_right_y]
+
+    return np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 
 
 class FastImageProcessor(BaseImageProcessor):
@@ -215,6 +214,13 @@ class FastImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+
+        min_area (`int`, *optional*, defaults to `16`):
+            Minimum area (in pixels) for a region to be considered a valid detection.
+            Regions smaller than this threshold will be ignored during post-processing.
+        pooling_size (`int`, *optional*, defaults to `3`):
+            Size of the pooling window used during region proposal aggregation or feature map downsampling.
+            This controls the granularity of spatial features extracted from the image.
     """
 
     model_input_names = ["pixel_values"]
@@ -233,6 +239,8 @@ class FastImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
         image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
         do_convert_rgb: bool = True,
+        min_area: int = 250,
+        pooling_size: int = 8,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -272,6 +280,8 @@ class FastImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
+        self.min_area = min_area
+        self.pooling_size = pooling_size
 
     def resize(
         self,
@@ -511,7 +521,6 @@ class FastImageProcessor(BaseImageProcessor):
                 - "scores" (np.ndarray): Corresponding confidence scores for each bounding box.
         """
         scale = 2
-        breakpoint()
         image_size = image_size if image_size is not None else self.img_size
         out = output["last_hidden_state"]
         batch_size = out.size(0)
@@ -577,10 +586,25 @@ class FastImageProcessor(BaseImageProcessor):
                 - List of bounding boxes (`bounding_boxes`), each a flattened list of coordinates.
                 - List of corresponding confidence scores (`scores`).
         """
-        label_num = len(keys)
+        if bounding_box_type == "rect":
+            return self.generate_rotated_rect_bounding_boxes(keys, label, score, scales, threshold)
+        elif bounding_box_type == "poly":
+            return self.generate_polygon_bounding_boxes(keys, label, score, scales, threshold)
+        else:
+            raise ValueError(f"Unsupported bounding_box_type: {bounding_box_type}")
+
+    def generate_rotated_rect_bounding_boxes(self, keys, label, score, scales, threshold):
+        """
+        Generates rotated rectangular bounding boxes for connected components.
+
+        Returns:
+            Tuple[List[List[int]], List[float]]:
+                - List of rotated rectangle bounding boxes as flattened coordinates.
+                - List of corresponding confidence scores.
+        """
         bounding_boxes = []
         scores = []
-        for index in range(1, label_num):
+        for index in range(1, len(keys)):
             i = keys[index]
             ind = label == i
             ind_np = ind.data.cpu().numpy()
@@ -593,23 +617,52 @@ class FastImageProcessor(BaseImageProcessor):
                 label[ind] = 0
                 continue
 
-            if bounding_box_type == "rect":
-                rect = compute_min_area_rect(points[:, ::-1])
-                alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
-                rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-                bounding_box = get_box_points(rect) * scales
+            rect = compute_min_area_rect(points[:, ::-1])
+            alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
+            rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
+            bounding_box = get_box_points(rect) * scales
 
-            elif bounding_box_type == "poly":
-                requires_backends(self, "cv2")
-                binary = np.zeros(label.shape, dtype="uint8")
-                binary[ind_np] = 1
-                # cv2.findContours is too complex to replicate :(
-                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                bounding_box = contours[0] * scales
+            bounding_box = bounding_box.astype("int32")
+            bounding_boxes.append([tuple(point) for point in bounding_box.tolist()])
+            scores.append(score_i)
+        return bounding_boxes, scores
+
+    def generate_polygon_bounding_boxes(self, keys, label, score, scales, threshold):
+        """
+        Generates polygonal bounding boxes using OpenCV contours for connected components.
+
+        Note:
+            Requires OpenCV backend (`cv2`) to be available.
+
+        Returns:
+            Tuple[List[List[int]], List[float]]:
+                - List of polygon contour bounding boxes as flattened coordinates.
+                - List of corresponding confidence scores.
+        """
+        requires_backends(self, "cv2")
+        bounding_boxes = []
+        scores = []
+        for index in range(1, len(keys)):
+            i = keys[index]
+            ind = label == i
+            ind_np = ind.data.cpu().numpy()
+            points = np.array(np.where(ind_np)).transpose((1, 0))
+            if points.shape[0] < self.min_area:
+                label[ind] = 0
+                continue
+            score_i = score[ind].mean().item()
+            if score_i < threshold:
+                label[ind] = 0
+                continue
+
+            binary = np.zeros(label.shape, dtype="uint8")
+            binary[ind_np] = 1
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            bounding_box = contours[0] * scales
+
             bounding_box = bounding_box.astype("int32")
             bounding_boxes.append(bounding_box.reshape(-1).tolist())
             scores.append(score_i)
-
         return bounding_boxes, scores
 
 
