@@ -47,7 +47,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
         `None` to encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
         SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audios` is not `None`. Please refer
-        to the doctsring of the above two methods for more information.
+        to the docstring of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):

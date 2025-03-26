@@ -20,7 +20,7 @@ import unittest
 import requests
 
 from transformers import PixtralProcessor
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_read_token, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -35,6 +35,7 @@ if is_vision_available():
 
 
 @require_vision
+@require_read_token
 class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
 
@@ -51,7 +52,9 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = self.processor_class.from_pretrained("mistralai/Mistral-Small-3.1-24B-Instruct-2503")
+        processor = PixtralProcessor.from_pretrained(
+            "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor"
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def get_processor(self):

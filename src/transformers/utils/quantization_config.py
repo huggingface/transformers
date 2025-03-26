@@ -1360,7 +1360,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if value != default_config_dict[key]:
+            if key not in default_config_dict or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
@@ -1636,16 +1636,16 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison >= version.parse(
-            "0.10.0"
-        ), "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
+        assert ao_verison >= version.parse("0.10.0"), (
+            "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
+        )
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
         # Check if we only have one key which is "default"
         # In the future we may update this
-        assert (
-            len(quant_type) == 1 and "default" in quant_type
-        ), "Expected only one key 'default' in quant_type dictionary"
+        assert len(quant_type) == 1 and "default" in quant_type, (
+            "Expected only one key 'default' in quant_type dictionary"
+        )
         quant_type = quant_type["default"]
 
         # Deserialize quant_type if needed
