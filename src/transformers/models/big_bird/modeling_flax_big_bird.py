@@ -2407,7 +2407,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
             # removing question tokens from the competition
             logits = logits - logits_mask * 1e6
 
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
