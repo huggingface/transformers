@@ -30,6 +30,7 @@ from parameterized import parameterized
 
 import transformers
 from transformers import WhisperConfig
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -546,13 +547,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -3234,6 +3235,118 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         static_generated_ids = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
         # assert re-ordered generations match those from eager
         self.assertTrue((eager_generated_ids[permutation_idx, :] == static_generated_ids).all())
+
+    @slow
+    def test_export_encoder(self):
+        """Tests exporting Whisper encoder to torch.export format."""
+        if not is_torch_greater_or_equal_than_2_4:
+            self.skipTest("This test requires torch >= 2.4 to run.")
+
+        from transformers.integrations.executorch import Seq2SeqLMEncoderExportableModule
+
+        model_id = "openai/whisper-tiny.en"
+        device = "cpu"
+        encoder = WhisperEncoder.from_pretrained(model_id).to(device).eval()
+        example_log_mel_spectrogram = torch.randn(1, 80, 3000).to(device)
+        with torch.no_grad():
+            # Get original output for comparison
+            original_output = encoder(example_log_mel_spectrogram).last_hidden_state
+
+        exportable_encoder = Seq2SeqLMEncoderExportableModule(encoder).to(device).eval()
+        with torch.no_grad():
+            exported_encoder = torch.export.export(
+                exportable_encoder, (example_log_mel_spectrogram,), dynamic_shapes=None, strict=False
+            )
+
+        # Test the exported model
+        exported_model_ouput = exported_encoder.module()(example_log_mel_spectrogram)
+
+        self.assertTrue(torch.allclose(original_output, exported_model_ouput, atol=1e-5))
+
+    @slow
+    def test_export_decoder(self):
+        """Tests exporting Whisper decode to torch.export format."""
+        if not is_torch_greater_or_equal_than_2_4:
+            self.skipTest("This test requires torch >= 2.4 to run.")
+
+        from transformers.integrations.executorch import Seq2SeqLMDecoderExportableModuleWithStaticCache
+
+        model_id = "openai/whisper-tiny.en"
+        batch_size = 1
+        max_cache_size = 512
+
+        full_model = WhisperForConditionalGeneration.from_pretrained(model_id).cpu().eval()
+        exportable_decoder = (
+            Seq2SeqLMDecoderExportableModuleWithStaticCache(
+                full_model,
+                max_static_cache_length=max_cache_size,
+                batch_size=batch_size,
+            )
+            .cpu()
+            .eval()
+        )
+
+        # For Whisper tiny, the embeddings are always calculated for 30s  log-mel spectrograms,
+        # resulting in (batch_size, 1500, 384) shape.
+        example_encoder_hidden_states = torch.zeros((1, 1500, 384), dtype=torch.float32)
+        example_decoder_input_ids = torch.tensor([[50256]], dtype=torch.long)  # BOS token
+        example_cache_position = torch.tensor([0], dtype=torch.long)
+
+        with torch.no_grad():
+            exported_program = torch.export.export(
+                exportable_decoder,
+                (example_decoder_input_ids, example_encoder_hidden_states, example_cache_position),
+                strict=False,
+            )
+
+        self.assertIsNotNone(exported_program)
+
+        cache_buffers = [
+            (name, buffer)
+            for name, buffer in exported_program.named_buffers()
+            if name.startswith("key_cache_") or name.startswith("value_cache_")
+        ]
+
+        self.assertTrue(len(cache_buffers) > 0, "No cache buffers found in the exported model.")
+        for name, buffer in cache_buffers:
+            self.assertEqual(buffer.shape[2], max_cache_size)
+
+    @slow
+    def test_exported_whisper_transcription(self):
+        """Test compoosing exported Whisper encoder and decoder for audio transcription."""
+        if not is_torch_greater_or_equal_than_2_4:
+            self.skipTest("This test requires torch >= 2.4 to run.")
+
+        from transformers import AutoTokenizer, WhisperForConditionalGeneration
+        from transformers.integrations.executorch import Seq2SeqLMExportableModule
+
+        batch_size = 1
+        max_cache_len = 512
+        max_seq_len = 128
+        model_id = "openai/whisper-tiny.en"
+
+        original_model = WhisperForConditionalGeneration.from_pretrained(model_id)
+        wrapped_model = Seq2SeqLMExportableModule(
+            original_model, batch_size=batch_size, max_cache_length=max_cache_len
+        )
+
+        # Setting the seed for deterministic log mel.
+        # There could be a case when Whisper hallucinates for random input.
+        torch.manual_seed(420)
+        example_log_mel = torch.randn(1, 80, 3000)
+        exaple_encoder_hidden_states = torch.randn(1, 1500, 384)
+        exported_model = wrapped_model.export(
+            encoder_input_ids=example_log_mel,
+            encoder_hidden_states=exaple_encoder_hidden_states,
+            strict=False,
+            use_dynamic_shapes=False,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        original_summary = ["<|startoftranscript|>", "<|nocaptions|>", "<|endoftext|>"]
+        exported_model_outputs = exported_model.generate(example_log_mel, max_seq_len)
+        exported_model_summary = tokenizer.batch_decode(exported_model_outputs)
+        self.assertEqual(exported_model_summary, original_summary)
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
