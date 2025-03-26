@@ -5894,6 +5894,11 @@ def get_disk_only_shard_files(device_map, weight_map):
 
 
 class AttentionInterface(MutableMapping):
+    """
+    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
+    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
+    it needs to declare a new instance of this class inside the `modeling.py`, and declare it on that instance.
+    """
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
