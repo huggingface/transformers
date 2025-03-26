@@ -38,7 +38,6 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     add_start_docstrings,
     is_torch_available,
     is_vision_available,
@@ -137,7 +136,6 @@ class VideoLlavaImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -163,7 +161,6 @@ class VideoLlavaImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        # processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return processed_images
 
@@ -183,7 +180,7 @@ class VideoLlavaImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-        return_tensors = kwargs.get("return_tensors")
+        return_tensors = kwargs.pop("return_tensors")
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
