@@ -1016,7 +1016,7 @@ class EsmFoldSelfAttention(nn.Module):
         use mask.
 
         Inputs:
-            x: batch of input sequneces (.. x L x C) mask: batch of boolean masks where 1=valid, 0=padding position (..
+            x: batch of input sequences (.. x L x C) mask: batch of boolean masks where 1=valid, 0=padding position (..
             x L_k) bias: batch of scalar pairwise attention biases (.. x Lq x Lk x num_heads)
 
         Outputs:

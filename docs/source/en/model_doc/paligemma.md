@@ -125,6 +125,10 @@ visualizer = AttentionMaskVisualizer("google/paligemma2-3b-mix-224")
 visualizer("<img> What is in this image?")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/paligemma2-attn-mask.png"/>
+</div>
+
 ## Notes
 
 - PaliGemma is not a conversational model and works best when fine-tuned for specific downstream tasks such as image captioning, visual question answering (VQA), object detection, and document understanding.
