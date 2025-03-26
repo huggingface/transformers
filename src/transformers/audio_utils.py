@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team and the librosa & torchaudio authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,57 @@ Audio processing functions to extract features from audio waveforms. This code i
 and remove unnecessary dependencies.
 """
 
+import os
 import warnings
+from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import requests
+
+from .utils import is_librosa_available, requires_backends
+
+
+if is_librosa_available():
+    import librosa
+
+
+def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+    """
+    Loads `audio` to an np.ndarray object.
+
+    Args:
+        audio (`str` or `np.ndarray`):
+            The audio to be laoded to the numpy array format.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The samlping rate to be used when loading the audio. It should be same as the
+            sampling rate the model you will be using further was trained with.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+
+    Returns:
+        `np.ndarray`: A numpy artay representing the audio.
+    """
+    requires_backends(load_audio, ["librosa"])
+
+    if isinstance(audio, str):
+        # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
+        if audio.startswith("http://") or audio.startswith("https://"):
+            audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
+        elif os.path.isfile(audio):
+            audio = librosa.load(audio, sr=sampling_rate)[0]
+    elif isinstance(audio, np.ndarray):
+        audio = audio
+    else:
+        raise TypeError(
+            "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
+        )
+    return audio
+
+
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+]
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
@@ -146,7 +192,7 @@ def chroma_filter_bank(
     sampling_rate: int,
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float, float]] = (5.0, 2.0),
+    weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
     start_at_c_chroma: Optional[bool] = True,
 ):
     """
@@ -592,7 +638,7 @@ def spectrogram(
 
 
 def spectrogram_batch(
-    waveform_list: List[np.ndarray],
+    waveform_list: list[np.ndarray],
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
@@ -611,7 +657,7 @@ def spectrogram_batch(
     db_range: Optional[float] = None,
     remove_dc_offset: Optional[bool] = None,
     dtype: np.dtype = np.float32,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
     This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.

@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
     logging,
 )
 from .configuration_bloom import BloomConfig
@@ -747,7 +746,7 @@ class BloomModel(BloomPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -919,7 +918,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
             elif (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -1152,7 +1151,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
