@@ -71,10 +71,13 @@ from .generic import (
     working_or_temp_dir,
 )
 from .hub import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     CLOUDFRONT_DISTRIB_PREFIX,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PYTORCH_PRETRAINED_BERT_CACHE,
     PYTORCH_TRANSFORMERS_CACHE,
     S3_BUCKET_PREFIX,
@@ -97,9 +100,6 @@ from .hub import (
     list_repo_templates,
     send_example_telemetry,
     try_to_load_from_cache,
-    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
-    CHAT_TEMPLATE_FILE,
-    CHAT_TEMPLATE_DIR,
 )
 from .import_utils import (
     ACCELERATE_MIN_VERSION,
