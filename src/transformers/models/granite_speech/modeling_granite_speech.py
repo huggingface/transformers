@@ -807,16 +807,6 @@ class GraniteSpeechCTCModel(nn.Module):
 
 
 # NOTE: Conformer adapated from: https://github.com/lucidrains/conformer.git
-class GraniteSpeechConformerPermute(nn.Module):
-    def __init__(self, dims):
-        super().__init__()
-        self.dims = dims
-
-    def forward(self, x):
-        x = x.permute(self.dims)
-        return x
-
-
 class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
     def __init__(self, chan_in, chan_out, kernel_size, padding):
         super().__init__()
@@ -905,7 +895,7 @@ class GraniteSpeechConformerAttention(nn.Module):
             mask_value = -torch.finfo(pos_attn.dtype).max
             pos_attn[:, -1, :].masked_fill_(mask, mask_value)
 
-        with torch.nn.attention.sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
+        with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
             out = F.scaled_dot_product_attention(q, k, v, attn_mask=pos_attn, scale=self.scale)
         out = out.transpose(2, 3).reshape(bs, x.shape[1], -1)
         out = self.to_out(out[:, :n, :])
@@ -915,42 +905,45 @@ class GraniteSpeechConformerAttention(nn.Module):
 class GraniteSpeechConformerFeedForward(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(config.hidden_dim, config.hidden_dim * config.feedforward_mult),
-            nn.SiLU(),
-            nn.Dropout(config.dropout),
-            nn.Linear(config.hidden_dim * config.feedforward_mult, config.hidden_dim),
-            nn.Dropout(config.dropout),
-        )
+        self.up_proj = nn.Linear(config.hidden_dim, config.hidden_dim * config.feedforward_mult)
+        self.act_fn = nn.SiLU()
+        self.dropout = nn.Dropout(config.dropout)
+        self.down_proj = nn.Linear(config.hidden_dim * config.feedforward_mult, config.hidden_dim)
 
     def forward(self, x):
-        return self.net(x)
+        x = self.up_proj(x)
+        x = self.dropout(self.act_fn(x))
+        x = self.down_proj(x)
+        x = self.dropout(x)
+        return x
 
 
 class GraniteSpeechConformerConvModule(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
-        causal = False
         inner_dim = config.hidden_dim * config.conv_expansion_factor
-        padding = self.calc_same_padding(config.conv_kernel_size) if not causal else (config.conv_kernel_size - 1, 0)
+        padding = self.calc_same_padding(config.conv_kernel_size) 
 
-        self.net = nn.Sequential(
-            nn.LayerNorm(config.hidden_dim),
-            GraniteSpeechConformerPermute(dims=(0, 2, 1)),
-            nn.Conv1d(config.hidden_dim, inner_dim * 2, 1),
-            nn.GLU(dim=1),
-            GraniteSpeechConformerDepthWiseConv1d(
+        self.norm = nn.LayerNorm(config.hidden_dim)
+        self.up_conv = nn.Conv1d(config.hidden_dim, inner_dim * 2, 1)
+        self.glu = nn.GLU(dim=1)
+        self.depth_conv = GraniteSpeechConformerDepthWiseConv1d(
                 inner_dim, inner_dim, kernel_size=config.conv_kernel_size, padding=padding
-            ),
-            nn.BatchNorm1d(inner_dim) if not causal else nn.Identity(),
-            nn.SiLU(),
-            nn.Conv1d(inner_dim, config.hidden_dim, 1),
-            GraniteSpeechConformerPermute(dims=(0, 2, 1)),
-            nn.Dropout(config.dropout),
-        )
+            )
+        self.silu = nn.SiLU()
+        self.batch_norm = nn.BatchNorm1d(inner_dim)
+        self.down_conv = nn.Conv1d(inner_dim, config.hidden_dim, 1)
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        return self.net(x)
+        x = self.norm(x)
+        x = self.up_conv(x.permute(0, 2, 1))
+        x = self.glu(x)
+        x = self.depth_conv(x)
+        x = self.silu(self.batch_norm(x))
+        x = self.down_conv(x).permute(0, 2, 1)
+        x = self.dropout(x)
+        return x
 
     @staticmethod
     def calc_same_padding(kernel_size: int):
