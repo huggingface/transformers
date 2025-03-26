@@ -134,7 +134,7 @@ DeepseekVL can perform inference with multiple images as input, where images can
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DepthPro:
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Deepseek-VL:
 
 - Research Paper: [DeepSeek-VL: Towards Real-World Vision-Language Understanding](https://arxiv.org/abs/2403.05525)
 - Official Implementation: [deepseek-ai/DeepSeek-VL](https://github.com/deepseek-ai/DeepSeek-VL)
