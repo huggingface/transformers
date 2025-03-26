@@ -108,7 +108,7 @@ def permute_for_rope(input_tensor, n_heads, dim1, dim2):
 
 def is_param_same_across_shards(key):
     """
-    Return `True` if the parameter is different across checkpoint shards
+    Return `False` if the parameter is different across checkpoint shards
     and needs to be concatenated.
     """
     patterns = [
@@ -158,6 +158,14 @@ def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1
     return hidden_dim
 
 
+# Ignore extra info - h/t Aritra
+def safe_load(filename):
+    # Can use weights_only because io.BytesIO was registered, but we still need to skip those objects
+    shard = torch.load(filename, weights_only=True, map_location="cpu", mmap=True)
+    shard = {k: v for k, v in shard.items() if not isinstance(v, io.BytesIO)}
+    return shard
+
+
 def write_model(
     model_path,
     input_base_path,
@@ -202,6 +210,8 @@ def write_model(
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
+    num_experts = params["moe_args"]["num_experts"]
+
     bos_token_id = 200000
     eos_token_id = [200001, 200002, 200003] if instruct else 200001
     pad_token_id = 200008
@@ -215,6 +225,7 @@ def write_model(
         num_hidden_layers=num_layers,
         intermediate_size=8192,
         rope_scaling=rope_scaling,
+        num_local_experts=num_experts,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
@@ -256,15 +267,10 @@ def write_model(
                 path = os.path.join(input_base_path, "consolidated.00.pth")
             else:
                 path = os.path.join(input_base_path, "consolidated.pth")
-            loaded = [torch.load(path, map_location="cpu", mmap=True)]
+            loaded = [safe_load(path)]
         else:
             loaded = [
-                torch.load(
-                    os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
-                    map_location="cpu",
-                    mmap=True,
-                    weights_only=True,
-                )
+                safe_load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"))
                 for i in tqdm(range(num_shards), desc="Loading shards", unit="shard")
             ]
 
@@ -285,8 +291,6 @@ def write_model(
 
         print("Converting model...")
         all_keys = list(loaded[0].keys())
-        breakpoint()
-        print(model)
         new_keys = convert_old_keys_to_new_keys(all_keys)
         state_dict = {}
         replicated_params = []  # To keep track of replicated weights.
@@ -348,7 +352,6 @@ def write_model(
                 gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
                 up_key = re.sub(r"(gate|up)_proj", lambda m: "up_proj", new_key)
                 if gate_key == new_key:
-                    # torch.cat([ p.view(-1,1, 5120) for p in current_parameter], dim = 1) could be this
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
                 elif new_key == up_key:
                     if "shared" in new_key:
@@ -378,7 +381,7 @@ def write_model(
                 if "experts" in new_key:
                     p = []
                     for i in range(8):
-                        p += [current_parameter.reshape(8, -1, 5120)[i, :, :].view(16, -1, 5120)]
+                        p += [current_parameter.reshape(8, -1, 5120)[i, :, :].view(num_experts, -1, 5120)]
                     current_parameter = torch.cat(p, dim=1)
                 state_dict[new_key] = current_parameter.contiguous()
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
@@ -397,7 +400,6 @@ def write_model(
                     f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}, concat dim = {concat_dim}"
                 )
             elif new_key == "vision_model.patch_embedding.linear.weight":
-                breakpoint()
                 current_parameter = torch.cat(current_parameter, dim=concat_dim).clone()
                 # We don't reshape the patch embedding as we're using unfolded convolution as well
                 state_dict[new_key] = current_parameter  # .reshape(-1, 3, vision_patch_size, vision_patch_size)
@@ -454,11 +456,9 @@ def write_model(
 
         from transformers import AutoTokenizer
 
-        model_path = "llama4_hf"
-        tokenizer = AutoTokenizer.from_pretrained(model_path, pad_token="<|finetune_right_pad|>")
-        # input_ids = tokenizer(["<|begin_of_text|>Roses are red,"], return_tensors="pt", padding=True, padding_side="left")
-        out = model.generate(torch.tensor([[200000, 62, 19441, 583, 4242, 24]]), max_new_tokens=1)
-        # out = model.generate(**input_ids, max_new_tokens=10)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        inputs = tokenizer(["Roses are red,"], return_tensors="pt").to(model.device)
+        out = model.generate(**inputs, max_new_tokens=10)
         print(tokenizer.batch_decode(out))
     # generation config
     if instruct:
@@ -677,10 +677,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--convert_checkpoints",
         action="store_true",
-        help="Whether the model is an instruct model",
+        help="Whether to convert the original weights (or skip if previously converted)",
     )
 
     args = parser.parse_args()
+    write_tokenizer(
+        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+        save_dir=args.output_dir,
+        instruct=args.instruct,
+    )
+
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
@@ -688,12 +694,6 @@ if __name__ == "__main__":
         num_shards=args.num_shards,
         instruct=args.instruct,
         convert_checkpoints=args.convert_checkpoints,
-    )
-
-    write_tokenizer(
-        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
-        save_dir=args.output_dir,
-        instruct=args.instruct,
     )
 
 # torchrun --nproc-per-node=8   .venv/lib/python3.12/site-packages/llama_models/llama4/scripts/text_completion.py --checkpoint_dir   "llama4" --world_size 8
