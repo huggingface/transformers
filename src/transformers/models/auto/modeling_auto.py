@@ -26,6 +26,10 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
+from ..quantum_classical.modeling_quantum_classical import (
+    QuantumClassicalForMaskedLM,
+    QuantumClassicalModel,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -461,7 +465,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
-        ("nystromformer", "NystromformerForMaskedLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
@@ -909,6 +912,9 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xmod", "XmodForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
+        ("quantum_classical", QuantumClassicalForMaskedLM),
+        ("realm", RealmConfig),
+        ("reformer", ReformerConfig),
     ]
 )
 
