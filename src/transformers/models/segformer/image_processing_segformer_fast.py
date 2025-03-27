@@ -30,13 +30,9 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 512, "width": 512}
     do_resize = True
     do_rescale = True
+    rescale_factor = 1 / 255
     do_normalize = True
     do_reduce_labels = False
-    
-    # These attributes are needed so tests can check for them,
-    # but they won't be used in actual processing
-    do_center_crop = False
-    center_crop = None
 
 
 __all__ = ["SegformerImageProcessorFast"]
