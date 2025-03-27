@@ -99,7 +99,7 @@ class TrainerState:
     logging_steps: int = 500
     eval_steps: int = 500
     save_steps: int = 500
-    train_batch_size: int = None
+    train_batch_size: Optional[int] = None
     num_train_epochs: int = 0
     num_input_tokens_seen: int = 0
     total_flos: float = 0
@@ -110,7 +110,7 @@ class TrainerState:
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
-    trial_name: str = None
+    trial_name: Optional[str] = None
     trial_params: dict[str, Union[str, float, int, bool]] = None
     stateful_callbacks: list["TrainerCallback"] = None
 
