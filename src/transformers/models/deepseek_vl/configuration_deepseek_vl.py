@@ -35,11 +35,11 @@ class DeepseekVLConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`Union[LlamaConfig, dict]`  *optional*, defaults to , LlamaConfig`):
+        text_config (`Union[LlamaConfig, dict]`  *optional*, defaults to `LlamaConfig`):
             Configuration for the `Llama` based language model.
-        low_res_vision_config (`Union[SiglipVisionConfig, dict]`  *optional*, defaults to , SiglipVisionConfig`):
+        low_res_vision_config (`Union[SiglipVisionConfig, dict]`  *optional*, defaults to `SiglipVisionConfig`):
             Configuration for the `SiglipVisionModel` based low resolution image model.
-        high_res_vision_config (`Union[SamVisionConfig, dict]`  *optional*, defaults to , SamVisionConfig`):
+        high_res_vision_config (`Union[SamVisionConfig, dict]`  *optional*, defaults to `SamVisionConfig`):
             Configuration for the `SamVisionModel` based high resolution image model.
         use_high_res_vision (`bool`, *optional*, defaults to `True`):
             Whether to use high resolution image model (SamVisionModel)
