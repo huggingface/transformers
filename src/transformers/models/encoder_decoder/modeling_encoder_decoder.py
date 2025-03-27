@@ -264,6 +264,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         self.tie_weights()
 
     def tie_weights(self):
+        self.encoder.tie_weights()
+        self.decoder.tie_weights()
         # tie encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
@@ -278,6 +280,12 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             # attributed not an instance member, therefore modifying it will modify the entire class
             # Leading to issues on subsequent calls by different tests or subsequent calls.
             self._dynamic_tied_weights_keys = tied_weights
+
+    def _init_weights(self, module):
+        if module in self.encoder.modules():
+            self.encoder._init_weights(module)
+        elif module in self.decoder.modules():
+            self.decoder._init_weights(module)
 
     def get_encoder(self):
         return self.encoder
