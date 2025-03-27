@@ -233,6 +233,7 @@ class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
+        self._init_weight()
 
     def _init_weight(self):
         """
