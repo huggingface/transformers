@@ -1076,39 +1076,6 @@ else:
             x = self._apply_weight_bias(x)
             return x
 
-    class LayerNorm(NormLayer):
-        """Layer normalization layer implementation similar to
-        https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html.
-
-        The layer normalization is applied over the last dimension of the input tensor.
-
-        Args:
-            num_features: The number of features in the input tensor.
-            eps: A small value to avoid division by zero.
-            use_weight: Whether to use a learnable weight.
-            use_bias: Whether to use a learnable bias.
-            force_float32_reductions: Whether to force float32 reductions.
-
-        Returns:
-            The normalized tensor.
-        """
-
-        def _layer_normalize(self, x: torch.Tensor) -> torch.Tensor:
-            # x: (B, ..., S,..., D)
-            # apply layer norm over the last dimension, i.e. D dimension
-            in_dtype = x.dtype
-            if self.force_float32_reductions:
-                x = x.float()
-            x_centered = x - x.mean(dim=-1, keepdim=True)
-            y = x_centered * torch.rsqrt(x.var(dim=-1, keepdim=True, unbiased=False) + self.eps)
-            return y.to(in_dtype)
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            # x: (B, ..., S,..., D)
-            x = self._layer_normalize(x)
-            x = self._apply_weight_bias(x)
-            return x
-
     class FeedForward(nn.Module):
         def __init__(self, config: xLSTMConfig):
             super().__init__()
