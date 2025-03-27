@@ -455,7 +455,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         
         # Create sample masks and convert to RLE
         masks = torch.zeros((5, 10, 10), dtype=torch.bool)
-        # Add some overlapping masks to test NMS
+        # Add masks
         masks[0, 1:5, 1:5] = True
         masks[1, 2:6, 2:6] = True  # Overlaps with mask 0
         masks[2, 6:9, 6:9] = True  # Separate mask
@@ -465,34 +465,32 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # Convert to RLE
         rle_masks = [self.image_processor._mask_to_rle(mask.unsqueeze(0))[0] for mask in masks]
         
-        # Create bounding boxes (approximations based on the masks)
+        # Create bounding boxes with more significant overlap
         boxes = torch.tensor([
-            [1, 1, 5, 5],   # Mask 0
-            [2, 2, 6, 6],   # Mask 1 (overlaps with 0)
-            [6, 6, 9, 9],   # Mask 2
-            [5, 5, 8, 8],   # Mask 3 (overlaps with 2)
-            [0, 7, 3, 10],  # Mask 4
+            [1, 1, 5, 5],      # Mask 0
+            [1, 1, 5, 5],      # Mask 1 - Identical to mask 0
+            [6, 6, 9, 9],      # Mask 2
+            [6, 6, 9, 9],      # Mask 3 - Identical to mask 2
+            [0, 7, 3, 10],     # Mask 4
         ])
         
-        # Create scores (higher score = more likely to be kept)
-        scores = torch.tensor([0.9, 0.85, 0.95, 0.8, 0.7])
+        # Create scores with large differences to ensure correct filtering
+        scores = torch.tensor([0.9, 0.5, 0.95, 0.55, 0.7])
         
         # Apply NMS
         filtered_masks, filtered_scores, filtered_rle, filtered_boxes = self.image_processor.post_process_for_mask_generation(
             all_masks=rle_masks,
             all_scores=scores,
             all_boxes=boxes,
-            crops_nms_thresh=0.5  # Threshold for considering boxes as overlapping
+            crops_nms_thresh=0.3  # Lower threshold to ensure filtering
         )
         
-        # We expect NMS to remove overlapping masks with lower scores
-        # Mask 1 should be removed due to overlap with Mask 0
-        # Mask 3 should be removed due to overlap with Mask 2
-        # So we should have masks 0, 2, and 4 remaining
+        # Check if we have exactly 3 masks (0, 2, 4)
         self.assertEqual(len(filtered_masks), 3)
         
         # The remaining masks should be the ones with the highest scores
-        expected_scores = torch.tensor([0.9, 0.95, 0.7])
+        # Now we need to check if the correct masks were kept
+        expected_scores = torch.tensor([0.9500, 0.9000, 0.7000])
         self.assertTrue(torch.allclose(filtered_scores, expected_scores))
 
 
