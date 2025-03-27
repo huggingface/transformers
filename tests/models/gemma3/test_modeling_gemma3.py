@@ -148,9 +148,9 @@ class Gemma3Vision2TextModelTester:
         self,
         parent,
         mm_tokens_per_image=2,
-        image_token_index=1,
-        boi_token_index=2,
-        eoi_token_index=3,
+        image_token_index=4,
+        boi_token_index=5,
+        eoi_token_index=6,
         seq_length=25,
         is_training=True,
         vision_config={

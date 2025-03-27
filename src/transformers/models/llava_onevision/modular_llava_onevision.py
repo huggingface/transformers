@@ -25,6 +25,7 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
     LlavaNextVideoForConditionalGeneration,
     LlavaNextVideoModel,
     LlavaNextVideoModelOutputWithPast,
+    LlavaNextVideoPreTrainedModel,
     get_anyres_image_grid_shape,
     unpad_image,
 )
@@ -79,6 +80,10 @@ class LlavaOnevisionModelOutputWithPast(LlavaNextVideoModelOutputWithPast):
 
 
 class LlavaOnevisionCausalLMOutputWithPast(LlavaNextVideoCausalLMOutputWithPast):
+    pass
+
+
+class LlavaOnevisionPreTrainedModel(LlavaNextVideoPreTrainedModel):
     pass
 
 
@@ -670,4 +675,9 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         )
 
 
-__all__ = ["LlavaOnevisionImageProcessorFast", "LlavaOnevisionModel", "LlavaOnevisionForConditionalGeneration", "LlavaOnevisionPreTrainedModel"]
+__all__ = [
+    "LlavaOnevisionImageProcessorFast",
+    "LlavaOnevisionModel",
+    "LlavaOnevisionForConditionalGeneration",
+    "LlavaOnevisionPreTrainedModel",
+]

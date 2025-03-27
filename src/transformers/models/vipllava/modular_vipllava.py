@@ -23,6 +23,7 @@ from transformers.models.llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
+    LlavaPreTrainedModel,
 )
 
 from ...activations import ACT2FN
@@ -72,6 +73,10 @@ class VipLlavaMultiModalProjector(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
+
+class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
+    pass
 
 
 class VipLlavaModel(LlavaModel):
