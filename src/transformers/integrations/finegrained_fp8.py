@@ -381,7 +381,9 @@ def _replace_with_fp8_linear(
                     )
                     has_been_replaced = True
             # import re
-            # tp_plan[re.sub("\d+", "*", current_key_name_str) + ".weight_scale_inv"] = tp_plan[re.sub("\d+", "*", current_key_name_str)]
+            # TODO local should be determined here
+            # tp_plan[re.sub("\d+", "*", current_key_name_str)] = "local_" + tp_plan[re.sub("\d+", "*", current_key_name_str)]
+            # tp_plan[re.sub("\d+", "*", current_key_name_str).rsplit(".")[0]] = "gather"
 
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fp8_linear(

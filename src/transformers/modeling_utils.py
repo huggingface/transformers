@@ -4132,10 +4132,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not torch.distributed.is_initialized():
                 try:
                     logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
-                    rank = int(os.environ["LOCAL_RANK"])
+                    rank = int(os.environ["RANK"])
                     world_size = int(os.environ["WORLD_SIZE"])
-                    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
-                    torch.cuda.set_device(rank)
+                    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size, init_method="env://")
+                    torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
                 except Exception as e:
                     raise EnvironmentError(
                         "We tried to initialize torch.distributed for you, but it failed, make"
@@ -4147,12 +4147,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
             tp_device = torch.device(device_type, torch.cuda.current_device())
-            # if tp_device.index > 0:
-            #     import sys
-            #     sys.stdout = open(os.devnull, "w")
+            if tp_device.index > 0:
+                import sys
+                sys.stdout = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-            print("DEVICE MAP:", device_map)
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
@@ -4893,7 +4892,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None and hf_quantizer is None:
+        if device_map is not None: #and hf_quantizer is None:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map)
 
@@ -5033,7 +5032,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
-                f" initializing {model.__class__.__name__}: {"\n\t".join(update_key_name(unexpected_keys))}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__}:\n\t{"\n\t".join(update_key_name(unexpected_keys))}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
                 " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
                 " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
@@ -5045,7 +5044,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if len(missing_keys) > 0:
             logger.warning(
                 f"\nSome weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
-                f" {pretrained_model_name_or_path} and are newly initialized: {"\n\t".join(update_key_name(missing_keys))}\nYou should probably"
+                f" {pretrained_model_name_or_path} and are newly initialized:\n\t{"\n\t".join(update_key_name(missing_keys))}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
@@ -5887,8 +5886,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
-    print("Preallocating memory with cache allocator to improve loading perfs")
-    print(accelerator_device_map)
     total_byte_count = defaultdict(lambda: 0)
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
@@ -5908,7 +5905,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
             # Allow up to 95% of max device memory
             byte_count = min(byte_count, int(0.95 * device_memory))
         # Allocate memory
-        _ = torch.empty(byte_count // 2, dtype=torch.float16, device=device, requires_grad=False)
+        _ = torch.empty(byte_count // 4, dtype=torch.float16, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):

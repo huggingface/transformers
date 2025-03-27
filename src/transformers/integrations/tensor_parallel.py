@@ -231,8 +231,8 @@ class IsolatedParallel(TensorParallelLayer):
         distribute_module(
             module,
             device_mesh,
-            partial(self._prepare_input_fn),
-            partial(self._prepare_output_fn),
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
         )
 
 
@@ -534,7 +534,7 @@ def shard_and_distribute_module(
             param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
         )
     else:
-        print("NO PLAN FOR: ", parameter_name)
+        # TODO log no plan modules in set
         param = param[...].to(param_casting_dtype)
         if is_contiguous:
             param = param.contiguous()
