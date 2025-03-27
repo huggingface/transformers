@@ -355,7 +355,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # Check outputs
         # For crop_n_layers=1, we should have 1 (original) + 4 (2x2 grid) = 5 crops
         self.assertEqual(len(crop_boxes), 5)
-        self.assertEqual(points_per_crop.shape[2], 32)  # 32 points per crop
+        self.assertEqual(points_per_crop.shape[2], 36)  # When points_per_crop=32, we get a 6×6 grid of 36 points
         self.assertEqual(len(cropped_images), 5)
         self.assertEqual(input_labels.shape, points_per_crop.shape[:-1])
 
