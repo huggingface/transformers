@@ -505,6 +505,32 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+    def test_can_init_all_missing_weights(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+            # _init_weights() does not take all weights into account correctly
+            set_seed(0)
+            model_from_config = model_class(config)
+            set_seed(0)
+            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+            # by _init_weights()
+            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
+
+            # Everything must be exactly the same as we set the same seed for each init
+            different_weights = []
+            for (k1, v1), (k2, v2) in zip(
+                model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
+            ):
+                self.assertEqual(k1, k2, "The keys from each model should be the same")
+                if not (v1 == v2).all():
+                    different_weights.append(k1)
+
+            self.assertTrue(
+                len(different_weights) == 0,
+                f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
+            )
+
     @slow
     @require_accelerate
     @mark.accelerate_tests
