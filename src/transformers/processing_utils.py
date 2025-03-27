@@ -1390,7 +1390,7 @@ class ProcessorMixin(PushToHubMixin):
                                 audios = None
                                 logger.warning(
                                     "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
-                                    "If you model applies special processing based on metadata, please load the whole video and let the model sample frames."
+                                    "If your model uses this metadata during processing, please load the whole video and let the model sample frames instead."
                                 )
                             else:
                                 video, metadata = load_video(
