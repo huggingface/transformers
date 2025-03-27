@@ -31,16 +31,11 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
 from ..auto import AutoModel
 from .configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
-
-
-if is_flash_attn_2_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
