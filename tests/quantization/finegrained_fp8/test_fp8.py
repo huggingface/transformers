@@ -16,7 +16,6 @@
 import gc
 import tempfile
 import unittest
-from unittest import skip
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.testing_utils import (
@@ -251,7 +250,10 @@ class FP8QuantizerTest(unittest.TestCase):
 class FP8LinearTest(unittest.TestCase):
     device = "cuda"
 
-    @skip("Skipping FP8LinearTest because it is not supported GPU with capabilitie < 9.0")
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0"
+    )
     def test_linear_preserves_shape(self):
         """
         Test that FP8Linear preserves shape when in_features == out_features.
@@ -264,7 +266,10 @@ class FP8LinearTest(unittest.TestCase):
         x_ = linear(x)
         self.assertEqual(x_.shape, x.shape)
 
-    @skip("Skipping FP8LinearTest because it is not supported GPU with capabilitie < 9.0")
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0"
+    )
     def test_linear_with_diff_feature_size_preserves_shape(self):
         """
         Test that FP8Linear generates the correct shape when in_features != out_features.
