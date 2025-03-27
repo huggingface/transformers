@@ -359,10 +359,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_generate_compile_model_forward(self):
         pass
 
-    @unittest.skip("LLaVA vision backbone doesn't support Flex attention yet")
-    def test_flex_attention_with_grads(self):
-        pass
-
     @unittest.skip("LLaVA uses `image_newline` which is not compatible with offloading")
     def test_cpu_offload(self):
         pass

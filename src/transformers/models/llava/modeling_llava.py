@@ -158,12 +158,12 @@ LLAVA_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare Llava Model outputting raw hidden-states without any specific head on top.",
     LLAVA_START_DOCSTRING,
 )
 class LlavaPreTrainedModel(PreTrainedModel):
     config_class = LlavaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -172,7 +172,6 @@ class LlavaPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_flex_attn = True
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only

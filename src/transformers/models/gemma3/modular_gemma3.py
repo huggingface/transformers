@@ -32,6 +32,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
     logging,
@@ -502,7 +503,7 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _no_split_modules = [
         "Gemma3DecoderLayer",
         "SiglipVisionEmbeddings",
@@ -905,6 +906,10 @@ class Gemma3Model(PaliGemmaModel):
         return output if return_dict else output.to_tuple()
 
 
+@add_start_docstrings(
+    """The Gemma3 model which consists of a vision backbone and a language model.""",
+    GEMMA3_START_DOCSTRING,
+)
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
     def tie_weights(self):
         return self.language_model.tie_weights()

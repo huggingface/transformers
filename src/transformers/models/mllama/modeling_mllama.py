@@ -1042,7 +1042,7 @@ class MllamaRotaryEmbedding(nn.Module):
 
 class MllamaPreTrainedModel(PreTrainedModel):
     config_class = MllamaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "MllamaVisionEncoderLayer",

@@ -1918,22 +1918,6 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
-    # def test_resize_embeddings_results_in_successful_loss(self):
-    #     if not self.test_resize_embeddings:
-    #         self.skipTest(reason="test_resize_embeddings is set to `False`")
-    #
-    #     # resizing embeddings should result in successful loss computation (#36840)
-    #     config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-    #
-    #     for model_class in self.all_model_classes:
-    #         model = model_class(config).to(torch_device)
-    #         model_vocab_size = config.get_text_config().vocab_size
-    #         inputs = self._prepare_for_class(inputs, model_class, return_labels=True)
-    #         # Resize embeddings and call forward
-    #         model.resize_token_embeddings(model_vocab_size + 10)
-    #         output = model(**inputs, return_dict=True)
-    #         self.assertTrue("loss" in output)
-
     def test_resize_tokens_embeddings(self):
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")

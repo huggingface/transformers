@@ -610,12 +610,12 @@ GOT_OCR2_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    "The bare GotOcr2 Model outputting raw hidden-states without any specific head on top.",
     GOT_OCR2_START_DOCSTRING,
 )
 class GotOcr2PreTrainedModel(PreTrainedModel):
     config_class = GotOcr2Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -624,7 +624,6 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_flex_attn = True
 
     def _init_weights(self, module):
         # important: this ported version of GotOcr2 isn't meant for training from scratch - only

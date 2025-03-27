@@ -344,10 +344,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Vision backbone doesn't support flex attention yet!")
-    def test_flex_attention_with_grads(self):
-        pass
-
 
 @require_torch
 class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):

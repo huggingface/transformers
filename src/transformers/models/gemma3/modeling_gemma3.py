@@ -527,7 +527,7 @@ GEMMA3_START_DOCSTRING = r"""
 )
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -1345,7 +1345,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Base Gemma3 model which consists of a vision backbone and a language model withou language modeling head.""",
+    """The Gemma3 model which consists of a vision backbone and a language model.""",
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):

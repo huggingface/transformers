@@ -192,7 +192,7 @@ LLAVA_NEXT_VIDEO_START_DOCSTRING = r"""
 )
 class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     config_class = LlavaNextVideoConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -201,7 +201,6 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_flex_attn = True
 
     def _init_weights(self, module):
         # important: this ported version of LlavaNextVideo isn't meant for training from scratch - only

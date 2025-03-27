@@ -407,10 +407,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_generate_compile_model_forward(self):
         pass
 
-    @unittest.skip("LLaVA vision backbones doesn't support flex attention yet")
-    def test_flex_attention_with_grads(self):
-        pass
-
 
 @require_torch
 class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):

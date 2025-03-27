@@ -361,10 +361,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip("FLEX attn not yet supported on SigLIP, PR on the way")
-    def test_flex_attention_with_grads(self):
-        pass
-
 
 @require_read_token
 @require_torch

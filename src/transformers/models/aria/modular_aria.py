@@ -42,6 +42,7 @@ from ...tokenization_utils import (
 )
 from ...utils import (
     TensorType,
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
@@ -1240,10 +1241,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config_class = AriaConfig
-    base_model_prefix = ""
-    _supports_flash_attn_2 = False
-    _supports_flex_attn = False
-    _supports_sdpa = False
+    base_model_prefix = "model"
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = False
 
@@ -1484,6 +1482,12 @@ class AriaModel(LlavaModel):
         return output if return_dict else output.to_tuple()
 
 
+@add_start_docstrings(
+    """Aria model for conditional generation tasks.
+    This model combines a vision tower, a multi-modal projector, and a language model
+    to perform tasks that involve both image and text inputs.""",
+    ARIA_START_DOCSTRING,
+)
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
     _supports_flash_attn_2 = False

@@ -116,7 +116,7 @@ AYA_VISION_START_DOCSTRING = r"""
 )
 class AyaVisionPreTrainedModel(PreTrainedModel):
     config_class = AyaVisionConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -125,7 +125,6 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = False
     _supports_static_cache = False
-    _supports_flex_attn = True
 
     def _init_weights(self, module):
         # important: this ported version of AyaVision isn't meant for training from scratch - only
@@ -223,7 +222,7 @@ class AyaVisionModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-AYA_VISION_INPUTS_DOCSTRING = """
+AYA_VISION_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -235,8 +234,8 @@ AYA_VISION_INPUTS_DOCSTRING = """
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`AyaVisionProcessor`] uses
-            [`GotOcr2ImageProcessor`] for processing images.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`AyaVisionProcessor`] uses
+            [`CLIPImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -469,7 +468,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 
 
 @add_start_docstrings(
-    """The AYA_VISION model which consists of a vision backbone and a language model.""",
+    """The AyaVision model which consists of a vision backbone and a language model.""",
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):

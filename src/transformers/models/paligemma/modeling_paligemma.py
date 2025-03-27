@@ -225,7 +225,7 @@ PALIGEMMA_START_DOCSTRING = r"""
 )
 class PaliGemmaPreTrainedModel(PreTrainedModel):
     config_class = PaliGemmaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"

@@ -705,13 +705,13 @@ ARIA_TEXT_START_DOCSTRING = r"""
 )
 class AriaPreTrainedModel(PreTrainedModel):
     config_class = AriaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AriaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = False
-    _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
@@ -1581,6 +1581,12 @@ class AriaModel(AriaPreTrainedModel):
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
 
+@add_start_docstrings(
+    """Aria model for conditional generation tasks.
+    This model combines a vision tower, a multi-modal projector, and a language model
+    to perform tasks that involve both image and text inputs.""",
+    ARIA_START_DOCSTRING,
+)
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
     _supports_flash_attn_2 = False
