@@ -267,7 +267,7 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     output = torch.zeros(num_tokens, out_features, dtype=token_states.dtype, device=token_states.device)
 
     cumsum_num_tokens = torch.cumsum(tokens_per_expert, dim=0)
-    # Insert zero at the begining for offset index's convenience
+    # Insert zero at the beginning for offset index's convenience
     zero_tensor = torch.zeros(1, dtype=torch.long, device=cumsum_num_tokens.device)
     cumsum_num_tokens = torch.cat((zero_tensor, cumsum_num_tokens))
 

@@ -631,8 +631,10 @@ class OffloadedCache(DynamicCache):
     def prefetch_layer(self, layer_idx: int):
         "Starts prefetching the next layer cache"
         if layer_idx < len(self):
-            with self.prefetch_stream if is_torch_greater_or_equal("2.7", accept_dev=True) else torch.cuda.stream(
+            with (
                 self.prefetch_stream
+                if is_torch_greater_or_equal("2.7", accept_dev=True)
+                else torch.cuda.stream(self.prefetch_stream)
             ):
                 # Prefetch next layer tensors to GPU
                 device = self.original_device[layer_idx]
@@ -1181,8 +1183,8 @@ class StaticCache(Cache):
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
-        max_cache_len: int = None,
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
@@ -1365,8 +1367,8 @@ class SlidingWindowCache(StaticCache):
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
-        max_cache_len: int = None,
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
         device: torch.device = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
@@ -1672,8 +1674,8 @@ class HybridCache(Cache):
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
-        max_cache_len: int = None,
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
         device: Union[torch.device, str] = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
@@ -1875,7 +1877,7 @@ class MambaCache:
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int = None,
+        batch_size: Optional[int] = None,
         dtype: torch.dtype = torch.float16,
         device: Optional[Union[torch.device, str]] = None,
         max_batch_size: Optional[int] = None,

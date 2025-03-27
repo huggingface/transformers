@@ -229,7 +229,7 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
         elif re.search("head", new_key) and not config.use_simple_decoder:
             # Pattern for deconvolution layers
             deconv_pattern = r"deconv_layers\.(0|3)\.weight"
-            new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1))//3 + 1}.weight", new_key)
+            new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1)) // 3 + 1}.weight", new_key)
             # Pattern for batch normalization layers
             bn_patterns = [
                 (r"deconv_layers\.(\d+)\.weight", r"batchnorm\1.weight"),

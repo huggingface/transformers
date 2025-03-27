@@ -1284,9 +1284,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert (
-                        labels.shape[0] == float_answer.shape[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    assert labels.shape[0] == float_answer.shape[0], (
+                        "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    )
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1336,9 +1336,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert (
-                            labels.shape[0] == aggregation_labels.shape[0]
-                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        assert labels.shape[0] == aggregation_labels.shape[0], (
+                            "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        )
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,

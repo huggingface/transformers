@@ -129,7 +129,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         if audio is not None:
             # ensure we have as much audios as audio tokens
             num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
-            num_audios = 1 if type(audio) == np.ndarray else len(audio)
+            num_audios = 1 if type(audio) is np.ndarray else len(audio)
             if num_audio_tokens != num_audios:
                 raise ValueError(
                     f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"

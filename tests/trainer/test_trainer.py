@@ -28,7 +28,7 @@ import unittest
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -2982,7 +2982,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
                 self.tokenizer.add_tokens(["<NEW_TOKEN1>", "<NEW_TOKEN2>"])
 
-            def __call__(self, features: List[Any], return_tensors="pt") -> Dict[str, Any]:
+            def __call__(self, features: list[Any], return_tensors="pt") -> dict[str, Any]:
                 return default_data_collator(features, return_tensors)
 
         data_collator = FakeCollator()
@@ -2999,15 +2999,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = get_regression_trainer(
             output_dir=tmp_dir,
             save_steps=5,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             eval_steps=5,
             max_steps=9,
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(
-            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
-        ), f"Could not find checkpoint-{trainer.state.max_steps}"
+        assert os.path.exists(os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")), (
+            f"Could not find checkpoint-{trainer.state.max_steps}"
+        )
         # And then check the last step
         assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
@@ -3020,7 +3020,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = get_regression_trainer(
             output_dir=tmp_dir,
             save_steps=5,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             eval_steps=5,
             load_best_model_at_end=True,
             save_total_limit=2,
@@ -4260,7 +4260,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             model = RegressionPreTrainedModel(config)
             eval_dataset = SampleIterableDataset()
 
-            accelerator_config = {
+            accelerator_config: dict[str, Any] = {
                 "split_batches": True,
                 "dispatch_batches": True,
                 "even_batches": False,
@@ -4369,56 +4369,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
-
-    def test_accelerator_config_from_dict_with_deprecated_args(self):
-        # Checks that accelerator kwargs can be passed through
-        # and the accelerator is initialized respectively
-        # and maintains the deprecated args if passed in
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config = RegressionModelConfig(a=1.5, b=2.5)
-            model = RegressionPreTrainedModel(config)
-            eval_dataset = SampleIterableDataset()
-
-            # Leaves all options as something *not* basic
-            with self.assertWarns(FutureWarning) as cm:
-                args = RegressionTrainingArguments(
-                    output_dir=tmp_dir,
-                    accelerator_config={
-                        "split_batches": True,
-                    },
-                    dispatch_batches=False,
-                )
-                self.assertIn("dispatch_batches", str(cm.warnings[0].message))
-            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-            self.assertEqual(trainer.accelerator.dispatch_batches, False)
-            self.assertEqual(trainer.accelerator.split_batches, True)
-            with self.assertWarns(FutureWarning) as cm:
-                args = RegressionTrainingArguments(
-                    output_dir=tmp_dir,
-                    accelerator_config={
-                        "even_batches": False,
-                    },
-                    split_batches=True,
-                )
-                self.assertIn("split_batches", str(cm.warnings[0].message))
-            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-            self.assertEqual(trainer.accelerator.split_batches, True)
-            self.assertEqual(trainer.accelerator.even_batches, False)
-            self.assertEqual(trainer.accelerator.dispatch_batches, None)
-
-    def test_accelerator_config_only_deprecated_args(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertWarns(FutureWarning) as cm:
-                args = RegressionTrainingArguments(
-                    output_dir=tmp_dir,
-                    split_batches=True,
-                )
-                self.assertIn("split_batches", str(cm.warnings[0].message))
-                config = RegressionModelConfig(a=1.5, b=2.5)
-                model = RegressionPreTrainedModel(config)
-                eval_dataset = SampleIterableDataset()
-                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
-                self.assertEqual(trainer.accelerator.split_batches, True)
 
     def test_accelerator_custom_state(self):
         AcceleratorState._reset_state(reset_partial_state=True)
@@ -5191,7 +5141,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
         def hp_name(trial):
             return MyTrialShortNamer.shortname(trial.params)
 
-        def compute_objective(metrics: Dict[str, float]) -> List[float]:
+        def compute_objective(metrics: dict[str, float]) -> list[float]:
             return metrics["eval_loss"], metrics["eval_accuracy"]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
