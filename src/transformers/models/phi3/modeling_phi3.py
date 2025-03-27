@@ -20,7 +20,7 @@
 # limitations under the License.
 
 
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -488,20 +488,12 @@ PHI3_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -592,6 +584,10 @@ class Phi3Model(Phi3PreTrainedModel):
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -865,7 +861,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1026,7 +1022,7 @@ class Phi3ForSequenceClassification(Phi3PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1137,7 +1133,7 @@ class Phi3ForTokenClassification(Phi3PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
