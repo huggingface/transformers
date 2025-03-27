@@ -337,7 +337,7 @@ class OnnxConfig(ABC):
                 " `preprocessor` instead.",
                 FutureWarning,
             )
-            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummy inputs.")
             preprocessor = tokenizer
         if isinstance(preprocessor, PreTrainedTokenizerBase):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX

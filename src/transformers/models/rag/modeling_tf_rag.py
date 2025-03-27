@@ -506,9 +506,9 @@ class TFRagModel(TFRagPreTrainedModel):
         load_weight_prefix: Optional[str] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an question_encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an question_encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -533,9 +533,9 @@ class TFRagModel(TFRagPreTrainedModel):
 
         self.retriever = retriever
         if self.retriever is not None:
-            assert isinstance(
-                retriever, RagRetriever
-            ), f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            assert isinstance(retriever, RagRetriever), (
+                f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            )
             self.retriever = retriever
 
         self.question_encoder = question_encoder
@@ -589,9 +589,9 @@ class TFRagModel(TFRagPreTrainedModel):
         >>> input_ids = input_dict["input_ids"]
         >>> outputs = model(input_ids)
         ```"""
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        assert "decoder_cached_states" not in kwargs, (
+            "Please use past_key_values to cache intermediate outputs"
+        )  # from modeling_tf_bart.py
 
         # aliasing to minimize code changing
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -657,9 +657,9 @@ class TFRagModel(TFRagPreTrainedModel):
                     " retriever using the `set_retriever(...)` function."
                 )
 
-        assert (
-            doc_scores is not None
-        ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        assert doc_scores is not None, (
+            "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        )
 
         assert (doc_scores.shape[1] % n_docs) == 0, (
             f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
@@ -747,9 +747,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -939,9 +939,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        assert "decoder_cached_states" not in kwargs, (
+            "Please use past_key_values to cache intermediate outputs"
+        )  # from modeling_tf_bart.py
 
         do_marginalize = do_marginalize if do_marginalize else self.config.do_marginalize
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
@@ -1327,9 +1327,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -1454,9 +1454,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
-        assert (
-            "decoder_cached_states" not in kwargs
-        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+        assert "decoder_cached_states" not in kwargs, (
+            "Please use past_key_values to cache intermediate outputs"
+        )  # from modeling_tf_bart.py
 
         exclude_bos_score = exclude_bos_score if exclude_bos_score else self.config.exclude_bos_score
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
@@ -1663,9 +1663,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        assert (
-            input_ids is not None or context_input_ids is not None
-        ), " At least one of input_ids or context_input_ids must be given"
+        assert input_ids is not None or context_input_ids is not None, (
+            " At least one of input_ids or context_input_ids must be given"
+        )
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]

@@ -513,7 +513,9 @@ def cached_files(
             return None
         # Now we raise for missing entries
         revision_ = "main" if revision is None else revision
-        msg = f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {*missing_entries,}"
+        msg = (
+            f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
+        )
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
             "for available files."
@@ -782,8 +784,8 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
-        revision: str = None,
-        commit_description: str = None,
+        revision: Optional[str] = None,
+        commit_description: Optional[str] = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -863,8 +865,8 @@ class PushToHubMixin:
         max_shard_size: Optional[Union[int, str]] = "5GB",
         create_pr: bool = False,
         safe_serialization: bool = True,
-        revision: str = None,
-        commit_description: str = None,
+        revision: Optional[str] = None,
+        commit_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         **deprecated_kwargs,
     ) -> str:
