@@ -422,7 +422,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - reset
 
 [[autodoc]] xLSTMCache
-    - update_rnn_state
     - reset
 
 ## Watermark Utils
