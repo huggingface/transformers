@@ -1636,9 +1636,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison > version.parse(
-            "0.9.0"
-        ), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
+        assert ao_verison > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
         # Check if we only have one key which is "default"
