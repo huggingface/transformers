@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Beit."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torchvision.transforms import functional as F
@@ -43,6 +43,7 @@ from ...utils import (
     TensorType,
     add_start_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 
 
 class BeitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -75,6 +76,16 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     def reduce_label(self, labels: list["torch.Tensor"]):
         for idx in range(len(labels)):
@@ -150,6 +161,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     @add_start_docstrings(
         "Constructs a fast Beit image processor.",
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
