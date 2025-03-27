@@ -1163,7 +1163,7 @@ class TokenizerTesterMixin:
                 new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=True)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=True)
                     # Check we are saving a chat_template.jinja file
                     self.assertTrue(any(file.endswith("chat_template.jinja") for file in save_files))
                     chat_template_file = Path(tmp_dir_name) / "chat_template.jinja"
@@ -1189,7 +1189,7 @@ class TokenizerTesterMixin:
                 self.skipTest("tokenizer doesn't accept chat templates at input")
             tokenizer.chat_template = "test template"
             with tempfile.TemporaryDirectory() as tmpdirname:
-                tokenizer.save_pretrained(tmpdirname, save_raw_chat_template=True)
+                tokenizer.save_pretrained(tmpdirname, save_jinja_files=True)
                 self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
                 self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
                 self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
@@ -1201,7 +1201,7 @@ class TokenizerTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 tokenizer.chat_template = {"default": "a", "secondary": "b"}
-                tokenizer.save_pretrained(tmpdirname, save_raw_chat_template=True)
+                tokenizer.save_pretrained(tmpdirname, save_jinja_files=True)
                 self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
                 self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
                 self.assertTrue(Path(tmpdirname, "additional_chat_templates").is_dir())
@@ -1213,7 +1213,7 @@ class TokenizerTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 tokenizer.chat_template = {"default": "a", "secondary": "b"}
-                tokenizer.save_pretrained(tmpdirname, save_raw_chat_template=False)
+                tokenizer.save_pretrained(tmpdirname, save_jinja_files=False)
                 self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
                 self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
                 self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
@@ -1712,12 +1712,12 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                for save_raw_chat_template in (True, False):
+                for save_jinja_files in (True, False):
                     tokenizer.chat_template = {"default": dummy_template_1, "template2": dummy_template_2}
                     with tempfile.TemporaryDirectory() as tmp_dir_name:
-                        # Test that save_raw_chat_template is ignored when there's a dict of multiple templates
-                        tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=save_raw_chat_template)
-                        if save_raw_chat_template:
+                        # Test that save_jinja_files is ignored when there's a dict of multiple templates
+                        tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=save_jinja_files)
+                        if save_jinja_files:
                             config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
                             self.assertNotIn("chat_template", config_dict)
                             self.assertTrue(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
@@ -1748,7 +1748,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.chat_template = dummy_template1
-                    tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
+                    tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
                     with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
                         f.write(dummy_template2)
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)

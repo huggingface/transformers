@@ -650,7 +650,7 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        save_as_jinja = kwargs.get("save_raw_chat_template", False)
+        save_as_jinja = kwargs.get("save_jinja_files", False)
         is_single_template = isinstance(self.chat_template, str)
 
         if save_as_jinja and is_single_template:
@@ -685,7 +685,7 @@ class ProcessorMixin(PushToHubMixin):
             # chat template dicts are saved to chat_template.json as lists of dicts with fixed key names.
             raise ValueError(
                 "Multiple chat templates are not supported in the legacy format. Please save them as separate files "
-                "using the `save_raw_chat_template` argument."
+                "using the `save_jinja_files` argument."
             )
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and

@@ -896,9 +896,9 @@ class PushToHubMixin:
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
-        save_raw_chat_template = deprecated_kwargs.pop(
-            "save_raw_chat_template", None
-        )  # TODO: This is only used for testing and should be removed once save_raw_chat_template becomes the default
+        save_jinja_files = deprecated_kwargs.pop(
+            "save_jinja_files", None
+        )  # TODO: This is only used for testing and should be removed once save_jinja_files becomes the default
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
@@ -955,12 +955,12 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            if save_raw_chat_template:
+            if save_jinja_files:
                 self.save_pretrained(
                     work_dir,
                     max_shard_size=max_shard_size,
                     safe_serialization=safe_serialization,
-                    save_raw_chat_template=True,
+                    save_jinja_files=True,
                 )
             else:
                 self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
