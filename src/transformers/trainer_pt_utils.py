@@ -121,9 +121,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     nested list/tuples/dict of tensors.
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
-        assert (
-            type(tensors) is type(new_tensors)
-        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        assert type(tensors) is type(new_tensors), (
+            f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
+        )
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -381,15 +381,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert (
-            len(indices) == self.total_size
-        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
+        assert len(indices) == self.total_size, (
+            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
+        )
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert (
-            len(indices) == self.num_samples
-        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+        assert len(indices) == self.num_samples, (
+            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+        )
 
         return iter(indices)
 
@@ -506,9 +506,9 @@ class DistributedTensorGatherer:
         if isinstance(arrays, (list, tuple)):
             result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
             return result[0][0], type(arrays)(r[1] for r in result)
-        assert (
-            arrays.shape[0] % self.world_size == 0
-        ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
+        assert arrays.shape[0] % self.world_size == 0, (
+            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
+        )
 
         slice_len = arrays.shape[0] // self.world_size
         for i in range(self.world_size):
@@ -1263,7 +1263,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: bool = field(
+    dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"

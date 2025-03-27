@@ -485,7 +485,7 @@ class MimiIntegrationTest(unittest.TestCase):
 
         for num_codebooks, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
 
                 audio_codes = encoder_outputs[0]
@@ -537,7 +537,7 @@ class MimiIntegrationTest(unittest.TestCase):
             model = MimiModel.from_pretrained(model_id, use_cache=use_cache).to(torch_device)
             for num_codebooks, expected_rmse in expected_rmses.items():
                 with torch.no_grad():
-                    # use max bandwith for best possible reconstruction
+                    # use max bandwidth for best possible reconstruction
                     encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
 
                     audio_code_sums = encoder_outputs[0].sum().cpu().item()
