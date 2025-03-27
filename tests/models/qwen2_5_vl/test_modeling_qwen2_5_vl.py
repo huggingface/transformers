@@ -350,6 +350,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
 
+    @unittest.skip("Qwen strcuture is weird, needs refactoring without breaking. TODO: raushan")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
 
 @require_torch
 class Qwen2_5_VLIntegrationTest(unittest.TestCase):

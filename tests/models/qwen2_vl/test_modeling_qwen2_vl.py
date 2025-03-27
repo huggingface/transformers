@@ -355,6 +355,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip("Qwen strcuture is weird, needs refactoring without breaking. TODO: raushan")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
 
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):

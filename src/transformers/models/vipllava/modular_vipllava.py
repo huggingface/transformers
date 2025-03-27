@@ -316,6 +316,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
         logits = outputs[0]
