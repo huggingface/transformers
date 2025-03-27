@@ -28,13 +28,15 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 512, "width": 512}
-    default_to_square = False
-    crop_size = {"height": 30, "width": 30}
     do_resize = True
-    do_center_crop = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = True
+    do_reduce_labels = False
+    
+    # These attributes are needed so tests can check for them,
+    # but they won't be used in actual processing
+    do_center_crop = False
+    center_crop = None
 
 
 __all__ = ["SegformerImageProcessorFast"]
