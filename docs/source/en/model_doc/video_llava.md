@@ -211,6 +211,10 @@ model = VideoLlavaForConditionalGeneration.from_pretrained(
 
 [[autodoc]] VideoLlavaImageProcessor
 
+## VideoLlavaImageProcessorFast
+
+[[autodoc]] VideoLlavaImageProcessorFast
+
 ## VideoLlavaProcessor
 
 [[autodoc]] VideoLlavaProcessor
