@@ -360,7 +360,6 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
-        self._init_weight()
 
     def _init_weight(self):
         """
@@ -902,7 +901,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, AutoformerSinusoidalPositionalEmbedding):
-            module.weight = module._init_weight(module.weight)
+            module._init_weight()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
