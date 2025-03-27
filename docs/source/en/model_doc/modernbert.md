@@ -60,6 +60,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 
+<PipelineTag pipeline="question-answering"/>
+
+- [`ModernBertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [colab notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 
 ## ModernBertConfig
 
@@ -87,6 +90,16 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] ModernBertForTokenClassification
     - forward
+
+## ModernBertForQuestionAnswering
+
+[[autodoc]] ModernBertForQuestionAnswering
+    - forward
+
+### Usage tips
+
+The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
+
 
 </pt>
 </frameworkcontent>
