@@ -1065,6 +1065,8 @@ class SinkCache(Cache):
         """
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
+        if cache_kwargs is None:
+            cache_kwargs = {}
         sin = cache_kwargs.get("sin")
         cos = cache_kwargs.get("cos")
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
@@ -1248,6 +1250,8 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
+        if cache_kwargs is None:
+            cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
@@ -1379,6 +1383,8 @@ class SlidingWindowCache(StaticCache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if cache_kwargs is None:
+            cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
@@ -1751,6 +1757,8 @@ class HybridCache(Cache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if cache_kwargs is None:
+            cache_kwargs = {}
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
 
