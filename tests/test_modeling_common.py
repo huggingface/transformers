@@ -534,6 +534,10 @@ class ModelTesterMixin:
                 if not (v1 == v2).all():
                     different_weights.append(k1)
 
+            # Buffers that are ignored randomly are ignored as they are not initialized on meta device anyway
+            buffer_names = {name for name, _ in model_from_config.named_buffers()}
+            different_weights = [k for k in different_weights if not k in buffer_names]
+
             self.assertTrue(
                 len(different_weights) == 0,
                 f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",

@@ -1192,6 +1192,13 @@ class SamPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
+            module.weight.data.fill_(1.)
+            module.bias.data.zero_()
+        elif isinstance(module, SamVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
 
 
 SAM_START_DOCSTRING = r"""
