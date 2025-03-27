@@ -76,10 +76,13 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def reduce_label(self, label: list["torch.Tensor"]):
-        label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
-        label = label - 1
-        label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
+    def reduce_label(self, labels: list["torch.Tensor"]):
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
+            labels[idx] = label
 
         return label
 
