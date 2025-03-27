@@ -1457,12 +1457,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                pooled_logits=pooled_logits,
-                config=self.config,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
