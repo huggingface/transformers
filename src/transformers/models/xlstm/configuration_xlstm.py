@@ -33,6 +33,8 @@ if is_xlstm_available():
 
     external_xlstm = True
 else:
+    from typing import Literal
+
     BackendModeType = Literal["train", "train_with_padding", "inference"]
     ChunkwiseKernelType = Literal[
         "chunkwise--native_autograd",
