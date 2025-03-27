@@ -43,6 +43,7 @@ Alternatively, one can decide to further pre-train an already pre-trained (or fi
 ```bash
 !python run_mim.py \
     --model_type vit \
+    --fast_image_processor True \
     --output_dir ./outputs/ \
     --overwrite_output_dir \
     --remove_unused_columns False \
