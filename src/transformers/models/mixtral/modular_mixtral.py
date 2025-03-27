@@ -19,6 +19,7 @@
 # limitations under the License.
 """PyTorch Mixtral model."""
 
+from functools import partial
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -400,7 +401,7 @@ class MixtralModel(MistralModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,
