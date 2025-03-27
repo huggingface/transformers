@@ -19,8 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -505,52 +503,39 @@ class ConversationalSpeechModelBackboneConfig(PretrainedConfig):
 
 class ConversationalSpeechModelConfig(PretrainedConfig):
     model_type = "conversational_speech_model"
+    sub_model_type = {
+        "backbone_config": ConversationalSpeechModelBackboneConfig,
+        "depth_decoder_config": ConversationalSpeechModelDepthDecoderConfig,
+    }
 
     def __init__(
         self,
-        backbone_config: Dict = None,
-        depth_decoder_config: Dict = None,
-        initializer_range=0.02,
-        tie_codebook_embeddings=True,
-        eos_token_id=None,
+        backbone_config=None,
+        depth_decoder_config=None,
         **kwargs,
     ):
         if backbone_config is None:
-            backbone_config = {}
-            logger.info("backbone_config is None. Initializing the backbone with default values.")
+            self.backbone_config = ConversationalSpeechModelBackboneConfig()
+            logger.info("backbone_config is None, using default backbone config.")
+        elif isinstance(backbone_config, dict):
+            self.backbone_config = ConversationalSpeechModelBackboneConfig(**backbone_config)
+        elif isinstance(backbone_config, ConversationalSpeechModelBackboneConfig):
+            self.backbone_config = backbone_config
 
         if depth_decoder_config is None:
-            depth_decoder_config = {}
-            logger.info("depth_decoder_config is None. Initializing the depth decoder with default values.")
+            self.depth_decoder_config = ConversationalSpeechModelDepthDecoderConfig()
+            logger.info("depth_decoder_config is None, using default depth decoder config.")
+        elif isinstance(depth_decoder_config, dict):
+            self.depth_decoder_config = ConversationalSpeechModelDepthDecoderConfig(**depth_decoder_config)
+        elif isinstance(depth_decoder_config, ConversationalSpeechModelDepthDecoderConfig):
+            self.depth_decoder_config = depth_decoder_config
 
-        self.backbone_config = ConversationalSpeechModelBackboneConfig(**backbone_config)
-        self.depth_decoder_config = ConversationalSpeechModelDepthDecoderConfig(**depth_decoder_config)
-
-        if self.backbone_config.num_codebooks != self.depth_decoder_config.num_codebooks:
-            raise ValueError(
-                f"{self.backbone_config.__class__.__name__} and {self.depth_decoder_config.__class__.__name__} "
-                "`num_codebooks` must be the same."
-            )
-
-        if self.backbone_config.codebook_vocab_size != self.depth_decoder_config.vocab_size:
-            raise ValueError(
-                f"{self.backbone_config.__class__.__name__} `codebook_vocab_size` and {self.depth_decoder_config.__class__.__name__} "
-                "`vocab_size` must be the same."
-            )
-
-        if self.backbone_config.hidden_size != self.depth_decoder_config.backbone_hidden_size:
-            raise ValueError(
-                f"{self.backbone_config.__class__.__name__} `hidden_size` and {self.depth_decoder_config.__class__.__name__} "
-                "`backbone_hidden_size` must be the same."
-            )
-
-        self.initializer_range = initializer_range
-        self.tie_codebook_embeddings = tie_codebook_embeddings
         self.vocab_size = self.backbone_config.codebook_vocab_size
         self.hidden_size = self.backbone_config.hidden_size
         self.num_codebooks = self.backbone_config.num_codebooks
+        self.initializer_range = self.backbone_config.initializer_range
 
-        # disable tie_word_embeddings as it does not apply here
+        # tie_word_embeddings does not apply here
         kwargs["tie_word_embeddings"] = False
         self.max_position_embeddings = 2048
 

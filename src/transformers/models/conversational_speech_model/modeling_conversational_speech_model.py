@@ -1312,8 +1312,8 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
         super().__init__(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM(config.depth_decoder_config)
-        self.backbone_model = ConversationalSpeechModelBackboneModel(config.backbone_config)
+        self.depth_decoder = ConversationalSpeechModelDepthDecoderForCausalLM._from_config(config.depth_decoder_config)
+        self.backbone_model = ConversationalSpeechModelBackboneModel._from_config(config.backbone_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1424,11 +1424,13 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
                 logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
             )
 
-            depth_decoder_input_ids = depth_decoder_input_ids = input_ids[:, :, : self.config.num_codebooks - 1].view(
-                -1, self.config.num_codebooks - 1
-            )
-            backbone_last_hidden_states = backbone_hidden_states.view(-1, self.config.hidden_size)
-            depth_decoder_labels = labels[:, :, : self.config.num_codebooks].view(-1, self.config.num_codebooks)
+            depth_decoder_labels = labels[:, :, : self.config.num_codebooks]
+            mask_idxs = (depth_decoder_labels == -100).all(dim=-1)
+            train_idxs = (~mask_idxs).nonzero()
+
+            depth_decoder_input_ids = input_ids[train_idxs[:, 0], train_idxs[:, 1], : self.config.num_codebooks - 1]
+            backbone_last_hidden_states = backbone_hidden_states[train_idxs[:, 0], train_idxs[:, 1] - 1, :]
+            depth_decoder_labels = depth_decoder_labels[train_idxs[:, 0], train_idxs[:, 1], :]
 
             depth_decoder_outputs = self.depth_decoder(
                 input_ids=depth_decoder_input_ids,
