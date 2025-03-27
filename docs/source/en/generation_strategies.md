@@ -316,11 +316,11 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ## Custom decoding methods
 
-Under specific circumstances, it may be useful to have specialized generative behaviour:
-- keep thinking if the model is uncertain
-- roll back generation if the model gets stuck
-- handle special tokens
-- custom input preparation for advances models
+Under specific circumstances, it may be useful to have specialized generation behaviour:
+- have the model continue thinking if it is uncertain;
+- roll back generation if the model gets stuck;
+- handle special tokens with custom logic;
+- enhanced input preparation for advanced models;
 - (...)
 
 To that end, we enable `generate` to load custom generation recipes from the Hub through its `recipe` argument. This means anyone can create and share their own advanced generation method which, from a user perspective, requires no additional python packages.
@@ -340,9 +340,9 @@ print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 
 ### Using a custom decoding method
 
-After you've identified a custom generation recipe on the Hub that you'd like to try, the first thing you should do it to read its README page. When creating a recipe (see below), we recommend their creators to document new arguments and output type differences, if any of these exist. A resonable assumption is to assume everything works like the base `generate` unless documented.
+After you've identified a custom generation recipe on the Hub that you'd like to try, the first thing you should do is to read its README page. When creating a recipe (see below), we recommend their creators to document new arguments and output type differences, if any of these exist. Reasonably, you should assume everything works like the base `generate` unless documented.
 
-Let's consider the Hub repository [`joaogante/test_generate_from_hub`](https://huggingface.co/joaogante/test_generate_from_hub). We can see in its README that it has an additional input argument, `left_padding`, which is an optional integer that will add as many pad tokens before the prompt. Let's try it out!
+Let's consider the Hub repository [`joaogante/test_generate_from_hub`](https://huggingface.co/joaogante/test_generate_from_hub). We can see in its README that it has an additional input argument, `left_padding`, which is an optional integer that will add that number of pad tokens before the prompt. Let's try it out!
 
 ```py
 gen_out = model.generate(**inputs, recipe="joaogante/test_generate_from_hub", left_padding=5)
@@ -350,7 +350,7 @@ print(tokenizer.batch_decode(gen_out)[0])
 '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
 ```
 
-If the recipe has special python requirements and your environment doesn't fulfill them, you'll get a message about missing requirements. For instance, [`joaogante/test_generate_from_hub_2`](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see something like this if you try to run it:
+If the recipe has pinned python requirements and your environment doesn't fulfill them, you'll get an exception about missing requirements. For instance, [`joaogante/test_generate_from_hub_2`](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see something like this if you try to run it:
 
 ```
 ValueError: Missing requirements for joaogante/test_generate_from_hub_2:
@@ -359,7 +359,7 @@ bar==0.0.0 (installed: None)
 torch>=99.0 (installed: 2.6.0+cu126)
 ```
 
-Updating your python requirements to match these will get rid of this error message.
+Updating your python requirements accordingly will remove this error message.
 
 ### Creating a custom decoding method
 
@@ -372,9 +372,9 @@ Let's dive at each file, and have a look at their requirements and best practice
 
 #### generate.py
 
-This is the core of your decoding method. It *must* contain a `generate` method, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in `GenerationMixin`.
+This is the core of your decoding method. It *must* contain a `generate` method, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in `GenerationMixin` (like the original `generate` method).
 
-Under the hood, when the original `generate` method is called with a `recipe` argument, it will first check its requirements (see below), then locate the custom `generate` method in `generate.py`, and finally calls the custom `generate`, forwarding all received arguments to them (plus `model`). This means your `generate` can have a mix of orginal and custom arguments, as well as a different output type -- the world is your oyster!
+Under the hood, when the original `generate` method is called with a `recipe` argument, it will first check its requirements (if they exist, see below), then locate the custom `generate` method in `generate.py`, and finally calls the custom `generate`, forwarding all received arguments to it (plus `model`). This means your `generate` can have a mix of orginal and custom arguments, as well as a different output type -- the world is your oyster!
 
 Here is an example of a `generate.py` file that mixes original and custom arguments:
 
@@ -412,8 +412,8 @@ def generate(model, input_ids, generation_config, left_padding=None, **kwargs):
 
 Recommended practices:
 - The original `generate` has extensive logic for validation and input preparation. Feel free to reuse them;
-- If you use any private method/attribute in `model`, make sure to pin the `transformers` version you're using in the requirements;
-- Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code on their environment.
+- If you use any private method/attribute in `model`, pin the `transformers` version you're using in the requirements;
+- Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
 
 #### README.md
 
@@ -426,7 +426,7 @@ Recommended pratices:
 
 #### requirements.txt
 
-If your decoding method has python requirements that are not present in the original `transformers` package, you can specify then in a `requirements.txt` file (just like you would in a python project). These will be checked at runtime, and an exception will be thrown if their are not honored.
+If your decoding method has python requirements that are not present in the original `transformers` package, you can specify then in a `requirements.txt` file (just like you would in a python project). These will be checked at runtime, and an exception will be thrown if they are not honored.
 
 ## Resources
 
