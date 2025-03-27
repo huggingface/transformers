@@ -20,11 +20,16 @@ A decoding strategy informs how a model should select the next generated token. 
 
 This guide will help you understand the different decoding strategies available in Transformers and how and when to use them.
 
-## Greedy search
+> [!TIP]
+> `transformers` can also load custom generation strategies from the Hub! See the `Custom decoding methods` section below for instructions on how to load or share a custom generation strategy.
 
-Greedy search is the default decoding strategy. It selects the next most likely token at each step. Unless specified in [`GenerationConfig`], this strategy generates a maximum of 20 tokens.
+## Basic decoding methods
 
-Greedy search works well for tasks with relatively short outputs. However, it breaks down when generating longer sequences because it begins to repeat itself.
+### Greedy search
+
+Greedy search is the default decoding strategy. It selects the next most likely token at each step. Unless specified in [`GenerationConfig`], this strategy generates a maximum of 20 new tokens.
+
+Greedy search works well for tasks with relatively short outputs where creativity is not a priority. However, it breaks down when generating longer sequences because it begins to repeat itself.
 
 ```py
 import torch
@@ -40,11 +45,11 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 'Hugging Face is an open-source company that provides a suite of tools and services for building, deploying, and maintaining natural language processing'
 ```
 
-## Contrastive search
+### Sampling
 
-[Contrastive search](https://huggingface.co/papers/2202.06417) is a decoding strategy that aims to reduce repetition even while generating longer sequences. This strategy compares how similar a generated token is against previous tokens, and if they're more similar, a penalty is applied.
+Sampling, or multinomial sampling, randomly selects a token based on the probability distribution over the entire model's vocabulary (as opposed to the most likely token, as in greedy search). This means every token with a non-zero probability has a chance to be selected. Sampling strategies reduce repetition and can generate more creative and diverse outputs.
 
-Enable contrastive search with the `penalty_alpha` and `top_k` parameters. The `penalty_alpha` manages the penalty applied and `top_k` is the number of most likely tokens to return.
+Enable multinomial sampling with `do_sample=True` and `num_beams=1`.
 
 ```py
 import torch
@@ -55,14 +60,14 @@ inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt"
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
 # explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=100, penalty_alpha=0.6, top_k=4)
+outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=1)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
-'Hugging Face is an open-source company that provides a platform for building and deploying AI models.\nHugging Face is an open-source company that provides a platform for building and deploying AI models. The platform allows developers to build and deploy AI models, as well as collaborate with other developers.\nHugging Face was founded in 2019 by Thibault Wittemberg and Clément Delangue. The company is based in Paris, France.\nHugging Face has'
+'Hugging Face is an open-source company 🤗\nWe are open-source and believe that open-source is the best way to build technology. Our mission is to make AI accessible to everyone, and we believe that open-source is the best way to achieve that.'
 ```
 
-## Beam search
+### Beam search
 
-Beam search keeps track of several generated sequences (beams) at each time step. After a certain number of steps, it selects the sequence with the highest *overall* probability. Unlike greedy search, this strategy can "look ahead" and pick a sequence with a higher probability overall even if the initial tokens have a lower probability.
+Beam search keeps track of several generated sequences (beams) at each time step. After a certain number of steps, it selects the sequence with the highest *overall* probability. Unlike greedy search, this strategy can "look ahead" and pick a sequence with a higher probability overall even if the initial tokens have a lower probability. It is best suited for input-grounded tasks, like describing an image or speech recognition.
 
 > [!TIP]
 > Check out the [beam search visualizer](https://huggingface.co/spaces/m-ric/beam_search_visualizer) to see how beam search works.
@@ -83,66 +88,9 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 "['Hugging Face is an open-source company that develops and maintains the Hugging Face platform, which is a collection of tools and libraries for building and deploying natural language processing (NLP) models. Hugging Face was founded in 2018 by Thomas Wolf']"
 ```
 
-## Diverse beam search
+## Advanced decoding methods
 
-[Diverse beam search](https://hf.co/papers/1610.02424) is a variant of beam search that produces more diverse output candidates to choose from. This strategy measures the dissimilarity of sequences and a penalty is applied if sequences are too similar. To avoid high computation costs, the number of beams is divided into groups.
-
-Enable diverse beam search with the `num_beams`, `num_beam_groups` and `diversity_penalty` parameters (the `num_beams` parameter should be divisible by `num_beam_groups`).
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
-# explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=50, num_beams=6, num_beam_groups=3, diversity_penalty=1.0, do_sample=False)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-'Hugging Face is an open-source company 🤗\nWe are an open-source company. Our mission is to democratize AI and make it accessible to everyone. We believe that AI should be used for the benefit of humanity, not for the benefit of a'
-```
-
-## Multinomial sampling
-
-Search methods selects the most likely tokens. Sampling, or multinomial sampling, randomly selects a token based on the probability distribution over the entire models vocabulary. This means every token with a non-zero probability has a chance to be selected. Sampling strategies reduce repetition and can generate more creative and diverse outputs.
-
-Enable multinomial sampling with `do_sample=True` and `num_beams=1`.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
-# explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=1)
-tokenizer.batch_decode(outputs, skip_special_tokens=True)
-'Hugging Face is an open-source company 🤗\nWe are open-source and believe that open-source is the best way to build technology. Our mission is to make AI accessible to everyone, and we believe that open-source is the best way to achieve that.'
-```
-
-## Beam search multinomial sampling
-
-This decoding strategy is a combination of beam search and multinomial sampling. It generates multiple beams and uses a sampling strategy for each beam.
-
-Enable beam search multinomial sampling by setting `num_beams` to a value greater than 1 and `do_sample=True`.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
-# explicitly set to 100 because Llama2 generation length is 4096
-outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=4)
-'Hugging Face is an open-source company 100% dedicated to making AI more accessible. We believe that AI should be available to everyone, and we’re working hard to make that a reality.\nWe’re a team of passionate engineers, designers,'
-```
-
-## Speculative decoding
+### Speculative decoding
 
 [Speculative](https://hf.co/papers/2211.17192) or assistive decoding isn't a search or sampling strategy. Instead, speculative decoding adds a second smaller model to generate candidate tokens. The main model verifies the candidate tokens in a single `forward` pass, which speeds up the decoding process overall. This method is especially useful for LLMs where it can be more costly and slower to generate tokens. Refer to the [speculative decoding](./llm_optims#speculative-decoding) guide to learn more.
 
@@ -203,7 +151,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 </hfoption>
 </hfoptions>
 
-### Prompt lookup decoding
+#### Prompt lookup decoding
 
 [Prompt lookup decoding](./llm_optims#prompt-lookup-decoding) is a variant of speculative decoding that uses overlapping n-grams as the candidate tokens. It works well for input-grounded tasks such as summarization. Refer to the [prompt lookup decoding](./llm_optims#prompt-lookup-decoding) guide to learn more.
 
@@ -245,7 +193,7 @@ outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
-### Universal assisted decoding
+#### Universal assisted decoding
 
 Universal assisted decoding (UAD) enables the main and assistant models to use different tokenizers. The main models input tokens are re-encoded into assistant model tokens. Candidate tokens are generated in the assistant encoding which are re-encoded into the main model candidate tokens. The candidate tokens are verified as explained in [speculative decoding](#speculative-decoding).
 
@@ -269,7 +217,27 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-## DoLa
+### Contrastive search
+
+[Contrastive search](https://huggingface.co/papers/2202.06417) is a decoding strategy that aims to reduce repetition even while generating longer sequences. This strategy compares how similar a generated token is against previous tokens, and if they're more similar, a penalty is applied.
+
+Enable contrastive search with the `penalty_alpha` and `top_k` parameters. The `penalty_alpha` manages the penalty applied and `top_k` is the number of most likely tokens to return.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+# explicitly set to 100 because Llama2 generation length is 4096
+outputs = model.generate(**inputs, max_new_tokens=100, penalty_alpha=0.6, top_k=4)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company that provides a platform for building and deploying AI models.\nHugging Face is an open-source company that provides a platform for building and deploying AI models. The platform allows developers to build and deploy AI models, as well as collaborate with other developers.\nHugging Face was founded in 2019 by Thibault Wittemberg and Clément Delangue. The company is based in Paris, France.\nHugging Face has'
+```
+
+### DoLa
 
 [Decoding by Contrasting Layers (DoLa)](https://hf.co/papers/2309.03883) is a contrastive decoding strategy for improving factuality and reducing hallucination. This strategy works by contrasting the logit differences between the final and early layers. As a result, factual knowledge localized to particular layers are amplified. DoLa is not recommended for smaller models like GPT-2.
 
@@ -324,6 +292,141 @@ tokenizer.batch_decode(outputs[:, inputs.input_ids.shape[-1]:], skip_special_tok
 
 </hfoption>
 </hfoptions>
+
+### Diverse beam search
+
+[Diverse beam search](https://hf.co/papers/1610.02424) is a variant of beam search that produces more diverse output candidates to choose from. This strategy measures the dissimilarity of sequences and a penalty is applied if sequences are too similar. To avoid high computation costs, the number of beams is divided into groups.
+
+Enable diverse beam search with the `num_beams`, `num_beam_groups` and `diversity_penalty` parameters (the `num_beams` parameter should be divisible by `num_beam_groups`).
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+# explicitly set to 100 because Llama2 generation length is 4096
+outputs = model.generate(**inputs, max_new_tokens=50, num_beams=6, num_beam_groups=3, diversity_penalty=1.0, do_sample=False)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company 🤗\nWe are an open-source company. Our mission is to democratize AI and make it accessible to everyone. We believe that AI should be used for the benefit of humanity, not for the benefit of a'
+```
+
+
+## Custom decoding methods
+
+Under specific circumstances, it may be useful to have specialized generative behaviour:
+- keep thinking if the model is uncertain
+- roll back generation if the model gets stuck
+- handle special tokens
+- custom input preparation for advances models
+- (...)
+
+To that end, we enable `generate` to load custom generation recipes from the Hub through its `recipe` argument. This means anyone can create and share their own advanced generation method which, from a user perspective, requires no additional python packages.
+
+<!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", device_map="auto")
+
+inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
+gen_out = model.generate(**inputs, recipe="joaogante/test_generate_from_hub")  # minimal greedy decoding
+print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
+'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
+```
+
+### Using a custom decoding method
+
+After you've identified a custom generation recipe on the Hub that you'd like to try, the first thing you should do it to read its README page. When creating a recipe (see below), we recommend their creators to document new arguments and output type differences, if any of these exist. A resonable assumption is to assume everything works like the base `generate` unless documented.
+
+Let's consider the Hub repository [`joaogante/test_generate_from_hub`](https://huggingface.co/joaogante/test_generate_from_hub). We can see in its README that it has an additional input argument, `left_padding`, which is an optional integer that will add as many pad tokens before the prompt. Let's try it out!
+
+```py
+gen_out = model.generate(**inputs, recipe="joaogante/test_generate_from_hub", left_padding=5)
+print(tokenizer.batch_decode(gen_out)[0])
+'<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
+```
+
+If the recipe has special python requirements and your environment doesn't fulfill them, you'll get a message about missing requirements. For instance, [`joaogante/test_generate_from_hub_2`](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see something like this if you try to run it:
+
+```
+ValueError: Missing requirements for joaogante/test_generate_from_hub_2:
+foo (installed: None)
+bar==0.0.0 (installed: None)
+torch>=99.0 (installed: 2.6.0+cu126)
+```
+
+Updating your python requirements to match these will get rid of this error message.
+
+### Creating a custom decoding method
+
+To create a new decoding method, you need to create a new "Model" repository and push a few files into it:
+1. (required) `generate.py`, which contains all the logic for your custom decoding method.
+2. (optional) `README.md`, the front page on the Hub to your custom generation method;
+3. (optional) `requirements.txt`, to add new python requirements and/or lock specific versions for correct utilization of the technique.
+
+Let's dive at each file, and have a look at their requirements and best practices.
+
+#### generate.py
+
+This is the core of your decoding method. It *must* contain a `generate` method, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in `GenerationMixin`.
+
+Under the hood, when the original `generate` method is called with a `recipe` argument, it will first check its requirements (see below), then locate the custom `generate` method in `generate.py`, and finally calls the custom `generate`, forwarding all received arguments to them (plus `model`). This means your `generate` can have a mix of orginal and custom arguments, as well as a different output type -- the world is your oyster!
+
+Here is an example of a `generate.py` file that mixes original and custom arguments:
+
+```py
+import torch
+
+def generate(model, input_ids, generation_config, left_padding=None, **kwargs):
+    generation_config = generation_config or model.generation_config  # default to the model generation config
+    cur_length = input_ids.shape[1]
+    max_length = generation_config.max_length or cur_length + generation_config.max_new_tokens
+
+    # Example of custom argument: add `left_padding` (integer) pad tokens before the prompt
+    if left_padding is not None:
+        if not isinstance(left_padding, int) or left_padding < 0:
+            raise ValueError(f"left_padding must be an integer larger than 0, but is {left_padding}")
+
+        pad_token = kwargs.pop("pad_token", None) or generation_config.pad_token_id or model.config.pad_token_id
+        if pad_token is None:
+            raise ValueError("pad_token is not defined")
+        batch_size = input_ids.shape[0]
+        pad_tensor = torch.full(size=(batch_size, left_padding), fill_value=pad_token).to(input_ids.device)
+        input_ids = torch.cat((pad_tensor, input_ids), dim=1)
+        cur_length = input_ids.shape[1]
+
+    # Simple greedy decoding loop
+    while cur_length < max_length:
+        logits = model(input_ids).logits
+        next_token_logits = logits[:, -1, :]
+        next_tokens = torch.argmax(next_token_logits, dim=-1)
+        input_ids = torch.cat((input_ids, next_tokens[:, None]), dim=-1)
+        cur_length += 1
+
+    return input_ids
+```
+
+Recommended practices:
+- The original `generate` has extensive logic for validation and input preparation. Feel free to reuse them;
+- If you use any private method/attribute in `model`, make sure to pin the `transformers` version you're using in the requirements;
+- Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code on their environment.
+
+#### README.md
+
+As the front page of your decoding method, this is where other users get to know it. In addition to a description of the method, we heavily recommend documenting any input and/or output differences to the original `generate`. That way, users can focus on what's new, and rely on `transformers` docs for generic implementation details.
+
+Recommended pratices:
+- Document input and output differences in `generate`;
+- Add self-contained examples to enable quick experimentation;
+- Describe additional soft-requirements (e.g. if the technique only works well with a certain family of models).
+
+#### requirements.txt
+
+If your decoding method has python requirements that are not present in the original `transformers` package, you can specify then in a `requirements.txt` file (just like you would in a python project). These will be checked at runtime, and an exception will be thrown if their are not honored.
 
 ## Resources
 

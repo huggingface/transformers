@@ -39,7 +39,7 @@ from ..cache_utils import (
     QuantizedCacheConfig,
 )
 from ..configuration_utils import PretrainedConfig
-from ..dynamic_module_utils import get_cached_module_file, get_class_in_module
+from ..dynamic_module_utils import check_python_requirements, get_cached_module_file, get_class_in_module
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -2256,7 +2256,7 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
-        if recipe is not None:  # TODO: should also go in the generation config, so that users can save it
+        if recipe is not None:
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
             # methods from `GenerationMixin` through `model`.
@@ -2264,7 +2264,8 @@ class GenerationMixin:
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
 
-            module = get_cached_module_file(pretrained_model_name_or_path=recipe, module_file="generate.py", **kwargs)
+            check_python_requirements(recipe, **kwargs)
+            module = get_cached_module_file(recipe, module_file="generate.py", **kwargs)
             custom_generate_function = get_class_in_module("generate", module)
             return custom_generate_function(model=self, **generate_arguments)
 
