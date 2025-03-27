@@ -1589,11 +1589,10 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
-                weights_only_kwarg = {"weights_only": True}
                 state_dict = torch.load(
                     weight_path,
                     map_location="cpu",
-                    **weights_only_kwarg,
+                    weights_only=True,
                 )
 
             except EnvironmentError:

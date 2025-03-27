@@ -207,7 +207,7 @@ def convert_wav2vec2_checkpoint(
         hf_wav2vec = Data2VecAudioModel(config)
         data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
 
-        state_dict = torch.load(checkpoint_path)
+        state_dict = torch.load(checkpoint_path, weights_only=True)
         state_dict["model"]["final_proj.weight"] = state_dict["model"].pop("final_proj.0.weight")
         state_dict["model"]["final_proj.bias"] = state_dict["model"].pop("final_proj.0.bias")
         converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
