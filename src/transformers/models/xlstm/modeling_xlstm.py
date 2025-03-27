@@ -46,8 +46,6 @@ else:
     from functools import partial
     from typing import Callable, Literal
 
-    from einops import rearrange
-
     from .configuration_xlstm import (
         BackendModeType,
         ChunkwiseKernelType,
@@ -188,13 +186,14 @@ else:
     ]:  # matH_out (B, NH, S, DHHV), vecN_out (B, NH, S), vecM_out (B, NH, S)
         _device = matQ.device
         NC, L = num_chunks, chunk_size
-        matC_k_states = rearrange(matC_states, "b nh (nc dhqk) dhv -> b nh nc dhqk dhv", nc=NC)
-        vecN_k_states = rearrange(vecN_states, "b nh (nc dhqk) -> b nh nc dhqk", nc=NC)
+        B, NH, DQK, DHV = matC_states.shape
+        matC_k_states = matC_states.view(B, NH, NC, DQK // NC, DHV)
+        vecN_k_states = vecN_states.view(B, NH, NC, DQK // NC)
         scaMinter_k_states = scaMinter_states
 
-        matQ = rearrange(matQ, "b nh (nc l) dh -> b nh nc l dh", l=L)
-        matK = rearrange(matK, "b nh (nc l) dh -> b nh nc l dh", l=L)
-        matV = rearrange(matV, "b nh (nc l) dh -> b nh nc l dh", l=L)
+        matQ = matQ.view(B, NH, NC, L, DQK)
+        matK = matK.view(B, NH, NC, L, DQK)
+        matV = matV.view(B, NH, NC, L, DHV)
 
         ltr = torch.tril(
             torch.ones(
@@ -244,11 +243,11 @@ else:
 
         matH_k_chunk = matNumerator_common / (vecDenom_max_common + eps)
 
-        matH_out = rearrange(matH_k_chunk, "b nh nc l dh -> b nh (nc l) dh")
+        matH_out = matH_k_chunk.view(B, NH, NC * L, DHV)
 
         # we need the denominator and the overall max state for the backward pass
-        vecN_out = rearrange(vecDenom_max_common, "b nh nc l 1 -> b nh (nc l)")  # (B, NH, S)
-        vecM_out = rearrange(vecM_k_combine, "b nh nc l 1 -> b nh (nc l)")  # (B, NH, S)
+        vecN_out = vecDenom_max_common.reshape(B, NH, NC * L)
+        vecM_out = vecM_k_combine(B, NH, NC * L)
         return matH_out, vecN_out, vecM_out
 
     def mlstm_chunkwise_fw(
@@ -282,8 +281,8 @@ else:
         assert S % chunk_size == 0, f"Sequence length {S} is not divisible by chunk size {chunk_size}."
         NC = S // chunk_size
 
-        vecI = rearrange(i, "b nh (nc l) -> b nh nc l", l=chunk_size)
-        vecF = rearrange(f, "b nh (nc l) -> b nh nc l", l=chunk_size)
+        vecI = i.view(B, NH, NC, chunk_size)
+        vecF = f.view(B, NH, NC, chunk_size)
 
         # compute the gates, the g and the a and b vectors
         vecF_logsig = F.logsigmoid(vecF)
@@ -363,8 +362,9 @@ else:
         assert S % chunk_size == 0, f"Sequence length {S} is not divisible by chunk size {chunk_size}."
         NC = S // chunk_size
 
-        vecI = rearrange(i, "b nh (nc l) -> b nh nc l", l=chunk_size)
-        vecF = rearrange(f, "b nh (nc l) -> b nh nc l", l=chunk_size)
+        vecI = i.view(B, NH, NC, chunk_size)
+        vecF = f.view(B, NH, NC, chunk_size)
+        assert 0
 
         # compute the gates, the g and the a and b vectors
         vecF_logsig = F.logsigmoid(vecF)
@@ -732,13 +732,9 @@ else:
         DHHV = v.shape[-1]
 
         c_state = (
-            c_initial
-            if c_initial is not None
-            else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
+            c_initial if c_initial is not None else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
         )
-        n_state = (
-            n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
-        )
+        n_state = n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
         m_state = m_initial if m_initial is not None else torch.zeros(B, NH, 1, device=k.device, dtype=torch.float32)
 
         if S > 1:
@@ -897,9 +893,9 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert not return_last_states, (
-                        "return_last_states=True is not supported with train_with_padding mode."
-                    )
+                    assert (
+                        not return_last_states
+                    ), "return_last_states=True is not supported with train_with_padding mode."
 
                 return self._train_fn(
                     q=q,
