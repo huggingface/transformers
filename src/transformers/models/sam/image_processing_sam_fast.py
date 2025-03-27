@@ -212,7 +212,14 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             # Resize if needed
             if do_resize:
                 target_size = self._get_preprocess_shape(image.shape[-2:], size["longest_edge"])
-                resized_image = F.resize(image, target_size, interpolation=interpolation)
+                # Handle None interpolation by using a default mode
+                resize_interpolation = interpolation
+                if resize_interpolation is None:
+                    if is_torchvision_v2_available():
+                        resize_interpolation = F.InterpolationMode.BILINEAR
+                    else:
+                        resize_interpolation = F.InterpolationMode.BILINEAR
+                resized_image = F.resize(image, target_size, interpolation=resize_interpolation)
                 reshaped_input_sizes.append(resized_image.shape[-2:])
             else:
                 resized_image = image
@@ -230,7 +237,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 pad_bottom = max(0, padded_height - input_height)
                 pad_right = max(0, padded_width - input_width)
                 padding = (0, 0, pad_right, pad_bottom)  # Left, Top, Right, Bottom
-                processed_image = F.pad(processed_image, padding, value=0)
+                processed_image = F.pad(processed_image, padding, fill=0)
 
             processed_images.append(processed_image)
 
@@ -263,10 +270,12 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 # Resize mask if needed (using nearest neighbor interpolation)
                 if do_resize and mask_size is not None:
                     mask_target_size = self._get_preprocess_shape(mask.shape[-2:], mask_size["longest_edge"])
+                    # Always use NEAREST for masks
+                    mask_interpolation = F.InterpolationMode.NEAREST
                     resized_mask = F.resize(
                         mask.float(),
                         mask_target_size,
-                        interpolation=F.InterpolationMode.NEAREST
+                        interpolation=mask_interpolation
                     )
                 else:
                     resized_mask = mask
@@ -278,7 +287,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                     pad_bottom = max(0, mask_pad_h - mask_h)
                     pad_right = max(0, mask_pad_w - mask_w)
                     padding = (0, 0, pad_right, pad_bottom)  # Left, Top, Right, Bottom
-                    resized_mask = F.pad(resized_mask, padding, value=0)
+                    resized_mask = F.pad(resized_mask, padding, fill=0)
                 
                 # Convert to torch.int64 and add to processed masks
                 processed_masks.append(resized_mask.long())
