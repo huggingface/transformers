@@ -149,42 +149,34 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
     """
     with open(filename, encoding="utf-8") as f:
         content = f.read()
-
-    def is_optional_import(node, parents):
-        for parent in parents:
-            # Anything in a Try block is optional
-            if isinstance(parent, ast.Try):
-                return True
-            # Anything in an `if is_flash_attn` block is optional
-            if isinstance(parent, ast.If):
-                test = parent.test
-                if isinstance(test, ast.Call) and test.func.id.startswith("is_flash_attn"):
-                    return True
-        return False
-
     imported_modules = set()
 
-    def visit(node, parents):
-        # Handle 'import x' statements
-        if isinstance(node, ast.Import):
-            if not is_optional_import(node, parents):
-                for alias in node.names:
-                    top_module = alias.name.split(".")[0]
+    def recursive_look_for_imports(node):
+        if isinstance(node, ast.Try):
+            return  #  Don't recurse into Try blocks and ignore imports in them
+        elif isinstance(node, ast.If):
+            test = node.test
+            if isinstance(test, ast.Call) and test.func.id.startswith("is_flash_attn"):
+                return  # Don't recurse into in "if flash_attn_available()" blocks and ignore imports in them
+        elif isinstance(node, ast.Import):
+            # Handle 'import x' statements
+            for alias in node.names:
+                top_module = alias.name.split(".")[0]
+                if top_module:
                     imported_modules.add(top_module)
-
-        # Handle 'from x import y' statements, ignoring relative imports
         elif isinstance(node, ast.ImportFrom):
-            if node.level == 0 and node.module and not is_optional_import(node, parents):
+            # Handle 'from x import y' statements, ignoring relative imports
+            if node.level == 0 and node.module:
                 top_module = node.module.split(".")[0]
-                imported_modules.add(top_module)
+                if top_module:
+                    imported_modules.add(top_module)
 
         # Recursively visit all children
         for child in ast.iter_child_nodes(node):
-            visit(child, parents + [node])
+            recursive_look_for_imports(child)
 
     tree = ast.parse(content)
-    visit(tree, [])
-    imported_modules.discard("")
+    recursive_look_for_imports(tree)
 
     return sorted(imported_modules)
 
