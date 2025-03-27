@@ -16,13 +16,12 @@
 
 import math
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -52,14 +51,10 @@ class TimesFmOutput(BaseModelOutput):
             The mean of the time series inputs.
         scale (`torch.Tensor` of shape `(batch_size,)`):
             The scale of the time series inputs.
-        past_key_values (`List[Cache]`, *optional*):
-            Contains the precomputed key and value hidden states of the attention blocks used for
-            faster decoding. Can be used as a cache for future predictions.
     """
 
     loc: Optional[torch.Tensor] = None
     scale: Optional[torch.Tensor] = None
-    past_key_values: Optional[List[Cache]] = None
 
 
 @dataclass
@@ -72,15 +67,11 @@ class TimesFmOutputForPrediction(BaseModelOutput):
             The full predictions of the time series including the mean and the quantiles.
         loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
             The loss of the TimesFM model.
-        past_key_values (`List[Cache]`, *optional*):
-            Contains the precomputed key and value hidden states of the attention blocks used for
-            faster decoding. Can be used as a cache for future predictions.
     """
 
     mean_predictions: Optional[torch.Tensor] = None
     full_predictions: Optional[torch.Tensor] = None
     loss: Optional[Union[torch.Tensor, float]] = None
-    past_key_values: Optional[List[Cache]] = None
 
 
 class TimesFmMLP(nn.Module):
@@ -233,8 +224,6 @@ class TimesFmAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, input_len = hidden_states.shape[:2]
@@ -244,12 +233,6 @@ class TimesFmAttention(nn.Module):
         query_states = self._scale_query(query_states)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        # Write new kv cache if past_key_value is provided
-        if past_key_value is not None and cache_position is not None:
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -291,8 +274,6 @@ class TimesFmDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
         # Self Attention
@@ -301,8 +282,6 @@ class TimesFmDecoderLayer(nn.Module):
         hidden_states, scores = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
             output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
@@ -340,11 +319,8 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     config_class = TimesFmConfig
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     main_input_name = "past_values"
     _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_static_cache = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
@@ -464,14 +440,10 @@ class TimesFmModel(TimesFmPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
         """
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
-        cache_position (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The position of the cache.
         """
         # Reshape into patches (using view for efficiency)
         bsize = past_values.shape[0]
@@ -524,8 +496,6 @@ class TimesFmModel(TimesFmPreTrainedModel):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 paddings=patched_padding,
-                past_key_value=past_key_values,
-                cache_position=cache_position,
                 output_attentions=output_attentions,
             )
             if output_attentions:
@@ -544,7 +514,6 @@ class TimesFmModel(TimesFmPreTrainedModel):
             attentions=all_attentions if output_attentions else None,
             loc=stats[0],
             scale=stats[1],
-            past_key_values=past_key_values,
         )
         return output if return_dict else output.to_tuple()
 
@@ -930,7 +899,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             mean_predictions=mean_outputs,
             full_predictions=full_outputs,
             loss=loss,
-            past_key_values=decoder_output.past_key_values,
         )
         return output if return_dict else output.to_tuple()
 
