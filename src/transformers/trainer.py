@@ -3217,9 +3217,8 @@ class Trainer:
         if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
             best_checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.best_global_step}"
             best_checkpoint_dir = os.path.join(run_dir, best_checkpoint_folder)
-
-            if os.path.exists(best_checkpoint_dir):
-                self.state.best_model_checkpoint = best_checkpoint_dir
+            os.makedirs(best_checkpoint_dir, exist_ok=True)
+            self.state.best_model_checkpoint = best_checkpoint_dir
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler
