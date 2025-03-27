@@ -445,50 +445,30 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
-        **kwargs,
-    ):
+    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: Union[int, List[int]]):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, List[int]]`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
+            vision_feature_layers (`Union[int, List[int]]`):
+                The vision feature layer, or the list of indexes of the layers to select
+                the vision feature.
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
 
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
-
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-            if vision_feature_select_strategy == "default":
-                selected_image_feature = selected_image_feature[:, 1:]
+        # If multiple feature layers are provided (which is usually the case)
+        # then the image features are concatenated after the CLS is removed.
+        if isinstance(vision_feature_layers, int):
+            image_features = image_outputs.hidden_states[vision_feature_layers][:, 1:]
         else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            # For default; crop CLS from each hidden state in the hidden state pool
-            if vision_feature_select_strategy == "default":
-                hs_pool = [hs[:, 1:] for hs in hs_pool]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        image_features = self.multi_modal_projector(selected_image_feature)
+            # Usually, we select the features from index 1: the layers -2, -5, -8, -11 and 6
+            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+            image_features = torch.cat(image_features, dim=-1)
+        image_features = self.multi_modal_projector(image_features)
         return image_features
 
     @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
@@ -612,7 +592,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
         return output if return_dict else output.to_tuple()
 
@@ -647,4 +627,4 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         return model_inputs
 
 
-__all__ = ["VipLlavaModel", "VipLlavaForConditionalGeneration"]
+__all__ = ["VipLlavaModel", "VipLlavaForConditionalGeneration", "VipLlavaPreTrainedModel"]

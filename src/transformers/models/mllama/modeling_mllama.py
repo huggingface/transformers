@@ -1993,7 +1993,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     """The Mllama model which consists of a vision encoder and a language model without language modeling head.""",
     MLLAMA_START_DOCSTRING,
 )
-class MllamaModel(MllamaPreTrainedModel, GenerationMixin):
+class MllamaModel(MllamaPreTrainedModel):
     _key_mapping = {"language_model.model": "language_model"}
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 

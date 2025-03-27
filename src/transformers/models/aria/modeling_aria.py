@@ -1351,28 +1351,6 @@ class AriaModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class AriaMultiModalProjector(nn.Module):
-    def __init__(self, config: AriaConfig):
-        super().__init__()
-        # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * num_feature_layers,
-            config.text_config.hidden_size,
-            bias=config.multimodal_projector_bias,
-        )
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
-        )
-
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-
 ARIA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor`, *optional*):
@@ -1435,8 +1413,7 @@ class AriaModel(AriaPreTrainedModel):
     def __init__(self, config: AriaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
-
-        self.multi_modal_projector = AriaMultiModalProjector(config)
+        self.multi_modal_projector = AriaProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 

@@ -8215,6 +8215,13 @@ class Qwen2_5_VLPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Qwen2_5_VLTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Qwen2AudioEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8293,6 +8300,13 @@ class Qwen2VLModel(metaclass=DummyObject):
 
 
 class Qwen2VLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2VLTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

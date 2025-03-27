@@ -299,6 +299,10 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_compile_model_forward(self):
         pass
 
+    @unittest.skip(reason="Vision backbone doesn't support FLEX yet!")
+    def test_flex_attention_with_grads(self):
+        pass
+
     @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
     def test_cpu_offload(self):
         pass

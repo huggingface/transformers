@@ -268,6 +268,10 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_fp32_ln(self):
         pass
 
+    @unittest.skip(reason="Vision backbone doesn't support FLEX yet!")
+    def test_flex_attention_with_grads(self):
+        pass
+
 
 @require_torch
 class GotOcr2IntegrationTest(unittest.TestCase):

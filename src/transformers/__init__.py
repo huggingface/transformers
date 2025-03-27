@@ -3420,6 +3420,7 @@ else:
         [
             "Qwen2_5_VLForConditionalGeneration",
             "Qwen2_5_VLModel",
+            "Qwen2_5_VLTextModel",
             "Qwen2_5_VLPreTrainedModel",
         ]
     )
@@ -3444,6 +3445,7 @@ else:
         [
             "Qwen2VLForConditionalGeneration",
             "Qwen2VLModel",
+            "Qwen2VLTextModel",
             "Qwen2VLPreTrainedModel",
         ]
     )
@@ -8287,6 +8289,7 @@ if TYPE_CHECKING:
             Qwen2_5_VLForConditionalGeneration,
             Qwen2_5_VLModel,
             Qwen2_5_VLPreTrainedModel,
+            Qwen2_5_VLTextModel,
         )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,
@@ -8305,6 +8308,7 @@ if TYPE_CHECKING:
             Qwen2VLForConditionalGeneration,
             Qwen2VLModel,
             Qwen2VLPreTrainedModel,
+            Qwen2VLTextModel,
         )
         from .models.rag import (
             RagModel,

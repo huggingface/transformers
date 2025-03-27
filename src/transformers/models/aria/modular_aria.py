@@ -1359,6 +1359,10 @@ ARIA_START_DOCSTRING = r"""
 
 
 class AriaModel(LlavaModel):
+    def __init__(self, config: AriaConfig):
+        super().__init__(config)
+        self.multi_modal_projector = AriaProjector(config)
+
     def _create_patch_attention_mask(self, pixel_mask):
         if pixel_mask is None:
             return None
