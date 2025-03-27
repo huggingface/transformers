@@ -956,13 +956,13 @@ class GraniteSpeechConformerBlock(nn.Module):
 
         self.post_norm = nn.LayerNorm(config.hidden_dim)
 
-    def forward(self, x, context_size):
-        x = 0.5 * self.ff1(x) + x
-        x = self.attn(x, context_size) + x
-        x = self.conv(x) + x
-        x = 0.5 * self.ff2(x) + x
-        x = self.post_norm(x)
-        return x
+    def forward(self, hidden_states, context_size):
+        hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
+        hidden_states = self.attn(hidden_states, context_size) + hidden_states
+        hidden_states = self.conv(hidden_states) + hidden_states
+        hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
+        hidden_states = self.post_norm(hidden_states)
+        return hidden_states
 
 
 GRANITE_SPEECH_START_DOCSTRING = r"""
