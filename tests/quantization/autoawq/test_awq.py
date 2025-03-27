@@ -41,7 +41,6 @@ if is_accelerate_available():
 
 @require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
-    @require_torch_gpu
     def test_wrong_backend(self):
         """
         Simple test that checks if a user passes a wrong backend an error is raised
