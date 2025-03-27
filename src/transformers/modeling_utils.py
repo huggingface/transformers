@@ -716,6 +716,7 @@ def _infer_parameter_dtype(
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
+    # This will check potential shape mismatch if skipped before
     module.load_state_dict({param_type: tensor}, strict=False, assign=True)
 
 
