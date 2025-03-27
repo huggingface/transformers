@@ -143,7 +143,7 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     # load original model from local path
-    loaded = torch.load(pretrained_model_weights_path, map_location=torch.device("cpu"))["model"]
+    loaded = torch.load(pretrained_model_weights_path, map_location=torch.device("cpu"), weights_only=True)["model"]
     # Renaming the original model state dictionary to HF compatibile
     all_keys = list(loaded.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
