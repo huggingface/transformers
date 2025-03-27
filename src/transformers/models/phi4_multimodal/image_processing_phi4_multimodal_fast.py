@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Processor class for Phi4Multimodal
-"""
-
 import math
 from typing import List, Optional, Union
 
@@ -57,7 +53,7 @@ class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
 
 @add_start_docstrings(
-    "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of Pan adn Scan cropping method.",
+    "Constructs a fast Phi4Multimodal image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         patch_size (`int`, *optional*):

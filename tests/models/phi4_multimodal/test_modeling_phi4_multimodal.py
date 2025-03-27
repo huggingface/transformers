@@ -301,7 +301,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path, revision="refs/pr/55")
         self.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
         self.user_token = "<|user|>"
         self.assistant_token = "<|assistant|>"
@@ -319,7 +319,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/55"
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
@@ -338,7 +338,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/55"
         )
 
         prompt = f"{self.user_token}<|image_1|>What is shown in this image?{self.end_token}{self.assistant_token}"
@@ -357,7 +357,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/55"
         )
 
         images = []
@@ -384,7 +384,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_soundfile
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/55"
         )
 
         prompt = f"{self.user_token}<|audio_1|>What is happening in this audio?{self.end_token}{self.assistant_token}"
