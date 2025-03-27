@@ -14,28 +14,28 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
+    BatchFeature,
+    DefaultFastImageProcessorKwargs,
+)
 from ...image_transforms import (
+    ChannelDimension,
+    get_resize_output_image_size,
+    get_size_with_aspect_ratio,
     group_images_by_shape,
     reorder_images,
-    get_size_with_aspect_ratio,
-    get_resize_output_image_size,
-    ChannelDimension
-)
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast, 
-    BatchFeature,
-    DefaultFastImageProcessorKwargs
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN, 
-    IMAGENET_STANDARD_STD, 
-    PILImageResampling, 
-    SizeDict, 
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ImageInput,
+    PILImageResampling,
+    SizeDict,
     get_image_size_for_max_height_width,
 )
 from ...processing_utils import Unpack
@@ -46,7 +46,6 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
-
 from .image_processing_idefics3 import get_resize_output_image_size as get_resize_output_max_side_image_size
 
 
@@ -171,9 +170,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             )
         elif size.longest_edge:
             new_size = get_resize_output_max_side_image_size(
-                image,
-                resolution_max_side=size.longest_edge,
-                input_data_format=ChannelDimension.FIRST
+                image, resolution_max_side=size.longest_edge, input_data_format=ChannelDimension.FIRST
             )
         elif size.shortest_edge:
             new_size = get_resize_output_image_size(
@@ -218,7 +215,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         """
         batch_size, num_channels, height, width = image.size()
         height_dim, width_dim = 2, 3
-         
+
         max_height = max_width = max_image_size["longest_edge"]
 
         frames = []
@@ -228,27 +225,27 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             num_splits_w = math.ceil(width / max_width)
 
             # Split the image by height, then by width
-            frames = (image.unfold(height_dim, size=max_height, step=max_height)
-                 .unfold(width_dim, size=max_width, step=max_width) 
-                 .contiguous()
-                 .view(batch_size, num_channels, -1, max_height, max_width)
-                 .permute(0, 2, 1, 3, 4)) # batch_size x n_frames x num_channels x height x width
+            frames = (
+                image.unfold(height_dim, size=max_height, step=max_height)
+                .unfold(width_dim, size=max_width, step=max_width)
+                .contiguous()
+                .view(batch_size, num_channels, -1, max_height, max_width)
+                .permute(0, 2, 1, 3, 4)
+            )  # batch_size x n_frames x num_channels x height x width
 
             # For the global image at the end, we resize it to match the max_image_size, for cpu memory efficiency
             global_image_height, global_image_width = max_height, max_width
             image = self.resize(
-                image,
-                SizeDict(height=global_image_height, width=global_image_width),
-                interpolation=interpolation
+                image, SizeDict(height=global_image_height, width=global_image_width), interpolation=interpolation
             )
-            
+
             frames = torch.cat((frames, image.unsqueeze(1)), dim=1)
         else:
             num_splits_h, num_splits_w = 0, 0
             frames = image.unsqueeze(1)
 
-        num_splits_h = [num_splits_h]*batch_size
-        num_splits_w = [num_splits_w]*batch_size
+        num_splits_h = [num_splits_h] * batch_size
+        num_splits_w = [num_splits_w] * batch_size
 
         return frames, num_splits_h, num_splits_w
 
@@ -281,9 +278,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             width = int(height * aspect_ratio)
             width = math.ceil(width / vision_encoder_max_size) * vision_encoder_max_size
         new_size = SizeDict(height=height, width=width)
-        return self.resize(
-            image, size=new_size, interpolation=interpolation
-        )
+        return self.resize(image, size=new_size, interpolation=interpolation)
 
     def pad(
         self,
@@ -354,14 +349,16 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
                 # for size=(10, max_image_size) -> rescaled_size=(max_image_size, max_image_size)
                 # for size=(11, max_image_size+1) -> rescaled_size=(max_image_size, max_image_size*2)
                 stacked_images = self.resize_for_vision_encoder(
-                    image=stacked_images, vision_encoder_max_size=max_image_size["longest_edge"], interpolation=interpolation
+                    image=stacked_images,
+                    vision_encoder_max_size=max_image_size["longest_edge"],
+                    interpolation=interpolation,
                 )
             else:
                 # We square the images to max_image_size
                 stacked_images = self.resize(
                     image=stacked_images,
                     size=SizeDict(height=max_image_size["longest_edge"], width=max_image_size["longest_edge"]),
-                    interpolation=interpolation
+                    interpolation=interpolation,
                 )
 
             resized_images_grouped[shape] = stacked_images
@@ -377,15 +374,14 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_image_splitting:
                 stacked_images, rows, cols = self.split_image(
-                    stacked_images,
-                    max_image_size=max_image_size,
-                    interpolation=interpolation
+                    stacked_images, max_image_size=max_image_size, interpolation=interpolation
                 )
             else:
                 stacked_images, rows, cols = (
-                    stacked_images.unsqueeze(1), 
-                    [0]*stacked_images.size(0),
-                    [0]*stacked_images.size(0))
+                    stacked_images.unsqueeze(1),
+                    [0] * stacked_images.size(0),
+                    [0] * stacked_images.size(0),
+                )
 
             processed_cols_grouped[shape] = cols
             processed_rows_grouped[shape] = rows
@@ -424,9 +420,11 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
 
         if do_pad:
             data["pixel_attention_mask"] = (
-                torch.stack(pixel_attention_mask, dim=0) if do_pad and return_tensors is not None else pixel_attention_mask
+                torch.stack(pixel_attention_mask, dim=0)
+                if do_pad and return_tensors is not None
+                else pixel_attention_mask
             )
-        
+
         encoding = BatchFeature(data=data, tensor_type=return_tensors)
 
         if return_row_col_info:
