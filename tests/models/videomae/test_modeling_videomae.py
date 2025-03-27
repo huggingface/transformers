@@ -15,14 +15,24 @@
 """Testing suite for the PyTorch VideoMAE model."""
 
 import copy
+import tempfile
 import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from pytest import mark
 
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -338,6 +348,59 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_2_inference_equivalence(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                outputs = model(**inputs_dict, output_hidden_states=True)
+                outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(**inputs_dict)
+
+    @unittest.skip("Not applicable for VideoMAE")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
 
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
@@ -393,7 +456,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         # add boolean mask, indicating which patches to mask
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
+        inputs["bool_masked_pos"] = torch.load(local_path, weights_only=True)
 
         # forward pass
         with torch.no_grad():

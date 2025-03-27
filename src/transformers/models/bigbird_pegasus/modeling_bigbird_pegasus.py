@@ -2479,6 +2479,11 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self.model._tie_weights()
+            self._tie_or_clone_weights(self.lm_head, self.model.shared)
+
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(BIGBIRD_PEGASUS_GENERATION_EXAMPLE)

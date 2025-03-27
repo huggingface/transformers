@@ -14,7 +14,7 @@
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Optional
 
 from .training_args import TrainingArguments
 from .utils import cached_property, is_tf_available, logging, requires_backends
@@ -189,7 +189,7 @@ class TFTrainingArguments(TrainingArguments):
     xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
-    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
+    def _setup_strategy(self) -> tuple["tf.distribute.Strategy", int]:
         requires_backends(self, ["tf"])
         logger.info("Tensorflow: setting up strategy")
 

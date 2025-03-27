@@ -513,7 +513,7 @@ def find_all_dependencies(
     all_dependencies = set()
     all_dependencies_with_parent = []
     checked_dependencies = set(initial_checked_dependencies)
-    parents = {initial_dep: start_entity for initial_dep in initial_dependencies}
+    parents = dict.fromkeys(initial_dependencies, start_entity)
     while len(dependency_queue) > 0:
         # Pick element to visit
         current = dependency_queue.popleft()
@@ -524,7 +524,7 @@ def find_all_dependencies(
             if current in dependency_mapping.keys():
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
-                parents.update({dep: current for dep in dependency_mapping[current]})
+                parents.update(dict.fromkeys(dependency_mapping[current], current))
             # add visited node to the list
             checked_dependencies.add(current)
 
@@ -536,6 +536,9 @@ def find_all_dependencies(
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
 ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+
+# Top-level variables that match the following patterns will use the value in the `modular_xxx.py` file only if they are not None
+ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE = [r"_DOCSTRING"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -854,13 +857,17 @@ class ModelFileMapper(ModuleMapper):
         """Update the global nodes with the assignment from the modular file.
 
         Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
-        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
-        big docstrings.
+        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE` and its value is not None, or if it matches a pattern in `ASSIGNMENTS_REGEX_TO_KEEP.
+        Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the big docstrings.
         """
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
 
-            if should_keep or assignment not in self.assignments:
+            should_keep_if_not_none = any(
+                re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE
+            ) and not (hasattr(node.body[0].value, "value") and node.body[0].value.value == "None")
+
+            if should_keep or should_keep_if_not_none or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]

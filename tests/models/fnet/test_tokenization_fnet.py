@@ -141,7 +141,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.sep_token_id
         ]
 
-    # Overriden Tests - loading the fast tokenizer from slow just takes too long
+    # Overridden Tests - loading the fast tokenizer from slow just takes too long
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -190,7 +190,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in p_output)
                 self.assertTrue(special_token_id in cr_output)
 
-    # Overriden Tests
+    # Overridden Tests
     def test_padding(self, max_length=50):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions

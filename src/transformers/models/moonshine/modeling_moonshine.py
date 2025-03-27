@@ -437,7 +437,7 @@ class MoonshineEncoderLayer(nn.Module):
 
 
 class MoonshineDecoderLayer(nn.Module):
-    def __init__(self, config: MoonshineConfig, layer_idx: int = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -999,7 +999,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():

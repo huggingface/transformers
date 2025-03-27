@@ -652,7 +652,7 @@ class WhisperEncoderLayer(nn.Module):
 
 
 class WhisperDecoderLayer(nn.Module):
-    def __init__(self, config: WhisperConfig, layer_idx: int = None):
+    def __init__(self, config: WhisperConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -1043,9 +1043,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            assert head_mask.size()[0] == (len(self.layers)), (
+                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            )
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1378,7 +1378,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():

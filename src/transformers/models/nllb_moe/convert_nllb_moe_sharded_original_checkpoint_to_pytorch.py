@@ -82,7 +82,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             remove_ignore_keys_(expert_state)
             expert_state = rename_fairseq_keys(expert_state, expert)
             save_path = os.path.join(
-                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
+                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts) + 1:05d}-of-???.bin")
             )
             torch.save(expert_state, save_path)
             sharded_state_dicts.append(expert_state.keys())
@@ -91,7 +91,9 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             )
 
     # Add the last block
-    save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
+    save_path = os.path.join(
+        dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts) + 1:05d}-of-???.bin")
+    )
     shared_weights = torch.load(switch_checkpoint_path + "-shared.pt")["model"]
     remove_ignore_keys_(shared_weights)
     shared_weights = rename_fairseq_keys(shared_weights, None)
@@ -108,8 +110,8 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
     # Otherwise, let's build the index
     weight_map = {}
     for idx, shard in enumerate(sharded_state_dicts):
-        shard_file = weights_name.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
-        temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin"))
+        shard_file = weights_name.replace(".bin", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.bin")
+        temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx + 1:05d}-of-???.bin"))
         os.rename(temp_filename, os.path.join(dump_path, shard_file))
         for key in shard:
             weight_map[key] = shard_file

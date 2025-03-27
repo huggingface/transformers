@@ -40,7 +40,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -386,8 +385,8 @@ class Zamba2Attention(nn.Module):
         self,
         config: Zamba2Config,
         layer_idx: Optional[int] = None,
-        num_fwd_mem_blocks: int = None,
-        block_id: int = None,
+        num_fwd_mem_blocks: Optional[int] = None,
+        block_id: Optional[int] = None,
     ):
         super().__init__()
         self.config = config
@@ -561,7 +560,7 @@ class Zamba2MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: Zamba2Config, layer_idx: int = None):
+    def __init__(self, config: Zamba2Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -984,7 +983,7 @@ class Zamba2MambaMixer(nn.Module):
 
 
 class Zamba2MLP(nn.Module):
-    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int = None):
+    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: Optional[int] = None):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
@@ -1026,7 +1025,7 @@ class Zamba2MLP(nn.Module):
 
 
 class Zamba2AttentionDecoderLayer(nn.Module):
-    def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
+    def __init__(self, config: Zamba2Config, block_id: Optional[int] = None, layer_idx: Optional[int] = None):
         super().__init__()
         self.block_id = block_id
         num_gs = len(config.hybrid_layer_ids)
@@ -1100,7 +1099,7 @@ class Zamba2MambaDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Zamba2HybridDynamicCache] = None,
@@ -1170,7 +1169,7 @@ class Zamba2HybridLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Zamba2HybridDynamicCache] = None,
@@ -1762,7 +1761,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             #              (we can't check exception 3 while compiling)
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -1878,7 +1877,7 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
