@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Beit."""
 
-from typing import Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torchvision.transforms import functional as F
@@ -34,6 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    is_torch_tensor,
     pil_torch_interpolation_mapping,
     validate_kwargs,
 )
@@ -128,12 +129,6 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
 
-    def _preprocess_images(self, images: ImageInput, **kwargs):
-        return self._preprocess(
-            images,
-            **kwargs,
-        )
-
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
@@ -144,8 +139,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
-        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs)
-        segmentation_maps = [seg_map.to(torch.uint64) for seg_map in segmentation_maps]
+        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
         return segmentation_maps
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
@@ -185,7 +179,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         )
 
         # Prepare segmentation maps
-        if segmentation_maps:
+        if segmentation_maps is not None:
             segmentation_maps = self._prepare_input_images(
                 images=segmentation_maps,
                 do_convert_rgb=do_convert_rgb,
@@ -209,20 +203,63 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        images = self._preprocess_images(
+        images = self._preprocess(
             images=images,
             **kwargs,
         )
         data = {"pixel_values": images}
 
-        if segmentation_maps:
+        if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
                 **kwargs,
             )
             data["labels"] = segmentation_maps
 
-        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+        return BatchFeature(data=data)
+
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`BeitForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        # TODO: add support for other frameworks
+        logits = outputs.logits
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            semantic_segmentation = []
+
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
 
 
 __all__ = ["BeitImageProcessorFast"]
