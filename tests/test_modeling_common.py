@@ -31,6 +31,7 @@ import numpy as np
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
+from unittest.mock import patch
 
 from transformers import (
     AutoModel,
@@ -508,14 +509,20 @@ class ModelTesterMixin:
     def test_can_init_all_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
-            # _init_weights() does not take all weights into account correctly
-            set_seed(0)
-            model_from_config = model_class(config)
-            set_seed(0)
-            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
-            # by _init_weights()
-            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
+
+            # Monkey patch the method to add a seed
+            module_class_name = str(model_class).split("'")[1]
+            original_init_weights = model_class._init_weights
+            def seeded_init_weights(self, module):
+                set_seed(0)
+                original_init_weights(self, module)
+            with patch(module_class_name, _init_weights=seeded_init_weights) as patched_class:
+                # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+                # _init_weights() does not take all weights into account correctly
+                model_from_config = patched_class(config)
+                # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+                # by _init_weights()
+                model_from_pretrained = patched_class.from_pretrained(None, config=config, state_dict={})
 
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
@@ -523,6 +530,8 @@ class ModelTesterMixin:
                 model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
             ):
                 self.assertEqual(k1, k2, "The keys from each model should be the same")
+                # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
+                # to very low std in init function)
                 if not (v1 == v2).all():
                     different_weights.append(k1)
 
