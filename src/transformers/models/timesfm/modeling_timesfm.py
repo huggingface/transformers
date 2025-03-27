@@ -251,8 +251,8 @@ class TimesFmAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch_size, input_len = hidden_states.shape[:2]
-        hidden_shape = (batch_size, -1, self.num_heads, self.head_dim)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         query_states = self._scale_query(query_states)
@@ -279,7 +279,7 @@ class TimesFmAttention(nn.Module):
             scaling=1.0,
             **kwargs,
         )
-        attn_output = attn_output.reshape(batch_size, input_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
