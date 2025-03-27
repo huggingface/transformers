@@ -799,14 +799,11 @@ class ProcessorTesterMixin:
             # the reloaded tokenizer should get the chat template as well
             self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.chat_template = {"default": "a", "secondary": "b"}
-            processor.save_pretrained(tmpdirname, save_jinja_files=False)
-            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
-            self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
-            self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
-            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
-            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+        with self.assertRaises(ValueError):
+            # Saving multiple templates in the legacy format is not permitted
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                processor.chat_template = {"default": "a", "secondary": "b"}
+                processor.save_pretrained(tmpdirname, save_jinja_files=False)
 
     @require_torch
     def _test_apply_chat_template(
