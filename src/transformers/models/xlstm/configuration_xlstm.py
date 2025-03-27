@@ -29,14 +29,34 @@ if is_xlstm_available():
         round_up_to_next_multiple_of,
         xLSTMLargeConfig,
     )
+
+    external_xlstm = True
 else:
-    xLSTMLargeConfig = None
-    BackendModeType = None
-    ChunkwiseKernelType = None
-    DtypeType = None
-    SequenceKernelType = None
-    StepKernelType = None
-    WeightModeType = None
+    from typing import Literal
+
+    import torch
+
+    mLSTMLayerStateType = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    mLSTMStateType = dict[int, mLSTMLayerStateType]
+
+    WeightModeType = Literal["single", "fused"]
+
+    ChunkwiseKernelType = Literal[
+        "chunkwise--native_autograd",
+        "parallel--native_autograd",
+    ]
+    SequenceKernelType = Literal["native_sequence__native"]
+    StepKernelType = Literal["native"]
+
+    DtypeType = Literal["float32", "bfloat16", "float16"]
+
+    BackendModeType = Literal["train", "train_with_padding", "inference"]
+
+    def round_up_to_next_multiple_of(x: int, multiple_of: int) -> int:
+        """Rounds up x to the next multiple of multiple_of."""
+        return int(((x + multiple_of - 1) // multiple_of) * multiple_of)
+
+    external_xlstm = False
 
 
 logger = logging.get_logger(__name__)
@@ -245,33 +265,36 @@ class xLSTMConfig(PretrainedConfig):
         return self.v_dim // self.num_heads
 
     def to_xlstm_block_config(self):
-        return xLSTMLargeConfig(
-            vocab_size=self.vocab_size,
-            embedding_dim=self.embedding_dim,
-            num_blocks=self.num_blocks,
-            num_heads=self.num_heads,
-            use_bias=self.use_bias,
-            add_out_norm=self.add_out_norm,
-            norm_eps=self.norm_eps,
-            norm_reduction_force_float32=self.norm_reduction_force_float32,
-            # mlstm_layer
-            qk_dim_factor=self.qk_dim_factor,
-            v_dim_factor=self.v_dim_factor,
-            # mlstm backend
-            chunkwise_kernel=self.chunkwise_kernel,
-            sequence_kernel=self.sequence_kernel,
-            step_kernel=self.step_kernel,
-            mode=self.mode,
-            chunk_size=self.chunk_size,
-            return_last_states=self.return_last_states,
-            autocast_kernel_dtype=self.autocast_kernel_dtype,
-            eps=self.eps,
-            inference_state_dtype=self.inference_state_dtype,
-            # feedforward
-            ffn_proj_factor=self.ffn_proj_factor,
-            ffn_round_up_to_multiple_of=self.ffn_round_up_to_multiple_of,
-            # capping
-            gate_soft_cap=self.gate_soft_cap,
-            output_logit_soft_cap=self.output_logit_soft_cap,
-            weight_mode=self.weight_mode,
-        )
+        if external_xlstm:
+            return xLSTMLargeConfig(
+                vocab_size=self.vocab_size,
+                embedding_dim=self.embedding_dim,
+                num_blocks=self.num_blocks,
+                num_heads=self.num_heads,
+                use_bias=self.use_bias,
+                add_out_norm=self.add_out_norm,
+                norm_eps=self.norm_eps,
+                norm_reduction_force_float32=self.norm_reduction_force_float32,
+                # mlstm_layer
+                qk_dim_factor=self.qk_dim_factor,
+                v_dim_factor=self.v_dim_factor,
+                # mlstm backend
+                chunkwise_kernel=self.chunkwise_kernel,
+                sequence_kernel=self.sequence_kernel,
+                step_kernel=self.step_kernel,
+                mode=self.mode,
+                chunk_size=self.chunk_size,
+                return_last_states=self.return_last_states,
+                autocast_kernel_dtype=self.autocast_kernel_dtype,
+                eps=self.eps,
+                inference_state_dtype=self.inference_state_dtype,
+                # feedforward
+                ffn_proj_factor=self.ffn_proj_factor,
+                ffn_round_up_to_multiple_of=self.ffn_round_up_to_multiple_of,
+                # capping
+                gate_soft_cap=self.gate_soft_cap,
+                output_logit_soft_cap=self.output_logit_soft_cap,
+                weight_mode=self.weight_mode,
+            )
+        else:
+            return self
