@@ -51,7 +51,6 @@ class TestTensorParallel(TestCasePlus):
     def test_model_forward(self):
         script_to_run = textwrap.dedent(
             """
-            print("+"*200)
             import torch
             import os
             from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -61,11 +60,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            print(rank)
-            print(world_size)
-
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
-            print(model)
             torch.distributed.barrier()
 
             has_dtensor = 0
