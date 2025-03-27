@@ -14,11 +14,29 @@
 # limitations under the License.
 """Fast Image processor class for EfficientNet."""
 
-from typing import Any, Optional, TypedDict, Union
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
-from ...utils import add_start_docstrings, TensorType
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 @add_start_docstrings(
@@ -52,6 +70,7 @@ def _preprocess(
     rescale_factor: float,
     rescale_offset: bool,
     do_normalize: bool,
+    include_top: bool,
     image_mean: Optional[Union[float, list[float]]],
     image_std: Optional[Union[float, list[float]]],
     return_tensors: Optional[Union[str, TensorType]],
