@@ -104,7 +104,7 @@ class FastSpeech2ConformerModelTester:
         # check batch sizes match
         for value in result.values():
             self.parent.assertEqual(value.size(0), self.batch_size)
-        # check duration, pitch, and energy have the appopriate shapes
+        # check duration, pitch, and energy have the appropriate shapes
         # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
         self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
         self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)
@@ -390,7 +390,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-4))
+        torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-4, atol=1e-4)
         self.assertEqual(spectrogram.shape, (1, 205, model.config.num_mel_bins))
 
     def test_training_integration(self):
@@ -447,8 +447,8 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         expected_loss = torch.tensor(74.4595, device=torch_device)
 
-        self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-3))
-        self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
+        torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(loss, expected_loss, rtol=1e-4, atol=1e-4)
         self.assertEqual(spectrogram.shape, (1, 224, model.config.num_mel_bins))
 
 
@@ -527,7 +527,7 @@ class FastSpeech2ConformerWithHifiGanTester:
         # check batch sizes match
         for value in result.values():
             self.parent.assertEqual(value.size(0), self.batch_size)
-        # check duration, pitch, and energy have the appopriate shapes
+        # check duration, pitch, and energy have the appropriate shapes
         # duration: (batch_size, max_text_length), pitch and energy: (batch_size, max_text_length, 1)
         self.parent.assertEqual(result["duration_outputs"].shape + (1,), result["pitch_outputs"].shape)
         self.parent.assertEqual(result["pitch_outputs"].shape, result["energy_outputs"].shape)
@@ -803,5 +803,5 @@ class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(waveform[0, :100], expected_waveform, atol=1e-4))
+        torch.testing.assert_close(waveform[0, :100], expected_waveform, rtol=1e-4, atol=1e-4)
         self.assertEqual(waveform.shape, (1, 52480))

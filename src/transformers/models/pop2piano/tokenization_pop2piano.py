@@ -714,3 +714,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return BatchEncoding({"notes": notes_list, "pretty_midi_objects": pretty_midi_objects_list})
 
         return BatchEncoding({"notes": notes_list})
+
+
+__all__ = ["Pop2PianoTokenizer"]

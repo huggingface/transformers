@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # MaskFormer
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 <Tip>
 
 This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight

@@ -17,7 +17,7 @@ import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -73,7 +73,8 @@ class PaliGemmaConfig(PretrainedConfig):
     ```"""
 
     model_type = "paligemma"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -145,3 +146,6 @@ class PaliGemmaConfig(PretrainedConfig):
         output = super().to_dict()
         output.pop("_ignore_index", None)
         return output
+
+
+__all__ = ["PaliGemmaConfig"]

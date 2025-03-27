@@ -163,7 +163,6 @@ def prepare_fsmt_inputs_dict(
 @require_torch
 class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FSMTModel,
@@ -262,20 +261,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-
-    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = FSMTModel(config).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (inputs_dict["input_ids"], inputs_dict["attention_mask"]),
-                f"{tmpdirname}/fsmt_test.onnx",
-                export_params=True,
-                opset_version=12,
-                input_names=["input_ids", "attention_mask"],
-            )
 
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -513,7 +498,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-1.5753, -1.5753, 2.8975], [-0.9540, -0.9540, 1.0299], [-3.3131, -3.3131, 0.5219]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def translation_setup(self, pair):
         text = {
@@ -608,6 +593,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         )
         no_cache_pad_zero = emb1(input_ids)[0]
         # XXX: only the 1st line matches the 3rd
-        self.assertTrue(
-            torch.allclose(torch.tensor(desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3)
+        torch.testing.assert_close(
+            torch.tensor(desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], rtol=1e-3, atol=1e-3
         )

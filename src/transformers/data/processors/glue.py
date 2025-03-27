@@ -101,7 +101,7 @@ if is_tf_available():
 
         return tf.data.Dataset.from_generator(
             gen,
-            ({k: tf.int32 for k in input_names}, label_type),
+            (dict.fromkeys(input_names, tf.int32), label_type),
             ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
 

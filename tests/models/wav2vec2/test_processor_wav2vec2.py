@@ -22,10 +22,15 @@ from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureEx
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
+from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_wav2vec2 import floats_list
 
 
-class Wav2Vec2ProcessorTest(unittest.TestCase):
+class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Wav2Vec2Processor
+    audio_input_name = "input_values"
+    text_input_name = "labels"
+
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
@@ -52,6 +57,9 @@ class Wav2Vec2ProcessorTest(unittest.TestCase):
 
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
+
+        tokenizer = self.get_tokenizer()
+        tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()
@@ -117,7 +125,6 @@ class Wav2Vec2ProcessorTest(unittest.TestCase):
         processor = Wav2Vec2Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
-
         encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str)

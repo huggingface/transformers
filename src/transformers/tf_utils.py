@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -25,7 +25,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
+def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> list[int]:
     """
     Deal with dynamic shape in tensorflow cleanly.
 

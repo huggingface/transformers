@@ -16,6 +16,7 @@ import json
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
+from typing import Optional
 
 import numpy as np
 from tqdm import tqdm
@@ -249,7 +250,7 @@ def squad_convert_example_to_features(
         else:
             p_mask[-len(span["tokens"]) : -(len(truncated_query) + sequence_added_tokens)] = 0
 
-        pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
+        pad_token_indices = np.where(np.atleast_1d(span["input_ids"] == tokenizer.pad_token_id))
         special_token_indices = np.asarray(
             tokenizer.get_special_tokens_mask(span["input_ids"], already_has_special_tokens=True)
         ).nonzero()
@@ -800,8 +801,8 @@ class SquadFeatures:
         start_position,
         end_position,
         is_impossible,
-        qas_id: str = None,
-        encoding: BatchEncoding = None,
+        qas_id: Optional[str] = None,
+        encoding: Optional[BatchEncoding] = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask

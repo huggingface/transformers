@@ -419,6 +419,31 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_return_none(self):
+        def fn(x: int) -> None:
+            """
+            Test function
+
+            Args:
+                x: The first input
+            """
+            pass
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The first input"},
+                },
+                "required": ["x"],
+            },
+            "return": {"type": "null"},
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_everything_all_at_once(self):
         def fn(
             x: str, y: Optional[List[Union[str, int]]], z: Tuple[Union[str, int], str] = (42, "hello")

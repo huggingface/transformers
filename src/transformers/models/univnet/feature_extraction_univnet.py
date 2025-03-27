@@ -370,7 +370,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -454,3 +454,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 del output[name]
 
         return output
+
+
+__all__ = ["UnivNetFeatureExtractor"]

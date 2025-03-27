@@ -225,6 +225,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             Minimum length of each question in terms of tokens (will be skipped otherwise).
         max_question_length (`int`, *optional*):
             Maximum length of each question in terms of tokens (will be skipped otherwise).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -252,6 +255,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         max_question_length=None,
         model_max_length: int = 512,
         additional_special_tokens: Optional[List[str]] = None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         if not is_pandas_available():
@@ -322,6 +326,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             max_question_length=max_question_length,
             model_max_length=model_max_length,
             additional_special_tokens=additional_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -517,7 +522,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -634,7 +639,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -743,7 +748,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = None,
@@ -804,7 +809,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -922,7 +927,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1005,7 +1010,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -1065,7 +1070,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -1770,7 +1775,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -2782,3 +2787,6 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
             table.iloc[row_index, col_index].numeric_value = numeric_value
 
     return table
+
+
+__all__ = ["TapasTokenizer"]

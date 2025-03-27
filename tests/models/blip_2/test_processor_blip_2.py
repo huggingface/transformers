@@ -94,7 +94,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         encoded_tok = tokenizer(input_str, return_token_type_ids=False)
 
         for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
+            self.assertListEqual(encoded_tok[key], encoded_processor[key][0])
 
     def test_processor(self):
         image_processor = self.get_image_processor()
@@ -107,7 +107,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -138,4 +138,4 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])

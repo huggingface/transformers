@@ -245,26 +245,26 @@ class StopStringCriteria(StoppingCriteria):
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
-            token_list, token_indices, self.stop_strings, tokenizer
+            token_list, token_indices, tokenizer
         )
 
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
-    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, stop_strings, tokenizer):
+    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
-        if (token_list, token_indices, stop_strings) in STOP_STRING_EMBEDDING_CACHE:
+        if (token_list, token_indices, self.stop_strings) in STOP_STRING_EMBEDDING_CACHE:
             embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[
                 (token_list, token_indices, self.stop_strings)
             ]
-            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, stop_strings))
+            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, self.stop_strings))
         else:
             clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(tokenizer)
             embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
-                clean_token_list, clean_token_indices, stop_strings
+                clean_token_list, clean_token_indices, self.stop_strings
             )
-            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, stop_strings)] = (
+            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, self.stop_strings)] = (
                 embedding_vec,
                 max_valid_positions,
                 max_valid_end_lens,
@@ -357,7 +357,9 @@ class StopStringCriteria(StoppingCriteria):
             )
         max_valid_end_lens = max(valid_end_lens)
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
-        gather_vec = np.full((len(token_list), vec_size), dtype=np.int32, fill_value=-1)
+        # We use +2 instead of +1 so we can have a dummy entry at the end. We will clamp all token values
+        # over the max to this, ensuring they do not contribute to stop string matching.
+        gather_vec = np.full((max(token_indices) + 2, vec_size), dtype=np.int32, fill_value=-1)
 
         for i, stop_string in enumerate(stop_strings):
             positions = token_valid_positions[stop_string]
@@ -394,6 +396,9 @@ class StopStringCriteria(StoppingCriteria):
 
         # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
+
+        # Clip out-of-vocab values to the dummy value at the end of the embedding vector
+        flipped_ids = torch.clamp(flipped_ids, max=self.embedding_vec.size(0) - 1)
 
         # Size of the vector of positions a single token can match
         max_valid_positions = self.max_valid_positions

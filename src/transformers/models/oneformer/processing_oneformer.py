@@ -82,7 +82,7 @@ class OneFormerProcessor(ProcessorMixin):
         `task_inputs` and `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not
         `None` to encode. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         OneFormerImageProcessor's [`~OneFormerImageProcessor.__call__`] if `images` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        docstring of the above two methods for more information.
 
         Args:
             task_inputs (`str`, `List[str]`):
@@ -202,3 +202,6 @@ class OneFormerProcessor(ProcessorMixin):
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_panoptic_segmentation(*args, **kwargs)
+
+
+__all__ = ["OneFormerProcessor"]

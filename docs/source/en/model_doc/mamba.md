@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Mamba
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Mamba model was proposed in [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://arxiv.org/abs/2312.00752) by Albert Gu and Tri Dao.
@@ -39,8 +43,8 @@ The original code can be found [here](https://github.com/state-spaces/mamba).
 
 # Usage
 
-### A simple generation example: 
-```python 
+### A simple generation example:
+```python
 from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
 import torch
 
@@ -55,7 +59,7 @@ print(tokenizer.batch_decode(out))
 ### Peft finetuning
 The slow version is not very stable for training, and the fast one needs `float32`!
 
-```python 
+```python
 from datasets import load_dataset
 from trl import SFTTrainer
 from peft import LoraConfig
@@ -80,7 +84,7 @@ lora_config =  LoraConfig(
 )
 trainer = SFTTrainer(
     model=model,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     args=training_args,
     peft_config=lora_config,
     train_dataset=dataset,

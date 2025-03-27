@@ -28,6 +28,7 @@ from transformers import (
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
+    LlamaTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
     TensorType,
@@ -47,6 +48,7 @@ from transformers.testing_utils import (
 
 
 if is_tokenizers_available():
+    import tokenizers
     from tokenizers import Tokenizer
     from tokenizers.models import WordPiece
 
@@ -280,6 +282,54 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_flat, "##：")
                 self.assertEqual(decoded_list, "##：")
 
+    def test_extra_special_tokens_multimodal(self):
+        special_tokens_list = [
+            "bos_token",
+            "eos_token",
+            "unk_token",
+            "sep_token",
+            "pad_token",
+            "cls_token",
+            "mask_token",
+            "additional_special_tokens",
+        ]
+        llama_tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        llama_tokenizer.extra_special_tokens = {
+            "boi_token": "<image_start>",
+            "eoi_token": "<image_end>",
+            "image_token": "<image>",
+        }
+        self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            llama_tokenizer.save_pretrained(tmpdirname)
+
+            # load back and check we have extra special tokens set
+            loaded_tokenizer = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            multimodal_special_tokens_list = special_tokens_list + ["boi_token", "eoi_token", "image_token"]
+            self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
+
+            # We set an image_token_id before, so we can get an "image_token" as str that matches the id
+            self.assertTrue(loaded_tokenizer.image_token == "<image>")
+            self.assertTrue(loaded_tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+
+        # save one more time and make sure the image token can get loaded back
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            loaded_tokenizer.save_pretrained(tmpdirname)
+            loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "<image>")
+
+        # test that we can also indicate extra tokens during load time
+        extra_special_tokens = {
+            "boi_token": "<image_start>",
+            "eoi_token": "<image_end>",
+            "image_token": "<image>",
+        }
+        tokenizer = LlamaTokenizerFast.from_pretrained(
+            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
+        )
+        self.assertTrue(tokenizer.image_token == "<image>")
+        self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
+
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):
         for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
@@ -379,3 +429,21 @@ class TokenizerUtilsTest(unittest.TestCase):
         # Now this will try to import sentencepiece_model_pb2_new.py. This should not fail even if the protobuf
         # was already imported.
         import_protobuf()
+
+    def test_training_new_tokenizer_edge_cases(self):
+        _tokenizer = Tokenizer(tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")]))
+        _tokenizer.pre_tokenizer = None
+
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        toy_text_iterator = ("a" for _ in range(1000))
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+        _tokenizer.normalizer = None
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        toy_text_iterator = ("a" for _ in range(1000))
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+        _tokenizer.post_processor = None
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        toy_text_iterator = ("a" for _ in range(1000))
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)

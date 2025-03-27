@@ -385,6 +385,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         assert fast == [1, 319, 4559, 1243]
 
         fast_tokenizer.add_eos_token = True
+        print(fast_tokenizer.add_eos_token)
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [1, 319, 4559, 1243, 2]
 

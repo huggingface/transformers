@@ -106,6 +106,12 @@ class Text2TextGenerationPipeline(Pipeline):
                 )
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, postprocess_params
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
@@ -284,7 +290,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             logger.warning(
                 f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
                 "a summarization task, where outputs shorter than the input are typically wanted, you might "
-                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
+                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length // 2})"
             )
 
 

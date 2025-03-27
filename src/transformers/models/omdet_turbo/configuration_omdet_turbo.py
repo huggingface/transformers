@@ -134,10 +134,10 @@ class OmDetTurboConfig(PretrainedConfig):
     ```python
     >>> from transformers import OmDetTurboConfig, OmDetTurboForObjectDetection
 
-    >>> # Initializing a OmDet-Turbo omlab/omdet-turbo-tiny style configuration
+    >>> # Initializing a OmDet-Turbo omlab/omdet-turbo-swin-tiny-hf style configuration
     >>> configuration = OmDetTurboConfig()
 
-    >>> # Initializing a model (with random weights) from the omlab/omdet-turbo-tiny style configuration
+    >>> # Initializing a model (with random weights) from the omlab/omdet-turbo-swin-tiny-hf style configuration
     >>> model = OmDetTurboForObjectDetection(configuration)
 
     >>> # Accessing the model configuration
@@ -288,3 +288,6 @@ class OmDetTurboConfig(PretrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+
+__all__ = ["OmDetTurboConfig"]

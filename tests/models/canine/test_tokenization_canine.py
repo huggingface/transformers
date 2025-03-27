@@ -64,7 +64,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_encoding_keys(self):
         tokenizer = self.canine_tokenizer
-        src_text = ["Once there was a man.", "He wrote a test in HuggingFace Tranformers."]
+        src_text = ["Once there was a man.", "He wrote a test in HuggingFace Transformers."]
         batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids, attention_mask and token_type_ids are returned
         self.assertIn("input_ids", batch)

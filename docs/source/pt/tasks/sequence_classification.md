@@ -134,7 +134,7 @@ Nesse ponto, restam apenas três passos:
 ...     args=training_args,
 ...     train_dataset=tokenized_imdb["train"],
 ...     eval_dataset=tokenized_imdb["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )
 

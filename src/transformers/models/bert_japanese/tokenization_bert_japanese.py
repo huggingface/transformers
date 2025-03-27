@@ -380,7 +380,7 @@ class MecabTokenizer:
         do_lower_case=False,
         never_split=None,
         normalize_text=True,
-        mecab_dic: Optional[str] = "ipadic",
+        mecab_dic: Optional[str] = "unidic_lite",
         mecab_option: Optional[str] = None,
     ):
         """
@@ -977,3 +977,6 @@ class SentencepieceTokenizer:
                 new_pieces.append(piece)
 
         return new_pieces
+
+
+__all__ = ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"]

@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Grounding DINO
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Grounding DINO model was proposed in [Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection](https://arxiv.org/abs/2303.05499) by Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, Lei Zhang. Grounding DINO extends a closed-set object detection model with a text encoder, enabling open-set object detection. The model achieves remarkable results, such as 52.5 AP on COCO zero-shot.
@@ -56,9 +60,9 @@ Here's how to use the model for zero-shot object detection:
 >>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(image_url, stream=True).raw)
 >>> # Check for cats and remote controls
->>> text = "a cat. a remote control."
+>>> text_labels = [["a cat", "a remote control"]]
 
->>> inputs = processor(images=image, text=text, return_tensors="pt").to(device)
+>>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
@@ -69,12 +73,14 @@ Here's how to use the model for zero-shot object detection:
 ...     text_threshold=0.3,
 ...     target_sizes=[image.size[::-1]]
 ... )
->>> print(results)
-[{'boxes': tensor([[344.6959,  23.1090, 637.1833, 374.2751],
-        [ 12.2666,  51.9145, 316.8582, 472.4392],
-        [ 38.5742,  70.0015, 176.7838, 118.1806]], device='cuda:0'),
-  'labels': ['a cat', 'a cat', 'a remote control'],
-  'scores': tensor([0.4785, 0.4381, 0.4776], device='cuda:0')}]
+
+# Retrieve the first image result
+>>> result = results[0]
+>>> for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
+...     box = [round(x, 2) for x in box.tolist()]
+...     print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
+Detected a cat with confidence 0.468 at location [344.78, 22.9, 637.3, 373.62]
+Detected a cat with confidence 0.426 at location [11.74, 51.55, 316.51, 473.22]
 ```
 
 ## Grounded SAM

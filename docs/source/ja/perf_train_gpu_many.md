@@ -360,7 +360,7 @@ by [@anton-l](https://github.com/anton-l)。
 SageMakerは、より効率的な処理のためにTPとDPを組み合わせて使用します。
 
 代替名：
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/training/#model-parallelism)をご覧ください。
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/training/#model-parallelism)をご覧ください。
 
 実装例:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。
@@ -384,7 +384,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 各次元には少なくとも2つのGPUが必要ですので、ここでは少なくとも4つのGPUが必要です。
 
 実装例:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -403,7 +403,7 @@ DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/t
 各次元には少なくとも2つのGPUが必要ですので、ここでは少なくとも8つのGPUが必要です。
 
 実装例:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)

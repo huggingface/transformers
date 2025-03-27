@@ -663,6 +663,8 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         self.pred_layer.proj = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # Overwritten -- uses a language id
+
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id
 
@@ -1298,3 +1300,15 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "FlaubertForMultipleChoice",
+    "FlaubertForQuestionAnswering",
+    "FlaubertForQuestionAnsweringSimple",
+    "FlaubertForSequenceClassification",
+    "FlaubertForTokenClassification",
+    "FlaubertModel",
+    "FlaubertWithLMHeadModel",
+    "FlaubertPreTrainedModel",
+]

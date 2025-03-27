@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Data2Vec
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Data2Vec model was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and Michael Auli.
@@ -47,6 +53,46 @@ The original code for vision can be found [here](https://github.com/facebookrese
 - For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
+
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
+
+```
+from transformers import Data2VecVisionForImageClassification
+model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", torch_dtype=torch.float16)
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+For the Data2VecVision model, on a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.5.1, OS Ubuntu 20.04)
+with `float16` and `facebook/data2vec-vision-base` model, we saw the following improvements during training and
+inference:
+
+#### Training
+
+| num_training_steps | batch_size | image_size   | is_cuda | Time per batch (eager - s) | Time per batch (sdpa - s) | Speedup (%) | Eager peak mem (MB) | SDPA peak mem (MB) | Mem saving (%) |
+|--------------------|------------|--------------|---------|----------------------------|---------------------------|-------------|----------------------|--------------------|----------------|
+| 50                 | 2          | (1048, 640)  | True    | 0.996                      | 0.754                     | 32.147      | 6722.198            | 4264.653          | 57.626         |
+
+#### Inference
+
+|   Image batch size |   Eager (s/iter) | Eager CI, %   |   Eager memory (MB) |   SDPA (s/iter) | SDPA CI, %   |   SDPA memory (MB) |   SDPA speedup |   SDPA memory saved |
+|-------------------:|-----------------:|:--------------|--------------------:|----------------:|:-------------|-------------------:|---------------:|--------------------:|
+|                  1 |            0.011 | ±0.3%         |         3.76143e+08 |           0.01  | ±0.3%        |        3.74397e+08 |          1.101 |               0.466 |
+|                  4 |            0.014 | ±0.1%         |         4.02756e+08 |           0.012 | ±0.2%        |        3.91373e+08 |          1.219 |               2.909 |
+|                 16 |            0.046 | ±0.3%         |         4.96482e+08 |           0.035 | ±0.2%        |        4.51017e+08 |          1.314 |              10.081 |
+|                 32 |            0.088 | ±0.1%         |         6.23903e+08 |           0.067 | ±0.1%        |        5.32974e+08 |          1.33  |              17.061 |
 
 ## Resources
 

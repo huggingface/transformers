@@ -26,7 +26,7 @@ after a natural disaster, monitoring crop health, or helping screen medical imag
 
 This guide illustrates how to:
 
-1. Fine-tune [ViT](model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
+1. Fine-tune [ViT](../model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
 2. Use your fine-tuned model for inference.
 
 <Tip>
@@ -317,7 +317,7 @@ At this point, only three steps remain:
 ...     data_collator=data_collator,
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ... )
 
