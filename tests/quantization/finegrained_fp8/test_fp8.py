@@ -252,7 +252,7 @@ class FP8LinearTest(unittest.TestCase):
 
     @unittest.skipIf(
         torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
-        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0"
+        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
     )
     def test_linear_preserves_shape(self):
         """
@@ -268,7 +268,7 @@ class FP8LinearTest(unittest.TestCase):
 
     @unittest.skipIf(
         torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
-        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0"
+        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
     )
     def test_linear_with_diff_feature_size_preserves_shape(self):
         """
