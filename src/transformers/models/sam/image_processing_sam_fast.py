@@ -14,11 +14,13 @@
 # limitations under the License.
 """Fast Image processor class for SAM."""
 
+import math
 from copy import deepcopy
 from itertools import product
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as TF  # Renamed to avoid namespace collision
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -37,17 +39,13 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     add_start_docstrings,
-    is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
     requires_backends,
 )
 
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
-
+# Import torchvision only once with proper availability checks
 if is_torchvision_available():
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
@@ -58,6 +56,9 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Additional keyword arguments for SAM image processor.
+    """
     mask_size: Optional[Dict[str, int]]
     mask_pad_size: Optional[Dict[str, int]]
     pad_size: Optional[Dict[str, int]]
@@ -73,9 +74,16 @@ class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         mask_pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the output segmentation map after padding. Can be overridden by the `mask_pad_size` parameter in
             the `preprocess` method.
+        pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+            Size of the output image after padding. Can be overridden by the `pad_size` parameter in the `preprocess`
+            method.
     """,
 )
 class SamImageProcessorFast(BaseImageProcessorFast):
+    """
+    Fast image processor for Segment Anything Model (SAM).
+    Uses torch and torchvision for faster image processing operations.
+    """
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -91,9 +99,24 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     valid_kwargs = SamFastImageProcessorKwargs
 
-    def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int):
+    def __init__(self, **kwargs):
+        """
+        Initialize the SamImageProcessorFast with optional configuration parameters.
+        """
+        super().__init__(**kwargs)
+        # Initialize device attribute for methods that need it
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int) -> Tuple[int, int]:
         """
         Compute the output size given input size and target long side length.
+        
+        Args:
+            old_shape: Original shape (height, width) of the image
+            longest_edge: Target size for the longest edge
+            
+        Returns:
+            New shape (height, width) maintaining aspect ratio
         """
         oldh, oldw = old_shape
         scale = longest_edge * 1.0 / max(oldh, oldw)
@@ -102,28 +125,82 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         neww = int(neww + 0.5)
         return (newh, neww)
 
-    def _preprocess(
-        self,
-        images: List["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
+    def _rescale_and_normalize(
+        self, 
+        image: torch.Tensor,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+    ) -> torch.Tensor:
+        """
+        Apply rescaling and normalization to images.
+        
+        Args:
+            image: Input image tensor
+            do_rescale: Whether to apply rescaling
+            rescale_factor: Factor to use for rescaling
+            do_normalize: Whether to apply normalization
+            image_mean: Mean values for normalization
+            image_std: Standard deviation values for normalization
+            
+        Returns:
+            Processed image tensor
+        """
+        if do_rescale:
+            image = image * rescale_factor
+            
+        if do_normalize:
+            mean = torch.tensor(image_mean, device=image.device).view(-1, 1, 1)
+            std = torch.tensor(image_std, device=image.device).view(-1, 1, 1)
+            image = (image - mean) / std
+            
+        return image
+
+    def _preprocess(
+        self,
+        images: List[torch.Tensor],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool = None,  # Kept for compatibility but not used in SAM
+        crop_size: SizeDict = None,   # Kept for compatibility but not used in SAM
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         mask_size: Optional[Dict[str, int]] = None,
         mask_pad_size: Optional[Dict[str, int]] = None,
         do_pad: Optional[bool] = None,
         pad_size: Optional[Dict[str, int]] = None,
+        segmentation_maps: Optional[List[torch.Tensor]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images for the SAM model.
+        
+        Args:
+            images: List of images to process
+            segmentation_maps: Optional list of segmentation maps to process
+            do_resize: Whether to resize the input
+            size: Size dictionary for image resizing
+            mask_size: Size dictionary for mask resizing
+            interpolation: Interpolation mode for resizing
+            do_rescale: Whether to rescale the input
+            rescale_factor: Factor to use for rescaling
+            do_normalize: Whether to normalize the input
+            image_mean: Mean values for normalization
+            image_std: Standard deviation values for normalization
+            return_tensors: Output tensor type
+            do_pad: Whether to pad the input
+            pad_size: Padding size for images
+            mask_pad_size: Padding size for masks
+        
+        Returns:
+            BatchFeature containing the processed inputs
         """
         # Store original sizes and initialize processed sizes
         original_sizes = []
@@ -135,7 +212,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
             # Resize if needed
             if do_resize:
-                target_size = self._get_preprocess_shape(image.shape[-2:], size.longest_edge)
+                target_size = self._get_preprocess_shape(image.shape[-2:], size["longest_edge"])
                 resized_image = F.resize(image, target_size, interpolation=interpolation)
                 reshaped_input_sizes.append(resized_image.shape[-2:])
             else:
@@ -143,7 +220,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 reshaped_input_sizes.append(image.shape[-2:])
 
             # Apply rescale and normalization
-            processed_image = self.rescale_and_normalize(
+            processed_image = self._rescale_and_normalize(
                 resized_image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
@@ -151,37 +228,108 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             if do_pad:
                 padded_height, padded_width = pad_size["height"], pad_size["width"]
                 input_height, input_width = processed_image.shape[-2:]
-                pad_bottom = padded_height - input_height
-                pad_right = padded_width - input_width
+                pad_bottom = max(0, padded_height - input_height)
+                pad_right = max(0, padded_width - input_width)
                 padding = (0, 0, pad_right, pad_bottom)  # Left, Top, Right, Bottom
                 processed_image = F.pad(processed_image, padding, value=0)
 
             processed_images.append(processed_image)
 
-        # Stack images if return_tensors is specified
+        # Process segmentation maps if provided
+        processed_masks = None
+        if segmentation_maps is not None:
+            processed_masks = []
+            
+            # Make sure we have the same number of maps as images
+            if len(segmentation_maps) != len(images):
+                raise ValueError(
+                    f"Number of segmentation maps ({len(segmentation_maps)}) does not match "
+                    f"number of images ({len(images)})"
+                )
+            
+            # Process each mask
+            for i, mask in enumerate(segmentation_maps):
+                # Make sure the mask has the right shape
+                if mask.dim() == 2:
+                    mask = mask.unsqueeze(0)  # Add channel dimension if missing
+                
+                mask_h, mask_w = mask.shape[-2:]
+                img_h, img_w = original_sizes[i]
+                if mask_h != img_h or mask_w != img_w:
+                    raise ValueError(
+                        f"Segmentation map size ({mask_h}, {mask_w}) does not match "
+                        f"image size ({img_h}, {img_w})"
+                    )
+                
+                # Resize mask if needed (using nearest neighbor interpolation)
+                if do_resize and mask_size is not None:
+                    mask_target_size = self._get_preprocess_shape(mask.shape[-2:], mask_size["longest_edge"])
+                    resized_mask = F.resize(
+                        mask.float(),
+                        mask_target_size,
+                        interpolation=F.InterpolationMode.NEAREST
+                    )
+                else:
+                    resized_mask = mask
+                
+                # Pad mask if needed
+                if do_pad and mask_pad_size is not None:
+                    mask_pad_h, mask_pad_w = mask_pad_size["height"], mask_pad_size["width"]
+                    mask_h, mask_w = resized_mask.shape[-2:]
+                    pad_bottom = max(0, mask_pad_h - mask_h)
+                    pad_right = max(0, mask_pad_w - mask_w)
+                    padding = (0, 0, pad_right, pad_bottom)  # Left, Top, Right, Bottom
+                    resized_mask = F.pad(resized_mask, padding, value=0)
+                
+                # Convert to torch.int64 and add to processed masks
+                processed_masks.append(resized_mask.long())
+
+        # Stack tensors if requested
         if return_tensors:
             processed_images = torch.stack(processed_images, dim=0)
+            if processed_masks is not None:
+                processed_masks = torch.stack(processed_masks, dim=0)
 
-        return BatchFeature({
+        # Prepare output
+        output = {
             "pixel_values": processed_images,
             "original_sizes": original_sizes,
             "reshaped_input_sizes": reshaped_input_sizes,
-        })
+        }
+        
+        if processed_masks is not None:
+            output["labels"] = processed_masks
+            
+        return BatchFeature(output)
 
     def pad_image(
         self,
         image: torch.Tensor,
         pad_size: Dict[str, int],
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
         Pad an image to `(pad_size["height"], pad_size["width"])` with zeros to the right and bottom.
+        
+        Args:
+            image: Input image tensor
+            pad_size: Dictionary with height and width keys specifying the target size
+            input_data_format: Format of the input image channels
+            
+        Returns:
+            Padded image tensor
         """
         output_height, output_width = pad_size["height"], pad_size["width"]
-        input_height, input_width = image.shape[-2:]
+        
+        # Get input height and width, accounting for input_data_format if provided
+        if input_data_format == ChannelDimension.FIRST or (hasattr(image, 'shape') and image.shape[0] <= 3):
+            input_height, input_width = image.shape[-2], image.shape[-1]
+        else:
+            input_height, input_width = image.shape[0], image.shape[1]
 
-        pad_bottom = output_height - input_height
-        pad_right = output_width - input_width
+        pad_bottom = max(0, output_height - input_height)
+        pad_right = max(0, output_width - input_width)
         padding = (0, 0, pad_right, pad_bottom)  # Left, Top, Right, Bottom
         padded_image = F.pad(image, padding, value=0)
         
@@ -189,16 +337,28 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_masks(
         self,
-        masks,
-        original_sizes,
-        reshaped_input_sizes,
-        mask_threshold=0.0,
-        binarize=True,
-        pad_size=None,
-        return_tensors="pt",
-    ):
+        masks: torch.Tensor,
+        original_sizes: List[Tuple[int, int]],
+        reshaped_input_sizes: List[Tuple[int, int]],
+        mask_threshold: float = 0.0,
+        binarize: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
+        return_tensors: str = "pt",
+    ) -> List[torch.Tensor]:
         """
         Remove padding and upscale masks to the original image size.
+        
+        Args:
+            masks: Batch of predicted masks 
+            original_sizes: Original sizes of each image
+            reshaped_input_sizes: Resized input shapes before padding
+            mask_threshold: Threshold for binarizing masks
+            binarize: Whether to binarize masks
+            pad_size: Padding sizes used (defaults to self.pad_size)
+            return_tensors: Return format, only "pt" is supported
+            
+        Returns:
+            List of processed masks matching original image sizes
         """
         requires_backends(self, ["torch"])
         
@@ -210,9 +370,34 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         
         output_masks = []
         for i, original_size in enumerate(original_sizes):
-            interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
-            interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
-            interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
+            # Handle both single mask and batched masks
+            if masks[i].dim() == 3:
+                mask_batch = masks[i]
+            else:
+                mask_batch = masks[i].unsqueeze(0)
+                
+            # Resize to target size
+            interpolated_mask = TF.interpolate(
+                mask_batch.float(), 
+                target_image_size, 
+                mode="bilinear", 
+                align_corners=False
+            )
+            
+            # Remove padding to match the reshaped input size
+            interpolated_mask = interpolated_mask[
+                ..., 
+                :reshaped_input_sizes[i][0], 
+                :reshaped_input_sizes[i][1]
+            ]
+            
+            # Resize to original size
+            interpolated_mask = TF.interpolate(
+                interpolated_mask, 
+                original_size, 
+                mode="bilinear", 
+                align_corners=False
+            )
             
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
@@ -223,45 +408,57 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
     def generate_crop_boxes(
         self,
-        image,
-        target_size,
+        image: torch.Tensor,
+        target_size: int,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[List[int]] = 1,
-        device: Optional["torch.device"] = None,
+        crop_n_points_downscale_factor: Optional[int] = 1,
+        device: Optional[torch.device] = None,
         return_tensors: str = "pt",
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor], torch.Tensor]:
         """
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
+
+        Args:
+            image: Input original image tensor
+            target_size: Target size of the resized image
+            crop_n_layers: Number of crop layers to generate
+            overlap_ratio: Degree of overlap between crops
+            points_per_crop: Number of points to sample per crop
+            crop_n_points_downscale_factor: Factor to reduce points in deeper layers
+            device: Device to use for computation
+            return_tensors: Output format, only "pt" is supported
+            
+        Returns:
+            Tuple containing crop boxes, points per crop, cropped images, and input labels
         """
         requires_backends(self, ["torch"])
         if device is None:
-            device = torch.device("cpu")
-            
-        # This is a complex function from the original implementation
-        # For brevity in this example, I'm showing the basic structure but would need to adapt the full implementation
+            device = self.device
         
-        # Generate all crop boxes across layers
-        crop_boxes = []
+        # Generate crop boxes
         image_height, image_width = image.shape[-2:]
         
         # Original image crop box
-        crop_boxes.append([0, 0, image_width, image_height])
+        crop_boxes = [[0, 0, image_width, image_height]]
         
         # Generate points grid for each layer
         points_grid = []
         for i in range(crop_n_layers + 1):
             n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
             points_grid.append(self._build_point_grid(n_points))
-            
-        # Additional crop boxes for each layer
+        
+        # Generate crop boxes for additional layers
+        layer_idxs = [0]  # First layer is the original image
+        short_side = min(image_height, image_width)
+        
         for i_layer in range(crop_n_layers):
             n_crops_per_side = 2 ** (i_layer + 1)
-            overlap = int(overlap_ratio * min(image_height, image_width) * (2 / n_crops_per_side))
+            overlap = int(overlap_ratio * short_side * (2 / n_crops_per_side))
             
-            crop_width = int((overlap * (n_crops_per_side - 1) + image_width) / n_crops_per_side)
-            crop_height = int((overlap * (n_crops_per_side - 1) + image_height) / n_crops_per_side)
+            crop_width = int(math.ceil((overlap * (n_crops_per_side - 1) + image_width) / n_crops_per_side))
+            crop_height = int(math.ceil((overlap * (n_crops_per_side - 1) + image_height) / n_crops_per_side))
             
             crop_box_x0 = [int((crop_width - overlap) * i) for i in range(n_crops_per_side)]
             crop_box_y0 = [int((crop_height - overlap) * i) for i in range(n_crops_per_side)]
@@ -269,15 +466,61 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             for left, top in product(crop_box_x0, crop_box_y0):
                 box = [left, top, min(left + crop_width, image_width), min(top + crop_height, image_height)]
                 crop_boxes.append(box)
+                layer_idxs.append(i_layer + 1)
         
-        # Convert to tensor and return
-        crop_boxes = torch.tensor(crop_boxes, device=device)
+        # Generate cropped images and points for each crop
+        cropped_images = []
+        total_points_per_crop = []
         
-        # This is simplified - full implementation would handle points, cropped images, etc.
-        return crop_boxes, None, None, None  # Return tensors for crop_boxes, points_per_crop, cropped_images, input_labels
+        for i, crop_box in enumerate(crop_boxes):
+            left, top, right, bottom = crop_box
+            cropped_im = image[:, top:bottom, left:right]
+            cropped_images.append(cropped_im)
+            
+            # Generate normalized points for the crop
+            cropped_im_size = (bottom - top, right - left)
+            points_scale = torch.tensor(cropped_im_size, device=device).flip(0).unsqueeze(0)
+            
+            # Convert numpy array to tensor if needed
+            layer_points = points_grid[layer_idxs[i]]
+            if not isinstance(layer_points, torch.Tensor):
+                layer_points = torch.tensor(layer_points, device=device, dtype=torch.float32)
+                
+            points = layer_points * points_scale
+            
+            # Normalize coordinates based on target_size
+            scale = target_size * 1.0 / max(image_height, image_width)
+            new_height, new_width = image_height * scale, image_width * scale
+            new_height, new_width = int(new_height + 0.5), int(new_width + 0.5)
+            
+            points_tensor = points.clone()
+            points_tensor[..., 0] = points_tensor[..., 0] * (new_width / image_width)
+            points_tensor[..., 1] = points_tensor[..., 1] * (new_height / image_height)
+            
+            total_points_per_crop.append(points_tensor)
+        
+        # Convert to tensors
+        crop_boxes_tensor = torch.tensor(crop_boxes, device=device)
+        
+        # Prepare points_per_crop in the right format
+        points_per_crop = torch.stack(total_points_per_crop, dim=0).unsqueeze(0)
+        points_per_crop = points_per_crop.permute(0, 2, 1, 3)
+        
+        # Create input labels (ones)
+        input_labels = torch.ones(points_per_crop.shape[:-1], dtype=torch.int64, device=device)
+        
+        return crop_boxes_tensor, points_per_crop, cropped_images, input_labels
 
     def _build_point_grid(self, n_per_side: int) -> torch.Tensor:
-        """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
+        """
+        Generates a 2D grid of points evenly spaced in [0,1]x[0,1].
+        
+        Args:
+            n_per_side: Number of points per side of the grid
+            
+        Returns:
+            Grid of points as a tensor
+        """
         offset = 1 / (2 * n_per_side)
         points_one_side = torch.linspace(offset, 1 - offset, n_per_side)
         points_x = points_one_side.unsqueeze(0).repeat(n_per_side, 1)
@@ -287,18 +530,32 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
     def filter_masks(
         self,
-        masks,
-        iou_scores,
-        original_size,
-        cropped_box_image,
-        pred_iou_thresh=0.88,
-        stability_score_thresh=0.95,
-        mask_threshold=0,
-        stability_score_offset=1,
-        return_tensors="pt",
-    ):
+        masks: torch.Tensor,
+        iou_scores: torch.Tensor,
+        original_size: Tuple[int, int],
+        cropped_box_image: List[int],
+        pred_iou_thresh: float = 0.88,
+        stability_score_thresh: float = 0.95,
+        mask_threshold: float = 0,
+        stability_score_offset: int = 1,
+        return_tensors: str = "pt",
+    ) -> Tuple[List[Dict[str, Any]], torch.Tensor, torch.Tensor]:
         """
         Filters predicted masks based on various criteria.
+        
+        Args:
+            masks: Tensor of predicted masks
+            iou_scores: Tensor of IoU scores
+            original_size: Original image dimensions (height, width)
+            cropped_box_image: Coordinates of the crop box [left, top, right, bottom]
+            pred_iou_thresh: Threshold for IoU scores
+            stability_score_thresh: Threshold for stability scores
+            mask_threshold: Threshold for binarizing masks
+            stability_score_offset: Offset for stability score calculation
+            return_tensors: Output format, only "pt" is supported
+            
+        Returns:
+            Tuple of filtered mask encodings, scores, and boxes
         """
         requires_backends(self, ["torch"])
         if return_tensors != "pt":
@@ -344,8 +601,23 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
         return rle_masks, scores, converted_boxes
 
-    def _compute_stability_score(self, masks: torch.Tensor, mask_threshold: float, stability_score_offset: int):
-        """Compute the stability score for masks."""
+    def _compute_stability_score(
+        self, 
+        masks: torch.Tensor, 
+        mask_threshold: float, 
+        stability_score_offset: int
+    ) -> torch.Tensor:
+        """
+        Compute the stability score for masks.
+        
+        Args:
+            masks: Input masks tensor
+            mask_threshold: Threshold for mask binarization
+            stability_score_offset: Offset for stability computation
+            
+        Returns:
+            Stability scores tensor
+        """
         intersections = (
             (masks > (mask_threshold + stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
         )
@@ -353,8 +625,16 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         stability_scores = intersections / unions
         return stability_scores
 
-    def _batched_mask_to_box(self, masks: torch.Tensor):
-        """Convert masks to bounding boxes in XYXY format."""
+    def _batched_mask_to_box(self, masks: torch.Tensor) -> torch.Tensor:
+        """
+        Convert masks to bounding boxes in XYXY format.
+        
+        Args:
+            masks: Input binary masks tensor
+            
+        Returns:
+            Tensor of bounding boxes in XYXY format
+        """
         if torch.numel(masks) == 0:
             return torch.zeros(*masks.shape[:-2], 4, device=masks.device)
 
@@ -379,11 +659,29 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         empty_filter = (right_edges < left_edges) | (bottom_edges < top_edges)
         out = torch.stack([left_edges, top_edges, right_edges, bottom_edges], dim=-1)
         out = out * (~empty_filter).unsqueeze(-1)
+        
+        out = out.reshape(*shape[:-2], 4)
+        return out
 
-        return out.reshape(*shape[:-2], 4)
-
-    def _is_box_near_crop_edge(self, boxes, crop_box, orig_box, atol=20.0):
-        """Filter masks at the edge of a crop, but not at the edge of the original image."""
+    def _is_box_near_crop_edge(
+        self, 
+        boxes: torch.Tensor, 
+        crop_box: List[int], 
+        orig_box: List[int], 
+        atol: float = 20.0
+    ) -> torch.Tensor:
+        """
+        Filter masks at the edge of a crop, but not at the edge of the original image.
+        
+        Args:
+            boxes: Bounding boxes in XYXY format
+            crop_box: Crop box coordinates [left, top, right, bottom]
+            orig_box: Original image box coordinates [left, top, right, bottom]
+            atol: Tolerance for considering boxes near the edge
+            
+        Returns:
+            Boolean tensor indicating boxes near crop edges
+        """
         crop_box_torch = torch.as_tensor(crop_box, dtype=torch.float, device=boxes.device)
         orig_box_torch = torch.as_tensor(orig_box, dtype=torch.float, device=boxes.device)
 
@@ -398,8 +696,25 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
         return torch.any(near_crop_edge, dim=1)
 
-    def _pad_masks(self, masks, crop_box: List[int], orig_height: int, orig_width: int):
-        """Pad masks to the original image size."""
+    def _pad_masks(
+        self, 
+        masks: torch.Tensor, 
+        crop_box: List[int], 
+        orig_height: int, 
+        orig_width: int
+    ) -> torch.Tensor:
+        """
+        Pad masks to the original image size.
+        
+        Args:
+            masks: Masks tensor to pad
+            crop_box: Crop box coordinates [left, top, right, bottom]
+            orig_height: Original image height
+            orig_width: Original image width
+            
+        Returns:
+            Padded masks tensor
+        """
         left, top, right, bottom = crop_box
         if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
             return masks
@@ -408,8 +723,16 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         pad = (left, pad_x - left, top, pad_y - top)
         return F.pad(masks, pad, value=0)
 
-    def _mask_to_rle(self, input_mask: torch.Tensor):
-        """Convert masks to run-length encoding format."""
+    def _mask_to_rle(self, input_mask: torch.Tensor) -> List[Dict[str, Any]]:
+        """
+        Convert masks to run-length encoding format.
+        
+        Args:
+            input_mask: Binary masks tensor
+            
+        Returns:
+            List of mask encodings in RLE format
+        """
         batch_size, height, width = input_mask.shape
         input_mask = input_mask.permute(0, 2, 1).flatten(1)
 
@@ -432,11 +755,50 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             out.append({"size": [height, width], "counts": counts})
             
         return out
+    
+    def _rle_to_mask(self, rle: Dict[str, Any]) -> torch.Tensor:
+        """
+        Compute a binary mask from an uncompressed RLE.
+        
+        Args:
+            rle: RLE encoding of a mask
+            
+        Returns:
+            Binary mask tensor
+        """
+        height, width = rle["size"]
+        mask = torch.zeros(height * width, dtype=torch.bool, device=self.device)
+        idx = 0
+        parity = False
+        for count in rle["counts"]:
+            mask[idx : idx + count] = parity
+            idx += count
+            parity = not parity
+        mask = mask.reshape(width, height)
+        # Use transpose(1, 0) to match numpy's transpose() behavior
+        return mask.transpose(1, 0)  # Reshape to original shape
 
     def post_process_for_mask_generation(
-        self, all_masks, all_scores, all_boxes, crops_nms_thresh, return_tensors="pt"
-    ):
-        """Post-processes masks using Non-Maximum Suppression."""
+        self, 
+        all_masks: List[Dict[str, Any]], 
+        all_scores: torch.Tensor, 
+        all_boxes: torch.Tensor, 
+        crops_nms_thresh: float, 
+        return_tensors: str = "pt"
+    ) -> Tuple[List[torch.Tensor], torch.Tensor, List[Dict[str, Any]], torch.Tensor]:
+        """
+        Post-processes masks using Non-Maximum Suppression.
+        
+        Args:
+            all_masks: List of masks in RLE format
+            all_scores: IoU scores tensor
+            all_boxes: Bounding boxes tensor
+            crops_nms_thresh: NMS threshold
+            return_tensors: Output format, only "pt" is supported
+            
+        Returns:
+            Tuple of filtered masks, scores, RLE encodings, and boxes
+        """
         requires_backends(self, ["torch", "torchvision"])
         
         keep_by_nms = batched_nms(
@@ -454,19 +816,5 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         masks = [self._rle_to_mask(rle) for rle in rle_masks]
 
         return masks, iou_scores, rle_masks, mask_boxes
-
-    def _rle_to_mask(self, rle: Dict[str, Any]) -> torch.Tensor:
-        """Compute a binary mask from an uncompressed RLE."""
-        height, width = rle["size"]
-        mask = torch.zeros(height * width, dtype=torch.bool)
-        idx = 0
-        parity = False
-        for count in rle["counts"]:
-            mask[idx : idx + count] = parity
-            idx += count
-            parity = not parity
-        mask = mask.reshape(width, height)
-        return mask.transpose(0, 1)  # Reshape to original shape
-
 
 __all__ = ["SamImageProcessorFast"]
