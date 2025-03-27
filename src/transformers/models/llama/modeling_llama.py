@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache, PagedCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -283,7 +283,13 @@ class LlamaAttention(nn.Module):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {
+                "sin": sin, 
+                "cos": cos, 
+                "cache_position": cache_position, 
+                "sequence_ids": kwargs.get("sequence_ids"),
+                "cache_input_ids": kwargs.get("cache_input_ids"),
+            }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
@@ -574,8 +580,12 @@ class LlamaModel(LlamaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        if isinstance(past_key_values, PagedCache) and flash_attn_kwargs.get('prefilling', False):
+            tiled_position_ids = torch.cat([torch.arange(s, device=inputs_embeds.device) for s in cache_position])
+            position_embeddings = self.rotary_emb(hidden_states, tiled_position_ids[None])
+        else:
+            # create position embeddings to be shared across the decoder layers
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
