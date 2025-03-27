@@ -333,9 +333,7 @@ class GraniteMoeTopKGating(nn.Module):
 
         # compute number of input given to each expert
         zeros = torch.zeros(
-            [top_k_gates.size(0), self.num_experts],
-            dtype=top_k_gates.dtype,
-            device=top_k_gates.device,
+            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
         )  # [num_tokens, num_experts]
         gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
         expert_size = gates.long().sum(0)  # [num_experts,]

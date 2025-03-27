@@ -218,9 +218,7 @@ class JetMoeTopKGating(nn.Module):
 
         # compute number of input given to each expert
         zeros = torch.zeros(
-            [top_k_gates.size(0), self.num_experts],
-            dtype=top_k_gates.dtype,
-            device=top_k_gates.device,
+            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
         )  # [num_tokens, num_experts]
         gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
         expert_size = gates.long().sum(0)  # [num_experts,]
@@ -291,11 +289,7 @@ class JetMoeMoE(nn.Module):
 
         expert_outputs = expert_outputs * batch_gates[:, None]
 
-        zeros = torch.zeros(
-            (bsz * length, self.input_size),
-            dtype=expert_outputs.dtype,
-            device=expert_outputs.device,
-        )
+        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
         layer_output = layer_output + self.bias
@@ -346,9 +340,7 @@ class JetMoeMoA(nn.Module):
 
         # Ungroup queries back to original order
         zeros = torch.zeros(
-            (bsz * length * self.top_k, self.hidden_size),
-            dtype=expert_outputs.dtype,
-            device=expert_outputs.device,
+            (bsz * length * self.top_k, self.hidden_size), dtype=expert_outputs.dtype, device=expert_outputs.device
         )
         layer_output = zeros.index_add(0, index_sorted_experts, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.top_k, -1)  # [bsz, length, top_k, hidden_size]
@@ -370,11 +362,7 @@ class JetMoeMoA(nn.Module):
         expert_outputs = expert_outputs * batch_gates[:, None]
 
         # Ungroup and merge outputs to original order
-        zeros = torch.zeros(
-            (bsz * length, self.input_size),
-            dtype=expert_outputs.dtype,
-            device=expert_outputs.device,
-        )
+        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
         layer_output = layer_output + self.bias
@@ -619,12 +607,7 @@ class JetMoeSdpaAttention(JetMoeAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[
-        torch.Tensor,
-        Optional[torch.Tensor],
-        Optional[Tuple[torch.Tensor]],
-        Optional[torch.Tensor],
-    ]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]], Optional[torch.Tensor]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -843,10 +826,7 @@ class JetMoeBlock(nn.Module):
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[
-        Tuple[torch.Tensor],
-        Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]],
-    ]:
+    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         # Self Attention
         attn_output, self_attn_weights, present_key_value, attn_router_logits = self.self_attention(
             hidden_states=self.input_layernorm(hidden_states),
@@ -1057,9 +1037,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -1074,11 +1052,7 @@ class JetMoeModel(JetMoePreTrainedModel):
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
         causal_mask = self._update_causal_mask(
-            attention_mask,
-            inputs_embeds,
-            cache_position,
-            past_key_values,
-            output_attentions,
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
         hidden_states = inputs_embeds
@@ -1532,9 +1506,4 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
         )
 
 
-__all__ = [
-    "JetMoeForCausalLM",
-    "JetMoeModel",
-    "JetMoePreTrainedModel",
-    "JetMoeForSequenceClassification",
-]
+__all__ = ["JetMoeForCausalLM", "JetMoeModel", "JetMoePreTrainedModel", "JetMoeForSequenceClassification"]
