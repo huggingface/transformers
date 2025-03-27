@@ -33,25 +33,15 @@ if is_xlstm_available():
 
     external_xlstm = True
 else:
-    from typing import Literal
-
-    import torch
-
-    mLSTMLayerStateType = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-    mLSTMStateType = dict[int, mLSTMLayerStateType]
-
-    WeightModeType = Literal["single", "fused"]
-
+    BackendModeType = Literal["train", "train_with_padding", "inference"]
     ChunkwiseKernelType = Literal[
         "chunkwise--native_autograd",
         "parallel--native_autograd",
     ]
+    DtypeType = Literal["float32", "bfloat16", "float16"]
     SequenceKernelType = Literal["native_sequence__native"]
     StepKernelType = Literal["native"]
-
-    DtypeType = Literal["float32", "bfloat16", "float16"]
-
-    BackendModeType = Literal["train", "train_with_padding", "inference"]
+    WeightModeType = Literal["single", "fused"]
 
     def round_up_to_next_multiple_of(x: int, multiple_of: int) -> int:
         """Rounds up x to the next multiple of multiple_of."""

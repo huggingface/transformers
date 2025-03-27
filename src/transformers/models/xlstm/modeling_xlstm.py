@@ -55,10 +55,11 @@ else:
         SequenceKernelType,
         StepKernelType,
         WeightModeType,
-        mLSTMLayerStateType,
-        mLSTMStateType,
         round_up_to_next_multiple_of,
     )
+
+    mLSTMLayerStateType = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    mLSTMStateType = dict[int, mLSTMLayerStateType]
 
     external_xlstm = False
 
