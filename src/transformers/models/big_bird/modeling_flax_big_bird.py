@@ -412,7 +412,7 @@ class FlaxBigBirdSelfAttention(nn.Module):
 
 class FlaxBigBirdBlockSparseAttention(nn.Module):
     config: BigBirdConfig
-    block_sparse_seed: int = None
+    block_sparse_seed: Optional[int] = None
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -1262,7 +1262,7 @@ class FlaxBigBirdSelfOutput(nn.Module):
 
 class FlaxBigBirdAttention(nn.Module):
     config: BigBirdConfig
-    layer_id: int = None
+    layer_id: Optional[int] = None
     causal: bool = False
     dtype: jnp.dtype = jnp.float32
 
@@ -1362,7 +1362,7 @@ class FlaxBigBirdOutput(nn.Module):
 
 class FlaxBigBirdLayer(nn.Module):
     config: BigBirdConfig
-    layer_id: int = None
+    layer_id: Optional[int] = None
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):

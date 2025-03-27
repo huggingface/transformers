@@ -414,7 +414,7 @@ class Trainer:
     @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
-        model: Union[PreTrainedModel, nn.Module] = None,
+        model: Union[PreTrainedModel, nn.Module, None] = None,
         args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
@@ -2139,7 +2139,7 @@ class Trainer:
     def train(
         self,
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
-        trial: Union["optuna.Trial", dict[str, Any]] = None,
+        trial: Union["optuna.Trial", dict[str, Any], None] = None,
         ignore_keys_for_eval: Optional[list[str]] = None,
         **kwargs,
     ):
@@ -4920,10 +4920,10 @@ class Trainer:
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Batch size = {batch_size}")
 
-        losses_host: torch.Tensor = None
-        preds_host: Union[torch.Tensor, list[torch.Tensor]] = None
-        labels_host: Union[torch.Tensor, list[torch.Tensor]] = None
-        inputs_host: Union[torch.Tensor, list[torch.Tensor]] = None
+        losses_host: Optional[torch.Tensor] = None
+        preds_host: Union[torch.Tensor, list[torch.Tensor], None] = None
+        labels_host: Union[torch.Tensor, list[torch.Tensor], None] = None
+        inputs_host: Union[torch.Tensor, list[torch.Tensor], None] = None
         metrics: Optional[dict] = None
         eval_set_kwargs: dict = {}
 
