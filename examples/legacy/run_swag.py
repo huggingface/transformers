@@ -244,7 +244,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     )
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features = torch.load(cached_features_file, weights_only=True)
     else:
         logger.info("Creating features from dataset file at %s", input_file)
         examples = read_swag_examples(input_file)
