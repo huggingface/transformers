@@ -26,12 +26,12 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Dict, List, Tuple
+from unittest.mock import patch
 
 import numpy as np
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
-from unittest.mock import patch
 
 from transformers import (
     AutoModel,
@@ -509,20 +509,19 @@ class ModelTesterMixin:
     def test_can_init_all_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # Monkey patch the method to add a seed
-            module_class_name = str(model_class).split("'")[1]
             original_init_weights = model_class._init_weights
             def seeded_init_weights(self, module):
                 set_seed(0)
                 original_init_weights(self, module)
-            with patch(module_class_name, _init_weights=seeded_init_weights) as patched_class:
-                # First, initialize the model from config -> this ensure everything is correctly initialized, even if
-                # _init_weights() does not take all weights into account correctly
-                model_from_config = patched_class(config)
-                # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
-                # by _init_weights()
-                model_from_pretrained = patched_class.from_pretrained(None, config=config, state_dict={})
+            model_class._init_weights = seeded_init_weights
+
+            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+            # _init_weights() does not take all weights into account correctly
+            model_from_config = model_class(config)
+            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+            # by _init_weights()
+            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
 
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
