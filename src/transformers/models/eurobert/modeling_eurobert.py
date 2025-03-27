@@ -30,7 +30,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    MaskedLMOutput,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -708,7 +714,7 @@ class EuroBertModel(EuroBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The EuroBert Model with a sequence classification head on top that performs pooling.",
+    "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForMaskedLM(EuroBertPreTrainedModel):
@@ -766,7 +772,7 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
+    "The EuroBert Model with a sequence classification head on top that performs pooling.",
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
@@ -778,7 +784,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
         self.model = EuroBertModel(config)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.GELU()
-        self.out_proj = nn.Linear(config.hidden_size, self.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, self.num_labels)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(EUROBERT_INPUTS_DOCSTRING)
@@ -830,12 +836,12 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
 
             pooled_output = self.dense(pooled_output)
             pooled_output = self.activation(pooled_output)
-            logits = self.out_proj(pooled_output)
+            logits = self.classifier(pooled_output)
 
         elif self.clf_pooling == "late":
             x = self.dense(last_hidden_state)
             x = self.activation(x)
-            logits = self.out_proj(x)
+            logits = self.classifier(x)
             if attention_mask is None:
                 logits = logits.mean(dim=1)
             else:
@@ -878,4 +884,83 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
         )
 
 
-__all__ = ["EuroBertPreTrainedModel", "EuroBertModel", "EuroBertForMaskedLM", "EuroBertForSequenceClassification"]
+@add_start_docstrings(
+    """
+    The EuroBert Model with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks."
+    """,
+    EUROBERT_START_DOCSTRING,
+)
+class EuroBertForTokenClassification(EuroBertPreTrainedModel):
+    def __init__(self, config: EuroBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = EuroBertModel(config)
+
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(EUROBERT_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "EuroBertPreTrainedModel",
+    "EuroBertModel",
+    "EuroBertForMaskedLM",
+    "EuroBertForSequenceClassification",
+    "EuroBertForTokenClassification",
+]
