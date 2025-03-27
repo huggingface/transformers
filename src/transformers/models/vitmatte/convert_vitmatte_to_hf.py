@@ -82,7 +82,7 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     filename = model_name_to_filename[model_name]
     filepath = hf_hub_download(repo_id="nielsr/vitmatte-checkpoints", filename=filename, repo_type="model")
-    state_dict = torch.load(filepath, map_location="cpu")
+    state_dict = torch.load(filepath, map_location="cpu", weights_only=True)
 
     # rename keys
     for key in state_dict.copy().keys():

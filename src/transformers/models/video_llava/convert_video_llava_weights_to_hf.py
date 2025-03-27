@@ -99,7 +99,7 @@ def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     state_dict_temp = "pytorch_model-0000{i}-of-00002.bin"
     for shard in range(1, 3):
         state_dict_path = hf_hub_download(old_state_dict_id, state_dict_temp.format(i=shard))
-        state_dict = torch.load(state_dict_path, map_location="cpu")
+        state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
         state_dict = convert_state_dict_to_hf(state_dict)
         model.load_state_dict(state_dict, strict=False, assign=True)
         model_state_dict -= set(state_dict.keys())

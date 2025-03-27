@@ -87,7 +87,7 @@ def rename_state_dict(state_dict):
 
 def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
     sys.path.insert(0, ada_lib_path)
-    model_state_dict_base = torch.load(pt_model_path, map_location="cpu")
+    model_state_dict_base = torch.load(pt_model_path, map_location="cpu", weights_only=True)
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], ".")
     state_dict = rename_state_dict(state_dict)
 
