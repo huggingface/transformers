@@ -889,6 +889,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+        model.train()
 
         if torch.cuda.is_available():
             self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
