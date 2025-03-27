@@ -127,8 +127,8 @@ class SamImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = True,
-        pad_size: int = None,
-        mask_pad_size: int = None,
+        pad_size: Optional[int] = None,
+        mask_pad_size: Optional[int] = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
