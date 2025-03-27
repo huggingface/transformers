@@ -439,7 +439,7 @@ class SiglipAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim)
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
