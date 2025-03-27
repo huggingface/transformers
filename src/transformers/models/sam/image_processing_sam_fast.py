@@ -15,7 +15,6 @@
 """Fast Image processor class for SAM."""
 
 import math
-from copy import deepcopy
 from itertools import product
 from typing import Any, Dict, List, Optional, Tuple, Union
 
