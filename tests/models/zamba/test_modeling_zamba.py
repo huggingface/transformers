@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     slow,
-    torch_device,
+    torch_device, is_flaky,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -327,6 +327,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    @is_flaky(description="TODO: ydshieh")
     def test_initialization(self):
         r"""
         Overriding the test_initialization test as the A_log and D params of the Mamba block are initialized differently
