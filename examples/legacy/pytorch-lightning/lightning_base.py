@@ -8,7 +8,6 @@ import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
 from transformers import (
-    AdamW,
     AutoConfig,
     AutoModel,
     AutoModelForPreTraining,
@@ -20,6 +19,7 @@ from transformers import (
     AutoTokenizer,
     PretrainedConfig,
     PreTrainedTokenizer,
+    is_torch_available,
 )
 from transformers.optimization import (
     Adafactor,
@@ -29,6 +29,10 @@ from transformers.optimization import (
     get_polynomial_decay_schedule_with_warmup,
 )
 from transformers.utils.versions import require_version
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.getLogger(__name__)
@@ -146,7 +150,7 @@ class BaseTransformer(pl.LightningModule):
             )
 
         else:
-            optimizer = AdamW(
+            optimizer = torch.optim.AdamW(
                 optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon
             )
         self.opt = optimizer

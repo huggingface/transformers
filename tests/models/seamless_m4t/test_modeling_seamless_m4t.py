@@ -1017,7 +1017,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        # FOR NOW, only first units correspondance
+        # FOR NOW, only first units correspondence
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])

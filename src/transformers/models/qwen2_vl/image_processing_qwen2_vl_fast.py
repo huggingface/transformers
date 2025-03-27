@@ -339,7 +339,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
             min_pixels = size["shortest_edge"]
         else:
-            size = self.size
+            size = {**self.size}
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         if min_pixels is not None:
             size["shortest_edge"] = min_pixels

@@ -236,7 +236,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         else:
             assert isinstance(self.quantization_config, TorchAoConfig)
             module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
-            quantize_(module, self.quantization_config.get_quantize_config())
+            quantize_(module, self.quantization_config.get_apply_tensor_subclass(), set_inductor_config=False)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
@@ -246,7 +246,10 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             model = torch.compile(model, mode="max-autotune")
             model = autoquant(
-                model, qtensor_class_list=ALL_AUTOQUANT_CLASS_LIST, **self.quantization_config.quant_type_kwargs
+                model,
+                qtensor_class_list=ALL_AUTOQUANT_CLASS_LIST,
+                set_inductor_config=False,
+                **self.quantization_config.quant_type_kwargs,
             )
             return model
         return
@@ -254,8 +257,7 @@ class TorchAoHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None) -> bool:
         if safe_serialization:
             logger.warning(
-                "torchao quantized model does not support safe serialization, "
-                "please set `safe_serialization` to False"
+                "torchao quantized model does not support safe serialization, please set `safe_serialization` to False"
             )
             return False
         _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(
