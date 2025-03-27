@@ -29,10 +29,11 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    is_flaky,
     require_torch,
     require_torch_sdpa,
     slow,
-    torch_device, is_flaky,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin

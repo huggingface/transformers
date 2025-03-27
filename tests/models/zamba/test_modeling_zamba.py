@@ -22,12 +22,13 @@ import pytest
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
     slow,
-    torch_device, is_flaky,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
