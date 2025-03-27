@@ -1074,6 +1074,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             }
         self.visual_losses = visual_losses
 
+    def _tie_weights(self):
+        self.cls.predictions.decoder.weight = self.lxmert.embeddings.word_embeddings.weight
+
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
     ) -> nn.Embedding:
