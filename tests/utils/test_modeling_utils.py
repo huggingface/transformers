@@ -82,7 +82,9 @@ from transformers.utils.import_utils import (
     is_torch_sdpa_available,
     is_torchdynamo_available,
 )
-
+import torch.nn as nn
+from transformers import PreTrainedModel, PretrainedConfig
+import shutil
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
@@ -2744,3 +2746,143 @@ class TestTensorSharing(TestCasePlus):
         shared_names, identical_names = _find_identical([{"a", "b"}], state_dict)
         self.assertEqual(shared_names, [{"a", "b"}])
         self.assertEqual(identical_names, [])
+
+@require_torch
+class TestMissingWeightsInit(unittest.TestCase):
+    """Test class for proper initialization of missing weights during from_pretrained()"""
+    
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        
+        class TestConfig(PretrainedConfig):
+            def __init__(self, use_new=False, **kwargs):
+                super().__init__(**kwargs)
+                self.use_new = use_new
+        
+        class TestModel(PreTrainedModel):
+            config_class = TestConfig
+            def __init__(self, config):
+                super().__init__(config)
+                self.base_layer = nn.Linear(10, 10, bias=False)
+                if config.use_new:
+                    self.new_layer = nn.Linear(10, 10, bias=False)
+                self.post_init()
+            
+            def _init_weights(self, module):
+                if isinstance(module, nn.Linear):
+                    module.weight.data.fill_(1.0)
+        
+        self.TestConfig = TestConfig
+        self.TestModel = TestModel
+
+    def test_missing_weights_initialization(self):
+        """Test that new weights are properly initialized with _fast_init=True (default)"""
+        # 1. Create and save base model
+        base_config = self.TestConfig(use_new=False)
+        base_model = self.TestModel(base_config)
+        base_model.save_pretrained(self.tmp_dir)
+        
+        # 2. Load with new layer (using default _fast_init=True)
+        new_config = self.TestConfig(use_new=True)
+        loaded_model = self.TestModel.from_pretrained(self.tmp_dir, config=new_config)
+        
+        # 3. Verify initialization
+        # Base layer should keep pretrained weights
+        self.assertTrue(
+            torch.all(loaded_model.base_layer.weight.data == 1.0),
+            "Base layer weights not preserved"
+        )
+        
+        # New layer should be properly initialized
+        self.assertFalse(
+            torch.isnan(loaded_model.new_layer.weight.data).any(),
+            "New layer contains NaN values"
+        )
+        self.assertTrue(
+            torch.all(loaded_model.new_layer.weight.data == 1.0),
+            "New layer not properly initialized"
+        )
+
+    def test_tied_weights_initialization(self):
+        """Test that tied weights are handled correctly during initialization"""
+        class TiedTestConfig(self.TestConfig):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.tie_weights = True
+
+        class TiedTestModel(self.TestModel):
+            def __init__(self, config):
+                super().__init__(config)
+                if config.tie_weights and config.use_new:
+                    # Tie the weights
+                    self.new_layer.weight = self.base_layer.weight
+                    
+            def _get_tied_weight_keys(self):
+                # Tell transformers which weights are intentionally tied
+                if self.config.tie_weights and self.config.use_new:
+                    return [r"base_layer\.weight", r"new_layer\.weight"]
+                return []
+
+        # 1. Create and save base model
+        base_config = TiedTestConfig(use_new=True)
+        base_model = TiedTestModel(base_config)
+        # Save with safe_serialization=False to avoid safetensors tensor aliasing error
+        base_model.save_pretrained(self.tmp_dir, safe_serialization=False)
+        
+        # 2. Load model and verify tied weights
+        loaded_model = TiedTestModel.from_pretrained(self.tmp_dir)
+        
+        # 3. Verify weights are tied and properly initialized
+        self.assertTrue(
+            torch.equal(loaded_model.base_layer.weight, loaded_model.new_layer.weight),
+            "Weights should remain tied after loading"
+        )
+        self.assertTrue(
+            torch.all(loaded_model.base_layer.weight.data == 1.0),
+            "Tied weights not properly initialized"
+        )
+
+    def test_partial_initialization(self):
+        """Test initialization when some parameters exist and others are new"""
+        class PartialConfig(self.TestConfig):
+            def __init__(self, stage=1, **kwargs):
+                super().__init__(**kwargs)
+                self.stage = stage
+
+        class PartialModel(self.TestModel):
+            def __init__(self, config):
+                super().__init__(config)
+                if config.stage >= 2:
+                    self.middle_layer = nn.Linear(10, 10, bias=False)
+                if config.stage >= 3:
+                    self.final_layer = nn.Linear(10, 10, bias=False)
+
+        # 1. Create and save stage 1 model
+        base_config = PartialConfig(stage=1)
+        base_model = PartialModel(base_config)
+        base_model.save_pretrained(self.tmp_dir)
+        
+        # 2. Load stage 3 model (adding two new layers)
+        new_config = PartialConfig(stage=3)
+        loaded_model = PartialModel.from_pretrained(self.tmp_dir, config=new_config)
+        
+        # 3. Verify all layers are properly initialized
+        self.assertTrue(
+            torch.all(loaded_model.base_layer.weight.data == 1.0),
+            "Base layer weights not preserved"
+        )
+        self.assertTrue(
+            torch.all(loaded_model.middle_layer.weight.data == 1.0),
+            "Middle layer not properly initialized"
+        )
+        self.assertTrue(
+            torch.all(loaded_model.final_layer.weight.data == 1.0),
+            "Final layer not properly initialized"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+if __name__ == '__main__':
+    unittest.main() 
+
