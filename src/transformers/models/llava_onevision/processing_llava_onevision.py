@@ -102,12 +102,12 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         self.image_token_id = (
             self.tokenizer.convert_tokens_to_ids(self.image_token)
-            if getattr(tokenizer, "image_token_id")
+            if not getattr(tokenizer, "image_token_id")
             else self.tokenizer.image_token_id
         )
         self.video_token_id = (
             self.tokenizer.convert_tokens_to_ids(self.video_token)
-            if getattr(tokenizer, "video_token_id")
+            if not getattr(tokenizer, "video_token_id")
             else self.tokenizer.image_token_id
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
