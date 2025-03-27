@@ -349,7 +349,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
-                self.model_name, torch_dtype=torch.bfloat16, device_map=device
+                self.tmpdirname, torch_dtype=torch.bfloat16, device_map=device
             )
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
