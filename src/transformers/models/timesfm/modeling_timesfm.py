@@ -74,7 +74,7 @@ class TimesFmOutputForPrediction(BaseModelOutput):
             The mean predictions of the time series.
         full_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             The full predictions of the time series including the mean and the quantiles.
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_target` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
             The loss of the TimesFM model.
         past_key_values (`List[Cache]`, *optional*):
             Contains the precomputed key and value hidden states of the attention blocks used for
@@ -405,8 +405,8 @@ class TimesFmPreTrainedModel(PreTrainedModel):
             past_values=your_time_series_list,
             freq=your_frequencies,
             window_size=optional_window_size,
-            future_target=optional_target,
-            forecast_context_len=optional_context_length
+            future_values=optional_future_values,
+            forecast_context_len=optional_max_context_length
         )
 
         See the model's documentation for more details on the forward method parameters.
@@ -495,6 +495,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
         """
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
+        cache_position (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The position of the cache.
         """
         # Reshape into patches (using view for efficiency)
         bsize = past_values.shape[0]
@@ -817,7 +819,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If None then we do not do decomposition.
         future_values (`torch.Tensor`, *optional*):
-            Optional future target time series to be used for loss computation.
+            Optional future time series values to be used for loss computation.
         forecast_context_len (`int`, *optional*):
             Optional max context length.
         return_forecast_on_context (`bool`, *optional*):
@@ -825,13 +827,17 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         truncate_negative (`bool`, *optional*):
             Truncate to only non-negative values if any of the contexts have non-negative values,
             otherwise do nothing.
+        output_attentions (`bool`, *optional*):
+            Whether to output the attentions.
+        output_hidden_states (`bool`, *optional*):
+            Whether to output the hidden states.
 
         Returns:
             A TimesFmOutputForPrediction object or a tuple containing:
                 - the mean forecast of size (# past_values, # forecast horizon),
                 - the full forecast (mean + quantiles) of size
                     (# past_values,  # forecast horizon, 1 + # quantiles).
-                - loss: the mean squared error loss + quantile loss if future_target is provided.
+                - loss: the mean squared error loss + quantile loss if `future_values` is provided.
         """
         if return_dict is None:
             return_dict = self.config.use_return_dict
