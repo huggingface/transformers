@@ -776,15 +776,9 @@ class GraniteSpeechEncoderProjectorQFormer(nn.Module):
 class GraniteSpeechCTCModel(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super(GraniteSpeechCTCModel, self).__init__()
-
-        self.rnn_tr = nn.ModuleList(
-            [nn.Linear(config.input_dim, config.hidden_dim, bias=True)]
-            + [
-                GraniteSpeechConformerBlock(
-                    config,
-                )
-                for layer_idx in range(config.num_layers)
-            ]
+        self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
+        self.layers = nn.ModuleList(
+            [GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)]
         )
 
         self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
@@ -796,8 +790,8 @@ class GraniteSpeechCTCModel(nn.Module):
         self.output_dim = config.output_dim
 
     def forward(self, x: torch.Tensor):
-        x = self.rnn_tr[0](x)
-        for idx, layer in enumerate(self.rnn_tr[1:], start=1):
+        x = self.input_linear(x)
+        for idx, layer in enumerate(self.layers, start=1):
             x = layer(x, self.context_size)
             if idx == self.num_layers // 2:
                 x_mid = x.clone()
