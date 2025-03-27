@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import warnings
 from typing import Callable, Optional, Tuple
 
@@ -208,12 +207,6 @@ class DeepseekV2Config(LlamaConfig):
         self.head_dim = head_dim if head_dim is not None else qk_rope_head_dim
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
 def apply_rotary_pos_emb(
     query: torch.Tensor, key: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
 ) -> torch.Tensor:
@@ -283,7 +276,9 @@ class DeepseekV2MoEGate(nn.Module):
         logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
         scores = logits.softmax(dim=-1, dtype=torch.float32)
 
-        ### select top-k experts
+        # select top-k experts
+        # greedy method is used for DeepSeek-V2-Lite
+        # group_limited_greedy for DeepSeek-V2 and DeepSeek-V2-Chat
         if self.topk_method == "greedy":
             topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
@@ -447,12 +442,6 @@ class DeepseekV2Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_scaling is not None:
-            mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_scaling["factor"]
-            if mscale_all_dim:
-                mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
-                self.scaling = self.scaling * mscale * mscale
 
     def forward(
         self,
