@@ -89,6 +89,11 @@ class LlavaProcessor(ProcessorMixin):
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = (
+            self.tokenizer.convert_tokens_to_ids(self.image_token)
+            if getattr(tokenizer, "image_token_id")
+            else self.tokenizer.image_token_id
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
