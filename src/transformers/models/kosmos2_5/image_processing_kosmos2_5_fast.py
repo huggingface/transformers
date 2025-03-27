@@ -16,7 +16,6 @@
 
 from typing import Dict, List, Optional, Union
 
-from flex_example_01 import batch_size
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, DefaultFastImageProcessorKwargs, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS, group_images_by_shape
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
@@ -228,7 +227,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
                 max_patches=max_patches,
                 patch_size=patch_size,
             )
-            breakpoint()
+            # breakpoint()
 
         flattened_patches, width, height, rows, cols, attention_masks = [], [], [], [], [], []
         for image in images:
