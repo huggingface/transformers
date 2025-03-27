@@ -1,3 +1,18 @@
+# Copyright 2024, 2025 NXAI GmbH. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 """PyTorch xLSTM Model."""
 
 from dataclasses import dataclass
@@ -716,9 +731,13 @@ else:
         DHHV = v.shape[-1]
 
         c_state = (
-            c_initial if c_initial is not None else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
+            c_initial
+            if c_initial is not None
+            else torch.zeros(B, NH, DHQK, DHHV, device=k.device, dtype=torch.float32)
         )
-        n_state = n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
+        n_state = (
+            n_initial if n_initial is not None else torch.zeros(B, NH, DHQK, device=k.device, dtype=torch.float32)
+        )
         m_state = m_initial if m_initial is not None else torch.zeros(B, NH, 1, device=k.device, dtype=torch.float32)
 
         if S > 1:
@@ -877,9 +896,9 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert (
-                        not return_last_states
-                    ), "return_last_states=True is not supported with train_with_padding mode."
+                    assert not return_last_states, (
+                        "return_last_states=True is not supported with train_with_padding mode."
+                    )
 
                 return self._train_fn(
                     q=q,
