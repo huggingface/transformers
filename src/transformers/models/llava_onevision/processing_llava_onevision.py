@@ -106,7 +106,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             else self.tokenizer.image_token_id
         )
         self.video_token_id = (
-            self.tokenizer.convert_tokens_to_ids(self.image_token)
+            self.tokenizer.convert_tokens_to_ids(self.video_token)
             if getattr(tokenizer, "video_token_id")
             else self.tokenizer.image_token_id
         )
