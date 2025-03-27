@@ -649,9 +649,10 @@ class SamMaskEmbedding(nn.Module):
 
 
 class SamPromptEncoder(nn.Module):
-    def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding):
+    def __init__(self, config: SamPromptEncoderConfig):
         super().__init__()
-        self.shared_embedding = shared_patch_embedding
+        self.shared_embedding = SamPositionalEmbedding(config.vision_config)
+        config = config.prompt_encoder_config
         self.mask_embed = SamMaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
@@ -1300,10 +1301,13 @@ class SamModel(SamPreTrainedModel):
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
-        self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+        self.prompt_encoder = SamPromptEncoder(config)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
+
+    def _tie_weights(self):
+        self.prompt_encoder.shared_embedding.positional_embedding.data = self.shared_image_embedding.positional_embedding.data
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
