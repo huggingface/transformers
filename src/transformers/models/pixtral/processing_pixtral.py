@@ -156,6 +156,8 @@ class PixtralProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        patch_size = self.patch_size * self.spatial_merge_size
+
         if images is not None:
             if is_image_or_image_url(images):
                 images = [images]
@@ -172,7 +174,7 @@ class PixtralProcessor(ProcessorMixin):
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             images = [load_image(im) if isinstance(im, str) else im for im in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 
@@ -192,8 +194,8 @@ class PixtralProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
-                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
+                    num_height_tokens = height // patch_size
+                    num_width_tokens = width // patch_size
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
