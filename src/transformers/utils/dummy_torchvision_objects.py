@@ -72,6 +72,13 @@ class GotOcr2ImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class Kosmos2_5ImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class LlavaImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
