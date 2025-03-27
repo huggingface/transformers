@@ -1332,12 +1332,12 @@ class SizeDict:
     Hashable dictionary to store image size information.
     """
 
-    height: int = None
-    width: int = None
-    longest_edge: int = None
-    shortest_edge: int = None
-    max_height: int = None
-    max_width: int = None
+    height: Optional[int] = None
+    width: Optional[int] = None
+    longest_edge: Optional[int] = None
+    shortest_edge: Optional[int] = None
+    max_height: Optional[int] = None
+    max_width: Optional[int] = None
 
     def __getitem__(self, key):
         if hasattr(self, key):
