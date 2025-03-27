@@ -164,7 +164,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         """
         if position is None and seq_length is None:
             raise ValueError("Either position or seq_length must be provided")
-            
+
         if position is None:
             # [1, seqlen]
             position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)
