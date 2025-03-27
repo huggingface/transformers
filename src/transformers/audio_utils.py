@@ -1125,7 +1125,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
     return frames
 
 
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
+def stft(frames: np.array, windowing_function: np.array, fft_window_size: Optional[int] = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
     as `torch.stft`.
