@@ -1194,7 +1194,7 @@ class SamPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.)
+            module.weight.data.fill_(1.0)
             module.bias.data.zero_()
         elif isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
@@ -1307,7 +1307,9 @@ class SamModel(SamPreTrainedModel):
         self.post_init()
 
     def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = self.shared_image_embedding.positional_embedding.data
+        self.prompt_encoder.shared_embedding.positional_embedding.data = (
+            self.shared_image_embedding.positional_embedding.data
+        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

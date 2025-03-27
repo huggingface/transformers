@@ -26,7 +26,6 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Dict, List, Tuple
-from unittest.mock import patch
 
 import numpy as np
 from packaging import version
