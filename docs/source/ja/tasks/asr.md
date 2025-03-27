@@ -148,7 +148,7 @@ MInDS-14 データセットのサンプリング レートは 8000kHz です (�
 ...     return batch
 ```
 
-データセット全体に前処理関数を適用するには、🤗 Datasets [`~datasets.Dataset.map`] 関数を使用します。 `num_proc` パラメータを使用してプロセスの数を増やすことで、`map` を高速化できます。 [`~datasets.Dataset.remove_columns`] メソッドを使用して、不要な列を削除します。 
+データセット全体に前処理関数を適用するには、🤗 Datasets [`~datasets.Dataset.map`] 関数を使用します。 `num_proc` パラメータを使用してプロセスの数を増やすことで、`map` を高速化できます。 [`~datasets.Dataset.remove_columns`] メソッドを使用して、不要な列を削除します。
 
 ```py
 >>> encoded_minds = minds.map(prepare_dataset, remove_columns=minds.column_names["train"], num_proc=4)
@@ -281,7 +281,7 @@ MInDS-14 データセットのサンプリング レートは 8000kHz です (�
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=processor,
+...     processing_class=processor,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

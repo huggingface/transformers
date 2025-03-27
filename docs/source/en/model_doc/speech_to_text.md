@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Speech2Text
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+</div>
+
 ## Overview
 
 The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://arxiv.org/abs/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
@@ -69,7 +74,7 @@ be installed as follows: `apt install libsndfile1-dev`
   For multilingual speech translation models, `eos_token_id` is used as the `decoder_start_token_id` and
   the target language id is forced as the first generated token. To force the target language id as the first
   generated token, pass the `forced_bos_token_id` parameter to the `generate()` method. The following
-  example shows how to transate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
+  example shows how to translate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
   checkpoint.
 
 ```python

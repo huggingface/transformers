@@ -80,7 +80,7 @@ class RegNetConvLayer(nn.Module):
 
 class RegNetEmbeddings(nn.Module):
     """
-    RegNet Embedddings (stem) composed of a single aggressive convolution.
+    RegNet Embeddings (stem) composed of a single aggressive convolution.
     """
 
     def __init__(self, config: RegNetConfig):
@@ -449,3 +449,6 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["RegNetForImageClassification", "RegNetModel", "RegNetPreTrainedModel"]

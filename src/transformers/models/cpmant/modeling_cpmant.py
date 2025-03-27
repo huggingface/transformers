@@ -849,21 +849,12 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        input_ids = input_ids.int()
-        # save the memory usage of dummy attention mask
-        if "attention_mask" in kwargs:
-            kwargs["attention_mask"] = torch.zeros(1, 1)
-
-        return {
-            "input_ids": input_ids,
-            "use_cache": kwargs["use_cache"],
-            "past_key_values": kwargs.get("past_key_values", None),
-        }
-
     def _reorder_cache(self, past_key_values, beam_idx):
         past_key_values = [list(each) if each is not None else each for each in past_key_values]
         for key_value_layer in past_key_values:
             key_value_layer[0] = key_value_layer[0][beam_idx]
             key_value_layer[1] = key_value_layer[1][beam_idx]
         return past_key_values
+
+
+__all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

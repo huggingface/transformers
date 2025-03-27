@@ -35,7 +35,7 @@ if is_vision_available():
     from transformers import TvpImageProcessor
 
 
-class TvpImageProcessingTester(unittest.TestCase):
+class TvpImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -58,7 +58,6 @@ class TvpImageProcessingTester(unittest.TestCase):
         num_channels=3,
         num_frames=2,
     ):
-        super().__init__()
         self.do_resize = do_resize
         self.size = size
         self.do_center_crop = do_center_crop

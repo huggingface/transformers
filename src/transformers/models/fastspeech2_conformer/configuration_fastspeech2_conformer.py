@@ -164,6 +164,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     ```"""
 
     model_type = "fastspeech2_conformer"
+    base_config_key = "model_config"
     attribute_map = {"num_hidden_layers": "encoder_layers", "num_attention_heads": "encoder_num_attention_heads"}
 
     def __init__(
@@ -377,6 +378,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     ```"""
 
     model_type = "hifigan"
+    base_config_key = "vocoder_config"
 
     def __init__(
         self,
@@ -453,7 +455,7 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     """
 
     model_type = "fastspeech2_conformer_with_hifigan"
-    is_composition = True
+    sub_configs = {"model_config": FastSpeech2ConformerConfig, "vocoder_config": FastSpeech2ConformerHifiGanConfig}
 
     def __init__(
         self,
@@ -473,3 +475,6 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
 
         super().__init__(**kwargs)
+
+
+__all__ = ["FastSpeech2ConformerConfig", "FastSpeech2ConformerHifiGanConfig", "FastSpeech2ConformerWithHifiGanConfig"]

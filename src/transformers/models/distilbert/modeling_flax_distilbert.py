@@ -275,9 +275,9 @@ class FlaxTransformerBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        assert (
-            self.config.dim % self.config.n_heads == 0
-        ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        assert self.config.dim % self.config.n_heads == 0, (
+            f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        )
 
         self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
         self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
@@ -893,3 +893,14 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForQuestionAnswering",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertPreTrainedModel",
+]

@@ -14,7 +14,8 @@ env:
 jobs:
   setup:
     name: Setup
-    runs-on: [single-gpu, nvidia-gpu, t4, ci]
+    runs-on: 
+      group: aws-g4dn-2xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/

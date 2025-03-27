@@ -61,7 +61,7 @@ pip install -q pytorchvideo transformers evaluate
 
 サブセットをダウンロードした後、圧縮アーカイブを抽出する必要があります。
 
-```py 
+```py
 >>> import tarfile
 
 >>> with tarfile.open(file_path) as t:
@@ -127,7 +127,7 @@ UCF101_subset/
 * `id2label`: 整数をクラス名にマッピングします。
 
 
-```py 
+```py
 >>> class_labels = sorted({str(path).split("/")[2] for path in all_video_file_paths})
 >>> label2id = {label: i for i, label in enumerate(class_labels)}
 >>> id2label = {i: label for label, i in label2id.items()}
@@ -143,7 +143,7 @@ UCF101_subset/
 
 事前トレーニングされたチェックポイントとそれに関連する画像プロセッサからビデオ分類モデルをインスタンス化します。モデルのエンコーダーには事前トレーニングされたパラメーターが付属しており、分類ヘッドはランダムに初期化されます。画像プロセッサは、データセットの前処理パイプラインを作成するときに役立ちます。
 
-```py 
+```py
 >>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
 
 >>> model_ckpt = "MCG-NJU/videomae-base"
@@ -175,7 +175,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 ビデオの前処理には、[PyTorchVideo ライブラリ](https://pytorchvideo.org/) を利用します。まず、必要な依存関係をインポートします。
 
 
-```py 
+```py
 >>> import pytorchvideo.data
 
 >>> from pytorchvideo.transforms import (
@@ -224,7 +224,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 次に、データセット固有の変換とデータセットをそれぞれ定義します。トレーニングセットから始めます:
 
 
-```py 
+```py
 >>> train_transform = Compose(
 ...     [
 ...         ApplyTransformToKey(
@@ -254,7 +254,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 同じ一連のワークフローを検証セットと評価セットに適用できます。
 
 
-```py 
+```py
 >>> val_transform = Compose(
 ...     [
 ...         ApplyTransformToKey(
@@ -297,9 +297,9 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 # (300, 30, 75)
 ```
 
-## Visualize the preprocessed video for better debugging 
+## Visualize the preprocessed video for better debugging
 
-```py 
+```py
 >>> import imageio
 >>> import numpy as np
 >>> from IPython.display import Image
@@ -312,7 +312,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 >>> def create_gif(video_tensor, filename="sample.gif"):
 ...     """Prepares a GIF from a video tensor.
-...     
+...
 ...     The video tensor is expected to have the following shape:
 ...     (num_frames, num_channels, height, width).
 ...     """
@@ -339,13 +339,13 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif.gif" alt="Person playing basketball"/>
 </div>
 
-## Train the model 
+## Train the model
 
 🤗 Transformers の [`Trainer`](https://huggingface.co/docs/transformers/main_classes/trainer) をモデルのトレーニングに利用します。 `Trainer`をインスタンス化するには、トレーニング構成と評価メトリクスを定義する必要があります。最も重要なのは [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html#transformers.TrainingArguments) で、これはトレーニングを構成するためのすべての属性を含むクラスです。モデルのチェックポイントを保存するために使用される出力フォルダー名が必要です。また、🤗 Hub 上のモデル リポジトリ内のすべての情報を同期するのにも役立ちます。
 
 トレーニング引数のほとんどは一目瞭然ですが、ここで非常に重要なのは`remove_unused_columns=False`です。これにより、モデルの呼び出し関数で使用されない機能が削除されます。デフォルトでは`True`です。これは、通常、未使用の特徴列を削除し、モデルの呼び出し関数への入力を解凍しやすくすることが理想的であるためです。ただし、この場合、`pixel_values` (モデルが入力で期待する必須キーです) を作成するには、未使用の機能 (特に`video`) が必要です。
 
-```py 
+```py
 >>> from transformers import TrainingArguments, Trainer
 
 >>> model_name = model_ckpt.split("/")[-1]
@@ -391,7 +391,7 @@ def compute_metrics(eval_pred):
 また、サンプルをまとめてバッチ処理するために使用される `collat​​e_fn` を定義します。各バッチは、`pixel_values` と `labels` という 2 つのキーで構成されます。
 
 
-```py 
+```py
 >>> def collate_fn(examples):
 ...     # permute to (num_frames, num_channels, height, width)
 ...     pixel_values = torch.stack(
@@ -403,13 +403,13 @@ def compute_metrics(eval_pred):
 
 次に、これらすべてをデータセットとともに`Trainer`に渡すだけです。
 
-```py 
+```py
 >>> trainer = Trainer(
 ...     model,
 ...     args,
 ...     train_dataset=train_dataset,
 ...     eval_dataset=val_dataset,
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ...     data_collator=collate_fn,
 ... )
@@ -419,7 +419,7 @@ def compute_metrics(eval_pred):
 
 次に、`train` メソッドを呼び出してモデルを微調整します。
 
-```py 
+```py
 >>> train_results = trainer.train()
 ```
 
@@ -435,7 +435,7 @@ def compute_metrics(eval_pred):
 
 推論のためにビデオをロードします。
 
-```py 
+```py
 >>> sample_test_video = next(iter(test_dataset))
 ```
 
@@ -491,7 +491,7 @@ def compute_metrics(eval_pred):
 
 `logits` をデコードすると、次のようになります。
 
-```py 
+```py
 >>> predicted_class_idx = logits.argmax(-1).item()
 >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
 # Predicted class: BasketballDunk

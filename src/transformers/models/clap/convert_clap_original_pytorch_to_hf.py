@@ -74,7 +74,7 @@ def rename_state_dict(state_dict):
             # replace sequential layers with list
             sequential_layer = re.match(sequential_layers_pattern, key).group(1)
 
-            key = key.replace(f"sequential.{sequential_layer}.", f"layers.{int(sequential_layer)//3}.linear.")
+            key = key.replace(f"sequential.{sequential_layer}.", f"layers.{int(sequential_layer) // 3}.linear.")
         elif re.match(text_projection_pattern, key):
             projecton_layer = int(re.match(text_projection_pattern, key).group(1))
 

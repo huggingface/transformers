@@ -199,7 +199,7 @@ _python_、_numpy_、および _pytorch_ の RNG 状態は、そのチェック�
 torchrun --nproc_per_node=2  trainer-program.py ...
 ```
 
-[`accelerate`](https://github.com/huggingface/accelerate) または [`deepspeed`](https://github.com/microsoft/DeepSpeed) がインストールされている場合は、次を使用して同じことを達成することもできます。の一つ：
+[`accelerate`](https://github.com/huggingface/accelerate) または [`deepspeed`](https://github.com/deepspeedai/DeepSpeed) がインストールされている場合は、次を使用して同じことを達成することもできます。の一つ：
 
 ```bash
 accelerate launch --num_processes 2 trainer-program.py ...
@@ -291,7 +291,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 [`Trainer`] は、トレーニングを劇的に改善する可能性のあるライブラリをサポートするように拡張されました。
 時間とはるかに大きなモデルに適合します。
 
-現在、サードパーティのソリューション [DeepSpeed](https://github.com/microsoft/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
+現在、サードパーティのソリューション [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
 
 この提供されるサポートは、この記事の執筆時点では新しくて実験的なものです。 DeepSpeed と PyTorch FSDP のサポートはアクティブであり、それに関する問題は歓迎しますが、FairScale 統合は PyTorch メインに統合されているため、もうサポートしていません ([PyTorch FSDP 統合](#pytorch-fully-sharded-data-parallel))
 
@@ -301,7 +301,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 
 この記事の執筆時点では、Deepspeed を使用するには、CUDA C++ コードをコンパイルする必要があります。
 
-すべてのインストールの問題は、[Deepspeed](https://github.com/microsoft/DeepSpeed/issues) の対応する GitHub の問題を通じて対処する必要がありますが、ビルド中に発生する可能性のある一般的な問題がいくつかあります。
+すべてのインストールの問題は、[Deepspeed](https://github.com/deepspeedai/DeepSpeed/issues) の対応する GitHub の問題を通じて対処する必要がありますが、ビルド中に発生する可能性のある一般的な問題がいくつかあります。
 CUDA 拡張機能を構築する必要がある PyTorch 拡張機能。
 
 したがって、次の操作を実行中に CUDA 関連のビルドの問題が発生した場合は、次のとおりです。

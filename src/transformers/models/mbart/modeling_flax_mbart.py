@@ -286,7 +286,7 @@ class FlaxMBartAttention(nn.Module):
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
+        states from previous steps. This function is slightly adapted from the official Flax repository:
         https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
@@ -1769,3 +1769,12 @@ append_call_sample_docstring(
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxMBartForConditionalGeneration",
+    "FlaxMBartForQuestionAnswering",
+    "FlaxMBartForSequenceClassification",
+    "FlaxMBartModel",
+    "FlaxMBartPreTrainedModel",
+]

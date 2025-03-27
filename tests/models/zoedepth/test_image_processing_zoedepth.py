@@ -28,7 +28,7 @@ if is_vision_available():
     from transformers import ZoeDepthImageProcessor
 
 
-class ZoeDepthImageProcessingTester(unittest.TestCase):
+class ZoeDepthImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -46,7 +46,6 @@ class ZoeDepthImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         do_pad=False,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size

@@ -43,7 +43,6 @@ from tqdm import tqdm, trange
 from transformers import (
     CONFIG_NAME,
     WEIGHTS_NAME,
-    AdamW,
     OpenAIGPTDoubleHeadsModel,
     OpenAIGPTTokenizer,
     get_linear_schedule_with_warmup,
@@ -236,7 +235,7 @@ def main():
             },
             {"params": [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
         )

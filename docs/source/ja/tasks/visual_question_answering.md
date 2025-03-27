@@ -110,7 +110,7 @@ Dataset({
 残りの機能は必要ないので削除できます。
 
 
-```py 
+```py
 >>> dataset = dataset.remove_columns(['question_type', 'question_id', 'answer_type'])
 ```
 
@@ -150,7 +150,7 @@ Dataset({
 >>> unique_labels = list(set(flattened_labels))
 
 >>> label2id = {label: idx for idx, label in enumerate(unique_labels)}
->>> id2label = {idx: label for label, idx in label2id.items()} 
+>>> id2label = {idx: label for label, idx in label2id.items()}
 ```
 
 マッピングができたので、文字列の回答をその ID に置き換え、さらに前処理をより便利にするためにデータセットをフラット化することができます。
@@ -175,7 +175,7 @@ Dataset({
 次のステップでは、ViLT プロセッサをロードして、モデルの画像データとテキスト データを準備します。
 [`ViltProcessor`] は、BERT トークナイザーと ViLT 画像プロセッサを便利な単一プロセッサにラップします。
 
-```py 
+```py
 >>> from transformers import ViltProcessor
 
 >>> processor = ViltProcessor.from_pretrained(model_checkpoint)
@@ -197,13 +197,13 @@ Dataset({
 >>> def preprocess_data(examples):
 ...     image_paths = examples['image_id']
 ...     images = [Image.open(image_path) for image_path in image_paths]
-...     texts = examples['question']    
+...     texts = examples['question']
 
 ...     encoding = processor(images, texts, padding="max_length", truncation=True, return_tensors="pt")
 
 ...     for k, v in encoding.items():
 ...           encoding[k] = v.squeeze()
-    
+
 ...     targets = []
 
 ...     for labels, scores in zip(examples['label.ids'], examples['label.weights']):
@@ -211,11 +211,11 @@ Dataset({
 
 ...         for label, score in zip(labels, scores):
 ...             target[label] = score
-      
+
 ...         targets.append(target)
 
 ...     encoding["labels"] = targets
-    
+
 ...     return encoding
 ```
 
@@ -284,14 +284,14 @@ Dataset({
 ...     args=training_args,
 ...     data_collator=data_collator,
 ...     train_dataset=processed_dataset,
-...     tokenizer=processor,
+...     processing_class=processor,
 ... )
 ```
 
 3. [`~Trainer.train`] を呼び出してモデルを微調整します。
 
 ```py
->>> trainer.train() 
+>>> trainer.train()
 ```
 
 トレーニングが完了したら、 [`~Trainer.push_to_hub`] メソッドを使用してモデルをハブに共有し、🤗 ハブで最終モデルを共有します。
@@ -376,7 +376,7 @@ GPU (利用可能な場合)。これは [`Trainer`] が自動的に処理する�
 モデルは画像とテキストを入力として受け取るため、VQA データセットの最初の例とまったく同じ画像と質問のペアを使用してみましょう。
 
 
-```py 
+```py
 >>> example = dataset[0]
 >>> image = Image.open(example['image_id'])
 >>> question = example['question']
@@ -386,7 +386,7 @@ GPU (利用可能な場合)。これは [`Trainer`] が自動的に処理する�
 
 
 ```py
->>> prompt = f"Question: {question} Answer:" 
+>>> prompt = f"Question: {question} Answer:"
 ```
 
 次に、モデルのプロセッサで画像/プロンプトを前処理し、処理された入力をモデルに渡し、出力をデコードする必要があります。
@@ -397,7 +397,7 @@ GPU (利用可能な場合)。これは [`Trainer`] が自動的に処理する�
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10)
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
 >>> print(generated_text)
-"He is looking at the crowd" 
+"He is looking at the crowd"
 ```
 
 ご覧のとおり、モデルは群衆と顔の向き (下を向いている) を認識しましたが、見逃しているようです。

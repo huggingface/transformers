@@ -581,9 +581,9 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, image_pro
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=1e-3
-            ), "The backbone features are not the same."
+            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-3), (
+                "The backbone features are not the same."
+            )
 
         original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
@@ -602,9 +602,9 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, image_pro
 
         our_segmentation = image_processor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
-        assert torch.allclose(
-            original_segmentation, our_segmentation, atol=1e-3
-        ), "The segmentation image is not the same."
+        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-3), (
+            "The segmentation image is not the same."
+        )
 
         logger.info("✅ Test passed!")
 
@@ -641,7 +641,8 @@ if __name__ == "__main__":
         type=Path,
         help=(
             "A directory containing the model's checkpoints. The directory has to have the following structure:"
-            " <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl"
+            " <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl\n"
+            "Given the files are in the pickle format, please be wary of passing it files you trust."
         ),
     )
     parser.add_argument(

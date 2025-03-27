@@ -88,7 +88,7 @@ def check_details(line, spm_ids, tok_ids, slow, fast):
                     if tok_ids[first + k : first + k + min_width] == spm_ids[first + i : first + i + min_width]
                 ]
                 for j in possible_matches:
-                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], sp, tok) and check_details(
+                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], slow, fast) and check_details(
                         line,
                         spm_ids[first + i : last],
                         tok_ids[first + j : last],

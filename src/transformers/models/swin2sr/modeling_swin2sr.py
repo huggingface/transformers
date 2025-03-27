@@ -482,7 +482,9 @@ class Swin2SROutput(nn.Module):
 
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->Swin2SR
 class Swin2SRLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
+    def __init__(
+        self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0, pretrained_window_size=0
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         window_size, shift_size = self._compute_window_shift(
@@ -500,7 +502,7 @@ class Swin2SRLayer(nn.Module):
             else (pretrained_window_size, pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swin2SRDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Swin2SRDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.intermediate = Swin2SRIntermediate(config, dim)
         self.output = Swin2SROutput(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
@@ -811,10 +813,11 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         self.config = config
 
         if config.num_channels == 3 and config.num_channels_out == 3:
-            rgb_mean = (0.4488, 0.4371, 0.4040)
-            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
+            mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
         else:
-            self.mean = torch.zeros(1, 1, 1, 1)
+            mean = torch.zeros(1, 1, 1, 1)
+        self.register_buffer("mean", mean, persistent=False)
+
         self.img_range = config.img_range
 
         self.first_convolution = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
@@ -849,8 +852,8 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
 
         # 2. normalize
-        self.mean = self.mean.type_as(pixel_values)
-        pixel_values = (pixel_values - self.mean) * self.img_range
+        mean = self.mean.type_as(pixel_values)
+        pixel_values = (pixel_values - mean) * self.img_range
 
         return pixel_values
 
@@ -1175,3 +1178,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["Swin2SRForImageSuperResolution", "Swin2SRModel", "Swin2SRPreTrainedModel"]

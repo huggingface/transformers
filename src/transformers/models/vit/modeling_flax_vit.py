@@ -412,17 +412,18 @@ class FlaxViTPooler(nn.Module):
 
     def setup(self):
         self.dense = nn.Dense(
-            self.config.hidden_size,
+            self.config.pooler_output_size,
             kernel_init=jax.nn.initializers.variance_scaling(
                 self.config.initializer_range**2, "fan_in", "truncated_normal"
             ),
             dtype=self.dtype,
         )
+        self.activation = ACT2FN[self.config.pooler_act]
 
     def __call__(self, hidden_states):
         cls_hidden_state = hidden_states[:, 0]
         cls_hidden_state = self.dense(cls_hidden_state)
-        return nn.tanh(cls_hidden_state)
+        return self.activation(cls_hidden_state)
 
 
 class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
@@ -671,3 +672,6 @@ overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCS
 append_replace_return_docstrings(
     FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
 )
+
+
+__all__ = ["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"]

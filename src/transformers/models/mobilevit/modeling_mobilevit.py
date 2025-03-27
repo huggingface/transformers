@@ -215,7 +215,7 @@ class MobileViTSelfAttention(nn.Module):
 
         if hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -1070,3 +1070,11 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "MobileViTForImageClassification",
+    "MobileViTForSemanticSegmentation",
+    "MobileViTModel",
+    "MobileViTPreTrainedModel",
+]

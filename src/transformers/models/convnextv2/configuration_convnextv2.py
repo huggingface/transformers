@@ -52,6 +52,8 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
             The epsilon used by the layer normalization layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -111,3 +113,6 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+
+
+__all__ = ["ConvNextV2Config"]

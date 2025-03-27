@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team and the librosa & torchaudio authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,57 @@ Audio processing functions to extract features from audio waveforms. This code i
 and remove unnecessary dependencies.
 """
 
+import os
 import warnings
+from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import requests
+
+from .utils import is_librosa_available, requires_backends
+
+
+if is_librosa_available():
+    import librosa
+
+
+def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+    """
+    Loads `audio` to an np.ndarray object.
+
+    Args:
+        audio (`str` or `np.ndarray`):
+            The audio to be laoded to the numpy array format.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The samlping rate to be used when loading the audio. It should be same as the
+            sampling rate the model you will be using further was trained with.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+
+    Returns:
+        `np.ndarray`: A numpy artay representing the audio.
+    """
+    requires_backends(load_audio, ["librosa"])
+
+    if isinstance(audio, str):
+        # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
+        if audio.startswith("http://") or audio.startswith("https://"):
+            audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
+        elif os.path.isfile(audio):
+            audio = librosa.load(audio, sr=sampling_rate)[0]
+    elif isinstance(audio, np.ndarray):
+        audio = audio
+    else:
+        raise TypeError(
+            "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
+        )
+    return audio
+
+
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+]
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
@@ -146,7 +192,7 @@ def chroma_filter_bank(
     sampling_rate: int,
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float]] = (5.0, 2),
+    weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
     start_at_c_chroma: Optional[bool] = True,
 ):
     """
@@ -165,7 +211,7 @@ def chroma_filter_bank(
             Tuning deviation from A440 in fractions of a chroma bin.
         power (`float`, *optional*, defaults to 2.0):
             If 12.0, normalizes each column with their L2 norm. If 1.0, normalizes each column with their L1 norm.
-        weighting_parameters (`Tuple[float]`, *optional*, defaults to `(5., 2.)`):
+        weighting_parameters (`Tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
             If specified, apply a Gaussian weighting parameterized by the first element of the tuple being the center and
             the second element being the Gaussian half-width.
         start_at_c_chroma (`float`, *optional*, defaults to `True`):
@@ -390,6 +436,7 @@ def spectrogram(
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
+    dither: float = 0.0,
     preemphasis: Optional[float] = None,
     mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
@@ -460,6 +507,12 @@ def spectrogram(
         onesided (`bool`, *optional*, defaults to `True`):
             If True, only computes the positive frequencies and returns a spectrogram containing `fft_length // 2 + 1`
             frequency bins. If False, also computes the negative frequencies and returns `fft_length` frequency bins.
+        dither (`float`, *optional*, defaults to 0.0):
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
+            Dithering has similar effect as `mel_floor`. It reduces the high log_mel_fbank
+            values for signals with hard-zero sections, when VAD cutoff is present in the signal.
         preemphasis (`float`, *optional*)
             Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
         mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):
@@ -540,6 +593,9 @@ def spectrogram(
     for frame_idx in range(num_frames):
         buffer[:frame_length] = waveform[timestep : timestep + frame_length]
 
+        if dither != 0.0:
+            buffer[:frame_length] += dither * np.random.randn(frame_length)
+
         if remove_dc_offset:
             buffer[:frame_length] = buffer[:frame_length] - buffer[:frame_length].mean()
 
@@ -582,7 +638,7 @@ def spectrogram(
 
 
 def spectrogram_batch(
-    waveform_list: List[np.ndarray],
+    waveform_list: list[np.ndarray],
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
@@ -591,6 +647,7 @@ def spectrogram_batch(
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
+    dither: float = 0.0,
     preemphasis: Optional[float] = None,
     mel_filters: Optional[np.ndarray] = None,
     mel_floor: float = 1e-10,
@@ -600,7 +657,7 @@ def spectrogram_batch(
     db_range: Optional[float] = None,
     remove_dc_offset: Optional[bool] = None,
     dtype: np.dtype = np.float32,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
     This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.
@@ -653,6 +710,10 @@ def spectrogram_batch(
             The padding strategy when `center` is `True`.
         onesided (`bool`, *optional*, defaults to `True`):
             If True, returns a one-sided spectrogram for real input signals.
+        dither (`float`, *optional*, defaults to 0.0):
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
+            E.g. use 4.0 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 4.0, 0.0 means no dithering.
         preemphasis (`float`, *optional*):
             Applies a pre-emphasis filter to each frame.
         mel_filters (`np.ndarray`, *optional*):
@@ -689,16 +750,12 @@ def spectrogram_batch(
     if hop_length <= 0:
         raise ValueError("hop_length must be greater than zero")
 
-    # Check the dimensions of the waveform
+    # Check the dimensions of the waveform , and if waveform is complex
     for waveform in waveform_list:
         if waveform.ndim != 1:
             raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
-
-    # Check if waveform is complex
-    for waveform in waveform_list:
         if np.iscomplexobj(waveform):
             raise ValueError("Complex-valued input waveforms are not currently supported")
-
     # Center pad the waveform
     if center:
         padding = [(int(frame_length // 2), int(frame_length // 2))]
@@ -744,6 +801,9 @@ def spectrogram_batch(
     for frame_idx in range(num_frames):
         timestep = frame_idx * hop_length
         buffer[:, :frame_length] = padded_waveform_batch[:, timestep : timestep + frame_length]
+
+        if dither != 0.0:
+            buffer[:, :frame_length] += dither * np.random.randn(*buffer[:, :frame_length].shape)
 
         if remove_dc_offset:
             buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
@@ -1065,7 +1125,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
     return frames
 
 
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
+def stft(frames: np.array, windowing_function: np.array, fft_window_size: Optional[int] = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
     as `torch.stft`.

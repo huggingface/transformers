@@ -364,7 +364,7 @@ end_index 18
 自分で実装したい場合は、[質問応答の章](https://huggingface.co/course/chapter7/7?fw=pt#postprocessing) を確認してください。
 インスピレーションを得るためにハグフェイスコースの。
 
-## Train 
+## Train
 
 おめでとう！このガイドの最も難しい部分を無事にナビゲートできたので、独自のモデルをトレーニングする準備が整いました。
 トレーニングには次の手順が含まれます。
@@ -423,7 +423,7 @@ end_index 18
 ...     data_collator=data_collator,
 ...     train_dataset=encoded_train_dataset,
 ...     eval_dataset=encoded_test_dataset,
-...     tokenizer=processor,
+...     processing_class=processor,
 ... )
 
 >>> trainer.train()

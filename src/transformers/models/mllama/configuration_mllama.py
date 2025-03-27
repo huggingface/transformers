@@ -13,8 +13,7 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-import os
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -59,7 +58,7 @@ class MllamaVisionConfig(PretrainedConfig):
             The size (resolution) of each image *tile*.
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
+        norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         max_num_tiles (`int`, *optional*, defaults to 4):
             Maximum number of tiles for image splitting.
@@ -88,6 +87,7 @@ class MllamaVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -137,23 +137,6 @@ class MllamaVisionConfig(PretrainedConfig):
     def max_aspect_ratio_id(self) -> int:
         return len(self.supported_aspect_ratios)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "mllama":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class MllamaTextConfig(PretrainedConfig):
     r"""
@@ -178,12 +161,12 @@ class MllamaTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If not
             specified, will default to `num_attention_heads`.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
+        rope_theta (`float`, *optional*, defaults to `500000.0`):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
@@ -259,6 +242,7 @@ class MllamaTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -311,23 +295,6 @@ class MllamaTextConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "mllama":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class MllamaConfig(PretrainedConfig):
     r"""
@@ -370,7 +337,7 @@ class MllamaConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama"
-    is_composition = True
+    sub_configs = {"text_config": MllamaTextConfig, "vision_config": MllamaVisionConfig}
 
     def __init__(
         self,
@@ -398,3 +365,6 @@ class MllamaConfig(PretrainedConfig):
             self.text_config = text_config
 
         super().__init__(**kwargs)
+
+
+__all__ = ["MllamaConfig"]

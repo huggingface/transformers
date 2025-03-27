@@ -79,7 +79,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
-        output_text = "lower newer"
+        output_text = "lower[SPACE]newer"
         return input_text, output_text
 
     # Copied from transformers.tests.models.layoutxlm.test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_add_special_tokens

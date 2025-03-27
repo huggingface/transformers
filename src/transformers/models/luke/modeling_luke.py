@@ -501,7 +501,7 @@ class LukeSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -2226,3 +2226,17 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             entity_hidden_states=outputs.entity_hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LukeForEntityClassification",
+    "LukeForEntityPairClassification",
+    "LukeForEntitySpanClassification",
+    "LukeForMultipleChoice",
+    "LukeForQuestionAnswering",
+    "LukeForSequenceClassification",
+    "LukeForTokenClassification",
+    "LukeForMaskedLM",
+    "LukeModel",
+    "LukePreTrainedModel",
+]

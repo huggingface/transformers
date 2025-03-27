@@ -206,7 +206,7 @@ class DebugUnderflowOverflow:
         self.expand_frame(f"{'abs min':8} {'abs max':8} metadata")
 
     def batch_end_frame(self):
-        self.expand_frame(f"{self.prefix} *** Finished batch number={self.batch_number-1} ***\n\n")
+        self.expand_frame(f"{self.prefix} *** Finished batch number={self.batch_number - 1} ***\n\n")
 
     def create_frame(self, module, input, output):
         self.expand_frame(f"{self.prefix} {self.module_names[module]} {module.__class__.__name__}")

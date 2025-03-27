@@ -249,7 +249,7 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         batch_tokens = tokenizer.batch_decode(sample_ids)
-        self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ!?!? $$$", "j ð s j ð s oːɹ $$$"])
+        self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ ! ? ! ? $$$", "j ð s j ð s oːɹ $$$"])
 
     @staticmethod
     def get_from_offsets(offsets, key):

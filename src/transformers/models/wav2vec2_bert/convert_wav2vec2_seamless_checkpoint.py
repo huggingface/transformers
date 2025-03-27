@@ -113,7 +113,7 @@ def _convert_model(
     hf_model.load_state_dict(state_dict, strict=True)
     n_params = param_count(hf_model)
 
-    logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
+    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
 
     hf_model.eval()
     del state_dict
@@ -183,7 +183,7 @@ def convert_wav2vec2_bert_checkpoint(
         with torch.no_grad():
             outputs = hf_wav2vec(**inputs)
 
-        torch.testing.assert_close(original_output, outputs.last_hidden_state, atol=5e-3, rtol=5e-3)
+        torch.testing.assert_close(original_output, outputs.last_hidden_state, rtol=5e-3, atol=5e-3)
 
 
 if __name__ == "__main__":

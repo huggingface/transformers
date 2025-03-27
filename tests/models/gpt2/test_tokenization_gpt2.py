@@ -20,7 +20,7 @@ import unittest
 
 from transformers import AutoTokenizer, GPT2Tokenizer, GPT2TokenizerFast
 from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_jinja, require_tiktoken, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -298,6 +298,23 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
+
+    @require_tiktoken
+    def test_tokenization_tiktoken(self):
+        from tiktoken import encoding_name_for_model
+
+        from transformers.integrations.tiktoken import convert_tiktoken_to_fast
+
+        encoding = encoding_name_for_model("gpt2")
+        convert_tiktoken_to_fast(encoding, self.tmpdirname)
+
+        tiktoken_fast_tokenizer = GPT2TokenizerFast.from_pretrained(self.tmpdirname)
+        rust_tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+        sequence = "lower newer"
+        self.assertEqual(
+            rust_tokenizer.decode(rust_tokenizer.encode(sequence)),
+            tiktoken_fast_tokenizer.decode(rust_tokenizer.encode(sequence)),
+        )
 
 
 @require_tokenizers

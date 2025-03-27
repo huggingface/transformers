@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from time import sleep
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -79,8 +79,8 @@ class KerasMetricCallback(keras.callbacks.Callback):
         self,
         metric_fn: Callable,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
-        output_cols: Optional[List[str]] = None,
-        label_cols: Optional[List[str]] = None,
+        output_cols: Optional[list[str]] = None,
+        label_cols: Optional[list[str]] = None,
         batch_size: Optional[int] = None,
         predict_with_generate: bool = False,
         use_xla_generation: bool = False,

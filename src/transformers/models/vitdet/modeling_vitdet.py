@@ -456,8 +456,14 @@ class VitDetLayer(nn.Module):
         super().__init__()
 
         dim = config.hidden_size
-        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
 
+        image_size = config.image_size
+        image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+
+        patch_size = config.patch_size
+        patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
+
+        input_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = VitDetAttention(
             config, input_size=input_size if window_size == 0 else (window_size, window_size)
@@ -872,3 +878,6 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["VitDetModel", "VitDetPreTrainedModel", "VitDetBackbone"]

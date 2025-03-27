@@ -14,9 +14,12 @@
 
 import unittest
 
+from huggingface_hub import ZeroShotImageClassificationOutputElement
+
 from transformers import is_vision_available
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -126,6 +129,9 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        for single_output in output:
+            compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
 
     @require_torch
     def test_small_model_pt_fp16(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 # Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
@@ -17,7 +16,7 @@
 Time series distributional output classes and utilities.
 """
 
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Optional
 
 import torch
 from torch import nn
@@ -63,14 +62,14 @@ class AffineTransformed(TransformedDistribution):
 
 class ParameterProjection(nn.Module):
     def __init__(
-        self, in_features: int, args_dim: Dict[str, int], domain_map: Callable[..., Tuple[torch.Tensor]], **kwargs
+        self, in_features: int, args_dim: dict[str, int], domain_map: Callable[..., tuple[torch.Tensor]], **kwargs
     ) -> None:
         super().__init__(**kwargs)
         self.args_dim = args_dim
         self.proj = nn.ModuleList([nn.Linear(in_features, dim) for dim in args_dim.values()])
         self.domain_map = domain_map
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor]:
         params_unbounded = [proj(x) for proj in self.proj]
 
         return self.domain_map(*params_unbounded)
@@ -88,7 +87,7 @@ class LambdaLayer(nn.Module):
 class DistributionOutput:
     distribution_class: type
     in_features: int
-    args_dim: Dict[str, int]
+    args_dim: dict[str, int]
 
     def __init__(self, dim: int = 1) -> None:
         self.dim = dim
@@ -113,7 +112,7 @@ class DistributionOutput:
             return AffineTransformed(distr, loc=loc, scale=scale, event_dim=self.event_dim)
 
     @property
-    def event_shape(self) -> Tuple:
+    def event_shape(self) -> tuple:
         r"""
         Shape of each individual event contemplated by the distributions that this object constructs.
         """
@@ -167,7 +166,7 @@ class StudentTOutput(DistributionOutput):
     Student-T distribution output class.
     """
 
-    args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
+    args_dim: dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
     distribution_class: type = StudentT
 
     @classmethod
@@ -182,7 +181,7 @@ class NormalOutput(DistributionOutput):
     Normal distribution output class.
     """
 
-    args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
+    args_dim: dict[str, int] = {"loc": 1, "scale": 1}
     distribution_class: type = Normal
 
     @classmethod
@@ -196,7 +195,7 @@ class NegativeBinomialOutput(DistributionOutput):
     Negative Binomial distribution output class.
     """
 
-    args_dim: Dict[str, int] = {"total_count": 1, "logits": 1}
+    args_dim: dict[str, int] = {"total_count": 1, "logits": 1}
     distribution_class: type = NegativeBinomial
 
     @classmethod

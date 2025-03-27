@@ -44,7 +44,7 @@ from packaging import version
 def get_merge_commit(repo, pr_number, since_tag):
     try:
         # Use git log to find the merge commit for the PR within the given tag range
-        merge_commit = next(repo.iter_commits(f"v{since_tag}...HEAD", grep=f"#{pr_number}"))
+        merge_commit = next(repo.iter_commits(f"v{since_tag}...origin/main", grep=f"#{pr_number}"))
         return merge_commit
     except StopIteration:
         print(f"No merge commit found for PR #{pr_number} between tags {since_tag} and {main}")
@@ -71,6 +71,7 @@ def main(pr_numbers):
     major_minor = f"{last_tag.major}.{last_tag.minor}.0"
     # Iterate through tag ranges to find the merge commits
     for pr in pr_numbers:
+        pr = pr.split("https://github.com/huggingface/transformers/pull/")[-1]
         commit = get_merge_commit(repo, pr, major_minor)
         if commit:
             merge_commits.append(commit)
@@ -86,7 +87,9 @@ def main(pr_numbers):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find and sort merge commits for specified PRs.")
-    parser.add_argument("--prs", nargs="+", required=True, type=int, help="PR numbers to find merge commits for")
+    parser.add_argument("--prs", nargs="+", required=False, type=str, help="PR numbers to find merge commits for")
 
     args = parser.parse_args()
+    if args.prs is None:
+        args.prs = "https://github.com/huggingface/transformers/pull/33753  https://github.com/huggingface/transformers/pull/33861  https://github.com/huggingface/transformers/pull/33906  https://github.com/huggingface/transformers/pull/33761  https://github.com/huggingface/transformers/pull/33586  https://github.com/huggingface/transformers/pull/33766  https://github.com/huggingface/transformers/pull/33958 https://github.com/huggingface/transformers/pull/33965".split()
     main(args.prs)

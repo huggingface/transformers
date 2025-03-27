@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers.image_transforms import get_image_size
 
 
-class Swin2SRImageProcessingTester(unittest.TestCase):
+class Swin2SRImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -48,7 +48,6 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
         do_pad=True,
         pad_size=8,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

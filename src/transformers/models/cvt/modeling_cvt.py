@@ -544,7 +544,7 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CvtStage):
             if self.config.cls_token[module.stage]:
                 module.cls_token.data = nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                    module.cls_token.data, mean=0.0, std=self.config.initializer_range
                 )
 
 
@@ -720,3 +720,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["CvtForImageClassification", "CvtModel", "CvtPreTrainedModel"]

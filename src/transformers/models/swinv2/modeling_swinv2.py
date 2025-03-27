@@ -683,7 +683,9 @@ class Swinv2Output(nn.Module):
 
 
 class Swinv2Layer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
+    def __init__(
+        self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0, pretrained_window_size=0
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         window_size, shift_size = self._compute_window_shift(
@@ -701,7 +703,7 @@ class Swinv2Layer(nn.Module):
             else (pretrained_window_size, pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swinv2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Swinv2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.intermediate = Swinv2Intermediate(config, dim)
         self.output = Swinv2Output(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
@@ -819,6 +821,7 @@ class Swinv2Stage(nn.Module):
                 dim=dim,
                 input_resolution=input_resolution,
                 num_heads=num_heads,
+                drop_path_rate=drop_path[i],
                 shift_size=0 if (i % 2 == 0) else config.window_size // 2,
                 pretrained_window_size=pretrained_window_size,
             )
@@ -1458,3 +1461,12 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Swinv2ForImageClassification",
+    "Swinv2ForMaskedImageModeling",
+    "Swinv2Model",
+    "Swinv2PreTrainedModel",
+    "Swinv2Backbone",
+]

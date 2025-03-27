@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Phi-3
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Phi-3 model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://arxiv.org/abs/2404.14219) by Microsoft.
@@ -57,10 +63,7 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 >>> outputs = model.generate(inputs, max_new_tokens=32)
 >>> text = tokenizer.batch_decode(outputs)[0]
 >>> print(text)
-<s><|user|> 
-Can you provide ways to eat combinations of bananas and dragonfruits?<|end|> 
-<|assistant|> 
-Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for eating combinations of bananas and
+<|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some creative ideas for incorporating both fruits
 ```
 
 ## Phi3Config

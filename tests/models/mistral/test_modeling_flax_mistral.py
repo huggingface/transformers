@@ -20,7 +20,6 @@ import numpy as np
 from transformers import MistralConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -185,9 +184,8 @@ class FlaxMistralModelTester:
 
 
 @require_flax
-class FlaxMistralModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+class FlaxMistralModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxMistralModel, FlaxMistralForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxMistralForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMistralModelTester(self)

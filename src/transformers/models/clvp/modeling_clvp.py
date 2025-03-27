@@ -1367,6 +1367,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
     ):
+        # Overwritten: has `conditioning_embeds`-related logic
+
         input_ids_length = input_ids.shape[-1]
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -2019,3 +2021,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             text_encoder_hidden_states=text_outputs.hidden_states,
             speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
+
+
+__all__ = [
+    "ClvpModelForConditionalGeneration",
+    "ClvpForCausalLM",
+    "ClvpModel",
+    "ClvpPreTrainedModel",
+    "ClvpEncoder",
+    "ClvpDecoder",
+]
