@@ -55,7 +55,7 @@ class TestTensorParallel(TestCasePlus):
             import os
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+            model_id = "JackFram/llama-68m"
 
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
@@ -80,7 +80,7 @@ class TestTensorParallel(TestCasePlus):
             next_token_logits = outputs[0][:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)
             response = tokenizer.decode(next_token)
-            assert response == " you"
+            assert response == "with"
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
