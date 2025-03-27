@@ -831,6 +831,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x, context_size):
+        x = self.pre_norm(x)
         device, h, max_pos_emb = x.device, self.num_heads, self.max_pos_emb
         bs, n, d = x.shape
         assert context_size > 0 and context_size <= max_pos_emb
@@ -876,6 +877,7 @@ class GraniteSpeechConformerFeedForward(nn.Module):
         self.down_proj = nn.Linear(config.hidden_dim * config.feedforward_mult, config.hidden_dim)
 
     def forward(self, x):
+        x = self.pre_norm(x)
         x = self.up_proj(x)
         x = self.dropout(self.act_fn(x))
         x = self.down_proj(x)
