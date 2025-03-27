@@ -110,6 +110,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("esm", "EsmModel"),
         ("falcon", "FalconModel"),
         ("falcon_mamba", "FalconMambaModel"),
+        ("fast", "FastForSceneTextRecognition"),
         ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
