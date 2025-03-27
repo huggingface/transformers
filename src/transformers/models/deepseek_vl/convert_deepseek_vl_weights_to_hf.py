@@ -248,22 +248,15 @@ def convert_model(
 
     config = DeepseekVLConfig(
         text_config={
-            # -- temporary
-            "num_hidden_layers": 1,
-            "vocab_size": 20 if is_large else 102400,
-            # -- conversion script changes
             "hidden_size": 4096 if is_large else 2048,
             "intermediate_size": 11008 if is_large else 5632,
             "max_position_embeddings": 16384,
             "num_attention_heads": 32 if is_large else 16,
-            # "num_hidden_layers": 30 if is_large else 24,
-            # "vocab_size": 102400,
+            "num_hidden_layers": 30 if is_large else 24,
+            "vocab_size": 102400,
         },
         use_high_res_vision=is_large,
         low_res_vision_config={
-            # -- temporary
-            "num_hidden_layers": 1,
-            # -- conversion script changes
             "hidden_size": 1024,
             "intermediate_size": 4096,
             "image_size": 384,
@@ -271,19 +264,15 @@ def convert_model(
             "hidden_act": "gelu",
             "vision_use_head": False,
             "num_attention_heads": 16,
-            # "num_hidden_layers": 24,
+            "num_hidden_layers": 24,
         },
         high_res_vision_config={
-            # -- temporary
-            "num_hidden_layers": 1,
-            "global_attn_indexes": [0],
-            # -- conversion script changes
             "hidden_size": 768,
             "intermediate_size": 3072,
             "image_size": 1024,
             "patch_size": 16,
             "num_attention_heads": 12,
-            # "num_hidden_layers": 12,
+            "num_hidden_layers": 12,
         },
     )
 

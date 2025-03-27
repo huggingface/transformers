@@ -46,6 +46,8 @@ class DeepseekVLConfig(PretrainedConfig):
             along with low resolution image model (SiglipVisionModel).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
+        image_token_index (`int`, *optional*, defaults to 100015):
+            The index representing image tokens in the model's token vocabulary.
 
     Example:
 
@@ -76,6 +78,7 @@ class DeepseekVLConfig(PretrainedConfig):
         high_res_vision_config: SamVisionConfig = None,
         use_high_res_vision: bool = True,
         initializer_range: float = 0.02,
+        image_token_index: int = 100015,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -99,7 +102,7 @@ class DeepseekVLConfig(PretrainedConfig):
         self.low_res_vision_config = SiglipVisionConfig(**low_res_vision_config)
         self.high_res_vision_config = SamVisionConfig(**high_res_vision_config)
         self.initializer_range = initializer_range
-        self.image_token_index = kwargs.get("image_token_index", 100015)
+        self.image_token_index = image_token_index
 
 
 __all__ = ["DeepseekVLConfig"]

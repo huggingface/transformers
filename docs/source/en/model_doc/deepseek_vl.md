@@ -47,7 +47,6 @@ Here is the example of visual understanding with a single image.
 >>> import torch
 >>> from transformers import DeepseekVLForConditionalGeneration, DeepseekVLProcessor
 
->>> # model_id = "deepseek-ai/deepseek-vl-7b-chat-hf"
 >>> model_id = "deepseek-ai/deepseek-vl-1.3b-chat-hf"
 
 >>> messages = [
@@ -85,7 +84,6 @@ DeepseekVL can perform inference with multiple images as input, where images can
 >>> import torch
 >>> from transformers import DeepseekVLForConditionalGeneration, DeepseekVLProcessor
 
->>> # model_id = "deepseek-ai/deepseek-vl-7b-chat-hf"
 >>> model_id = "deepseek-ai/deepseek-vl-1.3b-chat-hf"
 
 >>> image_urls = [

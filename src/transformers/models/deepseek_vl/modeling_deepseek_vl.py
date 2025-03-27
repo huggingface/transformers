@@ -478,23 +478,34 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
         Example:
 
         ```python
-        >>> from transformers import DeepseekVLProcessor, DeepseekVLForConditionalGeneration
         >>> import torch
-        >>> import requests
-        >>> from PIL import Image
+        >>> from transformers import DeepseekVLForConditionalGeneration, DeepseekVLProcessor
 
         >>> model_id = "deepseek-ai/deepseek-vl-1.3b-chat-hf"
-        >>> model = DeepseekVLForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {'type':'image', 'url': 'http://images.cocodataset.org/val2017/000000039769.jpg'},
+        ...             {'type':"text", "text":"What do you see in this image?."}
+        ...         ]
+        ...     },
+        ... ]
+
         >>> processor = DeepseekVLProcessor.from_pretrained(model_id)
+        >>> model = DeepseekVLForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
 
-        >>> prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image_placeholder><image_placeholder>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-        >>> image = Image.open(requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw)
-        >>> image_2 = Image.open(requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw)
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     add_generation_prompt=True,
+        ...     tokenize=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device, dtype=torch.bfloat16)
 
-        >>> inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
-
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
-        >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> output = model.generate(**inputs, max_new_tokens=40, do_sample=True)
+        >>> text = processor.decode(output[0], skip_special_tokens=True)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
