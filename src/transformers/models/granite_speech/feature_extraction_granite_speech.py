@@ -16,8 +16,10 @@
 Feature extractor class for Speech Granite
 """
 
+from collections.abc import Sequence
 import math
-from typing import List, Optional
+import numpy as np
+from typing import List, Optional, Union, Tuple
 
 from transformers.feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from transformers.utils import is_torch_available, is_torchaudio_available, logging
@@ -31,6 +33,10 @@ if is_torch_available():
 if is_torchaudio_available():
     import torchaudio
 
+# todo: import from transformers.audio_utils
+AudioInput = Union[
+    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+]
 
 class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
     model_input_names = ["input_features"]
@@ -62,15 +68,31 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         self.projector_window_size = projector_window_size
         self.projector_downsample_rate = projector_downsample_rate
 
+    def __call__(
+        self,
+        audios: AudioInput,
+        device: Optional[str] = "cpu",
+    ) -> BatchFeature:
+        speech_inputs = {}
+        batched_audio, audio_lengths = self._get_validated_audios(audios)
+        # Calculate Mel features & the number of placeholders we will need
+        speech_inputs["input_features"] = self._extract_mel_spectrograms(
+            batched_audio,
+            device=device,
+        )
+        audio_embed_sizes = self._get_num_audio_features(audio_lengths)
+        speech_inputs["audio_embed_sizes"] = audio_embed_sizes
+        # todo: input_features_mask is not a great name, because input_features and input_features mask have different shapes (before/after the projector)
+        speech_inputs["input_features_mask"] = torch.arange(max(audio_embed_sizes)).view(1, -1) <= torch.tensor(
+            audio_embed_sizes
+        ).view(-1, 1)
+        return BatchFeature(data=speech_inputs)
+
     def _ensure_melspec_transform_is_initialized(self):
         if self.melspec is None:
             self.melspec = torchaudio.transforms.MelSpectrogram(**self.melspec_kwargs)
 
-    def __call__(
-        self,
-        x: torch.Tensor,
-        device: Optional[str] = "cpu",
-    ) -> BatchFeature:
+    def _extract_mel_spectrograms(self, x: torch.Tensor, device="cpu"):
         # TODO there is probably a better way to do both of these things...
         self._ensure_melspec_transform_is_initialized()
         if device is not None:
@@ -113,6 +135,38 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
             projector_lengths.append(projector_length)
 
         return projector_lengths
+
+    def _get_validated_audios(self, audios: AudioInput):
+        # Coerce to PyTorch tensors if we have numpy arrays, since
+        # currently we have a dependency on torch/torchaudio anyway
+        if isinstance(audios, np.ndarray):
+            audios = torch.from_numpy(audios)
+        elif isinstance(audios, Sequence) and isinstance(audios[0], np.ndarray):
+            audios = [torch.from_numpy(arr) for arr in audios]
+
+        if isinstance(audios, torch.Tensor):
+            if audios.ndim == 1:
+                audios = audios.unsqueeze(0)
+            if not torch.is_floating_point(audios):
+                raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
+
+            if audios.shape[0] > 1:
+                logger.warning("Audio samples are already collated; assuming they all have the same length")
+            lengths = [audios.shape[-1]] * audios.shape[0]
+            return audios, lengths
+
+        elif isinstance(audios, Sequence) and isinstance(audios[0], torch.Tensor):
+            if not torch.is_floating_point(audios[0]):
+                raise ValueError("Invalid audio provided. Audio should be a floating point between 0 and 1")
+            lengths = [audio.shape[-1] for audio in audios]
+            padding = [max(lengths) - length for length in lengths]
+            # ensure all audios have a batch dimension:
+            audios = [audio.view(1, -1) for audio in audios]
+            padded = [torch.nn.functional.pad(audio, (0, pad)) for audio, pad in zip(audios, padding)]
+            audios = torch.cat(padded, dim=0)
+            return audios, lengths
+
+        raise TypeError("Invalid audio provided. Audio should be a one or more torch tensors or numpy arrays")
 
 
 __all__ = ["GraniteSpeechFeatureExtractor"]
