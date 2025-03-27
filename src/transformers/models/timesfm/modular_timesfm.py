@@ -366,9 +366,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
             # Initialize scaling parameter
             nn.init.ones_(module.scaling)
 
-        elif isinstance(module, TimesFmPositionalEmbedding):
-            pass
-
     def generate(self, *args, **kwargs):
         """
         This method is disabled for TimesFM models. TimesFM models are designed for time series forecasting and should be used
