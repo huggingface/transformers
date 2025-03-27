@@ -180,13 +180,13 @@ class Seq2seqTrainerTester(TestCasePlus):
         for num_return_sequences in range(3, 0, -1):
             gen_config.num_return_sequences = num_return_sequences
             metrics = trainer.evaluate(eval_dataset=prepared_dataset, generation_config=gen_config)
-            assert (
-                metrics["eval_samples"] == dataset_len * num_return_sequences
-            ), f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+            assert metrics["eval_samples"] == dataset_len * num_return_sequences, (
+                f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+            )
 
     @require_torch
     def test_bad_generation_config_fail_early(self):
-        # Tests that a bad geneartion config causes the trainer to fail early
+        # Tests that a bad generation config causes the trainer to fail early
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")

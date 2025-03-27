@@ -411,7 +411,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(attention_scale, 1.0)
 
         # Check 2: based on `low_freq_factor` and `high_freq_factor`, the frequencies will be scaled between 1 and
-        # `factor` (similar to yarn). Low frequencies get scaled by `factor`, high frequences see no change, medium
+        # `factor` (similar to yarn). Low frequencies get scaled by `factor`, high frequencies see no change, medium
         # frequencies are scaled by a value in between. Changing `low_freq_factor` and `high_freq_factor` changes what
         # is considered low, medium, and high frequencies.
         factor = 10.0

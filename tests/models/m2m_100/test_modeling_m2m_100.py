@@ -433,7 +433,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_flash_attn_2_seq_to_seq_generation(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = M2M100ForConditionalGeneration.from_pretrained(
             "facebook/m2m100_418M", attn_implementation="flash_attention_2"

@@ -585,11 +585,19 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
 
         return trainer.objective
 
-    sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
+    if not sweep_id:
+        sweep_id = wandb.sweep(sweep_config, project=project, entity=entity)
+    else:
+        import wandb.env
+
+        if entity:
+            wandb.env.set_entity(entity)
+        wandb.env.set_project(project)
+
     logger.info(f"wandb sweep id - {sweep_id}")
     wandb.agent(sweep_id, function=_objective, count=n_trials)
 
-    return BestRun(best_trial["run_id"], best_trial["objective"], best_trial["hyperparameters"])
+    return BestRun(best_trial["run_id"], best_trial["objective"], best_trial["hyperparameters"], sweep_id)
 
 
 def get_available_reporting_integrations():
@@ -2283,10 +2291,10 @@ class SwanLabCallback(TrainerCallback):
         if state.is_world_process_zero:
             for k, v in logs.items():
                 if k in single_value_scalars:
-                    self._swanlab.log({f"single_value/{k}": v})
+                    self._swanlab.log({f"single_value/{k}": v}, step=state.global_step)
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._swanlab.log({**non_scalar_logs, "train/global_step": state.global_step})
+            self._swanlab.log({**non_scalar_logs, "train/global_step": state.global_step}, step=state.global_step)
 
     def on_save(self, args, state, control, **kwargs):
         if self._log_model is not None and self._initialized and state.is_world_process_zero:

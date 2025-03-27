@@ -423,6 +423,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         pass
 
     @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
     @unittest.skip(reason="Cache position is off by one leaving out image tokens, FIXME raushan")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass

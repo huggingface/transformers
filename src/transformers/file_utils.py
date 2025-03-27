@@ -71,7 +71,6 @@ from .utils import (
     copy_func,
     default_cache_path,
     define_sagemaker_information,
-    get_file_from_repo,
     get_torch_version,
     has_file,
     http_user_agent,

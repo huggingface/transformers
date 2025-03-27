@@ -20,12 +20,14 @@ from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.testing_utils import (
+    CaptureStderr,
     get_gpu_count,
     is_torch_available,
     require_gptq,
     require_non_xpu,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -47,7 +49,7 @@ if is_torch_available():
         StaticCache,
         convert_and_export_with_cache,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
+    from transformers.utils import is_torch_greater_or_equal
 
 
 @require_torch
@@ -172,13 +174,67 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    def test_dynamic_cache_exportability(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        prompt = "What is the best way to debug python script?"
+        inputs = tokenizer(prompt, return_tensors="pt")
+        attention_mask = inputs.attention_mask
+        input_ids = inputs.input_ids
+
+        past_key_values = DynamicCache()
+        ep = torch.export.export(
+            model,
+            (),
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": True,
+            },
+            strict=False,
+        )
+        res = ep.module()(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
+        )
+        self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
+        self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        self.assertEqual(
+            3,
+            len(
+                [
+                    x
+                    for x in ep.graph_signature.input_specs
+                    if x.kind == torch.export.graph_signature.InputKind.USER_INPUT
+                ]
+            ),
+        )
+
+        past_key_values_eager = DynamicCache()
+        res_eager = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values_eager,
+            use_cache=True,
+        )
+        self.assertTrue(torch.allclose(res.logits, res_eager.logits))
+        for k1, k2 in zip(res.past_key_values.key_cache, res_eager.past_key_values.key_cache):
+            self.assertTrue(torch.allclose(k1, k2))
+
+        for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
+            self.assertTrue(torch.allclose(v1, v2))
+
     @slow
     @require_read_token
     def test_static_cache_exportability(self):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal_than_2_3:
+        if not is_torch_greater_or_equal("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         set_seed(0)
@@ -229,7 +285,7 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
@@ -541,13 +597,17 @@ class CacheIntegrationTest(unittest.TestCase):
     def test_static_cache_beam_search(self):
         pass
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_offloaded_cache_equivalent_to_dynamic_cache(self):
         """Tests that OffloadedCache produces the same result as the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
+
+        if not is_torch_greater_or_equal("2.7", accept_dev=True) and device.type == "xpu":
+            self.skipTest(reason="This test requires torch >= 2.7 to run on xpu.")
+
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
         common = {
@@ -565,13 +625,17 @@ class CacheIntegrationTest(unittest.TestCase):
         for original_output, offloaded_output in zip(original_outputs, offloaded_outputs):
             assert torch.all(original_output == offloaded_output).item()
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_offloaded_cache_uses_less_memory_than_dynamic_cache(self):
         """Tests that OffloadedCache uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
         device = model.device
+
+        if not is_torch_greater_or_equal("2.7", accept_dev=True) and device.type == "xpu":
+            self.skipTest(reason="This test requires torch >= 2.7 to run on xpu.")
+
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)
         common = {
@@ -584,12 +648,20 @@ class CacheIntegrationTest(unittest.TestCase):
         }
         original = GenerationConfig(**common)
         offloaded = GenerationConfig(cache_implementation="offloaded", **common)
-        torch.cuda.reset_peak_memory_stats(device)
+
+        torch_accelerator_module = None
+        if device.type == "cuda":
+            torch_accelerator_module = torch.cuda
+        elif device.type == "xpu":
+            torch_accelerator_module = torch.xpu
+
+        torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=original, **inputs)
-        original_peak_memory = torch.cuda.max_memory_allocated(device)
-        torch.cuda.reset_peak_memory_stats(device)
+        original_peak_memory = torch_accelerator_module.max_memory_allocated(device)
+        torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=offloaded, **inputs)
-        offloaded_peak_memory = torch.cuda.max_memory_allocated(device)
+        offloaded_peak_memory = torch_accelerator_module.max_memory_allocated(device)
+        print(f"original_peak_memory: {original_peak_memory}, offloaded_peak_memory: {offloaded_peak_memory}")
         assert offloaded_peak_memory < original_peak_memory
 
     @require_torch_gpu
@@ -654,3 +726,42 @@ class CacheIntegrationTest(unittest.TestCase):
                 torch.testing.assert_close(
                     actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
                 )
+
+    @require_torch_gpu
+    def test_static_cache_no_cuda_graph_skips(self):
+        """
+        Tests generating with static cache and compilation doesn't skip cuda graphs. Regression test for #36543.
+
+        (? We set `fullgraph=True`, which according to torch docs means it should raise an exception. Instead,
+        messages are being thrown to stderr?)
+        """
+        model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_repo)
+        inputs = tokenizer(["foo bar"], return_tensors="pt").to(torch_device)
+
+        # on `main`, prior to #36543, this would send stderr messages about cuda graphs being skipped.
+        with CaptureStderr() as cap:
+            model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
+        self.assertEqual(cap.err, "")
+
+    @require_torch_multi_gpu
+    def test_static_cache_multi_gpu(self):
+        """Regression test for #35164: static cache with multi-gpu"""
+
+        model_id = "google/gemma-2-2b-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        device_map = {"model.embed_tokens": 0, "model.norm": 1, "model.rotary_emb": 1, "lm_head": 0}
+        num_hidden_layers = 26
+        for i in range(num_hidden_layers):
+            device_map[f"model.layers.{i}"] = 0 if i < 13 else 1
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype="bfloat16",
+            device_map=device_map,
+        )
+        inputs = tokenizer("Today is a beautiful day!", return_tensors="pt").to(0)
+        _ = model(**inputs)
+        _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")
