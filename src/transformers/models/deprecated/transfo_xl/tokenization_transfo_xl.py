@@ -162,7 +162,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         lower_case=False,
         delimiter=None,
         vocab_file=None,
-        pretrained_vocab_file: str = None,
+        pretrained_vocab_file: Optional[str] = None,
         never_split=None,
         unk_token="<unk>",
         eos_token="<eos>",

@@ -1316,7 +1316,7 @@ class MimiVectorQuantization(nn.Module):
 class MimiResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
 
-    def __init__(self, config: MimiConfig, num_quantizers: int = None):
+    def __init__(self, config: MimiConfig, num_quantizers: Optional[int] = None):
         super().__init__()
         self.codebook_size = config.codebook_size
         self.frame_rate = config.frame_rate

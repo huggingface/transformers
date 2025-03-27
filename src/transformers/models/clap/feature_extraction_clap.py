@@ -92,7 +92,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         frequency_min: float = 0,
         frequency_max: float = 14_000,
-        top_db: int = None,
+        top_db: Optional[int] = None,
         truncation: str = "fusion",
         padding: str = "repeatpad",
         **kwargs,
@@ -258,7 +258,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: str = None,
+        truncation: Optional[str] = None,
         padding: Optional[str] = None,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,

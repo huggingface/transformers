@@ -249,7 +249,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_size: bool = None,
         codebook_resample: int = PILImageResampling.LANCZOS,
         codebook_do_center_crop: bool = True,
-        codebook_crop_size: int = None,
+        codebook_crop_size: Optional[int] = None,
         codebook_do_rescale: bool = True,
         codebook_rescale_factor: Union[int, float] = 1 / 255,
         codebook_do_map_pixels: bool = True,

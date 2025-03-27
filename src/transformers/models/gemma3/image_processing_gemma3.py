@@ -104,8 +104,8 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
         do_pan_and_scan: bool = None,
-        pan_and_scan_min_crop_size: int = None,
-        pan_and_scan_max_num_crops: int = None,
+        pan_and_scan_min_crop_size: Optional[int] = None,
+        pan_and_scan_max_num_crops: Optional[int] = None,
         pan_and_scan_min_ratio_to_activate: float = None,
         **kwargs,
     ) -> None:
@@ -253,8 +253,8 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: bool = None,
         do_pan_and_scan: bool = None,
-        pan_and_scan_min_crop_size: int = None,
-        pan_and_scan_max_num_crops: int = None,
+        pan_and_scan_min_crop_size: Optional[int] = None,
+        pan_and_scan_max_num_crops: Optional[int] = None,
         pan_and_scan_min_ratio_to_activate: float = None,
     ) -> PIL.Image.Image:
         """

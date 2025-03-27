@@ -770,8 +770,8 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         self,
         token_ids_0: List[int],
         token_ids_1: Optional[List[int]] = None,
-        cls_token_id: int = None,
-        sep_token_id: int = None,
+        cls_token_id: Optional[int] = None,
+        sep_token_id: Optional[int] = None,
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and

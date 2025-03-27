@@ -280,7 +280,7 @@ class TvltImageProcessor(BaseImageProcessor):
         do_resize: bool = None,
         size: Dict[str, int] = None,
         patch_size: List[int] = None,
-        num_frames: int = None,
+        num_frames: Optional[int] = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
