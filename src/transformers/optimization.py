@@ -582,6 +582,7 @@ def get_scheduler(
     if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
 
+    # wsd scheduler requires either num_training_steps or num_stable_steps
     if name == SchedulerType.WARMUP_STABLE_DECAY:
         return schedule_func(
             optimizer,
