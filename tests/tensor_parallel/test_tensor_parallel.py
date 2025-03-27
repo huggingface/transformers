@@ -16,7 +16,6 @@ import subprocess
 import tempfile
 import textwrap
 
-# RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -29,6 +28,7 @@ if is_torch_available():
     import torch
 
 
+# RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
 class TestTensorParallel(TestCasePlus):
     nproc_per_node = 2
 
