@@ -145,6 +145,8 @@ IGNORE_NON_TESTED = (
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniThinkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniToken2WavModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavDiTModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
@@ -352,6 +354,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniThinkerModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavDiTModel",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!

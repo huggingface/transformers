@@ -69,7 +69,7 @@ text = processor.apply_chat_template(conversation, add_generation_prompt=True, t
 # Need install ffmpeg to read non wav&flac audios
 audios, images, videos = process_mm_info(conversation, USE_AUDIO_IN_VIDEO)
 
-inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True)
+inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True, use_audio_in_video=USE_AUDIO_IN_VIDEO)
 inputs = inputs.to(model.device)
 
 text_ids, audio = model.generate(**inputs, use_audio_in_video=USE_AUDIO_IN_VIDEO)
@@ -164,7 +164,7 @@ conversations = [conversation1, conversation2, conversation3, conversation4]
 text = processor.apply_chat_template(conversations, add_generation_prompt=True, tokenize=False)
 audios, images, videos = process_mm_info(conversations, USE_AUDIO_IN_VIDEO)
 
-inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True)
+inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True, use_audio_in_video=USE_AUDIO_IN_VIDEO)
 inputs = inputs.to(model.thinker.device)
 
 text_ids = model.generate(**inputs, use_audio_in_video=USE_AUDIO_IN_VIDEO, return_audio=False)
@@ -258,29 +258,46 @@ model = Qwen2_5OmniModel.from_pretrained(
 [[autodoc]] Qwen2_5OmniModel
     - forward
 
-## Qwen2_5OmniTalkerConfig
-[[autodoc]] Qwen2_5OmniTalkerConfig
+## Qwen2_5OmniPreTrainedModelForConditionalGeneration
 
-## Qwen2_5OmniTalkerForConditionalGeneration
-[[autodoc]] Qwen2_5OmniTalkerForConditionalGeneration
-
-## Qwen2_5OmniTalkerModel
-[[autodoc]] Qwen2_5OmniTalkerModel
-
-## Qwen2_5OmniTalkerPretrainedModel
-[[autodoc]] Qwen2_5OmniTalkerPretrainedModel
+[[autodoc]] Qwen2_5OmniPreTrainedModelForConditionalGeneration
 
 ## Qwen2_5OmniThinkerConfig
+
 [[autodoc]] Qwen2_5OmniThinkerConfig
 
 ## Qwen2_5OmniThinkerForConditionalGeneration
+
 [[autodoc]] Qwen2_5OmniThinkerForConditionalGeneration
 
 ## Qwen2_5OmniThinkerModel
+
 [[autodoc]] Qwen2_5OmniThinkerModel
 
+## Qwen2_5OmniTalkerConfig
+
+[[autodoc]] Qwen2_5OmniTalkerConfig
+
+## Qwen2_5OmniTalkerForConditionalGeneration
+
+[[autodoc]] Qwen2_5OmniTalkerForConditionalGeneration
+
+## Qwen2_5OmniTalkerModel
+
+[[autodoc]] Qwen2_5OmniTalkerModel
+
 ## Qwen2_5OmniToken2WavConfig
+
 [[autodoc]] Qwen2_5OmniToken2WavConfig
 
 ## Qwen2_5OmniToken2WavModel
+
 [[autodoc]] Qwen2_5OmniToken2WavModel
+
+## Qwen2_5OmniToken2WavDiTModel
+
+[[autodoc]] Qwen2_5OmniToken2WavDiTModel
+
+## Qwen2_5OmniToken2WavBigVGANModel
+
+[[autodoc]] Qwen2_5OmniToken2WavBigVGANModel
