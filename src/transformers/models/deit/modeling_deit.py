@@ -493,7 +493,6 @@ class DeiTPreTrainedModel(PreTrainedModel):
             module.distillation_token.data.zero_()
             if module.mask_token is not None:
                 module.mask_token.data.zero_()
-                
 
 
 DEIT_START_DOCSTRING = r"""
