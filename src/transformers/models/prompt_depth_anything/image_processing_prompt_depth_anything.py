@@ -152,7 +152,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = False,
-        size_divisor: int = None,
+        size_divisor: Optional[int] = None,
         prompt_scale_to_meter: float = 0.001,  # default unit is mm
         **kwargs,
     ):

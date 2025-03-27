@@ -646,7 +646,7 @@ class GPTQConfig(QuantizationConfigMixin):
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
-        meta: Optional[Dict[str, any]] = None,
+        meta: Optional[Dict[str, Any]] = None,
         backend: Optional[str] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
@@ -1636,16 +1636,16 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison >= version.parse(
-            "0.10.0"
-        ), "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
+        assert ao_verison >= version.parse("0.10.0"), (
+            "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
+        )
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
         # Check if we only have one key which is "default"
         # In the future we may update this
-        assert (
-            len(quant_type) == 1 and "default" in quant_type
-        ), "Expected only one key 'default' in quant_type dictionary"
+        assert len(quant_type) == 1 and "default" in quant_type, (
+            "Expected only one key 'default' in quant_type dictionary"
+        )
         quant_type = quant_type["default"]
 
         # Deserialize quant_type if needed
