@@ -156,8 +156,10 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
             return  #  Don't recurse into Try blocks and ignore imports in them
         elif isinstance(node, ast.If):
             test = node.test
-            if isinstance(test, ast.Call) and test.func.id.startswith("is_flash_attn"):
-                return  # Don't recurse into in "if flash_attn_available()" blocks and ignore imports in them
+            for condition_node in ast.walk(test):
+                if isinstance(condition_node, ast.Call) and condition_node.func.id.startswith("is_flash_attn"):
+                    # Don't recurse into "if flash_attn_available()" blocks and ignore imports in them
+                    return
         elif isinstance(node, ast.Import):
             # Handle 'import x' statements
             for alias in node.names:
