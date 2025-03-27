@@ -32,7 +32,6 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
     else:
