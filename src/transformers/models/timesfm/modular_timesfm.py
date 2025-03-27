@@ -139,9 +139,16 @@ class TimesFmPositionalEmbedding(nn.Module):
 
     def __init__(self, config: TimesFmConfig):
         super().__init__()
-        self.min_timescale = config.min_timescale
-        self.max_timescale = config.max_timescale
+        min_timescale = config.min_timescale
+        max_timescale = config.max_timescale
         self.embedding_dims = config.hidden_size
+
+        num_timescales = self.embedding_dims // 2
+        log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
+        self.register_buffer(
+            "inv_timescales",
+            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+        )
 
     def forward(self, seq_length=None, position=None):
         """Generates a Tensor of sinusoids with different frequencies.
@@ -157,21 +164,16 @@ class TimesFmPositionalEmbedding(nn.Module):
         """
         if position is None and seq_length is None:
             raise ValueError("Either position or seq_length must be provided")
+            
         if position is None:
             # [1, seqlen]
             position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)
         elif position.ndim != 2:
             raise ValueError(f"position must be 2-dimensional, got shape {position.shape}")
 
-        num_timescales = self.embedding_dims // 2
-        log_timescale_increment = math.log(float(self.max_timescale) / float(self.min_timescale)) / max(
-            num_timescales - 1, 1
-        )
-        inv_timescales = self.min_timescale * torch.exp(
-            torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
-        )
-        scaled_time = position.view(*position.shape, 1) * inv_timescales.view(1, 1, -1)
+        scaled_time = position.view(*position.shape, 1) * self.inv_timescales.view(1, 1, -1)
         signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=2)
+
         # Padding to ensure correct embedding dimension
         signal = F.pad(signal, (0, 0, 0, self.embedding_dims % 2))
         return signal
