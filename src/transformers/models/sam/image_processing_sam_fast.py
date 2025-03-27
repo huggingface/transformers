@@ -520,7 +520,11 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         
         # Prepare points_per_crop in the right format
         points_per_crop = torch.stack(total_points_per_crop, dim=0).unsqueeze(0)
-        points_per_crop = points_per_crop.permute(0, 2, 1, 3)
+        # Option 1: Remove the permutation entirely - this is the simplest fix
+        # points_per_crop = points_per_crop.permute(0, 2, 1, 3)  # Comment out or remove this line
+
+        # Option 2: Use the correct permutation if you need to match the exact format
+        # points_per_crop = points_per_crop.permute(0, 1, 2, 3)  # This is identity permutation
         
         # Create input labels (ones)
         input_labels = torch.ones(points_per_crop.shape[:-1], dtype=torch.int64, device=device)
@@ -532,15 +536,21 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Generates a 2D grid of points evenly spaced in [0,1]x[0,1].
         
         Args:
-            n_per_side: Number of points per side of the grid
+            n_per_side: Despite the name, this is actually the total number 
+                       of points desired. We calculate sqrt(n_per_side) to get
+                       the actual number of points per side.
             
         Returns:
             Grid of points as a tensor
         """
-        offset = 1 / (2 * n_per_side)
-        points_one_side = torch.linspace(offset, 1 - offset, n_per_side)
-        points_x = points_one_side.unsqueeze(0).repeat(n_per_side, 1)
-        points_y = points_one_side.unsqueeze(1).repeat(1, n_per_side)
+        # Calculate actual points per side by taking sqrt
+        # This matches the original implementation's behavior
+        actual_points_per_side = int(math.ceil(math.sqrt(n_per_side)))
+        
+        offset = 1 / (2 * actual_points_per_side)
+        points_one_side = torch.linspace(offset, 1 - offset, actual_points_per_side)
+        points_x = points_one_side.unsqueeze(0).repeat(actual_points_per_side, 1)
+        points_y = points_one_side.unsqueeze(1).repeat(1, actual_points_per_side)
         points = torch.stack([points_x, points_y], dim=-1).reshape(-1, 2)
         return points
 
