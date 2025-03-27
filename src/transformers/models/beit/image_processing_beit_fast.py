@@ -14,30 +14,34 @@
 # limitations under the License.
 """Fast Image processor class for Beit."""
 
+from typing import Optional, Union
+
 import torch
-from typing import Optional, Union, Dict
+from torchvision.transforms import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     group_images_by_shape,
     reorder_images,
 )
-from ...processing_utils import Unpack
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    PILImageResampling,
+    ChannelDimension,
     ImageInput,
+    PILImageResampling,
     SizeDict,
-    validate_kwargs,
     pil_torch_interpolation_mapping,
-    ChannelDimension
+    validate_kwargs,
 )
-from ...utils import add_start_docstrings, TensorType
+from ...processing_utils import Unpack
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+)
 
 
 class BeitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -70,7 +74,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
-    
+
     def reduce_label(self, label: list["torch.Tensor"]):
         label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
         label = label - 1
@@ -124,11 +128,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
 
-    def _preprocess_images(
-        self,
-        images: ImageInput,
-        **kwargs
-    ):
+    def _preprocess_images(self, images: ImageInput, **kwargs):
         return self._preprocess(
             images,
             **kwargs,
@@ -144,10 +144,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
-        segmentation_maps = self._preprocess(
-            images=segmentation_maps,
-            **kwargs
-        )
+        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs)
         segmentation_maps = [seg_map.to(torch.uint64) for seg_map in segmentation_maps]
         return segmentation_maps
 
@@ -166,7 +163,12 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
             ADE20k). The background label will be replaced by 255.
         """,
     )
-    def preprocess(self, images: ImageInput, segmentation_maps: Optional[ImageInput] = None, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+    ) -> BatchFeature:
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
@@ -185,7 +187,10 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         # Prepare segmentation maps
         if segmentation_maps:
             segmentation_maps = self._prepare_input_images(
-                images=segmentation_maps, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+                images=segmentation_maps,
+                do_convert_rgb=do_convert_rgb,
+                input_data_format=input_data_format,
+                device=device,
             )
 
         # Update kwargs that need further processing before being validated
@@ -216,7 +221,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
                 **kwargs,
             )
             data["labels"] = segmentation_maps
-        
+
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
 
