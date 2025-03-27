@@ -284,7 +284,7 @@ def get_polynomial_decay_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps: int, timescale: int = None):
+def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps: int, timescale: Optional[int] = None):
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
     shift = timescale - num_warmup_steps
@@ -293,7 +293,7 @@ def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps:
 
 
 def get_inverse_sqrt_schedule(
-    optimizer: Optimizer, num_warmup_steps: int, timescale: int = None, last_epoch: int = -1
+    optimizer: Optimizer, num_warmup_steps: int, timescale: Optional[int] = None, last_epoch: int = -1
 ):
     """
     Create a schedule with an inverse square-root learning rate, from the initial lr set in the optimizer, after a
