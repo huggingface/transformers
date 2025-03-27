@@ -103,8 +103,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Initialize the SamImageProcessorFast with optional configuration parameters.
         """
         super().__init__(**kwargs)
-        # Initialize device attribute for methods that need it
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Initialize device string instead of device object for JSON serialization
+        self.device_str = "cuda" if torch.cuda.is_available() else "cpu"
 
     def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int) -> Tuple[int, int]:
         """
@@ -434,7 +434,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         """
         requires_backends(self, ["torch"])
         if device is None:
-            device = self.device
+            device = torch.device(self.device_str)
         
         # Generate crop boxes
         image_height, image_width = image.shape[-2:]
@@ -561,8 +561,13 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("Only returning PyTorch tensors is currently supported.")
         
         original_height, original_width = original_size
-        iou_scores = iou_scores.flatten(0, 1)
-        masks = masks.flatten(0, 1)
+        
+        if iou_scores.dim() > 1:
+            iou_scores = iou_scores.flatten(0, 1)
+
+
+        if masks.dim() > 3:
+            masks = masks.flatten(0, 1)
 
         batch_size = masks.shape[0]
         keep_mask = torch.ones(batch_size, dtype=torch.bool, device=masks.device)
@@ -720,7 +725,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             
         pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
         pad = (left, pad_x - left, top, pad_y - top)
-        return F.pad(masks, pad, value=0)
+        return F.pad(masks, pad, fill=0)
 
     def _mask_to_rle(self, input_mask: torch.Tensor) -> List[Dict[str, Any]]:
         """
@@ -765,8 +770,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Returns:
             Binary mask tensor
         """
+        device = torch.device(self.device_str)  # Get device from string
         height, width = rle["size"]
-        mask = torch.zeros(height * width, dtype=torch.bool, device=self.device)
+        mask = torch.zeros(height * width, dtype=torch.bool, device=device)
         idx = 0
         parity = False
         for count in rle["counts"]:
