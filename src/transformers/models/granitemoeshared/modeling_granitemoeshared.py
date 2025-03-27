@@ -148,7 +148,6 @@ class GraniteMoeSharedTopKGating(nn.Module):
     def __init__(self, input_size: int, num_experts: int, top_k: int):
         """
         Initialize the top-k gating mechanism.
-
         Args:
             input_size (`int`):
                 Size of the input.
