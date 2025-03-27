@@ -528,6 +528,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         
         # Create input labels (ones)
         input_labels = torch.ones(points_per_crop.shape[:-1], dtype=torch.int64, device=device)
+
+        print("sushmanth is worst", points_per_crop.shape)
+
         
         return crop_boxes_tensor, points_per_crop, cropped_images, input_labels
 
