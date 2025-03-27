@@ -813,28 +813,6 @@ class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
 
 
 
-class GraniteSpeechConformerPreNorm(nn.Module):
-    def __init__(self, dim, fn):
-        super().__init__()
-        self.fn = fn
-        self.norm = nn.LayerNorm(dim)
-
-    def forward(self, x, **kwargs):
-        x = self.norm(x)
-        return self.fn(x, **kwargs)
-
-
-class GraniteSpeechConformerPreNormAttn(nn.Module):
-    def __init__(self, dim, fn):
-        super().__init__()
-        self.fn = fn
-        self.norm = nn.LayerNorm(dim)
-
-    def forward(self, x, context_size, **kwargs):
-        x = self.norm(x)
-        return self.fn(x, context_size, **kwargs)
-
-
 class GraniteSpeechConformerAttention(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
@@ -842,6 +820,7 @@ class GraniteSpeechConformerAttention(nn.Module):
         inner_dim = config.dim_head * self.num_heads
         self.dim_head = config.dim_head
         self.scale = self.dim_head**-0.5
+        self.pre_norm = nn.LayerNorm(config.hidden_dim)
         self.to_q = nn.Linear(config.hidden_dim, inner_dim, bias=False)
         self.to_kv = nn.Linear(config.hidden_dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, config.hidden_dim)
@@ -890,6 +869,7 @@ class GraniteSpeechConformerAttention(nn.Module):
 class GraniteSpeechConformerFeedForward(nn.Module):
     def __init__(self, config: GraniteSpeechEncoderConfig):
         super().__init__()
+        self.pre_norm = nn.LayerNorm(config.hidden_dim)
         self.up_proj = nn.Linear(config.hidden_dim, config.hidden_dim * config.feedforward_mult)
         self.act_fn = nn.SiLU()
         self.dropout = nn.Dropout(config.dropout)
@@ -943,11 +923,6 @@ class GraniteSpeechConformerBlock(nn.Module):
         self.attn = GraniteSpeechConformerAttention(config)
         self.conv = GraniteSpeechConformerConvModule(config)
         self.ff2 = GraniteSpeechConformerFeedForward(config)
-
-        self.attn = GraniteSpeechConformerPreNormAttn(config.hidden_dim, self.attn)
-        self.ff1 = GraniteSpeechConformerPreNorm(config.hidden_dim, self.ff1)
-        self.ff2 = GraniteSpeechConformerPreNorm(config.hidden_dim, self.ff2)
-
         self.post_norm = nn.LayerNorm(config.hidden_dim)
 
     def forward(self, hidden_states, context_size):
