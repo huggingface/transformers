@@ -337,8 +337,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def post_process_masks(
         self,
         masks: torch.Tensor,
-        original_sizes: List[Tuple[int, int]],
-        reshaped_input_sizes: List[Tuple[int, int]],
+        original_sizes: Union[List[Tuple[int, int]], torch.Tensor],
+        reshaped_input_sizes: Union[List[Tuple[int, int]], torch.Tensor],
         mask_threshold: float = 0.0,
         binarize: bool = True,
         pad_size: Optional[Dict[str, int]] = None,
@@ -367,15 +367,23 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
         
+        # Convert tensors to lists if needed
+        if isinstance(original_sizes, torch.Tensor):
+            original_sizes = original_sizes.tolist()
+        if isinstance(reshaped_input_sizes, torch.Tensor):
+            reshaped_input_sizes = reshaped_input_sizes.tolist()
+        
         output_masks = []
         for i, original_size in enumerate(original_sizes):
-            # Handle both single mask and batched masks
-            if masks[i].dim() == 3:
+            # Handle different dimensions for masks
+            if masks[i].dim() == 4:  # If masks[i] is already batched (e.g., shape [1, 3, 5, 5])
                 mask_batch = masks[i]
-            else:
+            elif masks[i].dim() == 3:  # If masks[i] has shape [3, 5, 5]
                 mask_batch = masks[i].unsqueeze(0)
-                
-            # Resize to target size
+            else:  # If masks[i] has shape [5, 5]
+                mask_batch = masks[i].unsqueeze(0).unsqueeze(0)
+            
+            # Resize to target size - ensure mask_batch has right shape [B, C, H, W]
             interpolated_mask = TF.interpolate(
                 mask_batch.float(), 
                 target_image_size, 
@@ -400,7 +408,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
-                
+            
             output_masks.append(interpolated_mask)
 
         return output_masks
