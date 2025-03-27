@@ -48,7 +48,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return AutoTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
+    def get_audio_processor(self, **kwargs):
         return GraniteSpeechFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
@@ -57,10 +57,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
     def test_save_load_pretrained_default(self):
         """Ensure we can save / reload a processor correctly."""
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         processor.save_pretrained(self.tmpdirname)
@@ -69,16 +69,16 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, GPT2TokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, GraniteSpeechFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, GraniteSpeechFeatureExtractor)
 
     def test_requires_text(self):
         """Ensure we require text"""
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         with pytest.raises(TypeError):
@@ -87,19 +87,19 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
     def test_bad_text_fails(self):
         """Ensure we gracefully fail if text is the wrong type."""
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
 
-        processor = GraniteSpeechProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = GraniteSpeechProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
         with pytest.raises(TypeError):
             processor(text=424, audios=None)
 
     def test_bad_nested_text_fails(self):
         """Ensure we gracefully fail if text is the wrong nested type."""
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         with pytest.raises(TypeError):
@@ -108,10 +108,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
     def test_bad_audios_fails(self):
         """Ensure we gracefully fail if audio is the wrong type."""
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         with pytest.raises(TypeError):
@@ -120,10 +120,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
     def test_nested_bad_audios_fails(self):
         """Ensure we gracefully fail if audio is the wrong nested type."""
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         with pytest.raises(TypeError):
@@ -143,10 +143,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         NOTE: Currently we enforce that each sample can only have one audio.
         """
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
         audios = random_func(*vec_dims) - 0.5
 
@@ -157,7 +157,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         audio_token_id = tokenizer.get_vocab()[processor.audio_token]
 
         # Make sure the number of audio tokens matches the number of features
-        num_computed_features = processor.feature_extractor._get_num_audio_features(
+        num_computed_features = processor.audio_processor._get_num_audio_features(
             [vec_dims[1] for _ in range(vec_dims[0])],
         )
         num_audio_tokens = int(torch.sum(inputs["input_ids"] == audio_token_id))
@@ -169,10 +169,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         multiple varying len audio sequences passed as a list.
         """
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
         vec_dims = [[1, 142100], [1, 269920]]
         num_expected_features = [90, 171]
@@ -191,7 +191,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         audio_token_id = tokenizer.get_vocab()[processor.audio_token]
 
         # Make sure the number of audio tokens matches the number of features
-        num_calculated_features = processor.feature_extractor._get_num_audio_features(
+        num_calculated_features = processor.audio_processor._get_num_audio_features(
             [dims[1] for dims in vec_dims],
         )
         num_audio_tokens = int(torch.sum(inputs["input_ids"] == audio_token_id))
@@ -204,10 +204,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         produced are on the CPU.
         """
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         vec_dims = [1, 269920]
