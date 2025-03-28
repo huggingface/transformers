@@ -57,6 +57,8 @@ if is_torch_flex_attn_available():
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
+from ...integrations import use_kernel_attn_from_hub, use_kernel_forward_from_hub
+
 
 logger = logging.get_logger(__name__)
 
@@ -64,6 +66,7 @@ _CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b-hf"
 _CONFIG_FOR_DOC = "LlamaConfig"
 
 
+@use_kernel_forward_from_hub("LlamaRMSNorm")
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -182,6 +185,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernel_forward_from_hub("LlamaMLP")
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -236,8 +240,11 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_attn_from_hub("LlamaAttention", device="cuda")
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    use_kernel: bool = False
 
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
@@ -287,12 +294,16 @@ class LlamaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
+
+        if self.use_kernel:
+            attention_interface = ALL_ATTENTION_FUNCTIONS["attn_kernel"]
+        else:
+            if self.config._attn_implementation != "eager":
+                if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                    logger.warning_once(
+                        "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                        'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                    )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -336,7 +347,6 @@ class LlamaDecoderLayer(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
