@@ -1780,6 +1780,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             **kwargs,
         )
 
+        model_inputs["position_ids"] = None
+
         if cache_position[0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
@@ -2059,7 +2061,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         video_second_per_grid=None,
         **kwargs,
     ):
-        return super().prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values,
             attention_mask,
@@ -2075,6 +2077,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             video_second_per_grid=video_second_per_grid,
             **kwargs,
         )
+
+        model_inputs["position_ids"] = None
+
+        return model_inputs
 
     def _update_model_kwargs_for_generation(
         self,

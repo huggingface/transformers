@@ -109,7 +109,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
             sampling_rate (`int`, defaults to 16000):
                 The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-            fsp (`int`, defaults to 2):
+            fps (`int`, defaults to 2):
                 The frames per second of video input.
         """
 
@@ -177,21 +177,21 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                     start = pos + len(special_token)
             positions.sort(key=lambda x: x[0])
             for _, special_token in positions:
-                if special_token == self.audio_token:
+                if audios is not None and special_token == self.audio_token:
                     text[i] = text[i].replace(
                         self.audio_token,
                         "<|audio_placeholder|>" * audio_lengths[audio_index],
                         1,
                     )
                     audio_index += 1
-                elif special_token == self.image_token:
+                elif images is not None and special_token == self.image_token:
                     text[i] = text[i].replace(
                         self.image_token,
                         "<|image_placeholder|>" * (image_grid_thw[image_index].prod() // merge_length),
                         1,
                     )
                     image_index += 1
-                elif special_token == self.video_token:
+                elif videos is not None and special_token == self.video_token:
                     if use_audio_in_video:
                         audio_t_index = torch.arange(audio_lengths[audio_index])
                         video_t_index = (
