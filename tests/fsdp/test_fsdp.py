@@ -323,7 +323,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_multi_accelerator
     @slow
-    @require_torch_gpu
     @require_fsdp
     @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
     def test_accelerate_fsdp2_integration(self):
@@ -372,7 +371,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_multi_accelerator
     @slow
-    @require_torch_gpu
     @require_fsdp
     @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
     def test_fsdp2_cpu_offloading(self):
