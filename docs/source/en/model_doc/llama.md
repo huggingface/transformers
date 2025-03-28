@@ -116,6 +116,10 @@ visualizer = AttentionMaskVisualizer("huggyllama/llama-7b")
 visualizer("Plants create energy through a process known as")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-attn-mask.png"/>
+</div>
+
 ## Notes
 
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.

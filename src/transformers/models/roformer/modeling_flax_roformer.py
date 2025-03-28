@@ -262,7 +262,7 @@ class FlaxRoFormerSelfAttention(nn.Module):
 
     @staticmethod
     def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer, value_layer=None):
-        sin, cos = sinusoidal_pos.split(2, axis=-1)
+        sin, cos = jnp.split(sinusoidal_pos, 2, axis=-1)
         sin_pos = jnp.stack([sin, sin], axis=-1).reshape(sinusoidal_pos.shape)
         cos_pos = jnp.stack([cos, cos], axis=-1).reshape(sinusoidal_pos.shape)
 
@@ -1046,7 +1046,7 @@ class FlaxRoFormerForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 

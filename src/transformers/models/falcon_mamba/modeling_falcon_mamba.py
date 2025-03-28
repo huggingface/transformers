@@ -119,7 +119,7 @@ class FalconMambaMixer(nn.Module):
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
         self.x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
@@ -768,7 +768,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
-        # Overwitten -- uses `cache_params` as opposed to `past_key_values`
+        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
         if use_cache:
             # `cache_position` should have been initialized in `generate`

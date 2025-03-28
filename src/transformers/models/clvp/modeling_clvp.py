@@ -1346,8 +1346,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             if hasattr(model_kwargs, "attention_mask"):
                 position_ids = model_kwargs["attention_mask"].long().cumsum(-1) - 1
             else:
-                position_ids = torch.range(
-                    0, conditioning_embeds.shape[1] - 1, dtype=torch.long, device=conditioning_embeds.device
+                position_ids = torch.arange(
+                    0, conditioning_embeds.shape[1], dtype=torch.long, device=conditioning_embeds.device
                 )
             position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1)
 

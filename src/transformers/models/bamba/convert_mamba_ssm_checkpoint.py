@@ -19,7 +19,7 @@ import json
 import os
 import re
 from os import path
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -172,7 +172,7 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
     mamba_ssm_checkpoint_path: str,
     precision: str,
     output_dir: str,
-    tokenizer_path: str = None,
+    tokenizer_path: Optional[str] = None,
     save_model: Union[bool, str] = True,
 ) -> None:
     # load tokenizer if provided, this will be used to set the

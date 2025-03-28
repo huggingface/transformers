@@ -175,7 +175,7 @@ class BarkProcessor(ProcessorMixin):
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
-    def _load_voice_preset(self, voice_preset: str = None, **kwargs):
+    def _load_voice_preset(self, voice_preset: Optional[str] = None, **kwargs):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}

@@ -215,7 +215,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        crop_pct: int = None,
+        crop_pct: Optional[int] = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,

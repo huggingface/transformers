@@ -105,8 +105,8 @@ def train(args, train_dataset, model, tokenizer):
         os.path.join(args.model_name_or_path, "scheduler.pt")
     ):
         # Load in optimizer and scheduler states
-        optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
-        scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt")))
+        optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt"), weights_only=True))
+        scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "scheduler.pt"), weights_only=True))
 
     if args.fp16:
         try:
@@ -417,7 +417,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     # Init features and dataset from cache if it exists
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
-        features_and_dataset = torch.load(cached_features_file)
+        features_and_dataset = torch.load(cached_features_file, weights_only=True)
         features, dataset, examples = (
             features_and_dataset["features"],
             features_and_dataset["dataset"],

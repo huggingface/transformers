@@ -36,12 +36,12 @@ import optax
 # for dataset and preprocessing
 import torch
 import torchvision
-import torchvision.transforms as transforms
 from flax import jax_utils
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import HfApi
+from torchvision import transforms
 from tqdm import tqdm
 
 import transformers

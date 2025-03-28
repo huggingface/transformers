@@ -105,7 +105,7 @@ class OPTAttention(nn.Module):
     def __init__(
         self,
         config: OPTConfig,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
@@ -369,7 +369,7 @@ OPT_ATTENTION_CLASSES = {
 
 
 class OPTDecoderLayer(nn.Module):
-    def __init__(self, config: OPTConfig, layer_idx: int = None):
+    def __init__(self, config: OPTConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
 

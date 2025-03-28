@@ -408,7 +408,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_input_ids.pt",
             repo_type="dataset",
         )
-        original_input_ids = torch.load(filepath, map_location="cpu")
+        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         # remove image token indices because HF impl expands image tokens `image_seq_length` times
         original_input_ids = original_input_ids[original_input_ids != -200]
@@ -420,7 +420,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_pixel_values.pt",
             repo_type="dataset",
         )
-        original_pixel_values = torch.load(filepath, map_location="cpu")
+        original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
         assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
         # verify generation
