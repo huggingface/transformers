@@ -13,12 +13,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    LlamaDecoderLayer,
     apply_rotary_pos_emb,
     eager_attention_forward,
     rotate_half,
@@ -39,10 +39,10 @@ class DeepseekV3RotaryEmbedding(LlamaRotaryEmbedding):
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
-    TODO let's just use the original freqcis computation to not have the view 
+    TODO let's just use the original freqcis computation to not have the view
     transpose + reshape! This is not optimized!
     Applies Rotary Position Embedding to the query and key tensors.
-    
+
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
@@ -143,6 +143,7 @@ class DeepseekV3TopkRouter(nn.Module):
         topk_weights = topk_weights * self.routed_scaling_factor
         return topk_indices, topk_weights
 
+
 class DeepseekV3MoE(nn.Module):
     """
     A mixed expert module containing shared experts.
@@ -162,11 +163,10 @@ class DeepseekV3MoE(nn.Module):
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
-
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         r"""
-            CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-            to not have to do a loop here (deepseek has 256 experts soooo yeah).
+        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
+        to not have to do a loop here (deepseek has 256 experts soooo yeah).
         """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
         expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
@@ -197,6 +197,7 @@ class DeepseekV3MoE(nn.Module):
         hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
+
 
 class DeepseekV3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -272,7 +273,7 @@ class DeepseekV3Attention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave: # support using interleaved weights for efficiency
+        if self.config.rope_interleave:  # support using interleaved weights for efficiency
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
