@@ -134,6 +134,7 @@ else:
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
+            ("relation_detr", ("RelationDetrImageProcessor", "RelationDetrImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
