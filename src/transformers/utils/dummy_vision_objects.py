@@ -366,13 +366,6 @@ class InstructBlipVideoImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class InstructBlipVideoVideoProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class LayoutLMv2FeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -436,21 +429,7 @@ class LlavaNextVideoImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class LlavaNextVideoVideoProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class LlavaOnevisionImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
-class LlavaOnevisionVideoProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -625,13 +604,6 @@ class Qwen2VLImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class Qwen2VLVideoProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class RTDetrImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -724,13 +696,6 @@ class TvpImageProcessor(metaclass=DummyObject):
 
 
 class VideoLlavaImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
-class VideoLlavaVideoProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
