@@ -730,6 +730,13 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_5_omni": [
+        "Qwen2_5OmniConfig",
+        "Qwen2_5OmniProcessor",
+        "Qwen2_5OmniTalkerConfig",
+        "Qwen2_5OmniThinkerConfig",
+        "Qwen2_5OmniToken2WavConfig",
+    ],
     "models.qwen2_5_vl": [
         "Qwen2_5_VLConfig",
         "Qwen2_5_VLProcessor",
@@ -1310,6 +1317,7 @@ else:
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.prompt_depth_anything"].extend(["PromptDepthAnythingImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.qwen2_5_omni"].extend(["Qwen2_5OmniProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
@@ -3408,6 +3416,20 @@ else:
             "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_5_omni"].extend(
+        [
+            "Qwen2_5OmniModel",
+            "Qwen2_5OmniPreTrainedModel",
+            "Qwen2_5OmniPreTrainedModelForConditionalGeneration",
+            "Qwen2_5OmniTalkerForConditionalGeneration",
+            "Qwen2_5OmniTalkerModel",
+            "Qwen2_5OmniThinkerForConditionalGeneration",
+            "Qwen2_5OmniThinkerModel",
+            "Qwen2_5OmniToken2WavBigVGANModel",
+            "Qwen2_5OmniToken2WavDiTModel",
+            "Qwen2_5OmniToken2WavModel",
         ]
     )
     _import_structure["models.qwen2_5_vl"].extend(
@@ -5979,6 +6001,13 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_5_omni import (
+        Qwen2_5OmniConfig,
+        Qwen2_5OmniProcessor,
+        Qwen2_5OmniTalkerConfig,
+        Qwen2_5OmniThinkerConfig,
+        Qwen2_5OmniToken2WavConfig,
+    )
     from .models.qwen2_5_vl import (
         Qwen2_5_VLConfig,
         Qwen2_5_VLProcessor,
@@ -6583,6 +6612,7 @@ if TYPE_CHECKING:
         )
         from .models.prompt_depth_anything import PromptDepthAnythingImageProcessor
         from .models.pvt import PvtImageProcessor
+        from .models.qwen2_5_omni import Qwen2_5OmniProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
@@ -8269,6 +8299,18 @@ if TYPE_CHECKING:
             Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
+        )
+        from .models.qwen2_5_omni import (
+            Qwen2_5OmniModel,
+            Qwen2_5OmniPreTrainedModel,
+            Qwen2_5OmniPreTrainedModelForConditionalGeneration,
+            Qwen2_5OmniTalkerForConditionalGeneration,
+            Qwen2_5OmniTalkerModel,
+            Qwen2_5OmniThinkerForConditionalGeneration,
+            Qwen2_5OmniThinkerModel,
+            Qwen2_5OmniToken2WavBigVGANModel,
+            Qwen2_5OmniToken2WavDiTModel,
+            Qwen2_5OmniToken2WavModel,
         )
         from .models.qwen2_5_vl import (
             Qwen2_5_VLForConditionalGeneration,
