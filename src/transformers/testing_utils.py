@@ -53,6 +53,7 @@ from transformers import logging as transformers_logging
 
 from .integrations import (
     is_clearml_available,
+    is_logfire_available,
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
@@ -1136,6 +1137,16 @@ def require_swanlab(test_case):
 
     """
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
+
+
+def require_logfire(test_case):
+    """
+    Decorator marking a test that requires logfire.
+
+    These tests are skipped when logfire isn't installed.
+
+    """
+    return unittest.skipUnless(is_logfire_available(), "test requires logfire")(test_case)
 
 
 def require_wandb(test_case):
