@@ -48,7 +48,7 @@ try:
         "LlamaAttention": {
             "cuda": LayerRepository(
                 repo_id="medmekk/triton-flash-attn",
-                layer_name="LlamaAttention",
+                layer_name="attention",
             )
         },
     }
@@ -78,7 +78,7 @@ try:
                 return cls
 
             attn_kernel = get_kernel(repo.repo_id)
-            AttentionInterface.register("attn_kernel", attn_kernel.attention)
+            AttentionInterface.register("attn_kernel", getattr(attn_kernel, repo.layer_name))
             cls.use_kernel = True
             return cls
 
