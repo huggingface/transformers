@@ -579,6 +579,11 @@ _import_structure = {
         "LongformerTokenizer",
     ],
     "models.longt5": ["LongT5Config"],
+    "models.long_vita": [
+        "Long_vitaConfig",
+        "Long_vitaProcessor",
+        "Long_vitaVisionConfig",
+    ],
     "models.luke": [
         "LukeConfig",
         "LukeTokenizer",
@@ -2850,6 +2855,13 @@ else:
             "LongT5ForConditionalGeneration",
             "LongT5Model",
             "LongT5PreTrainedModel",
+        ]
+    )
+    _import_structure["models.long_vita"].extend(
+        [
+            "Long_vitaForConditionalGeneration",
+            "Long_vitaPreTrainedModel",
+            "Long_vitaVisionModel",
         ]
     )
     _import_structure["models.luke"].extend(
@@ -5794,6 +5806,11 @@ if TYPE_CHECKING:
         LongformerTokenizer,
     )
     from .models.longt5 import LongT5Config
+    from .models.long_vita import (
+        Long_vitaConfig,
+        Long_vitaProcessor,
+        Long_vitaVisionConfig,
+    )
     from .models.luke import (
         LukeConfig,
         LukeTokenizer,
@@ -7817,6 +7834,11 @@ if TYPE_CHECKING:
             LongT5ForConditionalGeneration,
             LongT5Model,
             LongT5PreTrainedModel,
+        )
+        from .models.long_vita import (
+            Long_vitaForConditionalGeneration,
+            Long_vitaPreTrainedModel,
+            Long_vitaVisionModel,
         )
         from .models.luke import (
             LukeForEntityClassification,
