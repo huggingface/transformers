@@ -797,7 +797,7 @@ def _load_state_dict_into_meta_model(
             serialized_param_name = reverse_renaming_mapping[param_name]
             param = file_pointer.get_slice(serialized_param_name)
         else:
-            param = empty_param  # It is actually not empty!
+            param = empty_param.to(tensor_device)  # It is actually not empty!
 
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
