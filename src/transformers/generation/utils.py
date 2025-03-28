@@ -3931,9 +3931,10 @@ class GenerationMixin:
         beam_scores = self._flatten_beam_dim(beam_scores[:, :num_return_sequences])
         beam_indices = self._flatten_beam_dim(beam_indices[:, :num_return_sequences, :])
 
-        # Crop the static-shaped tensors to the actual size. `beam_indices` has -1 on positions that don't contain
-        # generated tokens, and the used beam index where generated tokens are present -- we can use it to detect the
-        # generated length, which may be != `cur_len` (e.g. early stopping with different lengths per beam)
+        # Crop the static-shaped tensors to the actual size.
+        # `beam_indices` is initialized with -1s, and is updated with the beam index of the generated token at each
+        # step. We can use it to detect the generated length, which may be != `cur_len`  (e.g. selected beam is from a
+        # previous decoding iteration)
         max_generated_length = ((beam_indices + 1).bool()).sum(dim=1).max()
         output_length = decoder_prompt_len + max_generated_length
         sequences = sequences[:, :output_length]
