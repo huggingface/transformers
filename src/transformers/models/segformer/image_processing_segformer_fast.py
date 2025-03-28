@@ -30,7 +30,6 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
@@ -258,7 +257,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
 
         # Pop kwargs not needed by internal methods or handled differently
         kwargs.pop("default_to_square")
-        kwargs.pop("data_format") 
+        kwargs.pop("data_format")
 
         # Process images using _preprocess
         processed_images = self._preprocess(
