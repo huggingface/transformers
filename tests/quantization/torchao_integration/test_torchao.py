@@ -408,14 +408,16 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     device = "cuda:0"
 
-    def setUp(self):
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
         if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Float8WeightOnlyConfig
 
-        self.quant_scheme = Float8WeightOnlyConfig()
-        self.quant_scheme_kwargs = {}
+        cls.quant_scheme = Float8WeightOnlyConfig()
+        cls.quant_scheme_kwargs = {}
 
         super().setUp()
 
@@ -426,14 +428,16 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     device = "cuda:0"
 
-    def setUp(self):
+    # called only once for all test in this class
+    @classmethod
+    def setUpClass(cls):
         if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Int8DynamicActivationInt4WeightConfig
 
-        self.quant_scheme = Int8DynamicActivationInt4WeightConfig()
-        self.quant_scheme_kwargs = {}
+        cls.quant_scheme = Int8DynamicActivationInt4WeightConfig()
+        cls.quant_scheme_kwargs = {}
 
         super().setUp()
 
