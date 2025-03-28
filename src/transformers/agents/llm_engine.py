@@ -19,6 +19,7 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from huggingface_hub import InferenceClient
+from huggingface_hub.utils._deprecation import _deprecate_method
 
 from .. import AutoTokenizer
 from ..pipelines.base import Pipeline
@@ -73,6 +74,10 @@ llama_role_conversions = {
 
 
 class HfEngine:
+    @_deprecate_method(
+        version="4.51.0",
+        message="Switch to smolagents instead, with the same functionalities and similar API (https://huggingface.co/docs/smolagents/index)",
+    )
     def __init__(self, model_id: Optional[str] = None):
         self.last_input_token_count = None
         self.last_output_token_count = None

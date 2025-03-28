@@ -344,7 +344,7 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
@@ -1297,7 +1297,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             "use_cache": use_cache,
         }
 
-    def build_delay_pattern_mask(self, input_ids: torch.LongTensor, pad_token_id: int, max_length: int = None):
+    def build_delay_pattern_mask(
+        self, input_ids: torch.LongTensor, pad_token_id: int, max_length: Optional[int] = None
+    ):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
@@ -1706,9 +1708,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration.from_sub_models_pretrained with Musicgen->MusicgenMelody, musicgen-small->musicgen-melody
     def from_sub_models_pretrained(
         cls,
-        text_encoder_pretrained_model_name_or_path: str = None,
-        audio_encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        text_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        audio_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        decoder_pretrained_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -2112,8 +2114,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         batch_size: int,
         model_input_name: str,
         model_kwargs: Dict[str, torch.Tensor],
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
+        decoder_start_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         device: torch.device = None,
     ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
@@ -2304,7 +2306,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration._get_decoder_start_token_id
     def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: Optional[int] = None
     ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id

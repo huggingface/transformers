@@ -228,7 +228,7 @@ class TatoebaConverter:
         # combine with Tatoeba markdown
         readme_url = f"{TATOEBA_MODELS_URL}/{model_dict['_name']}/README.md"
         extra_markdown = f"""
-### {model_dict['_name']}
+### {model_dict["_name"]}
 
 * source language name: {self.tag2name[a3_src]}
 * target language name: {self.tag2name[a3_tgt]}
@@ -237,12 +237,12 @@ class TatoebaConverter:
 
         content = (
             f"""
-* model: {model_dict['modeltype']}
-* source language code{src_multilingual*'s'}: {', '.join(a2_src_tags)}
-* target language code{tgt_multilingual*'s'}: {', '.join(a2_tgt_tags)}
+* model: {model_dict["modeltype"]}
+* source language code{src_multilingual * "s"}: {", ".join(a2_src_tags)}
+* target language code{tgt_multilingual * "s"}: {", ".join(a2_tgt_tags)}
 * dataset: opus {backtranslated_data}
-* release date: {model_dict['release-date']}
-* pre-processing: {model_dict['pre-processing']}
+* release date: {model_dict["release-date"]}
+* pre-processing: {model_dict["pre-processing"]}
 """
             + multilingual_data
             + tuned

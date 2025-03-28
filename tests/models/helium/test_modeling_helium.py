@@ -55,7 +55,6 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (HeliumForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": HeliumModel,

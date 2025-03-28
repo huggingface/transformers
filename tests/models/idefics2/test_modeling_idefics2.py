@@ -369,7 +369,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False

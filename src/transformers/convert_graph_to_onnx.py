@@ -16,7 +16,7 @@ import warnings
 from argparse import ArgumentParser
 from os import listdir, makedirs
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from packaging.version import Version, parse
 
@@ -159,7 +159,7 @@ def ensure_valid_input(model, tokens, input_names):
     return ordered_input_names, tuple(model_args)
 
 
-def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
+def infer_shapes(nlp: Pipeline, framework: str) -> tuple[list[str], list[str], dict, BatchEncoding]:
     """
     Attempt to infer the static vs dynamic axes for each input and output tensors for a specific model
 
@@ -189,7 +189,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
                     raise ValueError(f"Unable to infer tensor axes ({len(tensor.shape)})")
             else:
                 seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
-                axes.update({dim: "sequence" for dim in seq_axes})
+                axes.update(dict.fromkeys(seq_axes, "sequence"))
 
         print(f"Found {'input' if is_input else 'output'} {name} with shape: {axes}")
         return axes

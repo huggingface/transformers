@@ -411,16 +411,6 @@ class TFSamModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model = TFSamModel.from_pretrained("facebook/sam-vit-base")  # sam-vit-huge blows out our memory
         self.assertIsNotNone(model)
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-4, name="outputs", attributes=None):
-        super().check_pt_tf_outputs(
-            tf_outputs=tf_outputs,
-            pt_outputs=pt_outputs,
-            model_class=model_class,
-            tol=tol,
-            name=name,
-            attributes=attributes,
-        )
-
 
 def prepare_image():
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"

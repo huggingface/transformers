@@ -322,7 +322,6 @@ class DbrxModelTester:
 @require_torch
 class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (DbrxForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": DbrxForCausalLM} if is_torch_available() else {}
     test_headmasking = False
     test_pruning = False

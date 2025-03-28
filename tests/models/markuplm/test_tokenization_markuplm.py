@@ -33,7 +33,7 @@ from transformers import (
     logging,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
-from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, require_torch, slow
+from transformers.testing_utils import require_tokenizers, require_torch, slow
 
 from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
 
@@ -1257,50 +1257,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Ensure that the input IDs are still truncated when no max_length is specified
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                nodes, xpaths = self.get_nodes_and_xpaths_batch()
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, nodes, xpaths=xpaths, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, nodes, xpaths=xpaths, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        nodes,
-                        xpaths=xpaths,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        nodes,
-                        xpaths=xpaths,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(
-                        nodes, xpaths=xpaths, padding=True, return_tensors="pt"
-                    )
-                    tensorflow_tensor = tokenizer.batch_encode_plus(
-                        nodes, xpaths=xpaths, padding="longest", return_tensors="tf"
-                    )
-                    encoded_sequences = tokenizer.batch_encode_plus(nodes, xpaths=xpaths, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def test_sequence_ids(self):
         tokenizers = self.get_tokenizers()

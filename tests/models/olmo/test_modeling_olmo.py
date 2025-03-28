@@ -274,7 +274,6 @@ class OlmoModelTester:
 @require_torch
 class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OlmoModel, OlmoForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (OlmoForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": OlmoModel,

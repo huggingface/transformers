@@ -354,7 +354,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
 
-    all_generative_model_classes = (MptForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False

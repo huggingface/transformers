@@ -5,7 +5,6 @@
 #                          modular_olmo2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-
 from ...configuration_utils import PretrainedConfig
 
 
@@ -166,7 +165,7 @@ class Olmo2Config(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
+                f"`rope_scaling` must be a dictionary with two fields, `type` and `factor`, got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

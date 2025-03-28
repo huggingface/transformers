@@ -285,10 +285,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_torch_fx(self):
         pass
 
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_pt_tf_model_equivalence(self):
-        pass
-
 
 @require_torch
 @require_sentencepiece

@@ -300,7 +300,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GemmaModel,
@@ -354,7 +353,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_Gemma_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)

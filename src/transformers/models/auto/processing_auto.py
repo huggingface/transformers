@@ -34,6 +34,7 @@ from ...utils import (
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     get_file_from_repo,
+    cached_file,
     logging,
 )
 from ...video_processing_utils import BaseVideoProcessor
@@ -56,6 +57,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
+        ("aya_vision", "AyaVisionProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
         ("blip-2", "Blip2Processor"),
@@ -70,6 +72,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
+        ("gemma3", "Gemma3Processor"),
         ("git", "GitProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -90,12 +93,14 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
+        ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
+        ("phi4_multimodal", "Phi4MultimodalProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("pixtral", "PixtralProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
@@ -106,7 +111,9 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
+        ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
+        ("siglip2", "Siglip2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
@@ -259,15 +266,21 @@ class AutoProcessor:
         processor_auto_map = None
 
         # First, let's see if we have a processor or preprocessor config.
-        # Filter the kwargs for `get_file_from_repo`.
-        get_file_from_repo_kwargs = {
-            key: kwargs[key] for key in inspect.signature(get_file_from_repo).parameters.keys() if key in kwargs
+        # Filter the kwargs for `cached_file`.
+        cached_file_kwargs = {
+            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
         }
+        # We don't want to raise
+        cached_file_kwargs.update(
+            {
+                "_raise_exceptions_for_gated_repo": False,
+                "_raise_exceptions_for_missing_entries": False,
+                "_raise_exceptions_for_connection_errors": False,
+            }
+        )
 
         # Let's start by checking whether the processor class is saved in a processor config
-        processor_config_file = get_file_from_repo(
-            pretrained_model_name_or_path, PROCESSOR_NAME, **get_file_from_repo_kwargs
-        )
+        processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
             processor_class = config_dict.get("processor_class", None)
@@ -275,11 +288,9 @@ class AutoProcessor:
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
-            # First let's check whether the processor class is saved in an image processor config
-            # If not found, let's check whether the processor class is saved in a video processor config
-            # or in a feature extractor config
-            preprocessor_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME, **get_file_from_repo_kwargs
+            # If not found, let's check whether the processor class is saved in an image processor config
+            preprocessor_config_file = cached_file(
+                pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME, **cached_file_kwargs
             )
             if preprocessor_config_file is not None:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
@@ -315,8 +326,8 @@ class AutoProcessor:
 
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer
-            tokenizer_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **get_file_from_repo_kwargs
+            tokenizer_config_file = cached_file(
+                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **cached_file_kwargs
             )
             if tokenizer_config_file is not None:
                 with open(tokenizer_config_file, encoding="utf-8") as reader:
@@ -400,6 +411,6 @@ class AutoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            processor_class ([`FeatureExtractorMixin`]): The processor to register.
+            processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)

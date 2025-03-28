@@ -251,7 +251,7 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertTrue(model.generation_config.num_beams == 1)
 
         # Under the hood: we now store a generation config in the pipeline. This generation config stores the
-        # task-specific paremeters.
+        # task-specific parameters.
         self.assertTrue(pipe.generation_config.num_beams == 4)
 
         # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
@@ -613,7 +613,7 @@ class PipelineUtilsTest(unittest.TestCase):
         set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
         for task in SUPPORTED_TASKS.keys():
             if task == "table-question-answering":
-                # test table in seperate test due to more dependencies
+                # test table in separate test due to more dependencies
                 continue
 
             self.check_default_pipeline(task, "pt", set_seed_fn, self.check_models_equal_pt)
@@ -631,7 +631,7 @@ class PipelineUtilsTest(unittest.TestCase):
         set_seed_fn = lambda: keras.utils.set_random_seed(0)  # noqa: E731
         for task in SUPPORTED_TASKS.keys():
             if task == "table-question-answering":
-                # test table in seperate test due to more dependencies
+                # test table in separate test due to more dependencies
                 continue
 
             self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
@@ -796,7 +796,7 @@ class CustomPipelineTest(unittest.TestCase):
             pipeline_class=PairClassificationPipeline,
             pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
             tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
-            default={"pt": "hf-internal-testing/tiny-random-distilbert"},
+            default={"pt": ("hf-internal-testing/tiny-random-distilbert", "2ef615d")},
             type="text",
         )
         assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
@@ -806,7 +806,9 @@ class CustomPipelineTest(unittest.TestCase):
         self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
         self.assertEqual(task_def["type"], "text")
         self.assertEqual(task_def["impl"], PairClassificationPipeline)
-        self.assertEqual(task_def["default"], {"model": {"pt": "hf-internal-testing/tiny-random-distilbert"}})
+        self.assertEqual(
+            task_def["default"], {"model": {"pt": ("hf-internal-testing/tiny-random-distilbert", "2ef615d")}}
+        )
 
         # Clean registry for next tests.
         del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]

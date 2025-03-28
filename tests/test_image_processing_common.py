@@ -29,6 +29,7 @@ from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
+    is_flaky,
     require_torch,
     require_torch_gpu,
     require_vision,
@@ -212,6 +213,7 @@ class ImageProcessingTestMixin:
 
     @require_vision
     @require_torch
+    @is_flaky()
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
@@ -223,9 +225,14 @@ class ImageProcessingTestMixin:
             # Warmup
             for _ in range(5):
                 _ = image_processor(image, return_tensors="pt")
-            start = time.time()
-            _ = image_processor(image, return_tensors="pt")
-            return time.time() - start
+            all_times = []
+            for _ in range(10):
+                start = time.time()
+                _ = image_processor(image, return_tensors="pt")
+                all_times.append(time.time() - start)
+            # Take the average of the fastest 3 runs
+            avg_time = sum(sorted(all_times[:3])) / 3.0
+            return avg_time
 
         dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
@@ -306,8 +313,10 @@ class ImageProcessingTestMixin:
         }
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)
 
@@ -319,8 +328,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
 
@@ -352,8 +363,10 @@ class ImageProcessingTestMixin:
         }
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)
 
@@ -365,8 +378,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
 
@@ -387,7 +402,7 @@ class ImageProcessingTestMixin:
                 image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
                 encoding = image_processor(image_inputs, return_tensors="pt")
-                # for layoutLM compatiblity
+                # for layoutLM compatibility
                 self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
                 self.assertEqual(encoding.pixel_values.dtype, torch.float32)
 

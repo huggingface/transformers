@@ -234,7 +234,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
-    all_generative_model_classes = (RwkvForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = False

@@ -169,7 +169,6 @@ class GotOcr2VisionText2TextModelTester:
 @require_torch
 class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GotOcr2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (GotOcr2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-to-text": GotOcr2ForConditionalGeneration,
@@ -255,12 +254,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         reason="GotOcr2's language backbone is Qwen2 which uses GQA so the KV cache is a non standard format"
     )
     def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip(
-        reason="GotOcr2 needs a dynamic control flow to pass pixel values to the forward function only in the first generation step"
-    )
-    def test_generate_compile_1_end_to_end(self):
         pass
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")

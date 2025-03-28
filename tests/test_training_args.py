@@ -7,9 +7,9 @@ from transformers import TrainingArguments
 
 class TestTrainingArguments(unittest.TestCase):
     def test_default_output_dir(self):
-        """Test that output_dir defaults to 'tmp_trainer' when not specified."""
+        """Test that output_dir defaults to 'trainer_output' when not specified."""
         args = TrainingArguments(output_dir=None)
-        self.assertEqual(args.output_dir, "tmp_trainer")
+        self.assertEqual(args.output_dir, "trainer_output")
 
     def test_custom_output_dir(self):
         """Test that output_dir is respected when specified."""
@@ -40,3 +40,28 @@ class TestTrainingArguments(unittest.TestCase):
             self.assertFalse(os.path.exists(output_dir))  # Still shouldn't exist
 
             # Directory should be created when actually needed (e.g. in Trainer)
+
+    def test_torch_empty_cache_steps_requirements(self):
+        """Test that torch_empty_cache_steps is a positive integer or None."""
+
+        # None is acceptable (feature is disabled):
+        args = TrainingArguments(torch_empty_cache_steps=None)
+        self.assertIsNone(args.torch_empty_cache_steps)
+
+        # non-int is unacceptable:
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps=1.0)
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps="none")
+
+        # negative int is unacceptable:
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps=-1)
+
+        # zero is unacceptable:
+        with self.assertRaises(ValueError):
+            TrainingArguments(torch_empty_cache_steps=0)
+
+        # positive int is acceptable:
+        args = TrainingArguments(torch_empty_cache_steps=1)
+        self.assertEqual(args.torch_empty_cache_steps, 1)

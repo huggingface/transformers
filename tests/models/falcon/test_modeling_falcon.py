@@ -290,7 +290,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (FalconForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": FalconModel,
@@ -461,7 +460,9 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -592,12 +593,12 @@ class FalconLanguageGenerationTest(unittest.TestCase):
 
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
 
-        unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
+        unpadded_inputs = tokenizer([test_text], return_tensors="pt").to(f"{torch_device}:0")
         unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
         unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
 
         dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
-        padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
+        padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to(f"{torch_device}:0")
         padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
         padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
 

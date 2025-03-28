@@ -274,7 +274,6 @@ class CohereModelTester:
 @require_torch
 class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (CohereForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": CohereModel,
