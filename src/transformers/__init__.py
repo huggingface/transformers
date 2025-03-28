@@ -616,6 +616,7 @@ _import_structure = {
     "models.mistral": ["MistralConfig"],
     "models.mistral3": ["Mistral3Config"],
     "models.mixtral": ["MixtralConfig"],
+    "models.mlcd": ["MLCDVisionConfig"],
     "models.mllama": [
         "MllamaConfig",
         "MllamaProcessor",
@@ -2993,6 +2994,12 @@ else:
             "MixtralForTokenClassification",
             "MixtralModel",
             "MixtralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mlcd"].extend(
+        [
+            "MLCDPreTrainedModel",
+            "MLCDVisionModel",
         ]
     )
     _import_structure["models.mllama"].extend(
@@ -5845,6 +5852,7 @@ if TYPE_CHECKING:
     from .models.mistral import MistralConfig
     from .models.mistral3 import Mistral3Config
     from .models.mixtral import MixtralConfig
+    from .models.mlcd import MLCDVisionConfig
     from .models.mllama import (
         MllamaConfig,
         MllamaProcessor,
@@ -7936,6 +7944,10 @@ if TYPE_CHECKING:
             MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
+        )
+        from .models.mlcd import (
+            MLCDPreTrainedModel,
+            MLCDVisionModel,
         )
         from .models.mllama import (
             MllamaForCausalLM,
