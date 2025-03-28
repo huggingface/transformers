@@ -4874,7 +4874,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None:  # and hf_quantizer is None:
             expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model_to_load, expanded_device_map)
+            caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
         error_msgs = []
         mismatched_keys = []
@@ -5835,7 +5835,7 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
-def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
+def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, factor=2):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
     the model, which is actually the loading speed botteneck.
@@ -5886,7 +5886,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
             # Allow up to 95% of max device memory
             byte_count = min(byte_count, int(0.95 * device_memory))
         # Allocate memory
-        _ = torch.empty(byte_count // 4, dtype=torch.float16, device=device, requires_grad=False)
+        _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):
