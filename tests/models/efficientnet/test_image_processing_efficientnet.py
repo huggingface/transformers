@@ -19,9 +19,10 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available, is_torch_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
@@ -135,7 +136,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
                 expected_image = (expected_image - 1).to(torch.float32)
                 self.assertTrue(torch.allclose(rescaled_image, expected_image))
             else:
-                expected_image = (image.astype(np.float64) * (1 / 127.5))
+                expected_image = image.astype(np.float64) * (1 / 127.5)
                 expected_image = expected_image.astype(np.float32) - 1
                 self.assertTrue(np.allclose(rescaled_image, expected_image))
 
@@ -148,5 +149,3 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
             else:
                 expected_image = (image * scale).astype(np.float32)
                 self.assertTrue(np.allclose(rescaled_image, expected_image))
-
-
