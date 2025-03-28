@@ -1733,6 +1733,8 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Phi4MultimodalRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
