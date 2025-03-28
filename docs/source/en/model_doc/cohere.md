@@ -1,42 +1,52 @@
-# Cohere
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
 
-The Cohere Command-R model was proposed in the blogpost [Command-R: Retrieval Augmented Generation at Production Scale](https://txt.cohere.com/command-r/) by the Cohere Team.
+# Cohere
 
-The abstract from the paper is the following:
+The **Cohere Command-R** model was proposed in the blog post: [Command-R: Retrieval Augmented Generation at Production Scale](https://cohere.com/blog/command-r) by the Cohere Team.
 
-*Command-R is a scalable generative model targeting RAG and Tool Use to enable production-scale AI for enterprise. Today, we are introducing Command-R, a new LLM aimed at large-scale production workloads. Command-R targets the emerging “scalable” category of models that balance high efficiency with strong accuracy, enabling companies to move beyond proof of concept, and into production.*
+Command-R is a **scalable generative model** optimized for long-context tasks such as retrieval-augmented generation (RAG) and external tool/API use. It is designed to work alongside Cohere’s Embed and Rerank models to provide best-in-class performance for RAG pipelines, especially in enterprise use cases.
 
-*Command-R is a generative model optimized for long context tasks such as retrieval augmented generation (RAG) and using external APIs and tools. It is designed to work in concert with our industry-leading Embed and Rerank models to provide best-in-class integration for RAG applications and excel at enterprise use cases. As a model built for companies to implement at scale, Command-R boasts:
-- Strong accuracy on RAG and Tool Use
-- Low latency, and high throughput
-- Longer 128k context and lower pricing
-- Strong capabilities across 10 key languages
-- Model weights available on HuggingFace for research and evaluation
+Key highlights:
+- Strong accuracy on RAG and Tool Use  
+- Low latency and high throughput  
+- Longer 128k token context length  
+- Multilingual support across 10 key languages  
+- Model weights available on Hugging Face for research and evaluation  
 
-Checkout model checkpoints [here](https://huggingface.co/CohereForAI/c4ai-command-r-v01).
-This model was contributed by [Saurabh Dash](https://huggingface.co/saurabhdash) and [Ahmet Üstün](https://huggingface.co/ahmetustun). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox).
+You can find all the original Command-R checkpoints under the [Cohere Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01) collection.
 
-## Usage tips
+This model was contributed by [Saurabh Dash](https://huggingface.co/saurabhdash) and [Ahmet Üstün](https://huggingface.co/ahmetustun). The code of the implementation in Hugging Face is based on [GPT-NeoX](https://github.com/EleutherAI/gpt-neox).
 
-<Tip warning={true}>
+> [!TIP]
+> Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
 
-The checkpoints uploaded on the Hub use `torch_dtype = 'float16'`, which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+The example below demonstrates how to generate text with [`Pipeline`] and[`AutoModel`].
 
-The `dtype` of the online weights is mostly irrelevant unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `torch_dtype` provided in the config, it will be used. 
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
+```python
+import torch
+from transformers import pipeline
 
-</Tip>
-The model and tokenizer can be loaded via:
+pipeline = pipeline(
+    task="text-generation",
+    model="CohereForAI/c4ai-command-r-v01",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
 # pip install transformers
@@ -62,42 +72,13 @@ gen_text = tokenizer.decode(gen_tokens[0])
 print(gen_text)
 ```
 
-- When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `torch_dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
+</hfoption>
+</hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-## Resources
+The example below demonstrates loading a 4bit quantized model using [bitsandbytes](../quantization/bitsandbytes).
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Command-R. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-
-<PipelineTag pipeline="text-generation"/>
-
-Loading FP16 model
-```python
-# pip install transformers
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
-model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
-
-# Format message with the command-r chat template
-messages = [{"role": "user", "content": "Hello, how are you?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
-## <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
-
-gen_tokens = model.generate(
-    input_ids, 
-    max_new_tokens=100, 
-    do_sample=True, 
-    temperature=0.3,
-    )
-
-gen_text = tokenizer.decode(gen_tokens[0])
-print(gen_text)
-```
-
-Loading bitsnbytes 4bit quantized model
 ```python
 # pip install transformers bitsandbytes accelerate
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
@@ -118,6 +99,32 @@ gen_tokens = model.generate(
 gen_text = tokenizer.decode(gen_tokens[0])
 print(gen_text)
 ```
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+```py
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+visualizer = AttentionMaskVisualizer("CohereForAI/c4ai-command-r-v01")
+visualizer("Plants create energy through a process known as")
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/cohere-attn-mask.png"/>
+</div>
+
+
+## Notes
+<Tip warning={true}>
+The checkpoints uploaded on the Hub use `torch_dtype = 'float16'`, which will be
+used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+
+The `dtype` of the online weights is mostly irrelevant unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `torch_dtype` provided in the config, it will be used. 
+
+Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
+</Tip>
+
+When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `torch_dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
 
 
 ## CohereConfig
@@ -143,5 +150,3 @@ print(gen_text)
 
 [[autodoc]] CohereForCausalLM
     - forward
-
-
