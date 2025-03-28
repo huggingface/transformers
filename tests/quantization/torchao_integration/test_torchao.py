@@ -419,7 +419,7 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
         cls.quant_scheme = Float8WeightOnlyConfig()
         cls.quant_scheme_kwargs = {}
 
-        super().setUp()
+        super().setUpClass()
 
 
 @require_torch_gpu
@@ -439,7 +439,7 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
         cls.quant_scheme = Int8DynamicActivationInt4WeightConfig()
         cls.quant_scheme_kwargs = {}
 
-        super().setUp()
+        super().setUpClass()
 
 
 if __name__ == "__main__":
