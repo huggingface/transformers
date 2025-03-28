@@ -169,7 +169,7 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
-        crop_size: int = None,
+        crop_size: Optional[int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,

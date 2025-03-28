@@ -321,6 +321,24 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_resize_embeddings_results_in_successful_loss(self):
+        # resizing embeddings should result in successful loss computation
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model_vocab_size = config.get_text_config().vocab_size
+            inputs = self._prepare_for_class(inputs, model_class, return_labels=True)
+            # Resize embeddings and call forward
+            model.resize_token_embeddings(model_vocab_size + 10)
+            output = model(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                labels=inputs["labels"],
+                return_dict=True,
+            )
+            self.assertTrue("loss" in output)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):

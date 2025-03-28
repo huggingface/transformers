@@ -74,11 +74,6 @@ OBJECTS_TO_IGNORE = [
     "TFSequenceSummary",
     "TFBertTokenizer",
     "TFGPT2Tokenizer",
-    # Going through an argument deprecation cycle, remove after v4.46
-    "HybridCache",
-    "MambaCache",
-    "SlidingWindowCache",
-    "StaticCache",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
@@ -524,6 +519,7 @@ OBJECTS_TO_IGNORE = [
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
+    "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
@@ -735,7 +731,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
         elif _re_parse_description.search(description) is None:
             idx = description.find(OPTIONAL_KEYWORD)
             len_optional = len(OPTIONAL_KEYWORD)
-            description = f"{description[:idx + len_optional]}, defaults to {str_default}"
+            description = f"{description[: idx + len_optional]}, defaults to {str_default}"
         else:
             description = _re_parse_description.sub(rf"*optional*, defaults to {str_default}", description)
 
