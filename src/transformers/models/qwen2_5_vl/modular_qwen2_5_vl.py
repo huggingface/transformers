@@ -38,7 +38,6 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
-    Qwen2VLTextModel,
     VisionAttention,
     VisionRotaryEmbedding,
     VisionSdpaAttention,
@@ -398,10 +397,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         return hidden_states
-
-
-class Qwen2_5_VLTextModel(Qwen2VLTextModel):
-    pass
 
 
 @dataclass
@@ -1289,5 +1284,5 @@ __all__ = [
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLProcessor",
-    "Qwen2_5_VLTextModel",
+    "Qwen2_5_VLTextModel",  # noqa: F822
 ]
