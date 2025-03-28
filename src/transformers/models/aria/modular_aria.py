@@ -957,6 +957,8 @@ class AriaProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        elif isinstance(text, list):
+            text = text.copy()
         if images is not None:
             image_inputs = self.image_processor(
                 images,
