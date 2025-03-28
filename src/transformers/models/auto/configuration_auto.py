@@ -262,6 +262,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rembert", "RemBertConfig"),
         ("resnet", "ResNetConfig"),
         ("retribert", "RetriBertConfig"),
+        ("rf_detr", "RFDetrConfig"),
         ("roberta", "RobertaConfig"),
         ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
         ("roc_bert", "RoCBertConfig"),
@@ -617,6 +618,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("rembert", "RemBERT"),
         ("resnet", "ResNet"),
         ("retribert", "RetriBERT"),
+        ("rf_detr", "RF-DETR"),
+        ("rf_detr_dinov2_with_registers", "RF-DETR-DINOv2 with Registers"),
         ("roberta", "RoBERTa"),
         ("roberta-prelayernorm", "RoBERTa-PreLayerNorm"),
         ("roc_bert", "RoCBert"),
@@ -768,6 +771,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("smolvlm_vision", "smolvlm"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("rf_detr_dinov2_with_registers", "rf_detr"),
         ("granitevision", "llava_next"),
     ]
 )
