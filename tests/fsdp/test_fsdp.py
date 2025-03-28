@@ -133,6 +133,11 @@ def _parameterized_custom_name_func(func, param_num, param):
     param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
     return f"{func.__name__}_{param_based_name}"
 
+if is_accelerate_available():
+    from accelerate.accelerator import Accelerator
+    is_fsdp2_available = hasattr(Accelerator, 'is_fsdp2')
+else:
+    is_fsdp2_available = False
 
 @require_accelerate
 @require_torch_accelerator
@@ -315,6 +320,91 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             )
         except:  # noqa
             raise AssertionError("CPU offloading failed with FSDP!")
+
+    @require_torch_multi_accelerator
+    @slow
+    @require_torch_gpu
+    @require_fsdp
+    @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
+    def test_accelerate_fsdp2_integration(self):
+        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        sharding_strategy = "full_shard"
+        use_accelerate = True
+
+        num_gpus = min(2, backend_device_count(torch_device))
+        master_port = get_master_port(real_launcher=True)
+        launcher = f"""accelerate launch
+            --num_processes {num_gpus}
+            --main_process_port {master_port}
+            --use_fsdp
+            --fsdp_version 2
+            --fsdp_auto_wrap_policy TRANSFORMER_BASED_WRAP
+            --fsdp_state_dict_type SHARDED_STATE_DICT
+            --fsdp_transformer_layer_cls_to_wrap BertLayer""".split()
+        args = self.get_base_args(output_dir, 2, 25).split()
+        script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+        logs = self.run_cmd_and_get_logs(use_accelerate, sharding_strategy, launcher, script, args, output_dir)
+
+        # resume from ckpt
+        checkpoint = os.path.join(output_dir, "checkpoint-115")
+        resume_args = args + f"--resume_from_checkpoint {checkpoint}".split()
+
+        is_fsdp_ckpt = os.path.isdir(checkpoint) and (
+            # this checks the FSDP state dict when `SHARDED_STATE_DICT` is used
+            any(
+                FSDP_MODEL_NAME in folder_name
+                for folder_name in os.listdir(checkpoint)
+                if os.path.isdir(os.path.join(checkpoint, folder_name))
+            )
+            # this checks the FSDP state dict when `FULL_STATE_DICT` is used
+            or os.path.isfile(os.path.join(checkpoint, f"{FSDP_MODEL_NAME}.bin"))
+        )
+        self.assertTrue(is_fsdp_ckpt)
+
+        logs_resume = self.run_cmd_and_get_logs(
+            use_accelerate, sharding_strategy, launcher, script, resume_args, output_dir
+        )
+
+        for log, log1 in zip(logs, logs_resume):
+            if "learning_rate" in log:
+                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
+
+
+    @require_torch_multi_accelerator
+    @slow
+    @require_torch_gpu
+    @require_fsdp
+    @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
+    def test_fsdp2_cpu_offloading(self):
+        try:
+            subprocess.run(
+                "accelerate launch --fsdp_version 2 utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
+                shell=True,
+                check=True,
+            )
+        except:  # noqa
+            raise AssertionError("CPU offloading failed with FSDP!")
+
+    def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
+        if not use_accelerate:
+            fsdp_args = [
+                "--fsdp",
+                f"{sharding_strategy} auto_wrap",
+                "--fsdp_transformer_layer_cls_to_wrap",
+                "BertLayer",
+            ]
+            cmd = launcher + script + args + fsdp_args
+        else:
+            fsdp_config = f"""
+                --fsdp_sharding_strategy {FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
+            """.split()
+            cmd = launcher + fsdp_config + script + args
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+        logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
+        return logs
 
     def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
         if not use_accelerate:
