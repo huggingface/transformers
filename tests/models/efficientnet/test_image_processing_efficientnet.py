@@ -19,10 +19,12 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available, is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from transformers import EfficientNetImageProcessor
@@ -112,20 +114,39 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
         for image_processor_class in self.image_processor_list:
-            image_processor = image_processor_class(**self.image_processor_dict)
+            kwargs = self.image_processor_dict
+            kwargs["size"] = {"height": 42, "width": 42}
+            image_processor = image_processor_class(**kwargs)
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_rescale(self):
         # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
-        image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
-
         for image_processor_class in self.image_processor_list:
             image_processor = image_processor_class(**self.image_processor_dict)
+            if image_processor_class == EfficientNetImageProcessorFast:
+                image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32)
+            else:
+                image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
 
-            rescaled_image = image_processor.rescale(image, scale=1 / 127.5)
-            expected_image = (image * (1 / 127.5)).astype(np.float32) - 1
-            self.assertTrue(np.allclose(rescaled_image, expected_image))
+            scale = 1 / 127.5
+            rescaled_image = image_processor.rescale(image, scale=scale)
+            if isinstance(rescaled_image, torch.Tensor):
+                expected_image = image.to(torch.float64) * scale
+                expected_image = (expected_image - 1).to(torch.float32)
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
+            else:
+                expected_image = (image.astype(np.float64) * (1 / 127.5))
+                expected_image = expected_image.astype(np.float32) - 1
+                self.assertTrue(np.allclose(rescaled_image, expected_image))
 
-            rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
-            expected_image = (image / 255.0).astype(np.float32)
-            self.assertTrue(np.allclose(rescaled_image, expected_image))
+            scale = 1 / 255
+            rescaled_image = image_processor.rescale(image, scale=scale, offset=False)
+            if isinstance(rescaled_image, torch.Tensor):
+                expected_image = image.to(torch.float64) * scale
+                expected_image = expected_image.to(torch.float32)
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
+            else:
+                expected_image = (image * scale).astype(np.float32)
+                self.assertTrue(np.allclose(rescaled_image, expected_image))
+
+

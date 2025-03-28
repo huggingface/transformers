@@ -103,6 +103,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         scale: float,
         offset: bool = True,
+        dtype: torch.dtype = torch.float32,
     ) -> "torch.Tensor":
         """Rescale an image by a scale factor.
 
@@ -118,12 +119,17 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
             Image to rescale.
         scale (`int` or `float`):
             Scale to apply to the image.
-        offset (`bool`, *optional*):
+        offset (`bool`, default to True):
             Whether to scale the image in both negative and positive directions.
+        dtype (`torch.dtype`, default to `torch.float32`):
+            Data type of the rescaled image.
         """
-        rescaled = image * scale
+        rescaled = image.to(dtype=torch.float64) * scale
 
-        return rescaled if not offset else rescaled - 1
+        if offset:
+            rescaled = rescaled - 1
+
+        return rescaled.to(dtype=dtype)
 
     def rescale_and_normalize(
         self,
