@@ -7391,6 +7391,7 @@ class OPTPreTrainedModel(metaclass=DummyObject):
 
 class Ovis2ForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 

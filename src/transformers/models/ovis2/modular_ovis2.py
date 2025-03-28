@@ -1,24 +1,19 @@
 import math
-from typing import Callable, Optional, Tuple, Union, List, Dict
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
-from transformers.models.siglip.modeling_siglip import SiglipEncoder
 from transformers.models.llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast
+from transformers.models.siglip.modeling_siglip import SiglipEncoder
 
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-)
-from ..auto import AutoModelForCausalLM
+from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
-from ...activations import ACT2FN
 from ...utils import logging
+from ..auto import AutoModelForCausalLM
 
 
 logger = logging.get_logger(__name__)
@@ -132,7 +127,7 @@ def eager_attention_forward(
     key_states: torch.Tensor,
     value_states: torch.Tensor,
     scaling: float,
-    attention_mask: Optional[torch.Tensor]=None,
+    attention_mask: Optional[torch.Tensor] = None,
     dropout: float = 0.0,
     **kwargs,
 ):
@@ -309,7 +304,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
             return super().forward(visual_tokens)
         return torch.matmul(visual_tokens, self.weight)
 
-    def reset_parameters(self, mean=0., std=1.) -> None:
+    def reset_parameters(self, mean=0.0, std=1.0) -> None:
         nn.init.normal_(self.weight, mean=mean, std=std)
         self._fill_padding_idx_with_zero()
 
@@ -323,14 +318,14 @@ class Ovis2VisionModel(Ovis2VisionPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.head = nn.Sequential(
             nn.Linear(
-                config.hidden_size * config.hidden_stride * config.hidden_stride, 
+                config.hidden_size * config.hidden_stride * config.hidden_stride,
                 self.vocab_size - self.num_visual_indicator_tokens,
-                bias=False
+                bias=False,
             ),
             nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens),
         )
         self.post_init()
-        
+
     def get_prob_token(self, logits):
         if self.config.tokenize_function == "gumbel_argmax":
             prob_token = gumbel_softmax(logits, dim=-1, hard=True)
@@ -349,7 +344,7 @@ class Ovis2VisionModel(Ovis2VisionPreTrainedModel):
             selected_image_feature = last_hidden_state[:, 1:, :]
         elif self.config.vision_feature_select_strategy == "full":
             selected_image_feature = last_hidden_state
-        
+
         if self.config.hidden_stride > 1:
             n, seq_len, d = selected_image_feature.shape
             hs = self.config.hidden_stride
@@ -357,7 +352,9 @@ class Ovis2VisionModel(Ovis2VisionPreTrainedModel):
             sqrt_l = int(math.sqrt(seq_len))
             assert sqrt_l * sqrt_l == seq_len, "Token sequence length must be a perfect square"
             pad_size = (hs - (sqrt_l % hs)) % hs
-            selected_image_feature = nn.functional.pad(selected_image_feature, (0, 0, 0, pad_size, 0, pad_size), "constant", 0)
+            selected_image_feature = nn.functional.pad(
+                selected_image_feature, (0, 0, 0, pad_size, 0, pad_size), "constant", 0
+            )
             sqrt_l += pad_size
 
             selected_image_feature = selected_image_feature.reshape(n, sqrt_l // hs, hs, sqrt_l // hs, hs, d)
@@ -422,7 +419,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-        
+
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -469,7 +466,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         visual_indicator = torch.arange(
             self.visual_vocab_size - self.vision_tower.num_visual_indicator_tokens,
             self.visual_vocab_size,
-            dtype=torch.long
+            dtype=torch.long,
         ).to(image_features.device)
         visual_indicator_features = self.visual_table(visual_indicator)
 
@@ -561,9 +558,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features, visual_indicator_features = self.get_image_features(
-                pixel_values=pixel_values
-            )
+            image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
 
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -572,9 +567,11 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
-                inputs_embeds[(input_ids == visual_indicator_id)] = visual_indicator_features[i].expand_as(
-                    inputs_embeds[(input_ids == visual_indicator_id)]
-                ).to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds[(input_ids == visual_indicator_id)] = (
+                    visual_indicator_features[i]
+                    .expand_as(inputs_embeds[(input_ids == visual_indicator_id)])
+                    .to(inputs_embeds.device, inputs_embeds.dtype)
+                )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -654,5 +651,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             model_inputs["grids"] = grids
 
         return model_inputs
+
 
 __all__ = ["Ovis2ForConditionalGeneration"]

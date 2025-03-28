@@ -16,10 +16,8 @@
 
 import unittest
 
-import numpy as np
 import requests
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -102,7 +100,7 @@ class Ovis2VisionText2TextModelTester:
             "qkv_bias": False,
             "use_bias": False,
             "hidden_stride": 1,
-            "vision_feature_select_strategy": "full", 
+            "vision_feature_select_strategy": "full",
             "num_visual_indicator_tokens": 5,
             "tokenize_function": "softmax",
         },
@@ -127,7 +125,7 @@ class Ovis2VisionText2TextModelTester:
         self.seq_length = seq_length + self.image_seq_length
         self.is_training = is_training
         self.num_attention_heads = text_config["num_attention_heads"]
-        
+
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.pad_token_id = text_config["pad_token_id"]
         self.ignore_id = ignore_id
@@ -179,9 +177,7 @@ class Ovis2VisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_ovis2_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask
-    ):
+    def create_and_check_ovis2_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
         model = Ovis2ForConditionalGeneration(config=config)
         model.to(torch_device)
         model.half()
@@ -194,9 +190,7 @@ class Ovis2VisionText2TextModelTester:
         )["logits"]
         self.parent.assertFalse(torch.isnan(logits).any().item())
 
-    def create_and_check_ovis2_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask
-    ):
+    def create_and_check_ovis2_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
         config.torch_dtype = torch.float16
         model = Ovis2ForConditionalGeneration(config=config)
         model.to(torch_device)
@@ -218,9 +212,7 @@ class Ovis2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     """
 
     all_model_classes = (Ovis2ForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     _is_composite = True

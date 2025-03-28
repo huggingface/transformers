@@ -1,21 +1,22 @@
+import argparse
 import os
 import re
-import argparse
-import torch
+
 import requests
+import torch
 from PIL import Image
+
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForVision2Seq,
     AutoTokenizer,
 )
-from huggingface_hub import hf_hub_download
-from safetensors.torch import load_file
 from transformers.models.ovis2.configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
-from transformers.models.ovis2.processing_ovis2 import Ovis2Processor
 from transformers.models.ovis2.image_processing_ovis2 import Ovis2ImageProcessor
 from transformers.models.ovis2.modeling_ovis2 import Ovis2ForConditionalGeneration
+from transformers.models.ovis2.processing_ovis2 import Ovis2Processor
 from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
+
 
 # Constants
 CONTEXT_LENGTH = 32768  # multimodal_max_length
@@ -34,7 +35,7 @@ ORIGINAL_TO_HF_MAPPING = {
     r"trunk.blocks": r"encoder.layers",
     r"mlp.fc": r"ffn.fc",
     r"vte.weight": r"visual_table.weight",
-    r"llm": r"language_model"
+    r"llm": r"language_model",
 }
 
 # Special tokens for the tokenizer
@@ -64,22 +65,22 @@ UNNECESSARY_CONFIG_KEYS = [
 CHAT_TEMPLATE = (
     "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
     "{% for message in messages %}"
-        "{{'<|im_start|>' + message['role'] + '\n'}}"
-        "{% if message['content'] is string %}"
-            "{{ message['content'] }}"
-        "{% else %}"
-            "{% for content in message['content'] %}"
-                "{% if content['type'] == 'image' %}"
-                    "{{ '<image>\n' }}"
-                "{% elif content['type'] == 'text' %}"
-                    "{{ content['text'] }}"
-                "{% endif %}"
-            "{% endfor %}"
-        "{% endif %}"
-        "{{'<|im_end|>\n'}}"
+    "{{'<|im_start|>' + message['role'] + '\n'}}"
+    "{% if message['content'] is string %}"
+    "{{ message['content'] }}"
+    "{% else %}"
+    "{% for content in message['content'] %}"
+    "{% if content['type'] == 'image' %}"
+    "{{ '<image>\n' }}"
+    "{% elif content['type'] == 'text' %}"
+    "{{ content['text'] }}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{{'<|im_end|>\n'}}"
     "{% endfor %}"
     "{% if add_generation_prompt %}"
-        "{{'<|im_start|>assistant\n' }}"
+    "{{'<|im_start|>assistant\n' }}"
     "{% endif %}"
 )
 
@@ -87,11 +88,11 @@ CHAT_TEMPLATE = (
 def create_tokenizer(model_name_or_path, save_dir):
     """
     Create and configure a tokenizer for the Ovis2 model.
-    
+
     Args:
         model_name_or_path: Path to the source model or tokenizer
         save_dir: Directory to save the tokenizer to
-        
+
     Returns:
         The configured tokenizer
     """
@@ -103,9 +104,7 @@ def create_tokenizer(model_name_or_path, save_dir):
             replace_additional_special_tokens=False,
         )
     else:
-        tokenizer = AutoTokenizer.from_pretrained(
-            "./ovisv2_hf/tokenizer_ovisv2", return_token_type_ids=False
-        )
+        tokenizer = AutoTokenizer.from_pretrained("./ovisv2_hf/tokenizer_ovisv2", return_token_type_ids=False)
     tokenizer.chat_template = CHAT_TEMPLATE
     tokenizer.save_pretrained(save_dir)
     return tokenizer
@@ -114,10 +113,10 @@ def create_tokenizer(model_name_or_path, save_dir):
 def create_image_processor(save_dir):
     """
     Create and save an image processor for the Ovis2 model.
-    
+
     Args:
         save_dir: Directory to save the image processor to
-        
+
     Returns:
         The configured image processor
     """
@@ -141,22 +140,22 @@ def create_image_processor(save_dir):
 def extract_vision_config_from_original(orig_config):
     """
     Extract and format vision configuration from the original model config.
-    
+
     Args:
         orig_config: Original model configuration
-        
+
     Returns:
         dict: Cleaned vision configuration dictionary
     """
     visual_tokenizer_config = orig_config.visual_tokenizer_config.to_dict()
     backbone_config = visual_tokenizer_config.pop("backbone_config")
-    
+
     # Copy required fields from backbone config
     visual_tokenizer_config["hidden_size"] = orig_config.visual_tokenizer_config.backbone_config.hidden_size
     visual_tokenizer_config["image_size"] = orig_config.visual_tokenizer_config.backbone_config.image_size
     visual_tokenizer_config["num_channels"] = orig_config.visual_tokenizer_config.backbone_config.num_channels
     visual_tokenizer_config["patch_size"] = orig_config.visual_tokenizer_config.backbone_config.patch_size
-    
+
     # Remove unnecessary keys
     return {k: v for k, v in visual_tokenizer_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
 
@@ -164,25 +163,25 @@ def extract_vision_config_from_original(orig_config):
 def get_ovis2_config(model_name_or_path):
     """
     Create an Ovis2 configuration from the original model.
-    
+
     Args:
         model_name_or_path: Path to the original model
-        
+
     Returns:
         Ovis2Config: Configuration for the HF implementation
     """
     orig_config = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path, 
+        model_name_or_path,
         trust_remote_code=True,
     ).config
-    
+
     # Extract and clean LLM config
     llm_config = orig_config.llm_config.to_dict()
     llm_config = {k: v for k, v in llm_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
-    
+
     # Extract and clean vision config
     visual_tokenizer_config = extract_vision_config_from_original(orig_config)
-    
+
     return Ovis2Config(
         text_config=Qwen2Config(**llm_config),
         vision_config=Ovis2VisionConfig(**visual_tokenizer_config),
@@ -195,10 +194,10 @@ def get_ovis2_config(model_name_or_path):
 def load_orig_state_dict(model_name_or_path):
     """
     Load the state dictionary from the original model.
-    
+
     Args:
         model_name_or_path: Path to the original model
-        
+
     Returns:
         dict: Original model state dictionary
     """
@@ -209,18 +208,18 @@ def load_orig_state_dict(model_name_or_path):
         use_flash_attn=True,
         trust_remote_code=True,
     ).eval()
-    
+
     return model.state_dict()
 
 
 def convert_orig2hf(state_dict, dim):
     """
     Convert original state dictionary keys to HF format.
-    
+
     Args:
         state_dict: Original state dictionary
         dim: Hidden dimension for splitting QKV weights
-        
+
     Returns:
         dict: Converted state dictionary for HF model
     """
@@ -228,7 +227,7 @@ def convert_orig2hf(state_dict, dim):
 
     for key, val in state_dict.items():
         orig_key = key
-        
+
         # Apply regex pattern replacements
         for pattern, replacement in ORIGINAL_TO_HF_MAPPING.items():
             key = re.sub(pattern, replacement, key)
@@ -240,15 +239,15 @@ def convert_orig2hf(state_dict, dim):
             new_state_dict[new_key_query] = state_dict[orig_key][:dim]
 
             new_key_key = key.replace("attn.qkv", "attention.k_proj")
-            new_state_dict[new_key_key] = state_dict[orig_key][dim:2*dim]
+            new_state_dict[new_key_key] = state_dict[orig_key][dim : 2 * dim]
 
             new_key_value = key.replace("attn.qkv", "attention.v_proj")
             new_state_dict[new_key_value] = state_dict[orig_key][-dim:]
-            
+
         elif "pos_embed" in key:
             new_key = key.replace("pos_embed", "position_embeddings.weight")
             new_state_dict[new_key] = state_dict[orig_key][0]
-            
+
         else:
             new_state_dict[key] = val
 
@@ -258,23 +257,23 @@ def convert_orig2hf(state_dict, dim):
 def convert_model(model_name_or_path):
     """
     Convert and save the model in HF format.
-    
+
     Args:
         model_name_or_path: Path to the original model
         save_dir: Directory to save the converted model
-        
+
     Returns:
         The converted model
     """
-    
+
     config = get_ovis2_config(model_name_or_path)
     config.architectures = ["Ovis2ForConditionalGeneration"]
     # config.save_pretrained(save_dir)
-    
+
     # Load and convert weights
     orig_state_dict = load_orig_state_dict(model_name_or_path)
     new_state_dict = convert_orig2hf(orig_state_dict, config.vision_config.hidden_size)
-    
+
     # Create model and load converted weights
     model = Ovis2ForConditionalGeneration(config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
@@ -284,7 +283,7 @@ def convert_model(model_name_or_path):
         print(f"Missing keys: {missing_keys}")
     if unexpected_keys:
         print(f"Unexpected keys: {unexpected_keys}")
-        
+
     return model
 
 
@@ -302,29 +301,19 @@ def main():
             "AIDC-AI/Ovis2-16B",
             "AIDC-AI/Ovis2-34B",
         ],
-        help="Location of original Ovis2 model"
+        help="Location of original Ovis2 model",
     )
+    parser.add_argument("--save_dir", default="Ovis2-2B-hf", help="Location to write HF model and processors")
+    parser.add_argument("--hub_dir", default="thisisiron/Ovis2-2B-hf", help="Hub repository name if pushing to hub")
     parser.add_argument(
-        "--save_dir",
-        default="Ovis2-2B-hf",
-        help="Location to write HF model and processors"
-    )
-    parser.add_argument(
-        "--hub_dir",
-        default="thisisiron/Ovis2-2B-hf",
-        help="Hub repository name if pushing to hub"
-    )
-    parser.add_argument(
-        "--push_to_hub", 
-        action="store_true", 
-        help="Whether to push the converted model to the Hugging Face hub"
+        "--push_to_hub", action="store_true", help="Whether to push the converted model to the Hugging Face hub"
     )
 
     args = parser.parse_args()
-    
+
     # Execute conversion pipeline
     print(f"Converting model from {args.model_name_or_path} to {args.save_dir}")
-    
+
     tokenizer = create_tokenizer(
         model_name_or_path=args.model_name_or_path,
         save_dir=args.save_dir,
@@ -335,17 +324,11 @@ def main():
     )
 
     # Convert and save the model
-    model = convert_model(
-        model_name_or_path=args.model_name_or_path
-    )
+    model = convert_model(model_name_or_path=args.model_name_or_path)
 
     # Save the model and processor
     os.makedirs(args.save_dir, exist_ok=True)
-    processor = Ovis2Processor(
-        tokenizer=tokenizer,
-        image_processor=image_processor,
-        chat_template=CHAT_TEMPLATE
-    )
+    processor = Ovis2Processor(tokenizer=tokenizer, image_processor=image_processor, chat_template=CHAT_TEMPLATE)
     processor.save_pretrained(args.save_dir)
     model.save_pretrained(args.save_dir)
 
@@ -354,10 +337,14 @@ def main():
         processor.push_to_hub(args.hub_dir, use_temp_dir=True)
         model.push_to_hub(args.hub_dir, use_temp_dir=True)
 
-    model = AutoModelForVision2Seq.from_pretrained(
-        args.save_dir,
-        torch_dtype=torch.bfloat16,
-    ).eval().to("cuda:0")
+    model = (
+        AutoModelForVision2Seq.from_pretrained(
+            args.save_dir,
+            torch_dtype=torch.bfloat16,
+        )
+        .eval()
+        .to("cuda:0")
+    )
 
     messages = [
         {
@@ -372,21 +359,21 @@ def main():
     image = Image.open(requests.get(url, stream=True).raw)
     messages = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     print(messages)
-    
+
     inputs = processor(
         images=[image],
         text=messages,
         return_tensors="pt",
     )
     inputs = inputs.to("cuda:0")
-    inputs['pixel_values'] = inputs['pixel_values'].to(torch.bfloat16)
+    inputs["pixel_values"] = inputs["pixel_values"].to(torch.bfloat16)
 
     with torch.inference_mode():
         output_ids = model.generate(**inputs, max_new_tokens=128, do_sample=False)
-        generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+        generated_ids = [output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
         output_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         print(output_text)
-    
+
 
 if __name__ == "__main__":
     main()
