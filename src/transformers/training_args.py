@@ -768,14 +768,6 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        split_batches (`bool`, *optional*):
-            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices
-            during distributed training. If
-
-            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it
-            must be a
-
-            round multiple of the number of processes you are using (such as GPUs).
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
 
@@ -1426,10 +1418,6 @@ class TrainingArguments:
             "choices": ["auto", "apex", "cpu_amp"],
         },
     )
-    evaluation_strategy: Union[IntervalStrategy, str] = field(
-        default=None,
-        metadata={"help": "Deprecated. Use `eval_strategy` instead"},
-    )
     push_to_hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
     )
@@ -1502,16 +1490,6 @@ class TrainingArguments:
         metadata={
             "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
         },
-    )
-
-    dispatch_batches: Optional[bool] = field(
-        default=None,
-        metadata={"help": "Deprecated. Pass {'dispatch_batches':VALUE} to `accelerator_config`."},
-    )
-
-    split_batches: Optional[bool] = field(
-        default=None,
-        metadata={"help": "Deprecated. Pass {'split_batches':True} to `accelerator_config`."},
     )
 
     include_tokens_per_second: Optional[bool] = field(
@@ -1605,13 +1583,6 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-
-        if self.evaluation_strategy is not None:
-            warnings.warn(
-                "`evaluation_strategy` is deprecated and will be removed in version 4.46 of 🤗 Transformers. Use `eval_strategy` instead",
-                FutureWarning,
-            )
-            self.eval_strategy = self.evaluation_strategy
 
         if isinstance(self.eval_strategy, EvaluationStrategy):
             warnings.warn(
@@ -1771,7 +1742,7 @@ class TrainingArguments:
 
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
+            if not isinstance(self.accelerator_config, AcceleratorConfig):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
                 elif isinstance(self.accelerator_config, dict):
@@ -1785,22 +1756,6 @@ class TrainingArguments:
                     )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
-
-            if self.dispatch_batches is not None:
-                warnings.warn(
-                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.dispatch_batches = self.dispatch_batches
-
-            if self.split_batches is not None:
-                warnings.warn(
-                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'split_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.split_batches = self.split_batches
 
         # Initialize device before we proceed
         if self.framework == "pt" and is_torch_available():
