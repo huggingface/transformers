@@ -11,22 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import os
 import shutil
 import tempfile
 import unittest
-import json
 
 import numpy as np
 import torch
 
 from transformers.testing_utils import (
-    require_tf,
     require_torch,
     require_torchvision,
     require_vision,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 
@@ -35,11 +34,11 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import AutoProcessor, SamImageProcessor, SamProcessor
-    
+
     # Import SamImageProcessorFast if available
     try:
         from transformers.models.sam.image_processing_sam_fast import SamImageProcessorFast
-        
+
         # Create a wrapper class that inherits from SamImageProcessor to satisfy type checking
         class SamImageProcessorFastWrapper(SamImageProcessor):
             """
@@ -49,30 +48,30 @@ if is_vision_available():
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
                 self.fast_processor = SamImageProcessorFast(**kwargs)
-                
+
                 # Copy attributes from fast processor to wrapper
                 for attr_name in dir(self.fast_processor):
                     if not attr_name.startswith('_') and not hasattr(self, attr_name):
                         setattr(self, attr_name, getattr(self.fast_processor, attr_name))
-            
+
             def __call__(self, *args, **kwargs):
                 return self.fast_processor(*args, **kwargs)
-                
+
             def post_process_masks(self, *args, **kwargs):
                 return self.fast_processor.post_process_masks(*args, **kwargs)
-                
+
             def generate_crop_boxes(self, *args, **kwargs):
                 return self.fast_processor.generate_crop_boxes(*args, **kwargs)
-                
+
             def filter_masks(self, *args, **kwargs):
                 return self.fast_processor.filter_masks(*args, **kwargs)
-                
+
             def post_process_for_mask_generation(self, *args, **kwargs):
                 return self.fast_processor.post_process_for_mask_generation(*args, **kwargs)
-                
+
             def to_dict(self):
                 return self.fast_processor.to_dict()
-                
+
             def _preprocess(self, *args, **kwargs):
                 return self.fast_processor._preprocess(*args, **kwargs)
     except ImportError:
@@ -85,11 +84,11 @@ if is_vision_available():
 @require_torchvision
 class SamImageProcessorFastTest(unittest.TestCase):
     image_processor_class = SamImageProcessorFast
-    
+
     def setUp(self):
         if SamImageProcessorFast is None:
             self.skipTest("SamImageProcessorFast not found, skipping tests")
-            
+
         self.tmpdirname = tempfile.mkdtemp()
         self.image_processor = SamImageProcessorFast()
         self.image_processor.save_pretrained(self.tmpdirname)
@@ -129,10 +128,10 @@ class SamImageProcessorFastTest(unittest.TestCase):
         """Test saving and loading the fast image processor."""
         # Save the processor
         self.image_processor.save_pretrained(self.tmpdirname)
-        
+
         # Load it back
         loaded_processor = SamImageProcessorFast.from_pretrained(self.tmpdirname)
-        
+
         # Check if the loaded processor has the same attributes
         self.assertEqual(self.image_processor.to_dict(), loaded_processor.to_dict())
 
@@ -141,18 +140,18 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # Only run this test if SamImageProcessor exists
         if not hasattr(globals(), "SamImageProcessor"):
             self.skipTest("SamImageProcessor not found")
-            
+
         # Initialize both processors
-        slow_processor = SamImageProcessor() 
+        slow_processor = SamImageProcessor()
         fast_processor = SamImageProcessorFast()
-        
+
         # Create input
         images = self.prepare_image_inputs()
         images_tensor = [torch.tensor(np.array(img)).permute(2, 0, 1) for img in images]
-        
+
         # Process with slow processor
         slow_output = slow_processor(images, return_tensors="pt")
-        
+
         # Process with fast processor
         fast_output = fast_processor._preprocess(
             images=images_tensor,
@@ -168,10 +167,10 @@ class SamImageProcessorFastTest(unittest.TestCase):
             pad_size=fast_processor.pad_size,
             return_tensors="pt"
         )
-        
+
         # Check that the outputs have the same keys
         self.assertEqual(set(slow_output.keys()), set(fast_output.keys()))
-        
+
         # Check that the processed images have the same shape
         for key in ["pixel_values"]:
             # Convert slow output to torch if needed
@@ -179,10 +178,10 @@ class SamImageProcessorFastTest(unittest.TestCase):
                 slow_tensor = torch.tensor(slow_output[key])
             else:
                 slow_tensor = slow_output[key]
-                
+
             # Compare shapes
             self.assertEqual(slow_tensor.shape, fast_output[key].shape)
-            
+
             # Compare values (allowing for small differences due to implementation details)
             if isinstance(slow_tensor, torch.Tensor) and isinstance(fast_output[key], torch.Tensor):
                 max_diff = torch.max(torch.abs(slow_tensor - fast_output[key]))
@@ -217,7 +216,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         self.assertIn("pixel_values", output)
         self.assertIn("original_sizes", output)
         self.assertIn("reshaped_input_sizes", output)
-        
+
         # Check shapes
         self.assertEqual(output["pixel_values"].shape, (len(image_input), 3, 1024, 1024))
 
@@ -228,7 +227,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # Prepare input
         image_input = self.prepare_image_inputs()
         mask_input = self.prepare_mask_inputs()
-        
+
         # Convert to tensor for the fast processor
         image_input_tensor = [torch.tensor(np.array(img)).permute(2, 0, 1) for img in image_input]
 
@@ -256,7 +255,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         self.assertIn("original_sizes", output)
         self.assertIn("reshaped_input_sizes", output)
         self.assertIn("labels", output)
-        
+
         # Check shapes
         self.assertEqual(output["pixel_values"].shape, (len(image_input), 3, 1024, 1024))
         self.assertEqual(output["labels"].shape, (len(mask_input), 1, 256, 256))
@@ -264,14 +263,14 @@ class SamImageProcessorFastTest(unittest.TestCase):
     def test_post_process_masks(self):
         """Test post-processing of masks."""
         image_processor = self.image_processor
-        
+
         # Create dummy masks
         dummy_masks = torch.ones((1, 3, 5, 5))
 
         # Prepare sizes
         original_sizes = [(1764, 2646)]
         reshaped_input_size = [(683, 1024)]
-        
+
         # Post-process masks
         masks = image_processor.post_process_masks(
             masks=dummy_masks,
@@ -279,21 +278,21 @@ class SamImageProcessorFastTest(unittest.TestCase):
             reshaped_input_sizes=reshaped_input_size,
             return_tensors="pt"
         )
-        
+
         # Check shape of output masks
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
-        
+
         # Test with tensor inputs - convert tensors to lists before calling post_process_masks
         tensor_original_sizes = torch.tensor(original_sizes)
         tensor_reshaped_input_size = torch.tensor(reshaped_input_size)
-        
+
         masks = image_processor.post_process_masks(
             masks=dummy_masks,
             original_sizes=tensor_original_sizes.tolist(),
             reshaped_input_sizes=tensor_reshaped_input_size.tolist(),
             return_tensors="pt"
         )
-        
+
         # Check shape of output masks
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
@@ -302,23 +301,23 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # Test a mask of all zeros
         input_mask = torch.zeros((1, 2, 2), dtype=torch.long)
         rle = self.image_processor._mask_to_rle(input_mask)
-        
+
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
         self.assertEqual(rle[0]["counts"], [4])  # Single run of 4 zeros
-        
+
         # Test a mask of all ones
         input_mask = torch.ones((1, 2, 2), dtype=torch.long)
         rle = self.image_processor._mask_to_rle(input_mask)
-        
+
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
         self.assertEqual(rle[0]["counts"], [0, 4])  # 0 zeros followed by 4 ones
-        
+
         # Test a mixed mask
         input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
         rle = self.image_processor._mask_to_rle(input_mask)
-        
+
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
         self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero followed by 3 ones
@@ -327,13 +326,13 @@ class SamImageProcessorFastTest(unittest.TestCase):
         """Test conversion between RLE and mask formats."""
         # Create a sample mask
         original_mask = torch.tensor([[[0, 1], [1, 0]]], dtype=torch.bool)
-        
+
         # Convert to RLE
         rle = self.image_processor._mask_to_rle(original_mask)
-        
+
         # Convert back to mask
         reconstructed_mask = self.image_processor._rle_to_mask(rle[0]).unsqueeze(0)
-        
+
         # Check that the reconstructed mask matches the original
         self.assertTrue(torch.all(original_mask == reconstructed_mask))
 
@@ -341,7 +340,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         """Test generation of crop boxes."""
         # Create a sample image tensor
         image = torch.zeros((3, 512, 768), dtype=torch.float32)
-        
+
         # Generate crop boxes
         crop_boxes, points_per_crop, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image=image,
@@ -351,7 +350,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             crop_n_points_downscale_factor=1,
             return_tensors="pt"
         )
-        
+
         # Check outputs
         # For crop_n_layers=1, we should have 1 (original) + 4 (2x2 grid) = 5 crops
         self.assertEqual(len(crop_boxes), 5)
@@ -366,17 +365,17 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # First mask: largely uniform (should have high stability)
         masks[0, 0:2, 0:2] = 0.4
         # Second mask: moderate variation
-        masks[1, 0:3, 0:3] = 0.6  
+        masks[1, 0:3, 0:3] = 0.6
         # Third mask: lots of variation (should have lower stability)
         masks[2, :, :] = torch.rand((5, 5)) * 0.3 + 0.6
-        
+
         # Create sample scores
         scores = torch.tensor([0.95, 0.85, 0.75])
-        
+
         # Filter masks
         original_size = (10, 10)
         cropped_box = [0, 0, 5, 5]
-        
+
         rle_masks, filtered_scores, boxes = self.image_processor.filter_masks(
             masks=masks,
             iou_scores=scores,
@@ -388,12 +387,12 @@ class SamImageProcessorFastTest(unittest.TestCase):
             stability_score_offset=0.1,  # Smaller offset to get meaningful differences
             return_tensors="pt"
         )
-        
+
         # Check outputs - we expect two masks to remain after filtering by the 0.8 threshold
         self.assertEqual(len(rle_masks), 2)
         self.assertEqual(len(filtered_scores), 2)
         self.assertEqual(len(boxes), 2)
-        
+
         # Check that scores are filtered correctly
         self.assertTrue(torch.all(filtered_scores >= 0.8))
 
@@ -404,7 +403,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
         mask[0, :2, :2] = 0.2  # Add some variation
         mask[1, :3, :3] = 0.6
         mask[2, :4, :4] = 0.9
-        
+
         # Compute stability scores
         stability_scores = self.image_processor._compute_stability_score(
             masks=mask,
@@ -412,11 +411,11 @@ class SamImageProcessorFastTest(unittest.TestCase):
             stability_score_offset=0.1
         )
         print(stability_scores)
-        
+
         # Check that scores are between 0 and 1
         self.assertTrue(torch.all(stability_scores >= 0))
         self.assertTrue(torch.all(stability_scores <= 1))
-        
+
         # Check that the stability score increases with more consistent masks
         self.assertGreaterEqual(stability_scores[2], stability_scores[1])
 
@@ -429,19 +428,19 @@ class SamImageProcessorFastTest(unittest.TestCase):
         # Mask 2: center
         masks[1, 4:7, 4:7] = True
         # Mask 3: empty mask
-        
+
         # Convert to boxes
         boxes = self.image_processor._batched_mask_to_box(masks)
-        
+
         # Check shapes
         self.assertEqual(boxes.shape, (3, 4))
-        
+
         # Check box 1
         self.assertEqual(boxes[0].tolist(), [1, 1, 4, 3])
-        
+
         # Check box 2
         self.assertEqual(boxes[1].tolist(), [4, 4, 6, 6])
-        
+
         # Check box 3 (empty mask should give [0, 0, 0, 0])
         self.assertEqual(boxes[2].tolist(), [0, 0, 0, 0])
 
@@ -452,7 +451,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             from torchvision.ops.boxes import batched_nms
         except ImportError:
             self.skipTest("torchvision not available")
-        
+
         # Create sample masks and convert to RLE
         masks = torch.zeros((5, 10, 10), dtype=torch.bool)
         # Add masks
@@ -461,10 +460,10 @@ class SamImageProcessorFastTest(unittest.TestCase):
         masks[2, 6:9, 6:9] = True  # Separate mask
         masks[3, 5:8, 5:8] = True  # Overlaps with mask 2
         masks[4, 0:3, 7:10] = True  # Another separate mask
-        
+
         # Convert to RLE
         rle_masks = [self.image_processor._mask_to_rle(mask.unsqueeze(0))[0] for mask in masks]
-        
+
         # Create bounding boxes with more significant overlap
         boxes = torch.tensor([
             [1, 1, 5, 5],      # Mask 0
@@ -473,10 +472,10 @@ class SamImageProcessorFastTest(unittest.TestCase):
             [6, 6, 9, 9],      # Mask 3 - Identical to mask 2
             [0, 7, 3, 10],     # Mask 4
         ])
-        
+
         # Create scores with large differences to ensure correct filtering
         scores = torch.tensor([0.9, 0.5, 0.95, 0.55, 0.7])
-        
+
         # Apply NMS
         filtered_masks, filtered_scores, filtered_rle, filtered_boxes = self.image_processor.post_process_for_mask_generation(
             all_masks=rle_masks,
@@ -484,10 +483,10 @@ class SamImageProcessorFastTest(unittest.TestCase):
             all_boxes=boxes,
             crops_nms_thresh=0.3  # Lower threshold to ensure filtering
         )
-        
+
         # Check if we have exactly 3 masks (0, 2, 4)
         self.assertEqual(len(filtered_masks), 3)
-        
+
         # The remaining masks should be the ones with the highest scores
         # Now we need to check if the correct masks were kept
         expected_scores = torch.tensor([0.9500, 0.9000, 0.7000])
@@ -499,30 +498,30 @@ class SamImageProcessorFastTest(unittest.TestCase):
 @require_torchvision
 class SamProcessorFastTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SamProcessor
-    
+
     def setUp(self):
         if SamImageProcessorFastWrapper is None:
             self.skipTest("SamImageProcessorFast not found, skipping tests")
-            
+
         self.tmpdirname = tempfile.mkdtemp()
         # Use the wrapper class that inherits from SamImageProcessor
         image_processor = SamImageProcessorFastWrapper()
         processor = SamProcessor(image_processor)
         processor.save_pretrained(self.tmpdirname)
-        
+
         # Create or update config.json with model_type
         config_file = os.path.join(self.tmpdirname, "config.json")
         config = {"model_type": "sam"}
-        
+
         # If config file already exists, read its content first
         if os.path.exists(config_file):
             with open(config_file, "r") as f:
                 existing_config = json.load(f)
                 config.update(existing_config)
-        
+
         # Make sure model_type is set to sam
         config["model_type"] = "sam"
-        
+
         # Write the updated config
         with open(config_file, "w") as f:
             json.dump(config, f)
