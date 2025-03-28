@@ -1623,13 +1623,16 @@ class TorchAoConfig(QuantizationConfigMixin):
             # Handle layout serialization if present
             if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
                 if is_dataclass(d["quant_type_kwargs"]["layout"]):
-                    d["quant_type_kwargs"]["layout"] = [d["quant_type_kwargs"]["layout"].__class__.__name__, dataclasses.asdict(d["quant_type_kwargs"]["layout"])]
+                    d["quant_type_kwargs"]["layout"] = [
+                        d["quant_type_kwargs"]["layout"].__class__.__name__,
+                        dataclasses.asdict(d["quant_type_kwargs"]["layout"]),
+                    ]
                 if isinstance(d["quant_type_kwargs"]["layout"], list):
                     assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layour kwargs"
                     assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
                     assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
                 else:
-                    raise ValueError(f"layout must be a list")
+                    raise ValueError("layout must be a list")
         else:
             # Handle AOBaseConfig serialization
             from torchao.core.config import config_to_dict
@@ -1644,19 +1647,19 @@ class TorchAoConfig(QuantizationConfigMixin):
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
         ao_verison = cls._get_ao_version()
-        assert ao_verison >= version.parse("0.10.0"), (
-            "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
-        )
+        assert ao_verison >= version.parse(
+            "0.10.0"
+        ), "TorchAoConfig requires torchao >= 0.10.0 for construction from dict"
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
-        
+
         if isinstance(quant_type, str):
             return cls(quant_type=quant_type, **config_dict)
         # Check if we only have one key which is "default"
         # In the future we may update this
-        assert len(quant_type) == 1 and "default" in quant_type, (
-            "Expected only one key 'default' in quant_type dictionary"
-        )
+        assert (
+            len(quant_type) == 1 and "default" in quant_type
+        ), "Expected only one key 'default' in quant_type dictionary"
         quant_type = quant_type["default"]
 
         # Deserialize quant_type if needed

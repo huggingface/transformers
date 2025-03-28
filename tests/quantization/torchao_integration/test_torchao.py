@@ -298,7 +298,7 @@ class TorchAoGPUTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUT = 'What are we having for dinner?\n\nJane: (sighs)'
+        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJane: (sighs)"
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
