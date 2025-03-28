@@ -121,13 +121,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 logger.warn(
                     "`run_compressed` is only supported for quantized_compressed models"
                     " and not for sparsified models. Setting `run_compressed=False`"
-                    )
+                )
                 self.run_compressed = False
             elif self.is_quantized and not self.is_quantization_compressed:
-                logger.warn(
-                    "`run_compressed` is only supported for compressed models."
-                    "Setting `run_compressed=False`"
-                )
+                logger.warn("`run_compressed` is only supported for compressed models.Setting `run_compressed=False`")
                 self.run_compressed = False
             apply_quantization_config(model, ct_quantization_config, run_compressed=self.run_compressed)
         elif self.is_quantized and not self.is_quantization_compressed:
