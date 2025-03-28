@@ -154,18 +154,6 @@ class DeepseekV3TopkRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts)))
 
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        topk_indices = self.get_topk_indices(scores)
-        topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
-
     def get_topk_indices(self, scores):
         scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
         group_scores = (
@@ -184,6 +172,18 @@ class DeepseekV3TopkRouter(nn.Module):
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         return topk_indices
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        scores = router_logits.sigmoid()
+        topk_indices = self.get_topk_indices(scores)
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
 
 
 class DeepseekV3MoE(nn.Module):
@@ -204,15 +204,6 @@ class DeepseekV3MoE(nn.Module):
         self.shared_experts = DeepseekV3MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         r"""
@@ -239,6 +230,15 @@ class DeepseekV3MoE(nn.Module):
         # thus the moe module is itelsf an IsolatedParallel module
         # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
+
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        topk_indices, topk_weights = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 def rotate_half(x):
@@ -431,7 +431,7 @@ class DeepseekV3Attention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
+        if self.config.rope_interleave:  # support using interleaved weights for efficiency
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
