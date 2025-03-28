@@ -97,10 +97,19 @@ class DeepseekVLConfig(PretrainedConfig):
             high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
 
+        if isinstance(text_config, dict):
+            text_config = LlamaConfig(**text_config)
+
+        if isinstance(low_res_vision_config, dict):
+            low_res_vision_config = SiglipVisionConfig(**low_res_vision_config)
+
+        if isinstance(high_res_vision_config, dict):
+            high_res_vision_config = SamVisionConfig(**high_res_vision_config)
+
+        self.text_config = text_config
+        self.low_res_vision_config = low_res_vision_config
+        self.high_res_vision_config = high_res_vision_config
         self.use_high_res_vision = use_high_res_vision
-        self.text_config = LlamaConfig(**text_config)
-        self.low_res_vision_config = SiglipVisionConfig(**low_res_vision_config)
-        self.high_res_vision_config = SamVisionConfig(**high_res_vision_config)
         self.initializer_range = initializer_range
         self.image_token_index = image_token_index
 
