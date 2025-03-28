@@ -215,7 +215,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_second_token = end - start
-            logger.info(f"completed second compile generation in: {time_to_first_token}s")
+            logger.info(f"completed second compile generation in: {time_to_second_token}s")
             cache_position += 1
             all_generated_tokens += next_token.clone().detach().cpu().tolist()
 
@@ -227,7 +227,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_third_token = end - start
-            logger.info(f"completed third compile forward in: {time_to_first_token}s")
+            logger.info(f"completed third compile forward in: {time_to_third_token}s")
             cache_position += 1
             all_generated_tokens += next_token.clone().detach().cpu().tolist()
 
@@ -298,7 +298,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             third_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
+            logger.info(f"completed third compile generation in: {third_compile_generate_time}s")
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -313,7 +313,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             fourth_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
+            logger.info(f"completed fourth compile generation in: {fourth_compile_generate_time}s")
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         metrics_recorder.collect_model_measurements(
