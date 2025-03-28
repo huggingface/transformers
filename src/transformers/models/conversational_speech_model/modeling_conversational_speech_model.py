@@ -1425,7 +1425,7 @@ class ConversationalSpeechModelForCausalLM(ConversationalSpeechModelPreTrainedMo
             )
 
             depth_decoder_labels = labels[:, :, : self.config.num_codebooks]
-            mask_idxs = (depth_decoder_labels == -100).all(dim=-1)
+            mask_idxs = (depth_decoder_labels[:, :, 1:] == -100).all(dim=-1)
             train_idxs = (~mask_idxs).nonzero()
 
             depth_decoder_input_ids = input_ids[train_idxs[:, 0], train_idxs[:, 1], : self.config.num_codebooks - 1]

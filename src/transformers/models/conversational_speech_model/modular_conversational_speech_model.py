@@ -150,6 +150,7 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
         use_cache=True,
         pad_token_id=128002,
         codebook_pad_token_id=2050,
+        codebook_eos_token_id=0,
         bos_token_id=128000,
         eos_token_id=128001,
         pretraining_tp=1,
@@ -200,6 +201,7 @@ class ConversationalSpeechModelBackboneConfig(LlamaConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
         self.codebook_pad_token_id = codebook_pad_token_id
+        self.codebook_eos_token_id = codebook_eos_token_id
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -647,7 +649,7 @@ class ConversationalSpeechModelForCausalLM(LlamaForCausalLM, GenerationMixin):
             )
 
             depth_decoder_labels = labels[:, :, : self.config.num_codebooks]
-            mask_idxs = (depth_decoder_labels == -100).all(dim=-1)
+            mask_idxs = (depth_decoder_labels[:, :, 1:] == -100).all(dim=-1)
             train_idxs = (~mask_idxs).nonzero()
 
             depth_decoder_input_ids = input_ids[train_idxs[:, 0], train_idxs[:, 1], :self.config.num_codebooks - 1]

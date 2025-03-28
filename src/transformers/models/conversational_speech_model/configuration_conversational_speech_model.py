@@ -414,6 +414,7 @@ class ConversationalSpeechModelBackboneConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=128002,
         codebook_pad_token_id=2050,
+        codebook_eos_token_id=0,
         bos_token_id=128000,
         eos_token_id=128001,
         pretraining_tp=1,
@@ -471,6 +472,7 @@ class ConversationalSpeechModelBackboneConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
         self.codebook_pad_token_id = codebook_pad_token_id
+        self.codebook_eos_token_id = codebook_eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

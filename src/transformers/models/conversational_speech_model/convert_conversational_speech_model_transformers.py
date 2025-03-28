@@ -183,6 +183,6 @@ if __name__ == "__main__":
     write_model(
         "sesame/csm-1b",
         "ckpt.pt",
-        output_dir="eustlb/csm-1b",
+        output_dir="../eustlb/csm-1b",
         safe_serialization=True,
     )
