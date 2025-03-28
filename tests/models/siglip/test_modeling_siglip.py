@@ -21,10 +21,12 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 from pytest import mark
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -39,6 +41,7 @@ from transformers.utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -261,6 +264,13 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
         model_name = "google/siglip-base-patch16-224"
         model = SiglipVisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
 
 class SiglipTextModelTester:
