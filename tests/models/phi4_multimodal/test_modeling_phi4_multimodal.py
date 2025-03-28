@@ -190,19 +190,6 @@ class Phi4MultimodalModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model(self, config, input_ids, attention_mask):
-        model = Phi4MultimodalForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                return_dict=True,
-            )["logits"]
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
