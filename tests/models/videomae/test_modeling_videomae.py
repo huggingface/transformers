@@ -456,7 +456,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         # add boolean mask, indicating which patches to mask
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
+        inputs["bool_masked_pos"] = torch.load(local_path, weights_only=True)
 
         # forward pass
         with torch.no_grad():
