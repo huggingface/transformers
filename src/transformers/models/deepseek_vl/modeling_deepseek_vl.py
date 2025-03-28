@@ -12,7 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""PyTorch DeepseekVL model."""
+
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -31,6 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
+    ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -52,6 +56,145 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DeepseekVLConfig"
 _CHECKPOINT_FOR_DOC = "deepseek-ai/deepseek-vl-1.3b-chat-hf"
 _EXPECTED_OUTPUT_SHAPE = [1, 628, 2048]
+
+
+@dataclass
+# Copied from transformers.models.idefics3.modeling_idefics3.Idefics3CausalLMOutputWithPast with Idefics3->DeepseekVL
+class DeepseekVLBaseModelOutputWithPast(ModelOutput):
+    """
+    Base class for DeepseekVL model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+# Copied from transformers.models.idefics3.modeling_idefics3.Idefics3CausalLMOutputWithPast with Idefics3->DeepseekVL
+class DeepseekVLCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for DeepseekVL causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class DeepseekVLSamVisionProj(nn.Module):
+    def __init__(self, config, output_size: int = 24):
+        super().__init__()
+        self.config = config
+        self.output_size = output_size
+
+        self.conv1 = nn.Conv2d(
+            config.output_channels, config.output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.conv2 = nn.Conv2d(
+            config.output_channels * 2, config.output_channels * 4, kernel_size=3, stride=2, padding=1, bias=False
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        # interpolate Sam encodings to match Siglip encodings
+        features = F.interpolate(
+            features.float(),
+            size=(4 * self.output_size, 4 * self.output_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        features = self.conv1(features)
+        features = self.conv2(features)
+        return features
+
+
+class DeepseekVLAligner(nn.Module):
+    def __init__(self, config: DeepseekVLConfig):
+        super().__init__()
+        self.config = config
+        self.use_high_res_vision = config.use_high_res_vision
+
+        low_res_vision_in_channels = config.low_res_vision_config.hidden_size
+        high_res_vision_in_channels = config.high_res_vision_config.output_channels * 4
+        out_channels = config.text_config.hidden_size
+        if self.use_high_res_vision:
+            self.low_res_vision_proj = nn.Linear(low_res_vision_in_channels, out_channels // 2)
+            self.high_res_vision_proj = nn.Linear(high_res_vision_in_channels, out_channels // 2)
+        else:
+            self.low_res_vision_proj = nn.Linear(low_res_vision_in_channels, out_channels)
+
+        self.act = nn.GELU()
+        self.proj = nn.Linear(out_channels, out_channels)
+
+    def forward(
+        self,
+        low_res_vision_encodings: torch.Tensor,
+        high_res_vision_encodings: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        encodings = self.low_res_vision_proj(low_res_vision_encodings)
+        if self.use_high_res_vision:
+            high_res_vision_encodings = self.high_res_vision_proj(high_res_vision_encodings)
+            encodings = torch.concat([high_res_vision_encodings, encodings], dim=-1)
+
+        encodings = self.act(encodings)
+        encodings = self.proj(encodings)
+
+        return encodings
 
 
 DEEPSEEK_VL_START_DOCSTRING = r"""
@@ -137,66 +280,6 @@ DEEPSEEK_VL_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
-
-
-class DeepseekVLSamVisionProj(nn.Module):
-    def __init__(self, config, output_size: int = 24):
-        super().__init__()
-        self.config = config
-        self.output_size = output_size
-
-        self.conv1 = nn.Conv2d(
-            config.output_channels, config.output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.conv2 = nn.Conv2d(
-            config.output_channels * 2, config.output_channels * 4, kernel_size=3, stride=2, padding=1, bias=False
-        )
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        # interpolate Sam encodings to match Siglip encodings
-        features = F.interpolate(
-            features.float(),
-            size=(4 * self.output_size, 4 * self.output_size),
-            mode="bilinear",
-            align_corners=False,
-        )
-        features = self.conv1(features)
-        features = self.conv2(features)
-        return features
-
-
-class DeepseekVLAligner(nn.Module):
-    def __init__(self, config: DeepseekVLConfig):
-        super().__init__()
-        self.config = config
-        self.use_high_res_vision = config.use_high_res_vision
-
-        low_res_vision_in_channels = config.low_res_vision_config.hidden_size
-        high_res_vision_in_channels = config.high_res_vision_config.output_channels * 4
-        out_channels = config.text_config.hidden_size
-        if self.use_high_res_vision:
-            self.low_res_vision_proj = nn.Linear(low_res_vision_in_channels, out_channels // 2)
-            self.high_res_vision_proj = nn.Linear(high_res_vision_in_channels, out_channels // 2)
-        else:
-            self.low_res_vision_proj = nn.Linear(low_res_vision_in_channels, out_channels)
-
-        self.act = nn.GELU()
-        self.proj = nn.Linear(out_channels, out_channels)
-
-    def forward(
-        self,
-        low_res_vision_encodings: torch.Tensor,
-        high_res_vision_encodings: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        encodings = self.low_res_vision_proj(low_res_vision_encodings)
-        if self.use_high_res_vision:
-            high_res_vision_encodings = self.high_res_vision_proj(high_res_vision_encodings)
-            encodings = torch.concat([high_res_vision_encodings, encodings], dim=-1)
-
-        encodings = self.act(encodings)
-        encodings = self.proj(encodings)
-
-        return encodings
 
 
 @add_start_docstrings(
@@ -380,7 +463,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
-        return self.language_model(
+        lm_output = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -392,6 +475,16 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             cache_position=cache_position,
             flash_attn_kwargs=flash_attn_kwargs,
         )
+
+        output = DeepseekVLBaseModelOutputWithPast(
+            last_hidden_state=lm_output.last_hidden_state,
+            past_key_values=lm_output.past_key_values,
+            hidden_states=lm_output.hidden_states,
+            attentions=lm_output.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+        return output if return_dict else output.to_tuple()
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
@@ -533,12 +626,13 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return DeepseekVLCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
     def prepare_inputs_for_generation(
