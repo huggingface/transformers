@@ -527,7 +527,6 @@ def center_crop(
 
     new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
     new_image = to_channel_dimension_format(new_image, output_data_format, ChannelDimension.FIRST)
-    new_image = to_pil_image(new_image)
 
     return new_image
 
