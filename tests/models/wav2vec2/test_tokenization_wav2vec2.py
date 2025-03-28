@@ -21,6 +21,7 @@ import random
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 
 import numpy as np
 
@@ -33,7 +34,7 @@ from transformers import (
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
 from transformers.testing_utils import require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 global_rng = random.Random()
@@ -57,22 +58,27 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 class Wav2Vec2TokenizerTest(unittest.TestCase):
     tokenizer_class = Wav2Vec2Tokenizer
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
+        cls.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Wav2Vec2Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Wav2Vec2Tokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def test_tokenizer_decode(self):
         # TODO(PVP) - change to facebook
@@ -237,7 +243,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
     def test_save_pretrained(self):
         pretrained_name = list(self.tokenizer_class.pretrained_vocab_files_map["vocab_file"].keys())[0]
-        tokenizer = self.tokenizer_class.from_pretrained(pretrained_name)
+        tokenizer = self.get_tokenizer(pretrained_name)
         tmpdirname2 = tempfile.mkdtemp()
 
         tokenizer_files = tokenizer.save_pretrained(tmpdirname2)
@@ -373,22 +379,27 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = Wav2Vec2CTCTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
+        cls.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Wav2Vec2CTCTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def test_tokenizer_add_token_chars(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")

@@ -15,12 +15,13 @@
 
 
 import unittest
+from functools import lru_cache
 from typing import Tuple
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -33,13 +34,17 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
-        self.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
+        cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
 
-    def get_tokenizer(self, task=None, **kwargs):
-        kwargs.update(self.special_tokens_map)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, task=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
         kwargs.update({"task": task})
         tokenizer = MLukeTokenizer(vocab_file=SAMPLE_VOCAB, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
         return tokenizer
@@ -100,8 +105,8 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
                 tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
                 tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)

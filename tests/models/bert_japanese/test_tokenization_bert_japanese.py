@@ -17,6 +17,7 @@
 import os
 import pickle
 import unittest
+from functools import lru_cache
 
 from transformers import AutoTokenizer
 from transformers.models.bert.tokenization_bert import BertTokenizer
@@ -31,7 +32,7 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
 )
 from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi_projection
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @custom_tokenizers
@@ -41,8 +42,9 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     space_between_special_tokens = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = [
             "[UNK]",
@@ -72,8 +74,8 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "です",
         ]
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
@@ -408,17 +410,21 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こ", "ん", "に", "ち", "は", "ば", "世", "界", "、", "。"]
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_tokenizer(self, **kwargs):
-        return BertJapaneseTokenizer.from_pretrained(self.tmpdirname, subword_tokenizer_type="character", **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        return BertJapaneseTokenizer.from_pretrained(cls.tmpdirname, subword_tokenizer_type="character", **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "こんにちは、世界。 \nこんばんは、世界。"

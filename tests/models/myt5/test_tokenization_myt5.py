@@ -16,6 +16,7 @@ import binascii
 import unittest
 
 from transformers import MyT5Tokenizer
+from transformers.testing_utils import slow
 from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -86,15 +87,14 @@ class TestByteRewriter(unittest.TestCase):
         self.assertEqual(decompose_rewriter.rewrite_bytes(in_hex), out_hex)
 
 
+# This is way too slow, let's not run it on CircleCI. When trying to use cache, we get OOM and worker(s) crashed.
+@slow
 class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MyT5Tokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
-
-    def get_tokenizer(self, **kwargs) -> MyT5Tokenizer:
-        return self.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
+    def get_tokenizer(cls, **kwargs) -> MyT5Tokenizer:
+        return cls.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
 
     @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")
     def test_pretokenized_inputs(self):
