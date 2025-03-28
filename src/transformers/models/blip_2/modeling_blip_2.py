@@ -2332,6 +2332,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         if query_output.dtype != image_embeds.dtype:
             query_output = query_output.to(image_embeds.dtype)
 
+        language_model_inputs = self.language_projection(query_output)
+        language_attention_mask = torch.ones(
+            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
+        )
+
         if input_ids is None:
             start_tokens = [self.config.text_config.bos_token_id]
             if getattr(self.config, "image_token_index", None) is not None:
@@ -2342,11 +2347,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         inputs_embeds = self.get_input_embeddings()(input_ids)
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-
-        language_model_inputs = self.language_projection(query_output)
-        language_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-        )
 
         # if the model already has "image_token_index" then the input is expanded to account for image embeds
         # otherwise we expand manually by concatenating
