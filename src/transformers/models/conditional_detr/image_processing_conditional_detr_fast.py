@@ -346,7 +346,6 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @classmethod
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->ConditionalDetr
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
@@ -360,7 +359,6 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->ConditionalDetr
     def prepare_annotation(
         self,
         image: torch.Tensor,
