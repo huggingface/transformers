@@ -125,7 +125,7 @@ _deps = [
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
     "jinja2>=3.1.0",
-    "kenlm",
+    # "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
