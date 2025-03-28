@@ -486,7 +486,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
             "attention_mask": attention_mask,
             "qformer_input_ids": qformer_input_ids,
             "qformer_attention_mask": qformer_attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 

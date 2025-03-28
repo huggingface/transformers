@@ -45,6 +45,7 @@ if is_torch_available():
 
     from transformers import (
         AyaVisionForConditionalGeneration,
+        AyaVisionModel,
     )
 
 
@@ -184,7 +185,14 @@ class AyaVisionVisionText2TextModelTester:
 
 @require_torch
 class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AyaVisionModel,
+            AyaVisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

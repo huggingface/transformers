@@ -3536,8 +3536,8 @@ class ModelTesterMixin:
                 vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
 
-                vision_model_sdpa = getattr(model, vision_model_name)
-                language_model_sdpa = getattr(model, language_model_name)
+                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
                 vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
 

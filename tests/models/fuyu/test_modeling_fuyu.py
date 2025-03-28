@@ -41,7 +41,7 @@ if is_torch_available() and is_vision_available():
 if is_torch_available():
     import torch
 
-    from transformers import FuyuForCausalLM
+    from transformers import FuyuForCausalLM, FuyuModel
 
 
 class FuyuModelTester:
@@ -267,7 +267,14 @@ class FuyuModelTester:
 
 @require_torch
 class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            FuyuModel,
+            FuyuForCausalLM,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
     )

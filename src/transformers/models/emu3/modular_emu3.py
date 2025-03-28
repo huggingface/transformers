@@ -1110,6 +1110,119 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         super().forward()
 
 
+class Emu3Model(Emu3PreTrainedModel):
+    _key_mapping = {"text_model.model": "text_model"}
+    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.text_model = Emu3TextModel._from_config(config.text_config)
+        if self.text_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"text_model.{k}" for k in self.text_model._tied_weights_keys]
+
+        self.vqmodel = Emu3VQVAE(config.vq_config)
+        self.vocabulary_mapping = Emu3ImageVocabularyMapping(config.vocabulary_map)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_model.set_input_embeddings(value)
+
+    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module. Converts
+        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
+        special tokens.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+            image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
+                The sizes of the images in the batch, being (height, width) for each image.
+        """
+        image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
+        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
+        bpe_tokens = torch.cat(bpe_tokens_list)
+        return bpe_tokens
+
+    @torch.no_grad
+    def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
+        """
+        Decodes generated image tokens from language model to continuous pixel values
+        with VQGAN module via upsampling.
+
+        Args:
+            image_tokens (`torch.LongTensor` of shape `(batch_size, num_of_tokens)`):
+                The tensors corresponding to the input images.
+            height (`int`):
+                Height of the generated image before upsampling.
+            width (`int`):
+                Width of the generated image before upsampling.
+        """
+        sequences = image_tokens[:, :-3].view(-1, height, width + 1)
+        image_tokens = self.vocabulary_mapping.convert_bpe2img(sequences)
+        image = self.vqmodel.decode(image_tokens)
+        return image
+
+    @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        image_sizes: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if pixel_values is not None:
+            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+            special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+            image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        return outputs
+
+
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["text_model.lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
@@ -1311,4 +1424,5 @@ __all__ = [
     "Emu3TextModel",
     "Emu3PreTrainedModel",
     "Emu3VQVAE",
+    "Emu3Model",
 ]

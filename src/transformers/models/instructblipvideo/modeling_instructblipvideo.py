@@ -316,6 +316,9 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
