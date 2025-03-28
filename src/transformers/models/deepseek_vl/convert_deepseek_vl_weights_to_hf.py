@@ -91,6 +91,10 @@ CHAT_TEMPLATE = (
     # Define separators and initialize counter
     "{% set seps = ['\n\n', '<\uff5cend\u2581of\u2581sentence\uff5c>'] %}"
     "{% set i = 0 %}"
+    # Start with default system prompt
+    "You are a helpful language and vision assistant. "
+    "You are able to understand the visual content that the user provides, "
+    "and assist the user with a variety of tasks using natural language.\n\n"
     # Iterate through messages
     "{% for message in messages %}"
     # Identify user or assistant role

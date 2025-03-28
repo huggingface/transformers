@@ -26,12 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DEFAULT_SYSTEM_PROMPT = (
-    "You are a helpful language and vision assistant. "
-    "You are able to understand the visual content that the user provides, "
-    "and assist the user with a variety of tasks using natural language.\n\n"
-)
-
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -55,14 +49,12 @@ class DeepseekVLProcessor(ProcessorMixin):
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
-        use_default_system_prompt (`str`, *optional*, defaults to `True`):
-            Use default system prompt for Text Generation.
         num_image_tokens (`int`, *optional*, defaults to 576):
             The number of special image tokens used as placeholders for visual content in text sequences.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "use_default_system_prompt", "num_image_tokens"]
+    valid_kwargs = ["chat_template", "num_image_tokens"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -71,11 +63,9 @@ class DeepseekVLProcessor(ProcessorMixin):
         image_processor,
         tokenizer,
         chat_template=None,
-        use_default_system_prompt=True,
         num_image_tokens=576,
     ):
         self.image_token = tokenizer.image_token
-        self.use_default_system_prompt = use_default_system_prompt
         self.num_image_tokens = num_image_tokens
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -133,8 +123,6 @@ class DeepseekVLProcessor(ProcessorMixin):
         one_img_tokens = self.image_token * self.num_image_tokens
         for prompt in text:
             prompt = prompt.replace(self.image_token, one_img_tokens)
-            if self.use_default_system_prompt:
-                prompt = DEFAULT_SYSTEM_PROMPT + prompt
             prompt_strings.append(prompt)
 
         data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])

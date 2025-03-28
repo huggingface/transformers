@@ -51,4 +51,4 @@ class DeepseekVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(self.tmpdirname)
 
     def prepare_processor_dict(self):
-        return {"chat_template": CHAT_TEMPLATE, "use_default_system_prompt": False, "num_image_tokens": 576}
+        return {"chat_template": CHAT_TEMPLATE, "num_image_tokens": 576}
