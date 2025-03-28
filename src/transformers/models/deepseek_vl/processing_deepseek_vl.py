@@ -57,7 +57,7 @@ class DeepseekVLProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
         use_default_system_prompt (`str`, *optional*, defaults to `True`):
             Use default system prompt for Text Generation.
-        num_image_tokens (`int`, *optional*, defaults to `576`):
+        num_image_tokens (`int`, *optional*, defaults to 576):
             The number of special image tokens used as placeholders for visual content in text sequences.
     """
 
