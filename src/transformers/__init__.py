@@ -347,6 +347,7 @@ _import_structure = {
     "models.decision_transformer": ["DecisionTransformerConfig"],
     "models.deepseek_v3": ["DeepseekV3Config"],
     "models.deformable_detr": ["DeformableDetrConfig"],
+    "models.plaindetr": ["PlainDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
     "models.deprecated.bort": [],
@@ -2036,6 +2037,13 @@ else:
             "DeformableDetrForObjectDetection",
             "DeformableDetrModel",
             "DeformableDetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.plaindetr"].extend(
+        [
+            "PlainDetrForObjectDetection",
+            "PlainDetrModel",
+            "PlainDetrPreTrainedModel",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -5560,6 +5568,9 @@ if TYPE_CHECKING:
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
+    from .models.plaindetr import (
+        PlainDetrConfig,
+    )
     from .models.deit import DeiTConfig
     from .models.deprecated.deta import DetaConfig
     from .models.deprecated.efficientformer import (
@@ -7195,6 +7206,11 @@ if TYPE_CHECKING:
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,
+        )
+        from .models.plaindetr import (
+            PlainDetrForObjectDetection,
+            PlainDetrModel,
+            PlainDetrPreTrainedModel,
         )
         from .models.deit import (
             DeiTForImageClassification,

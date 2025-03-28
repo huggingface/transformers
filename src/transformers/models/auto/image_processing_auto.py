@@ -72,6 +72,7 @@ else:
             ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("data2vec-vision", ("BeitImageProcessor",)),
             ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
+        ("plaindetr", ("PlainDetrImageProcessor", "PlainDetrImageProcessorFast")),
             ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
             ("depth_anything", ("DPTImageProcessor",)),
             ("depth_pro", ("DepthProImageProcessor", "DepthProImageProcessorFast")),
