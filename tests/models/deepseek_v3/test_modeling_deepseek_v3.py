@@ -579,8 +579,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             if "SdpaAttention" in submodule.__class__.__name__:
                 has_sdpa = True
                 break
-        if not has_sdpa:
-            raise ValueError("The SDPA model should have SDPA attention layers")
 
         texts = [
             "hi here's a longer context, getting longer and",

@@ -154,6 +154,7 @@ class DeepseekV3TopkRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts)))
 
+    @torch.no_grad()
     def get_topk_indices(self, scores):
         scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
         group_scores = (
@@ -580,6 +581,10 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, DeepseekV3TopkRouter):
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.Parameter):
+            module.weight.data.normal_(mean=0.0, std=std)
 
 
 DEEPSEEK_V3_INPUTS_DOCSTRING = r"""
