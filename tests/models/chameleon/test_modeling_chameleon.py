@@ -130,7 +130,7 @@ class ChameleonModelTester:
 
     def get_config(self):
         # create dummy vocab map for image2bpe mapping if it needs remapping
-        # we assume that vocab size is big enough to accoun for image tokens somewhere in the beginning
+        # we assume that vocab size is big enough to account for image tokens somewhere in the beginning
         # same way as in real ckpt, when img tokens are in first half of embeds
         # we will need "vq_num_embeds" amount of tokens
 

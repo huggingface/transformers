@@ -230,7 +230,7 @@ class SwitchTransformersLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # SwitchTransformers uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -297,12 +297,12 @@ class SwitchTransformersSparseMLP(nn.Module):
         expert the corresponding hidden states.
 
         """
-        # Step 1: Get the router_mask from the router as wel as the probabilities
+        # Step 1: Get the router_mask from the router as well as the probabilities
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
         # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
+        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the selected ones.
 
         next_states = hidden_states.clone()
 

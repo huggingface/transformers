@@ -2205,12 +2205,12 @@ class JukeboxPrior(PreTrainedModel):
         loss += next_token_prediction_loss * self.next_token_prediction_loss_dims / self.total_loss_dims
 
         metrics = {
-            "bpd": next_token_prediction_loss.clone().detach(),
-            "encoder_loss": encoder_loss.clone().detach(),
-            "next_token_prediction_loss": next_token_prediction_loss.clone().detach(),
+            "bpd": next_token_prediction_loss.detach().clone(),
+            "encoder_loss": encoder_loss.detach().clone(),
+            "next_token_prediction_loss": next_token_prediction_loss.detach().clone(),
         }
         if get_preds:
-            metrics["preds"] = preds.clone().detach()
+            metrics["preds"] = preds.detach().clone()
         if get_attn_weights:
             saved_attn_weights = self.prior.transformer.saved_attn_weights
             self.prior.transformer.set_record_attn(False)
@@ -2366,7 +2366,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         new_tokens = sample_tokens - previous_sampled_tokens.shape[1]
 
         logger.info(
-            f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on"
+            f"Sampling {sample_tokens} tokens for [{start},{start + sample_tokens}]. Conditioning on"
             f" {conditioning_tokens} tokens"
         )
 
@@ -2390,7 +2390,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             name = ["Ancestral", "Primed"][music_tokens_i.shape[1] == 0]
             iterator.set_description(
                 f"[prior level {level}] {name} Sampling {sample_tokens} tokens out of"
-                f" {self.total_length//prior.raw_to_tokens}",
+                f" {self.total_length // prior.raw_to_tokens}",
                 refresh=True,
             )
             tokens_i = prior.sample(
