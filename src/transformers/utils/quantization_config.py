@@ -689,7 +689,6 @@ class GPTQConfig(QuantizationConfigMixin):
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
         loading_attibutes = [
-            "disable_exllama",
             "use_exllama",
             "exllama_config",
             "use_cuda_fp16",
