@@ -375,7 +375,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 outputs = model(**input_dict)
 
             out_2 = self.extract_output(outputs, model_class.__name__)
-            out_2 = out_2.cpu().numpy()
+            out_2 = out_2.numpy()
             out_2[np.isnan(out_2)] = 0
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -387,7 +387,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
                 # Make sure we don't have nans
                 out_1 = self.extract_output(after_outputs, model_class.__name__)
-                out_1 = out_1.cpu().numpy()
+                out_1 = out_1.numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)

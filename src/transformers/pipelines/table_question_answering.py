@@ -157,7 +157,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 # answer.
                 if prev_answers is not None:
                     prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
-                    model_labels = np.zeros_like(prev_labels_example.cpu().numpy())  # shape (seq_len,)
+                    model_labels = np.zeros_like(prev_labels_example.numpy())  # shape (seq_len,)
 
                     token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
                     for i in range(model_labels.shape[0]):

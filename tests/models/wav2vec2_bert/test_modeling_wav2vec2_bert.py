@@ -818,9 +818,7 @@ class Wav2Vec2BertUtilsTest(unittest.TestCase):
         features = torch.where(mask[:, :, None].expand(features.shape).bool(), features, -100)
 
         # sample negative indices
-        sampled_negative_indices = _sample_negative_indices(
-            (batch_size, sequence_length), num_negatives, mask.cpu().numpy()
-        )
+        sampled_negative_indices = _sample_negative_indices((batch_size, sequence_length), num_negatives, mask.numpy())
         sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
         negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
         negatives = negatives.view(batch_size, sequence_length, -1, hidden_size).permute(2, 0, 1, 3)

@@ -719,7 +719,7 @@ def batch_frexp(inputs, max_bit=31):
     # trans the input to be a 1-d tensor
     inputs = inputs.view(-1)
 
-    output_m, output_e = np.frexp(inputs.cpu().numpy())
+    output_m, output_e = np.frexp(inputs.numpy())
     tmp_m = []
     for m in output_m:
         int_m_shifted = int(

@@ -434,15 +434,15 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits per modality, let's verify each modality
                 for modality in first.keys():
-                    out_1 = first[modality].cpu().numpy()
-                    out_2 = second[modality].cpu().numpy()
+                    out_1 = first[modality].numpy()
+                    out_2 = second[modality].numpy()
                     out_1 = out_1[~np.isnan(out_1)]
                     out_2 = out_2[~np.isnan(out_2)]
                     max_diff = np.amax(np.abs(out_1 - out_2))
                     self.assertLessEqual(max_diff, 1e-5)
             else:
-                out_1 = first.cpu().numpy()
-                out_2 = second.cpu().numpy()
+                out_1 = first.numpy()
+                out_2 = second.numpy()
                 out_1 = out_1[~np.isnan(out_1)]
                 out_2 = out_2[~np.isnan(out_2)]
                 max_diff = np.amax(np.abs(out_1 - out_2))
@@ -697,7 +697,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 for modality in outputs[0].keys():
-                    out_2 = outputs[0][modality].cpu().numpy()
+                    out_2 = outputs[0][modality].numpy()
                     out_2[np.isnan(out_2)] = 0
 
                     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -708,13 +708,13 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                             after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
                         # Make sure we don't have nans
-                        out_1 = after_outputs[0][modality].cpu().numpy()
+                        out_1 = after_outputs[0][modality].numpy()
                         out_1[np.isnan(out_1)] = 0
                         max_diff = np.amax(np.abs(out_1 - out_2))
                         self.assertLessEqual(max_diff, 1e-5)
 
             else:
-                out_2 = outputs[0].cpu().numpy()
+                out_2 = outputs[0].numpy()
                 out_2[np.isnan(out_2)] = 0
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
@@ -725,7 +725,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                         after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
                     # Make sure we don't have nans
-                    out_1 = after_outputs[0].cpu().numpy()
+                    out_1 = after_outputs[0].numpy()
                     out_1[np.isnan(out_1)] = 0
                     max_diff = np.amax(np.abs(out_1 - out_2))
                     self.assertLessEqual(max_diff, 1e-5)

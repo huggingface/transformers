@@ -299,8 +299,8 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_determinism(first, second):
             # outputs are not tensors but list (since each sequence don't have the same frame_length)
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
+            out_1 = first.numpy()
+            out_2 = second.numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
@@ -435,7 +435,7 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
             torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
@@ -447,8 +447,8 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
-            arr = inputs["input_values"][0].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+            arr = inputs["input_values"][0].numpy()
+            arr_enc_dec = input_values_enc_dec[0].numpy()
 
             max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
@@ -520,8 +520,8 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
-            arr = inputs["input_values"][0].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+            arr = inputs["input_values"][0].numpy()
+            arr_enc_dec = input_values_enc_dec[0].numpy()
 
             max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
@@ -562,7 +562,7 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
             torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
@@ -574,8 +574,8 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
-            arr = inputs["input_values"][0].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+            arr = inputs["input_values"][0].numpy()
+            arr_enc_dec = input_values_enc_dec[0].numpy()
 
             max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
@@ -631,8 +631,8 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
-            arr = inputs["input_values"].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec.cpu().numpy()
+            arr = inputs["input_values"].numpy()
+            arr_enc_dec = input_values_enc_dec.numpy()
 
             max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
@@ -676,7 +676,7 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
             torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
@@ -688,8 +688,8 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
-            arr = inputs["input_values"].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec.cpu().numpy()
+            arr = inputs["input_values"].numpy()
+            arr_enc_dec = input_values_enc_dec.numpy()
 
             max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 
@@ -733,7 +733,7 @@ class DacIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(inputs["input_values"])
 
             expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            encoder_outputs_mean = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
 
             # make sure audio encoded codes are correct
             torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
@@ -745,8 +745,8 @@ class DacIntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
-            arr = inputs["input_values"].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec.cpu().numpy()
+            arr = inputs["input_values"].numpy()
+            arr_enc_dec = input_values_enc_dec.numpy()
 
             max_length = min(arr_enc_dec.shape[-1], arr.shape[-1])
 

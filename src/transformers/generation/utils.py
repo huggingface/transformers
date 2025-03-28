@@ -5100,7 +5100,7 @@ def _dola_select_contrast(
 
     # 6. Reduce the batchmean
     js_divs = js_divs.mean(-1)  # shape: (num_premature_layers,)
-    premature_layer = candidate_premature_layers[int(js_divs.argmax().cpu().item())]
+    premature_layer = candidate_premature_layers[int(js_divs.argmax().item())]
 
     base_logits = candidate_premature_logits[premature_layer]
     final_logits, base_logits = _relative_top_filter(final_logits, base_logits)

@@ -354,10 +354,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_save_load(out1, out2):
             # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
+            out_2 = out2.numpy()
             out_2[np.isnan(out_2)] = 0
 
-            out_1 = out1.cpu().numpy()
+            out_1 = out1.numpy()
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)

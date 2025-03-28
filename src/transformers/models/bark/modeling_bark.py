@@ -1703,7 +1703,7 @@ class BarkModel(BarkPreTrainedModel):
         >>> inputs = processor("Hello, my dog is cute, I need him in my life", voice_preset=voice_preset)
 
         >>> audio_array = model.generate(**inputs, semantic_max_new_tokens=100)
-        >>> audio_array = audio_array.cpu().numpy().squeeze()
+        >>> audio_array = audio_array.numpy().squeeze()
         ```
         """
         # TODO (joao):workaround until nested generation config is compatible with PreTrained Model

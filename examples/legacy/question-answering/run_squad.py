@@ -68,7 +68,7 @@ def set_seed(args):
 
 
 def to_list(tensor):
-    return tensor.detach().cpu().tolist()
+    return tensor.detach().tolist()
 
 
 def train(args, train_dataset, model, tokenizer):

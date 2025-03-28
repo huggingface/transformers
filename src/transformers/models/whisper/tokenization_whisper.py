@@ -899,7 +899,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         # convert type to ndarray if necessary
         if hasattr(token_ids, "numpy"):
             if "torch" in str(type(token_ids)):
-                token_ids = token_ids.cpu().numpy()
+                token_ids = token_ids.numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
         elif "jaxlib" in str(type(token_ids)):

@@ -120,7 +120,7 @@ class VisionTextDualEncoderMixin:
 
         with torch.no_grad():
             output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
-            out_1 = output[0].cpu().numpy()
+            out_1 = output[0].numpy()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -128,7 +128,7 @@ class VisionTextDualEncoderMixin:
                 model.to(torch_device)
 
                 after_output = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
-                out_2 = after_output[0].cpu().numpy()
+                out_2 = after_output[0].numpy()
                 max_diff = np.amax(np.abs(out_2 - out_1))
                 self.assertLessEqual(max_diff, 1e-5)
 
@@ -193,7 +193,7 @@ class VisionTextDualEncoderMixin:
 
         with torch.no_grad():
             outputs = model_2(**inputs)
-            out_2 = outputs[0].cpu().numpy()
+            out_2 = outputs[0].numpy()
 
             with tempfile.TemporaryDirectory() as tmp_dirname:
                 model_2.save_pretrained(tmp_dirname)
@@ -201,7 +201,7 @@ class VisionTextDualEncoderMixin:
                 model_1.to(torch_device)
 
                 after_outputs = model_1(**inputs)
-                out_1 = after_outputs[0].cpu().numpy()
+                out_1 = after_outputs[0].numpy()
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 

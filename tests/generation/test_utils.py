@@ -2595,9 +2595,9 @@ class GenerationTesterMixin:
         # set to same device. we don't care what device.
 
         if not isinstance(tensor_1, list):
-            tensor_1 = tensor_1.cpu().tolist()
+            tensor_1 = tensor_1.tolist()
         if not isinstance(tensor_2, list):
-            tensor_2 = tensor_2.cpu().tolist()
+            tensor_2 = tensor_2.tolist()
 
         in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1
@@ -3431,7 +3431,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
             torch_device
         )
-        output = bart_model.generate(input_ids).cpu().numpy()
+        output = bart_model.generate(input_ids).numpy()
 
         # Let's create a fake model that has a different signature. In particular, this fake model accepts "foo" as an
         # argument. Because "foo" is not in the encoder signature and doesn't start with "decoder_", it will be part of
@@ -3442,7 +3442,7 @@ class GenerationIntegrationTests(unittest.TestCase):
                 return super().forward(input_ids, **kwargs)
 
         bart_model = FakeBart.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
-        fake_output = bart_model.generate(input_ids, foo="bar").cpu().numpy()
+        fake_output = bart_model.generate(input_ids, foo="bar").numpy()
         self.assertTrue(np.array_equal(output, fake_output))
 
         # Encoder signature filtering only kicks in if it doesn't accept wildcard kwargs. The following test will fail
@@ -3455,7 +3455,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         bart_model.model.encoder = fake_encoder
 
         # Normal generation still works (the output will be different because the encoder weights are different)
-        fake_output = bart_model.generate(input_ids).cpu().numpy()
+        fake_output = bart_model.generate(input_ids).numpy()
         with self.assertRaises(TypeError):
             # FakeEncoder.forward() accepts **kwargs -> no filtering -> type error due to unexpected input "foo"
             bart_model.generate(input_ids, foo="bar")
@@ -4368,7 +4368,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores)
-        transition_scores = transition_scores.cpu().numpy()
+        transition_scores = transition_scores.numpy()
 
         expected_scores = np.array(
             [
@@ -4401,7 +4401,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
-        transition_scores = transition_scores.cpu().numpy()
+        transition_scores = transition_scores.numpy()
 
         expected_scores = np.array(
             [
@@ -4437,8 +4437,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores = transition_scores.cpu().numpy()
-        outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+        transition_scores = transition_scores.numpy()
+        outputs.sequences_scores = outputs.sequences_scores.numpy()
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
 
@@ -4469,8 +4469,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores = transition_scores.cpu().numpy()
-        outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+        transition_scores = transition_scores.numpy()
+        outputs.sequences_scores = outputs.sequences_scores.numpy()
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
 
@@ -4503,8 +4503,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores = transition_scores.cpu().numpy()
-        outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+        transition_scores = transition_scores.numpy()
+        outputs.sequences_scores = outputs.sequences_scores.numpy()
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
 
@@ -4537,8 +4537,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         transition_scores = model.compute_transition_scores(
             sequences=outputs.sequences, scores=outputs.scores, beam_indices=outputs.beam_indices
         )
-        transition_scores = transition_scores.cpu().numpy()
-        outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+        transition_scores = transition_scores.numpy()
+        outputs.sequences_scores = outputs.sequences_scores.numpy()
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores))
 
@@ -4574,8 +4574,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         batched_out = output_sequences_batched.sequences_scores
         out = output_sequences.sequences_scores
-        batched_out = batched_out.cpu().numpy()
-        out = out.cpu().numpy()
+        batched_out = batched_out.numpy()
+        out = out.numpy()
 
         diff = np.abs(np.sum(batched_out[:5]) - np.sum(out))
         self.assertTrue(diff < 1e-4)
@@ -4591,8 +4591,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         output_sequences_kwargs = model.generate(input_ids=input_ids)
         output_sequences = model.generate(input_ids)
-        output_sequences_kwargs = output_sequences_kwargs.cpu().numpy()
-        output_sequences = output_sequences.cpu().numpy()
+        output_sequences_kwargs = output_sequences_kwargs.numpy()
+        output_sequences = output_sequences.numpy()
 
         self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
         self.assertEqual(output_sequences.shape, (1, 15))
@@ -4609,8 +4609,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         output_sequences_kwargs = model.generate(input_ids=input_ids, max_length=5)
         output_sequences = model.generate(input_ids, max_length=5)
-        output_sequences_kwargs = output_sequences_kwargs.cpu().numpy()
-        output_sequences = output_sequences.cpu().numpy()
+        output_sequences_kwargs = output_sequences_kwargs.numpy()
+        output_sequences = output_sequences.numpy()
 
         self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
         self.assertEqual(output_sequences.shape, (1, 5))
@@ -4647,8 +4647,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         output_sequences_kwargs = model.generate(input_features=input_features, max_length=5)
         output_sequences = model.generate(input_features, max_length=5)
-        output_sequences_kwargs = output_sequences_kwargs.cpu().numpy()
-        output_sequences = output_sequences.cpu().numpy()
+        output_sequences_kwargs = output_sequences_kwargs.numpy()
+        output_sequences = output_sequences.numpy()
 
         self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
         self.assertEqual(output_sequences.shape, (3, 5))
@@ -4669,8 +4669,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         output_sequences_no_mask = model.generate(encoder_outputs=encoder_outputs)
         output_sequences_with_mask = model.generate(encoder_outputs=encoder_outputs, attention_mask=attention_mask)
-        output_sequences_no_mask = output_sequences_no_mask.cpu().numpy()
-        output_sequences_with_mask = output_sequences_with_mask.cpu().numpy()
+        output_sequences_no_mask = output_sequences_no_mask.numpy()
+        output_sequences_with_mask = output_sequences_with_mask.numpy()
 
         self.assertFalse(np.array_equal(output_sequences_no_mask, output_sequences_with_mask))
 
@@ -4714,9 +4714,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             pixel_values, max_length=5, decoder_input_ids=conditioning_input
         )
         output_sequences_input_ids = model.generate(pixel_values, max_length=5, input_ids=conditioning_input)
-        output_sequences_decoder_input_ids = output_sequences_decoder_input_ids.cpu().numpy()
-        output_sequences_input_ids = output_sequences_input_ids.cpu().numpy()
-        conditioning_input = conditioning_input.cpu().numpy()
+        output_sequences_decoder_input_ids = output_sequences_decoder_input_ids.numpy()
+        output_sequences_input_ids = output_sequences_input_ids.numpy()
+        conditioning_input = conditioning_input.numpy()
 
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))

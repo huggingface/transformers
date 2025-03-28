@@ -311,7 +311,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
             )
@@ -379,7 +379,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
             )
@@ -438,7 +438,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
                 n_docs=n_docs,
@@ -507,7 +507,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
                 n_docs=retriever_n_docs,
@@ -963,9 +963,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         attention_mask = input_dict.attention_mask.to(torch_device)
 
         question_hidden_states = rag_sequence.question_encoder(input_ids, attention_mask=attention_mask)[0]
-        docs_dict = retriever(
-            input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt"
-        )
+        docs_dict = retriever(input_ids.detach().numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         doc_scores = torch.bmm(
             question_hidden_states.unsqueeze(1),
             docs_dict["retrieved_doc_embeds"].to(torch_device).float().transpose(1, 2),

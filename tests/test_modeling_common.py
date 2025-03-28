@@ -317,11 +317,11 @@ class ModelTesterMixin:
     def test_save_load(self):
         def check_save_load(out1, out2):
             # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
+            out_2 = out2.numpy()
             out_2[np.isnan(out_2)] = 0
             out_2 = out_2[~np.isneginf(out_2)]
 
-            out_1 = out1.cpu().numpy()
+            out_1 = out1.numpy()
             out_1[np.isnan(out_1)] = 0
             out_1 = out_1[~np.isneginf(out_1)]
             max_diff = np.amax(np.abs(out_1 - out_2))
@@ -763,8 +763,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def check_determinism(first, second):
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
+            out_1 = first.numpy()
+            out_2 = second.numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
             out_1 = out_1[~np.isneginf(out_1)]

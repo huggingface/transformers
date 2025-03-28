@@ -160,7 +160,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
             if v.dtype == bfloat16:
                 v = v.float()
-            pt_state_dict[k] = v.cpu().numpy()
+            pt_state_dict[k] = v.numpy()
 
     model_prefix = flax_model.base_model_prefix
 
