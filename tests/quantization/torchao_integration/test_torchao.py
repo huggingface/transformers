@@ -412,11 +412,11 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJEN: (smiling) Oh"
     device = "cuda:0"
 
-    def setUpClass(self):
+    def setUp(self):
         if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
-        super().setUpClass()
+        super().setUp()
 
 
 @require_torch_gpu
@@ -426,11 +426,11 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJEN: (smiling) Oh"
     device = "cuda:0"
 
-    def setUpClass(self):
+    def setUp(self):
         if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
-        super().setUpClass()
+        super().setUp()
 
 
 if __name__ == "__main__":
