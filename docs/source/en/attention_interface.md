@@ -104,3 +104,25 @@ model(torch.ones(1, 5, dtype=int), a_new_kwargs=..., another_new_kwargs=...)
 ```
 
 If in doubt about what args/kwargs a given model sends to the attention function, simply check that model's modeling code on [GitHub](https://github.com/huggingface/transformers/tree/main/src/transformers/models)!
+
+## Accessing current available implementations
+
+Most of the time, you will simply need to `register` a new function. If, however, you need to access existing one,
+and/or perform a few checks, the prefered way is to use the global `ALL_ATTENTION_FUNCTIONS`. It behaves the same way you
+would expect from a usual Python dictionary:
+
+```python
+>>> from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+>>> list(ALL_ATTENTION_FUNCTIONS.keys())
+>>> ['flash_attention_2', 'flex_attention', 'sdpa']
+
+>>> ALL_ATTENTION_FUNCTIONS["sdpa"]
+>>> <function transformers.integrations.sdpa_attention.sdpa_attention_forward>
+
+>>> ALL_ATTENTION_FUNCTIONS.get("sdpa", None)
+>>> <function transformers.integrations.sdpa_attention.sdpa_attention_forward>
+
+# You can also globally `register` a new function directly on it
+>>> ALL_ATTENTION_FUNCTIONS.register("new_func", new_func)
+```
