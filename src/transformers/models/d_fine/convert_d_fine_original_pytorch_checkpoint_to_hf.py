@@ -37,7 +37,7 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
 
     config.num_labels = 80
     repo_id = "huggingface/label-files"
-    filename = "coco-detection-mmdet-id2label.json"
+    filename = "object365-id2label.json" if "obj365" in model_name else "coco-detection-mmdet-id2label.json"
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
@@ -112,11 +112,17 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.backbone_config.stage_light_block = [False, False, True, True]
         config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
         config.backbone_config.stage_numb_of_layers = [3, 3, 3, 3]
-        config.backbone_config.out_indices = [2, 3]
+        config.backbone_config.out_indices = [3, 4]
+        config.backbone_config.use_learnable_affine_block = True
+        config.num_feature_levels = 2
         config.encoder_ffn_dim = 512
+        config.encode_proj_layers = [1]
+        config.d_model = 128
         config.encoder_hidden_dim = 128
+        config.decoder_ffn_dim = 512
         config.encoder_in_channels = [512, 1024]
-        config.decoder_n_points = [3, 6, 3]
+        config.decoder_n_points = [6, 6]
+        config.decoder_in_channels = [128, 128]
         config.feat_strides = [16, 32]
         config.depth_mult = 0.5
         config.decoder_layers = 3
@@ -324,7 +330,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     return state_dict_keys
 
 
-def read_in_q_k_v(state_dict, config):
+def read_in_q_k_v(state_dict, config, model_name):
     prefix = ""
     encoder_hidden_dim = config.encoder_hidden_dim
 
@@ -354,12 +360,20 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight", None)
         in_proj_bias = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias", None)
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+        if model_name in ["dfine_n_coco", "dfine_n_obj2coco_e25", "dfine_n_obj365"]:
+            state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:128, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:128]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:384, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:384]
+            state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-128:, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-128:]
+        else:
+            state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
+            state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
 
 
 # We will verify our results on an image of cute cats
@@ -389,7 +403,7 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     state_dict.pop("decoder.model.decoder.reg_scale", None)
 
     # query, key and value matrices need special treatment
-    read_in_q_k_v(state_dict, config)
+    read_in_q_k_v(state_dict, config, model_name)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     for key in state_dict.copy().keys():
         if key.endswith("num_batches_tracked"):
@@ -446,31 +460,31 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_x_obj2coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.059431, -6.19076, -4.66398],
-                [-3.865726, -5.84998, -4.42653],
-                [-3.874609, -6.228559, -4.60206],
+                [-4.230433, -6.6295037, -4.8339615],
+                [-4.085411, -6.3280816, -4.695468],
+                [-3.8968022, -6.336813, -4.67051],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.25807, 0.54150, 0.47592],
-                [0.76958, 0.40960, 0.45886],
-                [0.169469, 0.198879, 0.21171],
+                [0.25707328, 0.54842496, 0.47624254],
+                [0.76967394, 0.41272867, 0.45970756],
+                [0.16882066, 0.19918433, 0.2112098],
             ]
         )
     elif model_name == "dfine_x_obj365":
         expected_slice_logits = torch.tensor(
             [
-                [-6.3844957, -3.7549126, -4.687326],
-                [-5.8433194, -3.4490551, -3.322890],
-                [-6.5314736, -3.78566215, -4.895984],
+                [-6.3844957, -3.7549126, -4.6873264],
+                [-5.8433194, -3.4490552, -3.3228905],
+                [-6.5314736, -3.7856622, -4.895984],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.770304, 0.413294, 0.459321],
-                [0.168981, 0.198763, 0.210507],
-                [0.251349, 0.551761, 0.486412],
+                [0.7703046, 0.41329497, 0.45932162],
+                [0.16898105, 0.19876392, 0.21050783],
+                [0.25134972, 0.5517619, 0.4864124],
             ]
         )
     elif model_name == "dfine_m_coco":
@@ -491,31 +505,31 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_m_obj2coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.366883, -7.473241, -5.812667],
-                [-4.159411, -7.463147, -5.5588631],
-                [-4.689057, -5.662412, -4.8570761],
+                [-4.520666, -7.6678333, -5.739887],
+                [-4.5053635, -7.510611, -5.452532],
+                [-4.70348, -5.6098466, -5.0199957],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.2582458, 0.546585, 0.474364],
-                [0.7702161, 0.410875, 0.458311],
-                [0.5499019, 0.275631, 0.059633],
+                [0.2567608, 0.5485795, 0.4767465],
+                [0.77035284, 0.41236404, 0.4580645],
+                [0.5498525, 0.27548885, 0.05886984],
             ]
         )
     elif model_name == "dfine_m_obj365":
         expected_slice_logits = torch.tensor(
             [
-                [-5.869976, -2.919317, -5.000304],
-                [-6.024388, -3.356399, -4.868721],
-                [-6.174082, -3.646999, -3.296291],
+                [-5.770525, -3.1610885, -5.2807794],
+                [-5.7809954, -3.768266, -5.1146393],
+                [-6.180705, -3.7357295, -3.1651964],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.255842, 0.551198, 0.476844],
-                [0.7716257, 0.41158, 0.456440],
-                [0.5497970, 0.27594, 0.058975],
+                [0.2529114, 0.5526663, 0.48270613],
+                [0.7712474, 0.41294736, 0.457174],
+                [0.5497157, 0.27588123, 0.05813372],
             ]
         )
     elif model_name == "dfine_l_coco":
@@ -536,31 +550,46 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_l_obj365":
         expected_slice_logits = torch.tensor(
             [
-                [-5.794356, -3.31482, -5.403600],
-                [-5.581522, -3.68510, -5.791995],
-                [-6.050641, -3.18308, -4.332631],
+                [-5.7953215, -3.4901116, -5.4394145],
+                [-5.7032104, -3.671125, -5.76121],
+                [-6.09466, -3.1512096, -4.285499],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.768685, 0.413633, 0.460345],
-                [0.250496, 0.552994, 0.478527],
-                [0.168896, 0.198750, 0.211770],
+                [0.7693825, 0.41265628, 0.4606362],
+                [0.25306237, 0.55187637, 0.4832178],
+                [0.16892478, 0.19880727, 0.21115331],
             ]
         )
     elif model_name == "dfine_l_obj2coco_e25":
         expected_slice_logits = torch.tensor(
             [
-                [-3.456711, -6.703585, -5.255528],
-                [-3.561902, -6.936790, -5.589331],
-                [-4.282646, -5.987232, -4.452727],
+                [-3.6098495, -6.633563, -5.1227236],
+                [-3.682696, -6.9178205, -5.414557],
+                [-4.491674, -6.0823426, -4.5718226],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.769001, 0.410186, 0.459154],
-                [0.255007, 0.549077, 0.479700],
-                [0.168469, 0.198881, 0.212796],
+                [0.7697078, 0.41368833, 0.45879585],
+                [0.2573691, 0.54856044, 0.47715297],
+                [0.16895264, 0.19871138, 0.2115552],
+            ]
+        )
+    elif model_name == "dfine_n_coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-3.7827945, -5.0889463, -4.8341026],
+                [-5.3046904, -6.2801714, -2.9276395],
+                [-4.497901, -5.2670407, -6.2380104],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.73334837, 0.4270624, 0.39424777],
+                [0.1680235, 0.1988639, 0.21031213],
+                [0.25370035, 0.5534435, 0.48496848],
             ]
         )
     elif model_name == "dfine_s_coco":
@@ -581,31 +610,31 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     elif model_name == "dfine_s_obj2coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.881455, -6.95667, -4.667908],
-                [-3.432105, -8.56579, -6.258423],
-                [-4.239889, -8.90363, -5.805731],
+                [-6.0208125, -7.532673, -5.0572147],
+                [-3.3595953, -9.057545, -6.376975],
+                [-4.3203554, -9.546032, -6.075504],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.168693, 0.198404, 0.212517],
-                [0.765760, 0.4120095, 0.464718],
-                [0.256592, 0.5509163, 0.476652],
+                [0.16901012, 0.19883151, 0.21121952],
+                [0.76784194, 0.41266578, 0.46402973],
+                [00.2563128, 0.54797643, 0.47937632],
             ]
         )
     elif model_name == "dfine_s_obj365":
         expected_slice_logits = torch.tensor(
             [
-                [-6.464325, -3.859787, -6.328770],
-                [-6.630722, -3.216558, -5.556852],
-                [-5.627515, -3.938537, -3.713672],
+                [-6.3807316, -4.320986, -6.4775343],
+                [-6.5818424, -3.5009093, -5.75824],
+                [-5.748005, -4.3228016, -4.003726],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.2507714, 0.5541206, 0.480323],
-                [0.7640793, 0.4124037, 0.470100],
-                [0.1691108, 0.198352, 0.212930],
+                [0.2532072, 0.5491191, 0.48222217],
+                [0.76586807, 0.41175705, 0.46789962],
+                [0.169111, 0.19844547, 0.21069047],
             ]
         )
     else:

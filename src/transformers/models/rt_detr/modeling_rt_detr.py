@@ -1482,10 +1482,10 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
-                prediced_corners = self.bbox_embed[idx](hidden_states)
-                new_reference_points = F.sigmoid(prediced_corners + inverse_sigmoid(reference_points))
+                predicted_corners = self.bbox_embed[idx](hidden_states)
+                new_reference_points = F.sigmoid(predicted_corners + inverse_sigmoid(reference_points))
                 reference_points = new_reference_points.detach()
-                intermediate_predicted_corners += (prediced_corners,)
+                intermediate_predicted_corners += (predicted_corners,)
                 initial_reference_points += (reference_points,)
 
             intermediate += (hidden_states,)

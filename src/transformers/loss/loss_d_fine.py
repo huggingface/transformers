@@ -297,7 +297,7 @@ class DFineLoss(RTDetrLoss):
                     ).sum(-1)
                 )
 
-                batch_scale = 8 / outputs["pred_boxes"].shape[0]  # Avoid the influence of batch size per GPU
+                batch_scale = 1 / outputs["pred_boxes"].shape[0]  # it should be refined
                 self.num_pos, self.num_neg = (
                     (mask.sum() * batch_scale) ** 0.5,
                     ((~mask).sum() * batch_scale) ** 0.5,
