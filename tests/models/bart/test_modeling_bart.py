@@ -599,13 +599,15 @@ class FastIntegrationTests(unittest.TestCase):
             " 2002 to prosecute genocide, crimes against humanity and war crimes."
         )
         EXPECTED = (
+            "</s>"
             " The International Criminal Court (ICC) has announced that it has been announced by the International"
             " Criminal court."
+            "</s>"
         )
 
         dct = tok(ARTICLE, return_tensors="pt")
         generated_ids = hf.generate(**dct, num_beams=4)
-        result = tok.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        result = tok.batch_decode(generated_ids)[0]
         assert EXPECTED == result
 
     def test_xsum_1_1_batch_generation(self):
@@ -729,16 +731,18 @@ class FastIntegrationTests(unittest.TestCase):
             truncation=True,
         )
         generated_ids = self.xsum_1_1_model.generate(**batch, num_beams=4)
-        result = self.tok.batch_decode(generated_ids, skip_special_tokens=True)
-        assert (
-            result[0]
-            == " The International Criminal Court (ICC) has announced that it has been announced by the International"
+        result = self.tok.batch_decode(generated_ids)
+        assert result[0] == (
+            "</s>"
+            " The International Criminal Court (ICC) has announced that it has been announced by the International"
             " Criminal court."
+            "</s><pad><pad><pad><pad><pad>"
         )
-        assert (
-            result[1]
-            == " An investigation into the crash that killed at least 10 people in the French capital has been"
+        assert result[1] == (
+            "</s>"
+            " An investigation into the crash that killed at least 10 people in the French capital has been"
             " released by the French police investigating the crash."
+            "</s>"
         )
 
     def test_encoder_equiv(self):
