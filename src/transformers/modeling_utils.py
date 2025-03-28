@@ -797,7 +797,7 @@ def _load_state_dict_into_meta_model(
             serialized_param_name = reverse_renaming_mapping[param_name]
             param = file_pointer.get_slice(serialized_param_name)
         else:
-            param = empty_param.to(tensor_device)  # It is actually not empty!
+            param = empty_param  # It is actually not empty!
 
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
@@ -4897,7 +4897,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             map_location = "cpu"
             if low_cpu_mem_usage:
-                if shard_file.endswith(".safetensors") and not is_quantized:
+                if shard_file.endswith(".safetensors"):
                     map_location = "meta"
                 elif (
                     device_map is not None
