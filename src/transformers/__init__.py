@@ -349,6 +349,7 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_v3": ["DeepseekV3Config"],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
@@ -1487,7 +1488,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
-    _import_structure["modeling_utils"] = ["PreTrainedModel"]
+    _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
 
     # PyTorch models structure
 
@@ -2033,6 +2034,13 @@ else:
             "DecisionTransformerGPT2PreTrainedModel",
             "DecisionTransformerModel",
             "DecisionTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deepseek_v3"].extend(
+        [
+            "DeepseekV3ForCausalLM",
+            "DeepseekV3Model",
+            "DeepseekV3PreTrainedModel",
         ]
     )
     _import_structure["models.deformable_detr"].extend(
@@ -3059,6 +3067,7 @@ else:
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
+            "ModernBertForQuestionAnswering",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",
             "ModernBertModel",
@@ -5561,6 +5570,9 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_v3 import (
+        DeepseekV3Config,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -6744,7 +6756,7 @@ if TYPE_CHECKING:
             model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
-        from .modeling_utils import PreTrainedModel
+        from .modeling_utils import AttentionInterface, PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
@@ -7195,6 +7207,11 @@ if TYPE_CHECKING:
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
+        )
+        from .models.deepseek_v3 import (
+            DeepseekV3ForCausalLM,
+            DeepseekV3Model,
+            DeepseekV3PreTrainedModel,
         )
         from .models.deformable_detr import (
             DeformableDetrForObjectDetection,
@@ -7989,6 +8006,7 @@ if TYPE_CHECKING:
         )
         from .models.modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForQuestionAnswering,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,

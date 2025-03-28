@@ -549,6 +549,13 @@ def model_addition_debugger_context(*args, **kwargs):
 ROPE_INIT_FUNCTIONS = None
 
 
+class AttentionInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2820,6 +2827,27 @@ class DecisionTransformerModel(metaclass=DummyObject):
 
 
 class DecisionTransformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DeepseekV3ForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DeepseekV3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DeepseekV3PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6700,6 +6728,13 @@ class MobileViTV2PreTrainedModel(metaclass=DummyObject):
 
 
 class ModernBertForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ModernBertForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

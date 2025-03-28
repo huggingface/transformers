@@ -1377,7 +1377,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             "use_cache": use_cache,
         }
 
-    def build_delay_pattern_mask(self, input_ids: torch.LongTensor, pad_token_id: int, max_length: int = None):
+    def build_delay_pattern_mask(
+        self, input_ids: torch.LongTensor, pad_token_id: int, max_length: Optional[int] = None
+    ):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
@@ -1828,9 +1830,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
     @classmethod
     def from_sub_models_pretrained(
         cls,
-        text_encoder_pretrained_model_name_or_path: str = None,
-        audio_encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        text_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        audio_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        decoder_pretrained_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -2232,8 +2234,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         batch_size: int,
         model_input_name: str,
         model_kwargs: Dict[str, torch.Tensor],
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
+        decoder_start_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         device: torch.device = None,
     ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
@@ -2454,7 +2456,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: Optional[int] = None
     ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id
