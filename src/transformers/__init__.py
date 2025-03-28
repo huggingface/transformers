@@ -731,6 +731,7 @@ _import_structure = {
     ],
     "models.qwen2_5_vl": [
         "Qwen2_5_VLConfig",
+        "Qwen2_5_VLTextConfig",
         "Qwen2_5_VLProcessor",
     ],
     "models.qwen2_audio": [
@@ -741,6 +742,7 @@ _import_structure = {
     "models.qwen2_moe": ["Qwen2MoeConfig"],
     "models.qwen2_vl": [
         "Qwen2VLConfig",
+        "Qwen2VLTextConfig",
         "Qwen2VLProcessor",
     ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
@@ -5971,6 +5973,7 @@ if TYPE_CHECKING:
     from .models.qwen2_5_vl import (
         Qwen2_5_VLConfig,
         Qwen2_5_VLProcessor,
+        Qwen2_5_VLTextConfig,
     )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
@@ -5981,6 +5984,7 @@ if TYPE_CHECKING:
     from .models.qwen2_vl import (
         Qwen2VLConfig,
         Qwen2VLProcessor,
+        Qwen2VLTextConfig,
     )
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig

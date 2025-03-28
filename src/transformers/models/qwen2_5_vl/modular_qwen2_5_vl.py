@@ -28,7 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
-from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
@@ -112,9 +112,13 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.out_hidden_size = out_hidden_size
 
 
+class Qwen2_5_VLTextConfig(Qwen2VLTextConfig):
+    model_type = "qwen2_5_vl_text"
+
+
 class Qwen2_5_VLConfig(Qwen2VLConfig):
     model_type = "qwen2_5_vl"
-    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
+    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig, "text_config": Qwen2_5_VLTextConfig}
 
 
 class Qwen2_5_VLMLP(nn.Module):
@@ -965,6 +969,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
 __all__ = [
     "Qwen2_5_VLConfig",
+    "Qwen2_5_VLTextConfig",
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
