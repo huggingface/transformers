@@ -409,7 +409,7 @@ class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = Float8WeightOnlyConfig(), {}
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJEN: (smiling) Oh"
+    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     device = "cuda:0"
 
     def setUp(self):
@@ -423,7 +423,7 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = Int8DynamicActivationInt4WeightConfig(), {}
-    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJEN: (smiling) Oh"
+    EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     device = "cuda:0"
 
     def setUp(self):
