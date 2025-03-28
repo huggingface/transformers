@@ -413,7 +413,6 @@ def replace_with_fp8_linear(
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
-    print(modules_to_not_convert)
     model, has_been_replaced = _replace_with_fp8_linear(
         model,
         tp_plan=model._tp_plan,
