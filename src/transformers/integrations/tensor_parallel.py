@@ -231,8 +231,8 @@ class IsolatedParallel(TensorParallelLayer):
         distribute_module(
             module,
             device_mesh,
-            partial(self._prepare_input_fn),
-            partial(self._prepare_output_fn),
+            partial(self._prepare_input_fn, None, None),
+            partial(self._prepare_output_fn, None, None),
         )
 
 
@@ -484,7 +484,12 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
     # 1. We add hooks to the layer being loaded:
     if current_module_plan is not None:
         tp_layer = translate_to_torch_parallel_style(current_module_plan)
-        tp_layer.prepare_module_tp(module, device_mesh)
+        try:
+            tp_layer.prepare_module_tp(module, device_mesh)
+        except NotImplementedError as e:
+            print(
+                f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
+            )
 
     # 2. We add hooks to the parrent module if needed
     if "." in layer_name:
@@ -531,6 +536,7 @@ def shard_and_distribute_module(
             param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
         )
     else:
+        # TODO log no plan modules in set
         param = param[...].to(param_casting_dtype)
         if is_contiguous:
             param = param.contiguous()
