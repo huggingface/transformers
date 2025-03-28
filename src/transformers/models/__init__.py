@@ -88,6 +88,7 @@ from . import (
     donut,
     dpr,
     dpt,
+    efficientloftr,
     efficientnet,
     electra,
     emu3,
