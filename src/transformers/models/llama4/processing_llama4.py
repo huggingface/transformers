@@ -279,7 +279,7 @@ class Llama4Processor(ProcessorMixin):
                         img_string += "<|tile_x_separator|>"
 
                 img_string += "<|tile_y_separator|>"
-        # img_string += "<|image|>"
+        img_string += "<|image|>"
         img_string += "<|patch|>" * num_patches_per_chunk
         img_string += "<|image_end|>"
 
@@ -344,7 +344,7 @@ class Llama4Processor(ProcessorMixin):
             num_patches_per_chunk = int(
                 (image_height // self.patch_size) * (image_width // self.patch_size) // self.downsample_ratio
             )
-            aspect_ratios = image_inputs.pop("aspect_ratios")
+            aspect_ratios = image_inputs["aspect_ratios"]
 
             total_placeholders = sum(prompt.count(self.fake_image_token) for prompt in text)
             if total_placeholders != len(images):
