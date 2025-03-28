@@ -159,7 +159,7 @@ class TorchAoTest(unittest.TestCase):
         # Note: we quantize the bfloat16 model on the fly to int4
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=None,
+            torch_dtype=torch.bfloat16,
             device_map=self.device,
             quantization_config=quant_config,
         )
@@ -282,7 +282,7 @@ class TorchAoGPUTest(TorchAoTest):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            torch_dtype="auto",
             device_map=self.device,
             quantization_config=quant_config,
         )
@@ -321,9 +321,10 @@ class TorchAoSerializationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.quant_config = TorchAoConfig(cls.quant_scheme, **cls.quant_scheme_kwargs)
+        torch_dtype = torch.bfloat16 if cls.quant_scheme == "int4_weight_only" else "auto"
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch_dtype,
             device_map=cls.device,
             quantization_config=cls.quant_config,
         )
@@ -344,10 +345,11 @@ class TorchAoSerializationTest(unittest.TestCase):
         """
         Test if we can serialize and load/infer the model again on the same device
         """
+        torch_dtype = torch.bfloat16 if self.quant_scheme == "int4_weight_only" else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, torch_dtype=torch.bfloat16, device_map=device
+                tmpdirname, torch_dtype=torch_dtype, device_map=device
             )
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
