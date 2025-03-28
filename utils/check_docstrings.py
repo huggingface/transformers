@@ -467,6 +467,7 @@ OBJECTS_TO_IGNORE = [
     "SEWDForCTC",
     "SEWForCTC",
     "SamConfig",
+    "SamImageProcessorFast",
     "SamPromptEncoderConfig",
     "SeamlessM4TConfig",  # use of unconventional markdown
     "SeamlessM4Tv2Config",  # use of unconventional markdown
