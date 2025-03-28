@@ -4897,7 +4897,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             map_location = "cpu"
             if low_cpu_mem_usage:
-                if shard_file.endswith(".safetensors") and not is_quantized:
+                if shard_file.endswith(".safetensors"):
                     map_location = "meta"
                 elif (
                     device_map is not None
