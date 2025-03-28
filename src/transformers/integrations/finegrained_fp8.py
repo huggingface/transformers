@@ -382,7 +382,7 @@ def _replace_with_fp8_linear(
                         block_size=quantization_config.weight_block_size,
                     )
                     has_been_replaced = True
-            # when changing a layer the TP PLAN for that layer should be updated. TODO 
+            # when changing a layer the TP PLAN for that layer should be updated. TODO
 
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fp8_linear(
