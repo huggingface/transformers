@@ -64,19 +64,6 @@ class InstructBlipVideoVideoProcessorFast(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
-class Gemma3ImageProcessorFast(metaclass=DummyObject):
-    _backends = ["torchvision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchvision"])
-
-
-class GotOcr2ImageProcessorFast(metaclass=DummyObject):
-    _backends = ["torchvision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchvision"])
-
 
 class LlavaImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
@@ -112,6 +99,7 @@ class LlavaOnevisionVideoProcessorFast(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
+
 class Phi4MultimodalImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
@@ -120,13 +108,6 @@ class Phi4MultimodalImageProcessorFast(metaclass=DummyObject):
 
 
 class PixtralImageProcessorFast(metaclass=DummyObject):
-    _backends = ["torchvision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchvision"])
-
-
-class Qwen2_5_VLVideoProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
@@ -161,13 +142,14 @@ class SiglipImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class VideoLlavaVideoProcessorFast(metaclass=DummyObject):
+class Siglip2ImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchvision"])
 
-class Siglip2ImageProcessorFast(metaclass=DummyObject):
+
+class VideoLlavaVideoProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):

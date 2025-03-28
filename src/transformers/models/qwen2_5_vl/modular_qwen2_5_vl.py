@@ -41,8 +41,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
     VisionSdpaAttention,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLImagesKwargs
-from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
@@ -50,7 +49,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_flash_attn_2_available, is_torchdynamo_compiling, logging
+from ...utils import is_flash_attn_2_available, logging
 from ...video_utils import VideoInput
 
 
@@ -812,13 +811,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
         return model_inputs
 
-class Qwen2_5_VLVideoProcessor(Qwen2VLVideoProcessor):
-    model_input_names = [
-        "pixel_values_videos",
-        "video_grid_thw",
-        "second_per_grid_ts",
-    ]
-
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
@@ -973,6 +965,5 @@ __all__ = [
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
-    "Qwen2_5_VLVideoProcessor",
     "Qwen2_5_VLProcessor",
 ]

@@ -27,7 +27,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...utils import (
     CONFIG_NAME,
     VIDEO_PROCESSOR_NAME,
-    get_file_from_repo,
+    cached_file,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -181,7 +181,7 @@ def get_video_processor_config(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    resolved_config_file = get_file_from_repo(
+    resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         VIDEO_PROCESSOR_NAME,
         cache_dir=cache_dir,

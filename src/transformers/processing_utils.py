@@ -30,8 +30,8 @@ import typing_extensions
 
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
-from .video_utils import load_video
+from .image_utils import ChannelDimension, ImageInput, is_valid_image, is_vision_available, load_image
+from .video_utils import VideoInput, load_video
 
 
 if is_vision_available():

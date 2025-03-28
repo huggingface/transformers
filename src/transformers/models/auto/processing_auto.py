@@ -33,7 +33,6 @@ from ...utils import (
     IMAGE_PROCESSOR_NAME,
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
-    get_file_from_repo,
     cached_file,
     logging,
 )
@@ -300,8 +299,8 @@ class AutoProcessor:
 
             # Saved as video processor
             if preprocessor_config_file is None:
-                preprocessor_config_file = get_file_from_repo(
-                    pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **get_file_from_repo_kwargs
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
                 )
                 if preprocessor_config_file is not None:
                     config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
@@ -313,8 +312,8 @@ class AutoProcessor:
 
             # Saved as feature extractor
             if preprocessor_config_file is None:
-                preprocessor_config_file = get_file_from_repo(
-                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
                 )
                 if preprocessor_config_file is not None and processor_class is None:
                     config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(

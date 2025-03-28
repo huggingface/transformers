@@ -16,10 +16,9 @@ import base64
 import math
 import os
 from collections.abc import Iterable
-from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import requests
@@ -27,10 +26,6 @@ from packaging import version
 
 from .utils import (
     ExplicitEnum,
-    TensorType,
-    is_av_available,
-    is_cv2_available,
-    is_decord_available,
     is_jax_tensor,
     is_numpy_array,
     is_tf_tensor,
@@ -99,14 +94,6 @@ class AnnotationFormat(ExplicitEnum):
 class AnnotionFormat(ExplicitEnum):
     COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
     COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
-
-
-@dataclass
-class VideoMetadata:
-    total_num_frames: int
-    fps: float
-    duration: float
-    video_backend: str
 
 
 AnnotationType = dict[str, Union[int, str, list[dict]]]
@@ -383,6 +370,7 @@ def get_image_size_for_max_height_width(
     image_size: tuple[int, int],
     max_height: int,
     max_width: int,
+    size_divisor: int = 1,
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.

@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Iterable
-from typing import Optional, Union, Dict
+from typing import Optional, Union
 
 import numpy as np
 

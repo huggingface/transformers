@@ -1365,9 +1365,8 @@ else:
     _import_structure["models.llava_onevision"].extend(
         ["LlavaOnevisionImageProcessorFast", "LlavaOnevisionVideoProcessorFast"]
     )
-    _import_structure["model.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
-    _import_structure["models.qwen2_5_vl"].append("Qwen2_5_VLVideoProcessorFast")
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessorFast", "Qwen2VLVideoProcessorFast"])
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
@@ -6632,12 +6631,11 @@ if TYPE_CHECKING:
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast, LlavaOnevisionVideoProcessorFast
         from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
-        from .models.qwen2_5_vl import Qwen2_5_VLVideoProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast, Qwen2VLVideoProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.siglip import SiglipImageProcessorFast
-        from .models.video_llava import VideoLlavaVideoProcessorFast
         from .models.siglip2 import Siglip2ImageProcessorFast
+        from .models.video_llava import VideoLlavaVideoProcessorFast
         from .models.vit import ViTImageProcessorFast
         from .video_processing_utils_fast import BaseVideoProcessorFast
 

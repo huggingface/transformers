@@ -22,6 +22,7 @@ from .image_processing_utils import (
     BatchFeature,
     get_size_dict,
 )
+from .image_processing_utils_fast import validate_fast_preprocess_arguments
 from .image_transforms import (
     get_resize_output_image_size,
     get_size_with_aspect_ratio,
@@ -30,7 +31,6 @@ from .image_utils import (
     ChannelDimension,
     SizeDict,
     get_image_size_for_max_height_width,
-    validate_fast_preprocess_arguments,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
