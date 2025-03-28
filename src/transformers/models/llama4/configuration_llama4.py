@@ -142,10 +142,9 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.feed_forward.experts.gate_up_proj": "local_packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "local_colwise",  # col because not linear
         "layers.*.feed_forward.experts": "local",
-        # "layers.*.feed_forward.gate_up_proj": "local_packed_rowwise",  # row because not linear
         "layers.*.feed_forward.shared_expert.gate_proj": "local_colwise",
         "layers.*.feed_forward.shared_expert.up_proj": "local_colwise",
-        "layers.*.feed_forward.down_proj": "local_rowwise",  # col because not linear
+        "layers.*.feed_forward.down_proj": "local_rowwise",
         "layers.*.feed_forward": "gather",
     }
 
@@ -154,6 +153,7 @@ class Llama4TextConfig(PretrainedConfig):
         vocab_size=202048,
         hidden_size=5120,
         intermediate_size=8192,
+        intermediate_size_mlp=16384,
         num_hidden_layers=48,
         num_attention_heads=40,
         num_key_value_heads=8,
@@ -190,6 +190,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.intermediate_size_mlp = intermediate_size_mlp
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling

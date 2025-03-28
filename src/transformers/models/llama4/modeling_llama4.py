@@ -96,12 +96,11 @@ class Llama4TextExperts(nn.Module):
 
 # Phi3MLP
 class Llama4TextMLP(nn.Module):
-    def __init__(self, config, intermediate_size_factor=1):
-        """This is used for the shared expert."""
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
 
-        # In the layers that don't use MoEs, the intermediate size is double the expert's
-        intermediate_size = intermediate_size_factor * config.intermediate_size
+        if intermediate_size is None:
+            intermediate_size = config.intermediate_size
 
         self.config = config
         self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)
@@ -112,28 +111,6 @@ class Llama4TextMLP(nn.Module):
     def forward(self, x):
         down_proj = self.activation_fn(self.gate_proj(x)) * self.up_proj(x)
         return self.down_proj(down_proj)
-
-
-# Phi3MLP
-class Llama4TextFusedMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        # In the layers that don't use MoEs, the intermediate size is double the expert's
-        intermediate_size = 2 * config.intermediate_size
-
-        self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * intermediate_size, bias=False)
-        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
-        up_states = self.gate_up_proj(hidden_states)
-
-        gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
-
-        return self.down_proj(up_states)
 
 
 class Llama4TextL2Norm(torch.nn.Module):
@@ -371,18 +348,8 @@ class Llama4TextAttention(nn.Module):
         )
 
         if self.config.use_qk_norm:
-            # because L2 is computed on the shards, we need to find an appropriate reshape
-            # here, to make sure in TP but also non TP settings. Logits diverge otherwise
-            if query_states.shape[-1] == self.num_attention_heads * self.head_dim:
-                query_states = self.qk_norm(
-                    query_states.view(input_shape[0], input_shape[1], self.pretraining_tp, -1)
-                ).reshape(hidden_shape)
-                key_states = self.qk_norm(
-                    key_states.view(input_shape[0], input_shape[1], self.pretraining_tp, -1)
-                ).reshape((*input_shape, self.pretraining_tp, -1))
-            else:
-                query_states = self.qk_norm(query_states)
-                key_states = self.qk_norm(key_states)
+            query_states = self.qk_norm(query_states)
+            key_states = self.qk_norm(key_states)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -428,7 +395,7 @@ class Llama4TextDecoderLayer(nn.Module):
         if self.is_moe_layer:
             self.feed_forward = Llama4TextMoe(config)
         else:
-            self.feed_forward = Llama4TextMLP(config, intermediate_size_factor=2)
+            self.feed_forward = Llama4TextMLP(config, intermediate_size=config.intermediate_size_mlp)
 
         self.input_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

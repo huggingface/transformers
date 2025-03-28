@@ -253,9 +253,10 @@ def write_model(
         rope_theta=rope_theta,
         num_hidden_layers=num_layers,
         intermediate_size=8192,
+        intermediate_size_mlp=16384,
         rope_scaling=rope_scaling,
         num_local_experts=num_experts,
-        interleave_moe_layer_step = interleave_moe_layer_step,
+        interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
@@ -380,37 +381,34 @@ def write_model(
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {v}, {values.shape}")
                 state_dict[v] = values
             elif re.search(r"(gate|up)_proj", new_key):
-                if "gate_up_proj" not in new_key:
-                    path = new_key.split(".")
-                    gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
-                    up_key = re.sub(r"(gate|up)_proj", lambda m: "up_proj", new_key)
-                    if gate_key == new_key:
-                        state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
-                    elif new_key == up_key:
-                        if "experts" not in new_key:
-                            gate_proj = state_dict.pop(gate_key)
-                            up_proj = torch.cat(current_parameter, dim=concat_dim)
-                            state_dict[gate_key] = gate_proj
-                            state_dict[new_key] = up_proj
-                            # TODO that's kinda low hanging fruit, but shard dim for shared should be
-                            # column, then row. TO get hidden // tp * col // tp, gate + up
-                            tqdm.write(f"Processing: {key.ljust(50)}  ->\t {gate_key}, {state_dict[gate_key].shape}")
-                        else:
-                            gate_proj = state_dict.pop(gate_key)
-                            gate_proj = [
-                                gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
-                            ]
-                            gate_proj = torch.cat(gate_proj, dim=-1)
-
-                            up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
-                            up_proj = torch.cat(up_proj, dim=-1)
-
-                            gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
-                            new_key = new_key.replace("up_proj", "gate_up_proj")
-                            state_dict[new_key] = gate_up_proj.contiguous()
-                        tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
-                else:
+                path = new_key.split(".")
+                gate_key = re.sub(r"(gate|up)_proj", lambda m: "gate_proj", new_key)
+                up_key = re.sub(r"(gate|up)_proj", lambda m: "up_proj", new_key)
+                if gate_key == new_key:
                     state_dict[new_key] = torch.cat(current_parameter, dim=concat_dim)
+                elif new_key == up_key:
+                    if "experts" not in new_key:
+                        gate_proj = state_dict.pop(gate_key)
+                        up_proj = torch.cat(current_parameter, dim=concat_dim)
+                        state_dict[gate_key] = gate_proj
+                        state_dict[new_key] = up_proj
+                        # TODO that's kinda low hanging fruit, but shard dim for shared should be
+                        # column, then row. TO get hidden // tp * col // tp, gate + up
+                        tqdm.write(f"Processing: {key.ljust(50)}  ->\t {gate_key}, {state_dict[gate_key].shape}")
+                    else:
+                        gate_proj = state_dict.pop(gate_key)
+                        gate_proj = [
+                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
+                        ]
+                        gate_proj = torch.cat(gate_proj, dim=-1)
+
+                        up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
+                        up_proj = torch.cat(up_proj, dim=-1)
+
+                        gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
+                        new_key = new_key.replace("up_proj", "gate_up_proj")
+                        state_dict[new_key] = gate_up_proj.contiguous()
+                    tqdm.write(f"Processing: {key.ljust(50)}  ->\t {new_key}, {state_dict[new_key].shape}")
             elif "down_proj" in new_key:
                 current_parameter = torch.cat(current_parameter, dim=concat_dim)
                 if "experts" in new_key:
