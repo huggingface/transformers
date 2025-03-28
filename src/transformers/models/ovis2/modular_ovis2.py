@@ -1,0 +1,658 @@
+import math
+from typing import Callable, Optional, Tuple, Union, List, Dict
+
+import torch
+from torch import nn
+
+from transformers.models.llama.modeling_llama import LlamaRMSNorm
+from transformers.models.siglip.modeling_siglip import SiglipEncoder
+from transformers.models.llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast
+
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+)
+from ..auto import AutoModelForCausalLM
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...configuration_utils import PretrainedConfig
+from ...generation import GenerationMixin
+from ...activations import ACT2FN
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+
+def hard_softmax(logits: torch.Tensor, dim: int):
+    y_soft = logits.softmax(dim)
+    # Straight through.
+    index = y_soft.max(dim, keepdim=True)[1]
+    y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
+    ret = y_hard - y_soft.detach() + y_soft
+
+    return ret
+
+
+def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim: int = -1) -> torch.Tensor:
+    # more stable https://github.com/pytorch/pytorch/issues/41663
+    gumbel_dist = torch.distributions.gumbel.Gumbel(
+        torch.tensor(0.0, device=logits.device, dtype=logits.dtype),
+        torch.tensor(1.0, device=logits.device, dtype=logits.dtype),
+    )
+    gumbels = gumbel_dist.sample(logits.shape)
+
+    gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
+    y_soft = gumbels.softmax(dim)
+
+    if hard:
+        # Straight through.
+        index = y_soft.max(dim, keepdim=True)[1]
+        y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
+        ret = y_hard - y_soft.detach() + y_soft
+    else:
+        # Reparametrization trick.
+        ret = y_soft
+    return ret
+
+
+class Ovis2RMSNorm(LlamaRMSNorm):
+    pass
+
+
+class Ovis2SwiGLUFFN(nn.Module):
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__()
+        in_features = config.hidden_size
+        out_features = config.intermediate_size
+        self.act_fn = config.hidden_act
+
+        self.fc1 = nn.Linear(in_features, out_features, bias=config.use_bias)
+        self.fc2 = nn.Linear(out_features, in_features, bias=config.use_bias)
+        self.fc3 = nn.Linear(in_features, out_features, bias=config.use_bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        fc3_out = self.fc3(hidden_states)
+        fc1_out = self.fc1(hidden_states)
+        hidden_states = ACT2FN[self.act_fn](fc1_out) * fc3_out
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class Ovis2VisionEmbeddings(nn.Module):
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__()
+        self.config = config
+        self.patch_size = config.patch_size
+        self.patch_embed = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
+        self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+        num_patches = (config.image_size // config.patch_size) ** 2
+        self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
+        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+
+    @staticmethod
+    def build_2d_sincos_position_embedding(
+        height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
+    ):
+        grid_w = torch.arange(int(width), dtype=dtype, device=device)
+        grid_h = torch.arange(int(height), dtype=dtype, device=device)
+        grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
+
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
+        omega = 1.0 / (temperature**omega)
+
+        out_h = grid_h.flatten()[..., None] @ omega[None, :]
+        out_w = grid_w.flatten()[..., None] @ omega[None, :]
+
+        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        _, _, height, width = pixel_values.size()
+        hidden_states = self.patch_embed(pixel_values).flatten(2).transpose(1, 2)
+        hidden_states = self.rms_norm(hidden_states)
+
+        if self.config.image_size != height or self.config.image_size != width:
+            pos_embed = self.build_2d_sincos_position_embedding(
+                height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
+            )
+        else:
+            pos_embed = self.position_embeddings(self.position_ids)
+
+        hidden_states = hidden_states + pos_embed
+        return hidden_states
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    scaling: float,
+    attention_mask: Optional[torch.Tensor]=None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+    # Only apply attention dropout during training.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Ovis2VisionAttention(nn.Module):
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.attention_dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.proj_drop = nn.Dropout(config.projection_dropout)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask=attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
+
+        attn_output = self.proj_out(attn_output)
+        attn_output = self.proj_drop(attn_output)
+
+        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
+
+        return output
+
+
+class Ovis2EncoderLayer(nn.Module):
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__()
+        self.attention = Ovis2VisionAttention(config)
+        self.ffn = Ovis2SwiGLUFFN(config)
+        self.rms_norm1 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm2 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        norm_hidden_states = self.rms_norm1(hidden_states)
+        attn_output, attn_wights = self.attention(
+            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        )
+
+        hidden_states = hidden_states + attn_output
+        norm_hidden_states = self.rms_norm2(hidden_states)
+        mlp_output = self.ffn(norm_hidden_states)
+
+        hidden_states = hidden_states + mlp_output
+        return (hidden_states, attn_wights) if output_attentions else (hidden_states, None)
+
+
+class Ovis2Encoder(SiglipEncoder):
+    pass
+
+
+class Ovis2VisionPreTrainedModel(PreTrainedModel):
+    config_class = Ovis2VisionConfig
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Ovis2EncoderLayer", "Ovis2VisionEmbeddings"]
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+
+
+class Ovis2VisionTransformer(nn.Module):
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__()
+        self.config = config
+        self.embeddings = Ovis2VisionEmbeddings(config)
+        self.encoder = Ovis2Encoder(config)
+        self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+    def forward(
+        self,
+        pixel_values,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        hidden_states = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.rms_norm(last_hidden_state)
+
+        return BaseModelOutput(
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+class Ovis2VisualEmbeddingTable(nn.Embedding):
+    def forward(self, visual_tokens: torch.Tensor) -> torch.Tensor:
+        if visual_tokens.dtype in [torch.int8, torch.int16, torch.int32, torch.int64, torch.long]:
+            return super().forward(visual_tokens)
+        return torch.matmul(visual_tokens, self.weight)
+
+    def reset_parameters(self, mean=0., std=1.) -> None:
+        nn.init.normal_(self.weight, mean=mean, std=std)
+        self._fill_padding_idx_with_zero()
+
+
+class Ovis2VisionModel(Ovis2VisionPreTrainedModel):
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__(config)
+        self.config = config
+        self.transformer = Ovis2VisionTransformer(config)
+        self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
+        self.vocab_size = config.vocab_size
+        self.head = nn.Sequential(
+            nn.Linear(
+                config.hidden_size * config.hidden_stride * config.hidden_stride, 
+                self.vocab_size - self.num_visual_indicator_tokens,
+                bias=False
+            ),
+            nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens),
+        )
+        self.post_init()
+        
+    def get_prob_token(self, logits):
+        if self.config.tokenize_function == "gumbel_argmax":
+            prob_token = gumbel_softmax(logits, dim=-1, hard=True)
+        else:
+            if self.config.tokenize_function == "st_argmax":
+                prob_token = hard_softmax(logits, dim=-1)
+            else:
+                prob_token = nn.functional.softmax(logits, dim=-1)
+        return prob_token
+
+    def forward(self, pixel_values: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        outputs = self.transformer(pixel_values)
+        last_hidden_state = outputs.last_hidden_state
+
+        if self.config.vision_feature_select_strategy == "default":
+            selected_image_feature = last_hidden_state[:, 1:, :]
+        elif self.config.vision_feature_select_strategy == "full":
+            selected_image_feature = last_hidden_state
+        
+        if self.config.hidden_stride > 1:
+            n, seq_len, d = selected_image_feature.shape
+            hs = self.config.hidden_stride
+
+            sqrt_l = int(math.sqrt(seq_len))
+            assert sqrt_l * sqrt_l == seq_len, "Token sequence length must be a perfect square"
+            pad_size = (hs - (sqrt_l % hs)) % hs
+            selected_image_feature = nn.functional.pad(selected_image_feature, (0, 0, 0, pad_size, 0, pad_size), "constant", 0)
+            sqrt_l += pad_size
+
+            selected_image_feature = selected_image_feature.reshape(n, sqrt_l // hs, hs, sqrt_l // hs, hs, d)
+            selected_image_feature = selected_image_feature.permute(0, 1, 3, 2, 4, 5)
+            selected_image_feature = selected_image_feature.reshape(n, -1, hs * hs * d)  # (n, (sqrt_l//hs)^2, hs^2*d)
+
+        logits = self.head(selected_image_feature)
+        prob_token = self.get_prob_token(logits)
+
+        return prob_token
+
+
+class Ovis2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
+    pass
+
+
+class Ovis2PreTrainedModel(PreTrainedModel):
+    config_class = Ovis2Config
+    base_model_prefix = "ovis2"
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_static_cache = True
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextPreTrainedModel._init_weights
+    def _init_weights(self, module):
+        # important: this ported version of LlavaNext isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+        # https://github.com/haotian-liu/LLaVA/tree/main/llava_next should serve for that purpose
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
+    def __init__(self, config: Ovis2Config):
+        super().__init__(config)
+        self.vision_tower = Ovis2VisionModel(config.vision_config)
+        self.visual_table = Ovis2VisualEmbeddingTable(config.vision_config.vocab_size, config.hidden_size)
+
+        self.visual_vocab_size = config.vision_config.vocab_size
+        self.vocab_size = config.vocab_size
+
+        self.visual_indicator_token_ids = config.visual_indicator_token_ids
+
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+        
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_input_embeddings
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.set_input_embeddings
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_output_embeddings
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.set_output_embeddings
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.set_decoder
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_decoder
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+    ) -> torch.FloatTensor:
+        image_features = self.vision_tower(pixel_values)
+        b, l, _ = image_features.shape
+        padding_tensor = torch.zeros(
+            (b, l, self.vision_tower.num_visual_indicator_tokens),
+            dtype=image_features.dtype,
+            device=image_features.device,
+            requires_grad=False,
+            layout=image_features.layout,
+        )
+        image_features = torch.cat([image_features, padding_tensor], dim=2)
+        image_features = self.visual_table(image_features)
+
+        visual_indicator = torch.arange(
+            self.visual_vocab_size - self.vision_tower.num_visual_indicator_tokens,
+            self.visual_vocab_size,
+            dtype=torch.long
+        ).to(image_features.device)
+        visual_indicator_features = self.visual_table(visual_indicator)
+
+        return image_features, visual_indicator_features
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        grids: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> Union[Tuple, Ovis2CausalLMOutputWithPast]:
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
+
+
+        Returns:
+
+        Example:
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+
+        >>> torch_device = "cuda"
+        >>> processor = AutoProcessor.from_pretrained("")
+        >>> model = AutoModelForImageTextToText.from_pretrained(
+        ...     "", torch_dtype=torch.bfloat16, device_map=torch_device
+        ... )
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+        ...             },
+        ...             {
+        ...                 "type": "image",
+        ...                 "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+        ...             },
+        ...             {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
+        ...         ],
+        ...     },
+        ... ]
+
+        >>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
+        >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
+        The images depict the Statue of Liberty and the Golden Gate Bridge.
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_features, visual_indicator_features = self.get_image_features(
+                pixel_values=pixel_values
+            )
+
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = image_features.reshape(-1, image_features.shape[-1])
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+            for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
+                inputs_embeds[(input_ids == visual_indicator_id)] = visual_indicator_features[i].expand_as(
+                    inputs_embeds[(input_ids == visual_indicator_id)]
+                ).to(inputs_embeds.device, inputs_embeds.dtype)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
+        logits = outputs[0]
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            if attention_mask is not None:
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
+                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+            else:
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            )
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return Ovis2CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        grids=None,
+        attention_mask=None,
+        cache_position=None,
+        logits_to_keep=None,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
+        if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["grids"] = grids
+
+        return model_inputs
+
+__all__ = ["Ovis2ForConditionalGeneration"]

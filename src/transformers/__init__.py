@@ -672,6 +672,11 @@ _import_structure = {
         "OpenAIGPTTokenizer",
     ],
     "models.opt": ["OPTConfig"],
+    "models.ovis2": [
+        "Ovis2Config",
+        "Ovis2Processor",
+        "Ovis2VisionConfig",
+    ],
     "models.owlv2": [
         "Owlv2Config",
         "Owlv2Processor",
@@ -1288,6 +1293,7 @@ else:
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
+    _import_structure["models.ovis2"].extend(["Ovis2ImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
@@ -3189,6 +3195,13 @@ else:
             "OPTForSequenceClassification",
             "OPTModel",
             "OPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.ovis2"].extend(
+        [
+            "Ovis2ForConditionalGeneration",
+            "Ovis2VisionModel",
+            "Ovis2PreTrainedModel",
         ]
     )
     _import_structure["models.owlv2"].extend(
@@ -5861,6 +5874,11 @@ if TYPE_CHECKING:
         OpenAIGPTTokenizer,
     )
     from .models.opt import OPTConfig
+    from .models.ovis2 import (
+        Ovis2Config,
+        Ovis2Processor,
+        Ovis2VisionConfig,
+    )
     from .models.owlv2 import (
         Owlv2Config,
         Owlv2Processor,
@@ -8044,6 +8062,9 @@ if TYPE_CHECKING:
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,
+        )
+        from .models.ovis2 import (
+            Ovis2ForConditionalGeneration,
         )
         from .models.owlv2 import (
             Owlv2ForObjectDetection,

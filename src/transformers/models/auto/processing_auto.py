@@ -88,6 +88,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mllama", "MllamaProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
+        ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
