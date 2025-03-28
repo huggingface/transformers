@@ -44,7 +44,12 @@ from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -188,11 +193,15 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         logits_processor_kwargs = {}
         return logits_processor_kwargs
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(reason="Moshi has no strict equivalence between two modes, skipping this test.")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+            self.skipTest("Test is failing, fix me :) ")
+        parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
+        parent_parameterized_test(self)
 
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):
@@ -572,7 +581,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, filtered_inputs_dict
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
+        # Overwrite because the generate method actually always uses `inputs_embeds` so `use_cache` is always `True`
         super()._check_generate_outputs(
             output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
@@ -609,22 +618,22 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(
-        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
     )
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @unittest.skip(reason="The Moshi model does not have support dynamic compile yet")
@@ -840,7 +849,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 **model.get_unconditional_inputs(num_samples=4), max_new_tokens=5, concat_unconditional_inputs=False
             )
 
-            # check same results from uncondtional or no inputs
+            # check same results from unconditional or no inputs
             outputs_from_unconditional = model.generate(
                 **model.get_unconditional_inputs(num_samples=1), max_new_tokens=5, concat_unconditional_inputs=False
             )

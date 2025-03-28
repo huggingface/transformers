@@ -526,9 +526,13 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from transformers import pipeline
 
-        for model_id in self.peft_test_model_ids:
-            pipe = pipeline("text-generation", model_id)
-            _ = pipe("Hello")
+        for adapter_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
+            peft_pipe = pipeline("text-generation", adapter_id)
+            base_pipe = pipeline("text-generation", base_model_id)
+            peft_params = list(peft_pipe.model.parameters())
+            base_params = list(base_pipe.model.parameters())
+            self.assertNotEqual(len(peft_params), len(base_params))  # Assert we actually loaded the adapter too
+            _ = peft_pipe("Hello")
 
     def test_peft_add_adapter_with_state_dict(self):
         """
@@ -550,7 +554,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
 
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
                 with self.assertRaises(ValueError):
@@ -575,7 +579,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # this should always work
                 model.load_adapter(
@@ -643,7 +647,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # add unexpected key
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
@@ -670,7 +674,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_config = LoraConfig()
                 state_dict_path = hf_hub_download(peft_model_id, "adapter_model.bin")
-                dummy_state_dict = torch.load(state_dict_path)
+                dummy_state_dict = torch.load(state_dict_path, weights_only=True)
 
                 # remove a key so that we have missing keys
                 key = next(iter(dummy_state_dict.keys()))

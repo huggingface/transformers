@@ -91,7 +91,6 @@ from .hub import (
     define_sagemaker_information,
     download_url,
     extract_commit_hash,
-    get_file_from_repo,
     has_file,
     http_user_agent,
     is_offline_mode,
@@ -148,6 +147,7 @@ from .import_utils import (
     is_gguf_available,
     is_gptqmodel_available,
     is_grokadamw_available,
+    is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
     is_in_notebook,
@@ -181,6 +181,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quark_available,
     is_rich_available,
     is_rjieba_available,
     is_sacremoses_available,
@@ -218,6 +219,7 @@ from .import_utils import (
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_greater_or_equal,
+    is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -315,6 +317,9 @@ def get_available_devices() -> FrozenSet[str]:
 
     if is_torch_npu_available():
         devices.add("npu")
+
+    if is_torch_hpu_available():
+        devices.add("hpu")
 
     if is_torch_mlu_available():
         devices.add("mlu")

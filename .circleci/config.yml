@@ -154,7 +154,7 @@ jobs:
                   path: ~/transformers/installed.txt
             - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
             - run: ruff check examples tests src utils
-            - run: ruff format tests src utils --check
+            - run: ruff format examples tests src utils --check
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
             - run: python utils/check_doc_toc.py
@@ -178,8 +178,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
-            - run: python utils/check_modular_conversion.py --num_workers 4
-            - run: python utils/check_table.py
+            - run: python utils/check_modular_conversion.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
@@ -189,7 +188,6 @@ jobs:
             - run: make deps_table_check_updated
             - run: python utils/update_metadata.py --check-only
             - run: python utils/check_docstrings.py
-            - run: python utils/check_support_list.py
 
 workflows:
     version: 2

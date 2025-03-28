@@ -32,12 +32,18 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -1075,12 +1081,17 @@ class MllamaPreTrainedModel(PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1162,7 +1173,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -2045,6 +2056,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2146,15 +2158,31 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
-            labels=labels,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **loss_kwargs,
         )
 
-        return outputs
+        # Temporary fix to calculate the loss in main class, as the model's vocab size may be resized
+        loss = None
+        logits = outputs[0]
+
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **loss_kwargs)
+
+        if not return_dict:
+            return (loss,) + outputs if loss is not None else outputs
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=outputs.logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(
         self,
@@ -2182,7 +2210,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)

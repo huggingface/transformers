@@ -43,7 +43,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1399,7 +1398,7 @@ class BambaModel(BambaPreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1590,7 +1589,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         if not empty_past_kv:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)

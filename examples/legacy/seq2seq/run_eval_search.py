@@ -128,7 +128,7 @@ def run_search():
 
     results_sorted = sorted(results, key=operator.itemgetter(*task_score_names[task]), reverse=True)
     print(" | ".join([f"{col:{col_widths[col]}}" for col in col_names]))
-    print(" | ".join([f"{'-'*col_widths[col]}" for col in col_names]))
+    print(" | ".join([f"{'-' * col_widths[col]}" for col in col_names]))
     for row in results_sorted:
         print(" | ".join([f"{row[col]:{col_widths[col]}}" for col in col_names]))
 

@@ -398,8 +398,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        encoder_pretrained_model_name_or_path: Optional[str] = None,
+        decoder_pretrained_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -598,6 +598,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+        if "num_items_in_batch" in kwargs_encoder:
+            kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

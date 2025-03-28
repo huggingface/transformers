@@ -41,7 +41,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
     VisionSdpaAttention,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
@@ -432,7 +432,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 width position_ids: [0, 1, 2, 3, 4]
 
             For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
-            and 1D rotary position embeddin for text part.
+            and 1D rotary position embedding for text part.
             Examples:
                 Temporal (Time): 3 patches, representing different segments of the video in time.
                 Height: 2 patches, dividing each frame vertically.
@@ -816,7 +816,12 @@ class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
 
 
+class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
+    pass
+
+
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Qwen2_5_VLImagesKwargs
     videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {

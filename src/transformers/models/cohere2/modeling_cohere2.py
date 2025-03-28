@@ -36,7 +36,6 @@ from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -487,20 +486,12 @@ COHERE2_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -597,11 +588,13 @@ class Cohere2Model(Cohere2PreTrainedModel):
 
         if use_cache and past_key_values is None and not self.training:
             batch_size, seq_len, _ = inputs_embeds.shape
+            # NOTE: ideally, `HybridCache` should be initialized outside the model with `layer_device_map`
             past_key_values = HybridCache(
                 self.config,
                 max_batch_size=batch_size,
                 max_cache_len=seq_len,
                 dtype=inputs_embeds.dtype,
+                device=self.device,
             )
 
         if cache_position is None:
@@ -745,7 +738,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -929,7 +922,7 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)

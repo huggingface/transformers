@@ -288,7 +288,7 @@ def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
     if new_dummy_object not in content:
         if index_new != len(image_processor_names) - 1:
             # add the dummy object just before the next ImageProcessorFast
-            first_line = f"class {image_processor_names[index_new+1]}(metaclass=DummyObject):"
+            first_line = f"class {image_processor_names[index_new + 1]}(metaclass=DummyObject):"
             updated_content = content.replace(first_line, new_dummy_object + "\n\n" + first_line)
         else:
             # add the dummy object at the very end
@@ -313,11 +313,9 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
         raise ValueError(f"No doc files found for {model_name}")
 
     base_doc_string = (
-        f"## {fast_image_processor_name[:-4]}\n\n" f"[[autodoc]] {fast_image_processor_name[:-4]}\n" "    - preprocess"
+        f"## {fast_image_processor_name[:-4]}\n\n[[autodoc]] {fast_image_processor_name[:-4]}\n    - preprocess"
     )
-    fast_doc_string = (
-        f"## {fast_image_processor_name}\n\n" f"[[autodoc]] {fast_image_processor_name}\n" "    - preprocess"
-    )
+    fast_doc_string = f"## {fast_image_processor_name}\n\n[[autodoc]] {fast_image_processor_name}\n    - preprocess"
 
     for doc_file in doc_files:
         with open(doc_file, "r", encoding="utf-8") as f:
@@ -385,7 +383,7 @@ def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name
     # add the fast image processor to the imports
     base_import_string = f"    from transformers import {fast_image_processor_name[:-4]}"
     fast_import_string = (
-        "    if is_torchvision_available():\n" f"        from transformers import {fast_image_processor_name}"
+        f"    if is_torchvision_available():\n        from transformers import {fast_image_processor_name}"
     )
     if fast_import_string not in updated_content:
         updated_content = updated_content.replace(base_import_string, base_import_string + "\n\n" + fast_import_string)
@@ -414,11 +412,35 @@ def get_fast_image_processing_content_header(content: str) -> str:
     """
     Get the header of the slow image processor file.
     """
-    # get all lines before and including the line containing """Image processor
-    content_header = re.search(r"^(.*?\n)*?\"\"\"Image processor.*", content)
+    # get all the commented lines at the beginning of the file
+    content_header = re.search(r"^# coding=utf-8\n(#[^\n]*\n)*", content, re.MULTILINE)
+    if not content_header:
+        logger.warning("Couldn't find the content header in the slow image processor file. Using a default header.")
+        return (
+            f"# coding=utf-8\n"
+            f"# Copyright {CURRENT_YEAR} The HuggingFace Team. All rights reserved.\n"
+            f"#\n"
+            f'# Licensed under the Apache License, Version 2.0 (the "License");\n'
+            f"# you may not use this file except in compliance with the License.\n"
+            f"# You may obtain a copy of the License at\n"
+            f"#\n"
+            f"#     http://www.apache.org/licenses/LICENSE-2.0\n"
+            f"#\n"
+            f"# Unless required by applicable law or agreed to in writing, software\n"
+            f'# distributed under the License is distributed on an "AS IS" BASIS,\n'
+            f"# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n"
+            f"# See the License for the specific language governing permissions and\n"
+            f"# limitations under the License.\n"
+            f"\n"
+        )
     content_header = content_header.group(0)
+    # replace the year in the copyright
     content_header = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content_header)
-    content_header = content_header.replace("Image processor", "Fast Image processor")
+    # get the line starting with """Image processor in content if it exists
+    match = re.search(r'^"""Image processor.*$', content, re.MULTILINE)
+    if match:
+        content_header += match.group(0).replace("Image processor", "Fast Image processor")
+
     return content_header
 
 
@@ -522,17 +544,17 @@ def add_fast_image_processor_file(
         "    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.\n\n"
         "    # Default values should be checked against the slow image processor\n"
         "    # None values left after checking can be removed\n"
-        f'    resample = {default_args_dict.get("resample")}\n'
-        f'    image_mean = {default_args_dict.get("image_mean")}\n'
-        f'    image_std = {default_args_dict.get("image_std")}\n'
-        f'    size = {default_args_dict.get("size")}\n'
-        f'    default_to_square = {default_args_dict.get("default_to_square")}\n'
-        f'    crop_size = {default_args_dict.get("crop_size")}\n'
-        f'    do_resize = {default_args_dict.get("do_resize")}\n'
-        f'    do_center_crop = {default_args_dict.get("do_center_crop")}\n'
-        f'    do_rescale = {default_args_dict.get("do_rescale")}\n'
-        f'    do_normalize = {default_args_dict.get("do_normalize")}\n'
-        f'    do_convert_rgb = {default_args_dict.get("do_convert_rgb")}\n\n\n'
+        f"    resample = {default_args_dict.get('resample')}\n"
+        f"    image_mean = {default_args_dict.get('image_mean')}\n"
+        f"    image_std = {default_args_dict.get('image_std')}\n"
+        f"    size = {default_args_dict.get('size')}\n"
+        f"    default_to_square = {default_args_dict.get('default_to_square')}\n"
+        f"    crop_size = {default_args_dict.get('crop_size')}\n"
+        f"    do_resize = {default_args_dict.get('do_resize')}\n"
+        f"    do_center_crop = {default_args_dict.get('do_center_crop')}\n"
+        f"    do_rescale = {default_args_dict.get('do_rescale')}\n"
+        f"    do_normalize = {default_args_dict.get('do_normalize')}\n"
+        f"    do_convert_rgb = {default_args_dict.get('do_convert_rgb')}\n\n\n"
         f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 

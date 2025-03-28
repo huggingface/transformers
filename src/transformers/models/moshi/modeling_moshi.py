@@ -420,7 +420,7 @@ class MoshiGatingMLP(nn.Module):
             self.fc1 = MoshiFlexibleLinear(hidden_size, ffn_dim, num_layers)
             self.fc2 = MoshiFlexibleLinear(ffn_dim // 2, hidden_size, num_layers)
 
-    def forward(self, hidden_states: torch.Tensor, layer_idx: int = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, layer_idx: Optional[int] = None) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states) if layer_idx is None else self.fc1(hidden_states, layer_idx)
 
         batch_size, sequence_length, _ = hidden_states.shape
@@ -571,7 +571,7 @@ class MoshiFlashAttention2(MoshiAttention):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
@@ -1296,7 +1296,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -1400,7 +1400,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1610,7 +1610,7 @@ class MoshiModel(MoshiPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -1714,7 +1714,7 @@ class MoshiModel(MoshiPreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -2507,7 +2507,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             if (
                 inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
             ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
@@ -2644,7 +2644,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         return input_ids
 
     def build_delay_pattern_mask(
-        self, input_ids: torch.LongTensor, bos_token_id: int, pad_token_id: int, max_length: int = None
+        self, input_ids: torch.LongTensor, bos_token_id: int, pad_token_id: int, max_length: Optional[int] = None
     ):
         """Build a delayed pattern mask to the input_ids. Each codebook, except the first one, is offset by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there

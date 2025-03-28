@@ -139,9 +139,9 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            assert pointer.shape == array.shape, (
+                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            )
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise

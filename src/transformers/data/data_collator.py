@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import multiprocessing as mp
 import random
 import warnings
 from collections.abc import Mapping
@@ -787,6 +788,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             If set, will pad the sequence to a multiple of the provided value.
         return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
+        seed (`int`, *optional*):
+            The seed to use for the random number generator for masking. If not provided, the global RNG will be used.
 
     <Tip>
 
@@ -827,6 +830,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     pad_to_multiple_of: Optional[int] = None
     tf_experimental_compile: bool = False
     return_tensors: str = "pt"
+    seed: Optional[int] = None
 
     def __post_init__(self):
         if self.mlm and self.tokenizer.mask_token is None:
@@ -843,17 +847,66 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         if self.random_replace_prob < 0 or self.random_replace_prob > 1:
             raise ValueError("random_replace_prob should be between 0 and 1.")
 
+        self.mlm_probability = float(self.mlm_probability)
+        self.mask_replace_prob = float(self.mask_replace_prob)
+        self.random_replace_prob = float(self.random_replace_prob)
+
         if self.tf_experimental_compile:
             import tensorflow as tf
 
             self.tf_mask_tokens = tf.function(self.tf_mask_tokens, jit_compile=True)
 
+        self.generator = None
+
+    def get_generator(self, seed):
+        if self.return_tensors == "pt":
+            import torch
+
+            return torch.Generator().manual_seed(seed)
+        elif self.return_tensors == "tf":
+            import tensorflow as tf
+
+            return tf.random.Generator.from_seed(seed)
+        else:
+            import numpy as np
+
+            return np.random.default_rng(seed)
+
+    def create_rng(self):
+        if mp.current_process().name == "MainProcess":
+            # If we are in the main process, we create a generator object with the seed
+            self.generator = self.get_generator(self.seed)
+        else:
+            # If we are in a worker process (i.e using multiprocessing), we need to set a unique seed for each
+            # worker's generator, generated as the main seed + the worker's ID.
+            # (https://pytorch.org/docs/stable/data.html#randomness-in-multi-process-data-loading)
+            # Only PyTorch DataLoader allows us to access the worker ID, and so we check for this.
+            # For other frameworks, we will throw an error.
+            import torch
+
+            worker_info = torch.utils.data.get_worker_info()
+            if worker_info is None:
+                error_string = (
+                    "Worker process information is not available for seeding the generator. This may be because",
+                    "you are using multiprocessing without using a PyTorch DataLoader. The `seed` parameter can",
+                    "only be used when using multiprocessing with a PyTorch DataLoader. Please either use a",
+                    "single process or use a PyTorch DataLoader with multiple workers.",
+                )
+                raise ValueError(error_string)
+
+            self.generator = self.get_generator(self.seed + worker_info.id)
+
     @staticmethod
-    def tf_bernoulli(shape, probability):
+    def tf_bernoulli(shape, probability, generator=None):
         import tensorflow as tf
 
         prob_matrix = tf.fill(shape, probability)
-        return tf.cast(prob_matrix - tf.random.uniform(shape, 0, 1) >= 0, tf.bool)
+        # if generator exists, use it to generate the random numbers
+        # otherwise, use the global RNG
+        if generator:
+            return tf.cast(prob_matrix - generator.uniform(shape, 0, 1) >= 0, tf.bool)
+        else:
+            return tf.cast(prob_matrix - tf.random.uniform(shape, 0, 1) >= 0, tf.bool)
 
     def tf_mask_tokens(
         self, inputs: Any, vocab_size, mask_token_id, special_tokens_mask: Optional[Any] = None
@@ -868,12 +921,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         input_shape = tf.shape(inputs)
         # 1 for a special token, 0 for a normal token in the special tokens mask
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-        masked_indices = self.tf_bernoulli(input_shape, self.mlm_probability) & ~special_tokens_mask
+        masked_indices = self.tf_bernoulli(input_shape, self.mlm_probability, self.generator) & ~special_tokens_mask
         # Replace unmasked indices with -100 in the labels since we only compute loss on masked tokens
         labels = tf.where(masked_indices, inputs, -100)
 
         # mask_replace_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = self.tf_bernoulli(input_shape, self.mask_replace_prob) & masked_indices
+        indices_replaced = self.tf_bernoulli(input_shape, self.mask_replace_prob, self.generator) & masked_indices
 
         inputs = tf.where(indices_replaced, mask_token_id, inputs)
 
@@ -887,9 +940,15 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         random_replace_prob_scaled = self.random_replace_prob / remaining_prob
         # random_replace_prob% of the time, we replace masked input tokens with random word
         indices_random = (
-            self.tf_bernoulli(input_shape, random_replace_prob_scaled) & masked_indices & ~indices_replaced
+            self.tf_bernoulli(input_shape, random_replace_prob_scaled, self.generator)
+            & masked_indices
+            & ~indices_replaced
         )
-        random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
+
+        if self.generator:
+            random_words = self.generator.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
+        else:
+            random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
 
         inputs = tf.where(indices_random, random_words, inputs)
 
@@ -898,6 +957,11 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         import tensorflow as tf
+
+        if self.seed and self.generator is None:
+            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
+            # If no seed supplied, we will use the global RNG
+            self.create_rng()
 
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
@@ -939,6 +1003,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
+
+        if self.seed and self.generator is None:
+            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
+            # If no seed supplied, we will use the global RNG
+            self.create_rng()
+
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
                 self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
@@ -979,11 +1049,14 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             special_tokens_mask = special_tokens_mask.bool()
 
         probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
-        masked_indices = torch.bernoulli(probability_matrix).bool()
+        masked_indices = torch.bernoulli(probability_matrix, generator=self.generator).bool()
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # mask_replace_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, self.mask_replace_prob)).bool() & masked_indices
+        indices_replaced = (
+            torch.bernoulli(torch.full(labels.shape, self.mask_replace_prob), generator=self.generator).bool()
+            & masked_indices
+        )
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
         if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
@@ -997,11 +1070,11 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # random_replace_prob% of the time, we replace masked input tokens with random word
         indices_random = (
-            torch.bernoulli(torch.full(labels.shape, random_replace_prob_scaled)).bool()
+            torch.bernoulli(torch.full(labels.shape, random_replace_prob_scaled), generator=self.generator).bool()
             & masked_indices
             & ~indices_replaced
         )
-        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
+        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long, generator=self.generator)
         inputs[indices_random] = random_words[indices_random]
 
         # The rest of the time ((1-random_replace_prob-mask_replace_prob)% of the time) we keep the masked input tokens unchanged
@@ -1009,6 +1082,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
+
+        if self.seed and self.generator is None:
+            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
+            # If no seed supplied, we will use the global RNG
+            self.create_rng()
+
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
                 self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of
@@ -1048,13 +1127,21 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         probability_matrix[special_tokens_mask] = 0
         # Numpy doesn't have bernoulli, so we use a binomial with 1 trial
-        masked_indices = np.random.binomial(1, probability_matrix, size=probability_matrix.shape).astype(bool)
+        if self.generator:
+            masked_indices = self.generator.binomial(1, probability_matrix, size=probability_matrix.shape).astype(bool)
+        else:
+            masked_indices = np.random.binomial(1, probability_matrix, size=probability_matrix.shape).astype(bool)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # mask_replace_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = (
-            np.random.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
-        )
+        if self.generator:
+            indices_replaced = (
+                self.generator.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
+            )
+        else:
+            indices_replaced = (
+                np.random.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
+            )
         inputs[indices_replaced] = self.tokenizer.mask_token_id
 
         if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
@@ -1065,14 +1152,24 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
         # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
         random_replace_prob_scaled = self.random_replace_prob / remaining_prob
-        indices_random = (
-            np.random.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool)
-            & masked_indices
-            & ~indices_replaced
-        )
-        random_words = np.random.randint(
-            low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
-        )
+        if self.generator:
+            indices_random = (
+                self.generator.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool)
+                & masked_indices
+                & ~indices_replaced
+            )
+            random_words = self.generator.integers(
+                low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
+            )
+        else:
+            indices_random = (
+                np.random.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool)
+                & masked_indices
+                & ~indices_replaced
+            )
+            random_words = np.random.randint(
+                low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
+            )
         inputs[indices_random] = random_words
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -1096,6 +1193,11 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     </Tip>"""
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        if self.seed and self.generator is None:
+            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
+            # If no seed supplied, we will use the global RNG
+            self.create_rng()
+
         if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
@@ -1126,6 +1228,11 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         import tensorflow as tf
 
+        if self.seed and self.generator is None:
+            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
+            # If no seed supplied, we will use the global RNG
+            self.create_rng()
+
         if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
@@ -1154,6 +1261,11 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         return {"input_ids": inputs, "labels": labels}
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        if self.seed and self.generator is None:
+            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
+            # If no seed supplied, we will use the global RNG
+            self.create_rng()
+
         if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
@@ -1181,6 +1293,30 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         inputs, labels = self.numpy_mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
+    def _shuffle(self, cand_indexes):
+        # if no seed, just use random's shuffle
+        if self.seed is None:
+            random.shuffle(cand_indexes)
+            return cand_indexes
+
+        # if seed is provided, use the generator to shuffle
+        if self.return_tensors == "pt":
+            import torch
+
+            indices = torch.randperm(len(cand_indexes), generator=self.generator)
+            return [cand_indexes[i] for i in indices]
+
+        elif self.return_tensors == "tf":
+            import tensorflow as tf
+
+            seed = self.generator.make_seeds(2)[0]
+            indices = tf.random.experimental.stateless_shuffle(tf.range(len(cand_indexes)), seed=seed).numpy().tolist()
+            return [cand_indexes[i] for i in indices]
+
+        elif self.return_tensors == "np":
+            self.generator.shuffle(cand_indexes)
+            return cand_indexes
+
     def _whole_word_mask(self, input_tokens: List[str], max_predictions=512):
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
@@ -1201,7 +1337,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             else:
                 cand_indexes.append([i])
 
-        random.shuffle(cand_indexes)
+        cand_indexes = self._shuffle(cand_indexes)
         num_to_predict = min(max_predictions, max(1, int(round(len(input_tokens) * self.mlm_probability))))
         masked_lms = []
         covered_indexes = set()
@@ -1211,13 +1347,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             # If adding a whole-word mask would exceed the maximum number of
             # predictions, then just skip this candidate.
             if len(masked_lms) + len(index_set) > num_to_predict:
-                continue
-            is_any_index_covered = False
-            for index in index_set:
-                if index in covered_indexes:
-                    is_any_index_covered = True
-                    break
-            if is_any_index_covered:
                 continue
             for index in index_set:
                 covered_indexes.add(index)
@@ -1256,16 +1385,32 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         masked_indices = probability_matrix.bool()
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+        # mask_replace_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = (
+            torch.bernoulli(torch.full(labels.shape, self.mask_replace_prob), generator=self.generator).bool()
+            & masked_indices
+        )
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
+        if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
+            return inputs, labels
+
+        remaining_prob = 1 - self.mask_replace_prob
+        # scaling the random_replace_prob to the remaining probability for example if
+        # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
+        # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
+        random_replace_prob_scaled = self.random_replace_prob / remaining_prob
+
+        # random_replacement_prob% of the time, we replace masked input tokens with random word
+        indices_random = (
+            torch.bernoulli(torch.full(labels.shape, random_replace_prob_scaled), generator=self.generator).bool()
+            & masked_indices
+            & ~indices_replaced
+        )
+        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long, generator=self.generator)
         inputs[indices_random] = random_words[indices_random]
 
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        # The rest of the time ((1-random_replacement_prob-mask_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
     def tf_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
@@ -1297,17 +1442,35 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         # Replace unmasked indices with -100 in the labels since we only compute loss on masked tokens
         labels = tf.where(masked_indices, inputs, -100)
 
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = self.tf_bernoulli(input_shape, 0.8) & masked_indices
+        # mask_replace_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = self.tf_bernoulli(input_shape, self.mask_replace_prob, self.generator) & masked_indices
 
         inputs = tf.where(indices_replaced, self.tokenizer.mask_token_id, inputs)
 
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
-        random_words = tf.random.uniform(input_shape, maxval=len(self.tokenizer), dtype=tf.int64)
+        if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
+            return inputs, labels
+
+        remaining_prob = 1 - self.mask_replace_prob
+        # scaling the random_replace_prob to the remaining probability for example if
+        # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
+        # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
+        random_replace_prob_scaled = self.random_replace_prob / remaining_prob
+
+        # random_replace_prob% of the time, we replace masked input tokens with random word
+        indices_random = (
+            self.tf_bernoulli(input_shape, random_replace_prob_scaled, self.generator)
+            & masked_indices
+            & ~indices_replaced
+        )
+
+        if self.generator:
+            random_words = self.generator.uniform(input_shape, maxval=len(self.tokenizer), dtype=tf.int64)
+        else:
+            random_words = tf.random.uniform(input_shape, maxval=len(self.tokenizer), dtype=tf.int64)
+
         inputs = tf.where(indices_random, random_words, inputs)
 
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        # The rest of the time ((1-mask_replace_prob-random_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
     def numpy_mask_tokens(self, inputs: Any, mask_labels: Any) -> Tuple[Any, Any]:
@@ -1335,19 +1498,44 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(bool) & masked_indices
+        # mask_replacement_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        if self.generator:
+            indices_replaced = (
+                self.generator.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
+            )
+        else:
+            indices_replaced = (
+                np.random.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
+            )
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
-        # 10% of the time, we replace masked input tokens with random word
-        # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        indices_random = (
-            np.random.binomial(1, 0.5, size=labels.shape).astype(bool) & masked_indices & ~indices_replaced
-        )
-        random_words = np.random.randint(low=0, high=len(self.tokenizer), size=labels.shape, dtype=np.int64)
+        if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
+            return inputs, labels
+
+        remaining_prob = 1 - self.mask_replace_prob
+        # scaling the random_replace_prob to the remaining probability for example if
+        # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
+        # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
+        random_replace_prob_scaled = self.random_replace_prob / remaining_prob
+
+        if self.generator:
+            indices_random = (
+                self.generator.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool)
+                & masked_indices
+                & ~indices_replaced
+            )
+            random_words = self.generator.integers(low=0, high=len(self.tokenizer), size=labels.shape, dtype=np.int64)
+        else:
+            indices_random = (
+                np.random.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool)
+                & masked_indices
+                & ~indices_replaced
+            )
+            random_words = np.random.randint(low=0, high=len(self.tokenizer), size=labels.shape, dtype=np.int64)
+
         inputs[indices_random] = random_words[indices_random]
 
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        # The rest of the time ((1-mask_replace_prob-random_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
 
@@ -1789,16 +1977,19 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - concatate the entire mini batch into single long sequence [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
+
+    <Tip warning={true}>
+
+    Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence.
+    Make sure your attention computation is able to handle it!
+
+    </Tip>
     """
 
     def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
         self.separator_id = separator_id
-        warnings.warn(
-            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
-            "Make sure your attention computation is able to handle it!"
-        )
 
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
