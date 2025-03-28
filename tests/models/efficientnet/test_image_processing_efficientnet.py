@@ -99,7 +99,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
 
     def test_image_processor_properties(self):
         for image_processor_class in self.image_processor_list:
-            image_processor= image_processor_class(**self.image_processor_dict)
+            image_processor = image_processor_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "image_mean"))
             self.assertTrue(hasattr(image_processor, "image_std"))
             self.assertTrue(hasattr(image_processor, "do_normalize"))

@@ -13,25 +13,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Image processor class for EfficientNet."""
-from typing import Optional, Union, Unpack
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, \
-    DefaultFastImageProcessorKwargs, BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS
-from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, \
-    ChannelDimension, ImageInput
-from ...utils import add_start_docstrings, TensorType, is_torch_available
+from typing import Optional, Union
+
 from ...image_processing_utils import (
     BatchFeature,
 )
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+)
 from ...processing_utils import Unpack
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
 
 if is_torch_available():
     import torch
 
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
+
+
 class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     rescale_offset: bool
     include_top: bool
+
 
 @add_start_docstrings(
     "Constructs a fast EfficientNet image processor.",
@@ -41,10 +66,10 @@ class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
     include_top (`bool`, defaults to `True`):
         Normalize the image again with the standard deviation only for image classification if set to True.
-    """
+    """,
 )
 class EfficientNetImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.Image.NEAREST
+    resample = PILImageResampling.NEAREST
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 346, "width": 346}
@@ -74,10 +99,10 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         return super().preprocess(images, **kwargs)
 
     def rescale(
-    self,
-    image: "torch.Tensor",
-    scale: float,
-    offset: bool = True,
+        self,
+        image: "torch.Tensor",
+        scale: float,
+        offset: bool = True,
     ) -> "torch.Tensor":
         """Rescale an image by a scale factor.
 
@@ -138,7 +163,6 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         rescale_offset: bool = False,
         include_top: bool = True,
     ) -> BatchFeature:
-
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
@@ -169,8 +193,6 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-
 
 
 __all__ = ["EfficientNetImageProcessorFast"]
