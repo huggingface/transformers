@@ -56,7 +56,7 @@ Library:
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @zach-huggingface
+- deepspeed: HF Trainer/Accelerate: @SunMarc @zach-huggingface
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
 - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
