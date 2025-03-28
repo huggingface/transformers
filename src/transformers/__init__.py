@@ -533,6 +533,7 @@ _import_structure = {
         "InstructBlipVideoQFormerConfig",
         "InstructBlipVideoVisionConfig",
     ],
+    "models.internvl": ["InternVLConfig", "InternVLProcessor", "InternVLVisionConfig"],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -2717,6 +2718,14 @@ else:
             "InstructBlipVideoPreTrainedModel",
             "InstructBlipVideoQFormerModel",
             "InstructBlipVideoVisionModel",
+        ]
+    )
+    _import_structure["models.internvl"].extend(
+        [
+            "InternVLForConditionalGeneration",
+            "InternVLPreTrainedModel",
+            "InternVLVisionModel",
+            "InternVLVisionPreTrainedModel",
         ]
     )
     _import_structure["models.jamba"].extend(
@@ -5755,6 +5764,7 @@ if TYPE_CHECKING:
         InstructBlipVideoQFormerConfig,
         InstructBlipVideoVisionConfig,
     )
+    from .models.internvl import InternVLConfig, InternVLProcessor, InternVLVisionConfig
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -7735,6 +7745,12 @@ if TYPE_CHECKING:
             InstructBlipVideoPreTrainedModel,
             InstructBlipVideoQFormerModel,
             InstructBlipVideoVisionModel,
+        )
+        from .models.internvl import (
+            InternVLForConditionalGeneration,
+            InternVLPreTrainedModel,
+            InternVLVisionModel,
+            InternVLVisionPreTrainedModel,
         )
         from .models.jamba import (
             JambaForCausalLM,

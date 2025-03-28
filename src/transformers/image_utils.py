@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import requests
@@ -74,9 +74,8 @@ if is_vision_available():
         }
 
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -157,6 +156,15 @@ def is_valid_image(img):
 
 def is_valid_list_of_images(images: list):
     return images and all(is_valid_image(image) for image in images)
+
+
+def concatenate_list(input_list):
+    if isinstance(input_list[0], list):
+        return [item for sublist in input_list for item in sublist]
+    elif isinstance(input_list[0], np.ndarray):
+        return np.concatenate(input_list, axis=0)
+    elif isinstance(input_list[0], torch.Tensor):
+        return torch.cat(input_list, dim=0)
 
 
 def valid_images(imgs):
