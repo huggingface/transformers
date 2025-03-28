@@ -900,7 +900,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
+            labels = labels[:, 1:].to(device=shifted_prediction_scores.device, memory_format=torch.contiguous_format)
             loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=self.label_smoothing)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             if reduction == "none":

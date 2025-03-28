@@ -1498,11 +1498,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             loss = None
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
-                labels = labels.to(logits.device)
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous().to(logits.device)
+                shift_labels = labels[..., 1:].to(device=logits.device, memory_format=torch.contiguous_format)
 
                 # Flatten the tokens
                 loss_fct = CrossEntropyLoss(reduction="mean")
