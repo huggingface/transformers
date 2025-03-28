@@ -41,7 +41,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
       # Push CI images still need to be re-built daily
@@ -54,7 +54,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-all-latest-gpu-push-ci
 
@@ -90,7 +90,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
 
@@ -131,7 +131,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
 
@@ -205,7 +205,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
@@ -241,7 +241,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
       # Push CI images still need to be re-built daily
@@ -254,7 +254,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-amd-gpu-push-ci
 
@@ -292,7 +292,7 @@ jobs:
         with:
           context: ./docker/transformers-tensorflow-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-tensorflow-gpu
 
@@ -328,7 +328,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-amd-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
       # Push CI images still need to be re-built daily
@@ -341,7 +341,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-amd-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu-push-ci
 
@@ -379,7 +379,7 @@ jobs:
         with:
           context: ./docker/transformers-quantization-latest-gpu
           build-args: |
-            REF=main
+            REF=run_ci_without_kenlm
           push: true
           tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}
 
