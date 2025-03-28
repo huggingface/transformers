@@ -4,7 +4,7 @@ LABEL maintainer="Hugging Face"
 RUN apt update
 RUN git clone https://github.com/huggingface/transformers
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder ./transformers[dev]
+RUN cd transformers && git fetch origin && git checkout run_ci_without_kenlm && python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip install --no-cache-dir git+https://github.com/huggingface/doc-builder .[dev]
 RUN apt-get -y update && apt-get install -y libsndfile1-dev && apt install -y tesseract-ocr
 
 # Torch needs to be installed before deepspeed
