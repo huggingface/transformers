@@ -120,6 +120,7 @@ else:
             ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("nougat", ("NougatImageProcessor",)),
             ("oneformer", ("OneFormerImageProcessor",)),
+            ("ovis2", "Ovis2ImageProcessor"),
             ("owlv2", ("Owlv2ImageProcessor",)),
             ("owlvit", ("OwlViTImageProcessor",)),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
