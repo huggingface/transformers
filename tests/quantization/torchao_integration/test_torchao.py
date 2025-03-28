@@ -44,9 +44,6 @@ if is_torchao_available():
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
         from torchao.dtypes import Int4CPULayout
 
-    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.10.0"):
-        from torchao.quantization import Float8WeightOnlyConfig, Int8DynamicActivationInt4WeightConfig
-
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
     weight = qlayer.weight
@@ -408,13 +405,17 @@ class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
 @require_torch_gpu
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Float8WeightOnlyConfig(), {}
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     device = "cuda:0"
 
     def setUp(self):
         if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
+
+        from torchao.quantization import Float8WeightOnlyConfig
+
+        self.quant_scheme = Float8WeightOnlyConfig()
+        self.quant_scheme_kwargs = {}
 
         super().setUp()
 
@@ -422,13 +423,17 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
 @require_torch_gpu
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
-    quant_scheme, quant_scheme_kwargs = Int8DynamicActivationInt4WeightConfig(), {}
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     device = "cuda:0"
 
     def setUp(self):
         if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
+
+        from torchao.quantization import Int8DynamicActivationInt4WeightConfig
+
+        self.quant_scheme = Int8DynamicActivationInt4WeightConfig()
+        self.quant_scheme_kwargs = {}
 
         super().setUp()
 
