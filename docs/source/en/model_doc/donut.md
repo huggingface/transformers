@@ -197,6 +197,11 @@ We refer to the [tutorial notebooks](https://github.com/NielsRogge/Transformers-
 [[autodoc]] DonutImageProcessor
     - preprocess
 
+## DonutImageProcessorFast
+
+[[autodoc]] DonutImageProcessorFast
+    - preprocess
+
 ## DonutFeatureExtractor
 
 [[autodoc]] DonutFeatureExtractor
