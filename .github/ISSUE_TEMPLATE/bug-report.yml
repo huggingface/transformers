@@ -48,11 +48,11 @@ body:
           - pipelines: @Rocketknight1
           - tensorflow: @gante and @Rocketknight1
           - tokenizers: @ArthurZucker and @itazap
-          - trainer: @muellerzr @SunMarc
+          - trainer: @zach-huggingface @SunMarc
 
         Integrations:
 
-          - deepspeed: HF Trainer/Accelerate: @muellerzr
+          - deepspeed: HF Trainer/Accelerate: @SunMarc @zach-huggingface
           - ray/raytune: @richardliaw, @amogkam
           - Big Model Inference: @SunMarc
           - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
