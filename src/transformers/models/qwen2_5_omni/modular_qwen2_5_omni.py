@@ -1116,7 +1116,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         padded_tensor = torch.full(
             size=(len(tensor_list), dim, max_len),
             fill_value=padding_value,
-            dtype=tensor_list[0].dtype,
+            dtype=self.dtype,
             device=tensor_list[0].device,
         )
 
