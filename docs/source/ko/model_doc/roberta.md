@@ -24,87 +24,77 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+## 개요[[Overview]]
 
-The RoBERTa model was proposed in [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, [Myle Ott](https://huggingface.co/myleott), Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer
-Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov. It is based on Google's BERT model released in 2018.
+RoBERTa 모델은 Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov가 제안한 논문 [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692)에서 소개되었습니다. 이 모델은 2018년에 구글에서 발표한 BERT 모델을 기반으로 합니다.
 
-It builds on BERT and modifies key hyperparameters, removing the next-sentence pretraining objective and training with
-much larger mini-batches and learning rates.
+RoBERTa는 BERT를 기반으로 하며, 주요 하이퍼파라미터를 수정하고, 다음 문장 예측(Next Sentence Prediction) 사전 학습 목표를 제거했으며, 훨씬 더 큰 미니 배치 크기와 학습률을 사용하여 학습을 진행했습니다.
 
-The abstract from the paper is the following:
+해당 논문의 초록입니다:
 
-*Language model pretraining has led to significant performance gains but careful comparison between different
-approaches is challenging. Training is computationally expensive, often done on private datasets of different sizes,
-and, as we will show, hyperparameter choices have significant impact on the final results. We present a replication
-study of BERT pretraining (Devlin et al., 2019) that carefully measures the impact of many key hyperparameters and
-training data size. We find that BERT was significantly undertrained, and can match or exceed the performance of every
-model published after it. Our best model achieves state-of-the-art results on GLUE, RACE and SQuAD. These results
-highlight the importance of previously overlooked design choices, and raise questions about the source of recently
-reported improvements. We release our models and code.*
+*언어 모델 사전 학습은 성능을 크게 향상시켰지만, 서로 다른 접근 방식 간의 신중한 비교는 어렵습니다. 학습은 계산 비용이 많이 들고, 종종 크기가 서로 다른 비공개 데이터셋에서 수행되며, 본 논문에서 보여주듯이 하이퍼파라미터 선택이 최종 성능에 큰 영향을 미칩니다. 우리는 BERT 사전 학습(Devlin et al., 2019)에 대한 복제 연구를 수행하여, 여러 핵심 하이퍼파라미터와 학습 데이터 크기의 영향을 면밀히 측정하였습니다. 그 결과, BERT는 충분히 학습되지 않았으며, 이후 발표된 모든 모델의 성능을 맞추거나 능가할 수 있음을 발견했습니다. 우리가 제안한 최상의 모델은 GLUE, RACE, SQuAD에서 최신 성능(state-of-the-art)을 달성했습니다. 이 결과는 지금까지 간과되어 온 설계 선택의 중요성을 강조하며, 최근 보고된 성능 향상의 근원이 무엇인지에 대한 의문을 제기합니다. 우리는 본 연구에서 사용한 모델과 코드를 공개합니다.*
 
-This model was contributed by [julien-c](https://huggingface.co/julien-c). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/roberta).
+이 모델은 [julien-c](https://huggingface.co/julien-c)가 기여하였습니다. 원본 코드는 [여기](https://github.com/pytorch/fairseq/tree/master/examples/roberta)에서 확인할 수 있습니다.
 
-## Usage tips
+## 사용 팁[[Usage tips]]
 
-- This implementation is the same as [`BertModel`] with a minor tweak to the embeddings, as well as a setup
-  for RoBERTa pretrained models.
-- RoBERTa has the same architecture as BERT but uses a byte-level BPE as a tokenizer (same as GPT-2) and uses a
-  different pretraining scheme.
-- RoBERTa doesn't have `token_type_ids`, so you don't need to indicate which token belongs to which segment. Just
-  separate your segments with the separation token `tokenizer.sep_token` (or `</s>`).
-- RoBERTa is similar to BERT but with better pretraining techniques:
+- 이 구현은 [`BertModel`]과 동일하지만, 임베딩 부분에 약간의 수정이 있으며 RoBERTa 사전학습 모델에 맞게 설정되어 있습니다.
+- RoBERTa는 BERT와 동일한 아키텍처를 가지고 있지만, 토크나이저로 바이트 수준 BPE(Byte-Pair Encoding, GPT-2와 동일)를 사용하고, 사전학습 방식이 다릅니다.
+- RoBERTa는 `token_type_ids`를 사용하지 않기 때문에, 어떤 토큰이 어떤 문장(segment)에 속하는지 별도로 표시할 필요가 없습니다. 문장 구분은 분리 토큰 `tokenizer.sep_token`(또는 `</s>`)을 사용해 나누면 됩니다.
+- RoBERTa는 BERT와 유사하지만, 더 나은 사전학습 기법을 사용합니다:
 
-    * Dynamic masking: tokens are masked differently at each epoch, whereas BERT does it once and for all.
-    * Sentence packing: Sentences are packed together to reach 512 tokens (so the sentences are in an order that may span several documents).
-    * Larger batches: Training uses larger batches.
-    * Byte-level BPE vocabulary: Uses BPE with bytes as a subunit instead of characters, accommodating Unicode characters.
-- [CamemBERT](camembert) is a wrapper around RoBERTa. Refer to its model page for usage examples.
+    * 동적 마스킹: RoBERTa는 매 에폭마다 토큰을 다르게 마스킹하는 반면, BERT는 한 번만 마스킹합니다.
+    * 문장 패킹: 여러 문장을 최대 512 토큰까지 함께 패킹하여, 문장이 여러 문서에 걸쳐 있을 수도 있습니다.
+    * 더 큰 배치 사이즈: 학습 시 더 큰 미니배치를 사용합니다.
+    * 바이트 수준 BPE 어휘: 문자를 단위로 하지 않고 바이트 단위로 BPE를 적용하여 유니코드 문자를 더 유연하게 처리할 수 있습니다.
 
-## Resources
+- [CamemBERT](camembert)은 RoBERTa를 기반으로 한 래퍼 모델입니다. 사용 예제는 해당 모델 페이지를 참고하세요.
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RoBERTa. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+## 자료[[Resources]]
+
+RoBERTa를 시작하는 데 도움이 되는 Hugging Face 공식 자료와 커뮤니티 자료(🌎 아이콘으로 표시됨) 목록입니다. 이 목록에 자료를 추가하고 싶다면 언제든지 Pull Request를 보내주세요! 저희가 검토 후 반영하겠습니다. 추가하려는 자료는 기존 자료를 단순히 복제하는 것이 아닌, 새롭거나 유의미한 내용을 포함하고 있는 것이 이상적입니다.
 
 <PipelineTag pipeline="text-classification"/>
 
-- A blog on [Getting Started with Sentiment Analysis on Twitter](https://huggingface.co/blog/sentiment-analysis-twitter) using RoBERTa and the [Inference API](https://huggingface.co/inference-api).
-- A blog on [Opinion Classification with Kili and Hugging Face AutoTrain](https://huggingface.co/blog/opinion-classification-with-kili) using RoBERTa.
-- A notebook on how to [finetune RoBERTa for sentiment analysis](https://colab.research.google.com/github/DhavalTaunk08/NLP_scripts/blob/master/sentiment_analysis_using_roberta.ipynb). 🌎
-- [`RobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
-- [`TFRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
-- [`FlaxRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
-- [Text classification task guide](../tasks/sequence_classification)
+- RoBERTa와 [Inference API](https://huggingface.co/inference-api)를 활용한 [트위터 감성 분석 시작하기](https://huggingface.co/blog/sentiment-analysis-twitter) 블로그 포스트.
+- RoBERTa를 활용한 [Kili 및 Hugging Face AutoTrain을 이용한 의견 분류](https://huggingface.co/blog/opinion-classification-with-kili)에 관한 블로그 포스트.
+- [감성 분석을 위한 RoBERTa 미세조정](https://colab.research.google.com/github/DhavalTaunk08/NLP_scripts/blob/master/sentiment_analysis_using_roberta.ipynb)을 하는 방법에 대한 노트북.🌎
+- ['RobertaForSequenceClassification']은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
+- [`TFRobertaForSequenceClassification`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
+- [`FlaxRobertaForSequenceClassification`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
+- [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`RobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
-- [`TFRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-- [`FlaxRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
-- [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Token classification task guide](../tasks/token_classification)
+- [`RobertaForTokenClassification`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원됩니다.
+- [`TFRobertaForTokenClassification`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
+- [`FlaxRobertaForTokenClassification`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification)에서 지원됩니다.
+- 🤗 Hugging Face 코스의 [토큰 분류 챕터](https://huggingface.co/course/chapter7/2?fw=pt)
+- [토큰 분류 작업 가이드](../tasks/token_classification)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- A blog on [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train) with RoBERTa.
-- [`RobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
-- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
+- RoBERTa를 활용한 [Transformers와 Tokenizers를 활용한 새로운 언어 모델을 처음부터 학습하는 방법](https://huggingface.co/blog/how-to-train)에 대한 블로그 포스트.
+- [`RobertaForMaskedLM`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
+- [`TFRobertaForMaskedLM`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
+- [`FlaxRobertaForMaskedLM`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
+- 🤗 Hugging Face 코스의 [마스킹 언어 모델링 챕터](https://huggingface.co/course/chapter7/3?fw=pt)
+- [마스킹 언어 모델링 작업 가이드](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
-- A blog on [Accelerated Inference with Optimum and Transformers Pipelines](https://huggingface.co/blog/optimum-inference) with RoBERTa for question answering.
-- [`RobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-- [`TFRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
-- [`FlaxRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
-- [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Question answering task guide](../tasks/question_answering)
+- RoBERTa를 활용한 질문 응답 작업에서의 [Optimum과 Transformers 파이프라인을 이용한 추론 가속화](https://huggingface.co/blog/optimum-inference)에 대한 블로그 포스트.
+- [`RobertaForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
+- [`TFRobertaForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
+- [`FlaxRobertaForQuestionAnswering`]은 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering)에서 지원됩니다.
+- 🤗 Hugging Face 코스의 [질의응답 챕터](https://huggingface.co/course/chapter7/7?fw=pt)
+- [질의응답 작업 가이드](../tasks/question_answering)
 
 **Multiple choice**
-- [`RobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
-- [`TFRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
-- [Multiple choice task guide](../tasks/multiple_choice)
+**다중 선택**
+- [`RobertaForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
+- [`TFRobertaForMultipleChoice`]는 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
+- [다중 선택 작업 가이드](../tasks/multiple_choice)
 
 ## RobertaConfig
 
