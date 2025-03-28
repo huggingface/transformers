@@ -31,7 +31,7 @@ try:
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
             )
-        }, 
+        },
         "LlamaRMSNorm": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/triton-layer-norm",
@@ -56,8 +56,9 @@ try:
     register_kernel_mapping(_KERNEL_MAPPING)
 
     def use_kernel_attn_from_hub(layer_name: str, *, device: str = "cuda", use_fallback: bool = False):
-        from transformers import AttentionInterface
         from kernels import get_kernel
+
+        from transformers import AttentionInterface
 
         def decorator(cls):
             kernel = _KERNEL_MAPPING.get(layer_name)
@@ -73,15 +74,14 @@ try:
             repo = kernel.get(device)
             if repo is None:
                 if not use_fallback:
-                    raise ValueError(
-                        f"No layer mapping for attention `{layer_name}` with device type `{device}`"
-                    )
+                    raise ValueError(f"No layer mapping for attention `{layer_name}` with device type `{device}`")
                 return cls
 
             attn_kernel = get_kernel(repo.repo_id)
             AttentionInterface.register("attn_kernel", attn_kernel.attention)
             cls.use_kernel = True
             return cls
+
         return decorator
 
 except ImportError:
@@ -110,6 +110,7 @@ except ImportError:
 
 def is_hub_kernels_available():
     return _hub_kernels_available
+
 
 __all__ = [
     "LayerRepository",
