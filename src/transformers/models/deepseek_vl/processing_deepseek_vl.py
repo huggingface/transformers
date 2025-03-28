@@ -60,8 +60,8 @@ class DeepseekVLProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template", "use_default_system_prompt"]
-    image_processor_class = ("DeepseekVLImageProcessor", "DeepseekVLImageProcessorFast")
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         self.num_image_tokens = 576
