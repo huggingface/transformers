@@ -427,9 +427,10 @@ class _BaseAutoModelClass:
         if has_remote_code and trust_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
-                repo_id, class_ref = class_ref.split("--")
-            else:
-                repo_id = config.name_or_path
+                # The "--" syntax previously allowed remote code models to load from other repos, but this creates
+                # a supply chain attack vulnerability and is no longer supported.
+                class_ref = class_ref.split("--")[1]
+            repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
             cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
