@@ -71,7 +71,7 @@ images = [image_1, image_2]
 messages = [{
     "role": "user",
     "content": [
-        {"type": "text", "text": "What’s the difference between these two images?"},
+        {"type": "text", "text": "What's the difference between these two images?"},
         {"type": "image"},
         {"type": "image"},
     ],
@@ -84,7 +84,7 @@ model.to(device)
 # at inference time, one needs to pass `add_generation_prompt=True` in order to make sure the model completes the prompt
 text = processor.apply_chat_template(messages, add_generation_prompt=True)
 print(text)
-# 'User: What’s the difference between these two images?<image><image><end_of_utterance>\nAssistant:'
+# 'User: What's the difference between these two images?<image><image><end_of_utterance>\nAssistant:'
 
 inputs = processor(images=images, text=text, return_tensors="pt").to(device)
 
@@ -111,7 +111,7 @@ images = [image_1, image_2]
 messages = [{
     "role": "user",
     "content": [
-        {"type": "text", "text": "What’s the difference between these two images?"},
+        {"type": "text", "text": "What's the difference between these two images?"},
         {"type": "image"},
         {"type": "image"},
     ],
@@ -219,6 +219,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - preprocess
 
 
+## Idefics2ImageProcessorFast
+[[autodoc]] Idefics2ImageProcessorFast
+    - _preprocess
+
+
 ## Idefics2Processor
 [[autodoc]] Idefics2Processor
     - __call__
+

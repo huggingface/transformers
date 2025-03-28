@@ -338,6 +338,13 @@ class Idefics2ImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Idefics2ImageProcessorFast(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class Idefics3ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
