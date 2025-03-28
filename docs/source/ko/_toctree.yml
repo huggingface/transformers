@@ -721,6 +721,8 @@
       - local: in_translation
         title: (번역중) Pix2Struct
       - local: in_translation
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
         title: (번역중) Segment Anything
       - local: in_translation
         title: (번역중) Speech Encoder Decoder Models
