@@ -116,7 +116,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
-    def test_chat_template_single(self):
+    def test_image_chat_template_single(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
@@ -154,7 +154,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["attention_mask"]), 1)
         self.assertEqual(len(out_dict[self.images_input_name]), 71280)
 
-    def test_chat_template_batched(self):
+    def test_image_chat_template_batched(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
@@ -310,3 +310,19 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 71280)
+
+    def test_kwargs_overrides_custom_image_processor_kwargs(self):
+        processor_components = self.prepare_components()
+        processor_components["image_processor"] = self.get_component("image_processor")
+        processor_components["tokenizer"] = self.get_component("tokenizer")
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs, use_fast=True)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
+        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertEqual(inputs[self.images_input_name].shape[0], 800)

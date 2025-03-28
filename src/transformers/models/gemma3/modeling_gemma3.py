@@ -565,20 +565,12 @@ GEMMA3_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -1265,20 +1257,37 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
-        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/Gemma3-test-224px-hf")
-        >>> processor = AutoProcessor.from_pretrained("google/Gemma3-test-224px-hf")
+        >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
+        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
 
-        >>> prompt = "answer en Where is the cow standing?"
-        >>> url = "https://huggingface.co/gv-hf/Gemma3-test-224px-hf/resolve/main/cow_beach_1.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> messages = [
+        ...     {
+        ...         "role": "system",
+        ...         "content": [
+        ...             {"type": "text", "text": "You are a helpful assistant."}
+        ...         ]
+        ...     },
+        ...     {
+        ...         "role": "user", "content": [
+        ...             {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Where is the cat standing?"},
+        ...         ]
+        ...     },
+        ... ]
 
-        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
-
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     tokenizer=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ...     add_generation_prompt=True
+        ... )
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "answer en Where is the cow standing?\nbeach"
-        ```"""
+        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
+        ```
+        """
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
