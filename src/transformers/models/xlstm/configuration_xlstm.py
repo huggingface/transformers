@@ -125,8 +125,6 @@ class xLSTMConfig(PretrainedConfig):
             BOS token id needed for generation.
         eos_token_id (int, optional, *optional*, defaults to 2):
             EOS token id needed for generation.
-        force_bos_token_insert (bool, optional, *optional*, defaults to `True`):
-            Whether to force the insertion of a BOS token for prompting.
         max_inference_chunksize (int, optional, *optional*, defaults to 16384):
             Limit the chunk size for inference to save memory.
 
@@ -186,7 +184,6 @@ class xLSTMConfig(PretrainedConfig):
         pad_token_id: int = 1,
         bos_token_id: int = 0,
         eos_token_id: int = 2,
-        force_bos_token_insert: bool = True,
         max_inference_chunksize: int = 16384,
         **kwargs,
     ):
@@ -224,7 +221,6 @@ class xLSTMConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.force_bos_token_insert = force_bos_token_insert
         self.max_inference_chunksize = max_inference_chunksize
 
         super().__init__(
