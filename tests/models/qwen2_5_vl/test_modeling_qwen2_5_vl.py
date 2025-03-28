@@ -354,6 +354,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_save_load_fast_init_from_base(self):
         pass
 
+    @unittest.skip("VLMs need to have input ids to merge image embeddings")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
 
 @require_torch
 class Qwen2_5_VLIntegrationTest(unittest.TestCase):
