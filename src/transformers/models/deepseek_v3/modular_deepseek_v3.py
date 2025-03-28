@@ -340,7 +340,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(LlamaModel):
-    _keys_to_ignore_on_load_unexpected = [r"model.layers.61.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):
