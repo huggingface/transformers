@@ -20,7 +20,7 @@ import dataclasses
 import importlib.metadata
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import Enum
 from inspect import Parameter, signature
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -1605,6 +1605,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 and is_torchao_available()
                 and self.quant_type == "int4_weight_only"
                 and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+                and quant_type_kwargs.get("layout", None) is None
             ):
                 from torchao.dtypes import Int4CPULayout
 
@@ -1621,7 +1622,14 @@ class TorchAoConfig(QuantizationConfigMixin):
         if isinstance(self.quant_type, str):
             # Handle layout serialization if present
             if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
-                d["quant_type_kwargs"]["layout"] = dataclasses.asdict(d["quant_type_kwargs"]["layout"])
+                if is_dataclass(d["quant_type_kwargs"]["layout"]):
+                    d["quant_type_kwargs"]["layout"] = [d["quant_type_kwargs"]["layout"].__class__.__name__, dataclasses.asdict(d["quant_type_kwargs"]["layout"])]
+                if isinstance(d["quant_type_kwargs"]["layout"], list):
+                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layour kwargs"
+                    assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
+                    assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
+                else:
+                    raise ValueError(f"layout must be a list")
         else:
             # Handle AOBaseConfig serialization
             from torchao.core.config import config_to_dict
@@ -1641,6 +1649,9 @@ class TorchAoConfig(QuantizationConfigMixin):
         )
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
+        
+        if isinstance(quant_type, str):
+            return cls(quant_type=quant_type, **config_dict)
         # Check if we only have one key which is "default"
         # In the future we may update this
         assert len(quant_type) == 1 and "default" in quant_type, (
