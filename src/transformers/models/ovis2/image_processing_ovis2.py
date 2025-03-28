@@ -4,12 +4,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-    pad
-)
+from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -24,6 +19,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+
 
 if is_vision_available():
     import PIL
@@ -116,20 +112,23 @@ def covering_area(left, upper, right, lower, side):
         w = side
     return w * h
 
+
 def _get_best_grid(
     image_size: Tuple[int, int],
     side: int,
     max_partition: int = 9,
     covering_threshold: float = 0.9,
 ) -> Tuple[int, int]:
-    
     def _partition(h: int, w: int, grid: Tuple[int, int]) -> List[Tuple[int, int, int, int]]:
         row_height = h // grid[0]
         col_width = w // grid[1]
         return [
-            (col * col_width, row * row_height,
-             w if col == grid[1] - 1 else (col + 1) * col_width,
-             h if row == grid[0] - 1 else (row + 1) * row_height)
+            (
+                col * col_width,
+                row * row_height,
+                w if col == grid[1] - 1 else (col + 1) * col_width,
+                h if row == grid[0] - 1 else (row + 1) * row_height,
+            )
             for row in range(grid[0])
             for col in range(grid[1])
         ]
@@ -142,8 +141,7 @@ def _get_best_grid(
             if i * j <= max_partition:
                 candidate_grids.append((i, j))
     candidate_grids = [
-        (i, j) for i in range(1, max_partition + 1)
-        for j in range(1, max_partition + 1) if i * j <= max_partition
+        (i, j) for i in range(1, max_partition + 1) for j in range(1, max_partition + 1) if i * j <= max_partition
     ]
 
     all_grids = []
@@ -160,7 +158,7 @@ def _get_best_grid(
         return sorted(good_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0][0]
     else:
         return sorted(all_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0][0]
-    
+
 
 class Ovis2ImageProcessor(BaseImageProcessor):
     r"""
@@ -448,12 +446,10 @@ class Ovis2ImageProcessor(BaseImageProcessor):
 
             images[i] = to_channel_dimension_format(images[i], data_format, input_channel_dim=input_data_format)
 
-        encoded_outputs = BatchFeature(
-            data={"pixel_values": images, "grids": grids}, tensor_type=return_tensors
-        )
+        encoded_outputs = BatchFeature(data={"pixel_values": images, "grids": grids}, tensor_type=return_tensors)
 
         return encoded_outputs
-    
+
     def crop_image_to_patches(
         self,
         images: np.ndarray,
@@ -497,7 +493,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
                 (original_height, original_width),
                 side=patch_size_height,
                 max_partition=max_patches,
-                covering_threshold=0.9
+                covering_threshold=0.9,
             )
         else:
             # find the closest aspect ratio to the target
@@ -520,7 +516,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
             data_format=ChannelDimension.FIRST,
             input_data_format=ChannelDimension.FIRST,
         )
-        
+
         # split the image into patches
         processed_images = []
         for i in range(num_blocks):

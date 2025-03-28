@@ -1,16 +1,11 @@
 import math
-import os
 from typing import Iterable, List, Union
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-from ..auto import AutoImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -140,10 +135,10 @@ class Ovis2Processor(ProcessorMixin):
                         for c in range(col):
                             placeholder += f"{'<IMG_ATOM>' * self.image_seq_length}"
                             if c < col - 1:
-                                placeholder += f"<IMG_COL>"
+                                placeholder += "<IMG_COL>"
                         if r < row - 1:
-                            placeholder += f"<IMG_ROW>" 
-                placeholder += f"<IMG_END>"
+                            placeholder += "<IMG_ROW>"
+                placeholder += "<IMG_END>"
 
                 sample = sample.replace("<image>", placeholder, 1)
             processed_text.append(sample)
@@ -202,7 +197,6 @@ class Ovis2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
 
 
 __all__ = ["Ovis2Processor"]
