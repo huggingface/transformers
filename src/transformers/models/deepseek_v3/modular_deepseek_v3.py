@@ -18,6 +18,7 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    LlamaDecoderLayer,
     apply_rotary_pos_emb,
     eager_attention_forward,
     rotate_half,
@@ -37,7 +38,11 @@ class DeepseekV3RotaryEmbedding(LlamaRotaryEmbedding):
 
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
+    r"""
+    TODO let's just use the original freqcis computation to not have the view 
+    transpose + reshape! This is not optimized!
+    Applies Rotary Position Embedding to the query and key tensors.
+    
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
@@ -168,6 +173,10 @@ class DeepseekV3MoE(nn.Module):
         return hidden_states
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        r"""
+            CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
+            to not have to do a loop here (deepseek has 256 experts soooo yeah).
+        """
         final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
         expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
         expert_mask = expert_mask.permute(2, 0, 1)
@@ -183,8 +192,11 @@ class DeepseekV3MoE(nn.Module):
                 expert_output = expert(expert_input)
                 weighted_output = expert_output * expert_weights.unsqueeze(-1)
                 final_hidden_states.index_add_(0, token_indices, weighted_output)
-        return final_hidden_states.type(hidden_states.dtype)
 
+        # in original deepseek, the output of the experts are gathered once we leave this module
+        # thus the moe module is itelsf an IsolatedParallel module
+        # and all expert are "local" meaning we shard but we don't gather
+        return final_hidden_states.type(hidden_states.dtype)
 
 class DeepseekV3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -260,7 +272,7 @@ class DeepseekV3Attention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave:
+        if self.config.rope_interleave: # support using interleaved weights for efficiency
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
@@ -306,9 +318,9 @@ class DeepseekV3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekV3DecoderLayer(nn.Module):
+class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
     def __init__(self, config: DeepseekV3Config, layer_idx: int):
-        super().__init__()
+        nn.Module().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)
@@ -321,106 +333,13 @@ class DeepseekV3DecoderLayer(nn.Module):
         self.input_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
-
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
 class DeepseekV3Model(LlamaModel):
-    pass
-    # def __init__(self, config):
-    #     super().__init__(config)
-    #     self._register_load_state_dict_pre_hook(self.load_pre_hook)
-    #     self._register_state_dict_hook(self.load_hook)
-    #     self.post_init()
-
-    # def load_pre_hook(self, state_dict, prefix, *args):
-    #     """
-    #     Weights have to be permuted for correct rope formulation. We can't do this in the weights
-    #     as every other framework already uses the `Llama` original function (which is copyrighted btw).
-    #     And I am not even sure it's better.... anyways end of my rant
-    #     """
-
-    #     def permute_for_rope(input_tensor):
-    #         """
-    #         When you go from the complex ROPE formulation to sin and cos one, you need
-    #         to permute the query and key weights (to avoid doing it on the fly)
-    #         """
-    #         n_heads, dim1, dim2 = input_tensor.shape[0], input_tensor.shape[1], input_tensor.shape[2]
-    #         input_tensor = input_tensor.reshape(n_heads * dim1, dim2)
-    #         input_tensor = input_tensor.view(n_heads, dim1 // 2, 2, dim2)
-    #         input_tensor = input_tensor.transpose(1, 2).reshape(n_heads, dim1, dim2)
-    #         return input_tensor
-
-    #     def permute_layer_for_rope(key, num_heads, head_dim, rope_dim):
-    #         weight = state_dict[key]
-    #         weight = weight.view(num_heads, head_dim, -1)
-    #         weight_rot = weight[:, -rope_dim:]
-    #         weight_rot = permute_for_rope(weight_rot)
-    #         weight[:, -rope_dim:] = weight_rot
-    #         weight = weight.view(-1, weight.shape[-1])
-    #         state_dict[key] = weight
-
-    #     for k in state_dict:
-    #         if "q_b_proj." in k:
-    #             permute_layer_for_rope(
-    #                 k,
-    #                 num_heads=self.config.num_attention_heads,
-    #                 head_dim=self.config.qk_head_dim,
-    #                 rope_dim=self.config.qk_rope_head_dim,
-    #             )
-    #         if "kv_a_proj_with_mqa." in k:
-    #             permute_layer_for_rope(
-    #                 k,
-    #                 num_heads=1,
-    #                 head_dim=self.config.kv_lora_rank + self.config.qk_rope_head_dim,
-    #                 rope_dim=self.config.qk_rope_head_dim,
-    #             )
-
-    # def load_hook(self, module, state_dict, prefix, *args):
-    #     self.load_pre_hook(state_dict, prefix, *args)
+    _keys_to_ignore_on_load_unexpected = [r"model.layers.61.*"]
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):

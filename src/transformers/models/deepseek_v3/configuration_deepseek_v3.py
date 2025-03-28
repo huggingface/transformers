@@ -142,15 +142,15 @@ class DeepseekV3Config(PretrainedConfig):
         "layers.*.mlp.experts.*.gate_proj": "local_colwise",
         "layers.*.mlp.experts.*.up_proj": "local_colwise",
         "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.experts.*": "local", # each expert is wrapped in a module list
+        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
         "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
         "layers.*.mlp.shared_experts.up_proj": "local_colwise",
         "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
-        "layers.*.mlp.shared_experts": "local", # local's job
+        "layers.*.mlp.shared_experts": "local",  # local's job
         "layers.*.mlp.gate_proj": "local_colwise",
         "layers.*.mlp.up_proj": "local_colwise",
         "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather"
+        "layers.*.mlp": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

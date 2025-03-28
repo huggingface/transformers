@@ -773,7 +773,7 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_meta_state_dict = shard_file.endswith(".safetensors")# and not is_quantized
+    is_meta_state_dict = shard_file.endswith(".safetensors")  # and not is_quantized
 
     file_pointer = None
     if is_meta_state_dict:
@@ -4134,7 +4134,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
                     rank = int(os.environ["RANK"])
                     world_size = int(os.environ["WORLD_SIZE"])
-                    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size, init_method="env://")
+                    torch.distributed.init_process_group(
+                        "nccl", rank=rank, world_size=world_size, init_method="env://"
+                    )
                     torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
                 except Exception as e:
                     raise EnvironmentError(
@@ -4144,11 +4146,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
             device_type = torch._C._get_accelerator().type
-            device_module = torch.get_device_module(device_type)
-            # Get device with index assuming equal number of devices per host
             tp_device = torch.device(device_type, torch.cuda.current_device())
             if tp_device.index > 0:
                 import sys
+
                 sys.stdout = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
@@ -4892,7 +4893,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None: #and hf_quantizer is None:
+        if device_map is not None:  # and hf_quantizer is None:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map)
 

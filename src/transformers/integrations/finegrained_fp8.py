@@ -304,7 +304,7 @@ class FP8Linear(nn.Linear):
         device=None,
         activation_scheme="dynamic",
     ):
-        super().__init__(in_features,out_features)
+        super().__init__(in_features, out_features)
         self.in_features = in_features
         self.out_features = out_features
 
@@ -313,7 +313,9 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() == 1:
             scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
             scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device))
+            self.weight_scale_inv = nn.Parameter(
+                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+            )
         else:
             self.register_parameter("weight_scale_inv", None)
 

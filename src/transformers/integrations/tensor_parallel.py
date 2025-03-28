@@ -487,7 +487,9 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
         try:
             tp_layer.prepare_module_tp(module, device_mesh)
         except NotImplementedError as e:
-            print(f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}")
+            print(
+                f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
+            )
 
     # 2. We add hooks to the parrent module if needed
     if "." in layer_name:
