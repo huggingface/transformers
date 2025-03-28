@@ -1854,6 +1854,7 @@ class MambaCache:
         device: Union[torch.device, str, None] = None,
     ):
         self.max_batch_size = max_batch_size
+        self._dtype = dtype
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
@@ -1867,14 +1868,14 @@ class MambaCache:
                 self.intermediate_size,
                 self.conv_kernel_size,
                 device=device,
-                dtype=dtype,
+                dtype=self._dtype,
             )
             ssm_state: torch.Tensor = torch.zeros(
                 self.max_batch_size,
                 self.intermediate_size,
                 self.ssm_state_size,
                 device=device,
-                dtype=dtype,
+                dtype=self._dtype,
             )
 
             torch._dynamo.mark_static_address(conv_state)
