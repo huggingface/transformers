@@ -14,39 +14,34 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Callable, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache
+from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
     logging,
 )
 from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
     load_balancing_loss_func,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
@@ -59,8 +54,20 @@ class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
     pass
 
 
-class Qwen3MoeMLP(GemmaMLP):
-    pass
+class Qwen3MoeMLP(nn.Module):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Qwen3MoeSparseMoeBlock(nn.Module):
@@ -85,7 +92,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob: # only diff with mixtral sparse moe block!
+        if self.norm_topk_prob:  # only diff with mixtral sparse moe block!
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
@@ -115,13 +122,14 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
 
+
 class Qwen3MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
+class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
-        super().__init__()
+        nn.Module().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
