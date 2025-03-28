@@ -661,6 +661,9 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTMAEEmbeddings):
             module.initialize_weights()
+        elif isinstance(module, ViTMAEDecoder):
+            module.mask_token.data.zero_()
+            module.decoder_pos_embed.data.zero_()
 
 
 VIT_MAE_START_DOCSTRING = r"""
