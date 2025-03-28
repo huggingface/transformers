@@ -570,16 +570,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         self.assertTrue(model_eager.config._attn_implementation == "eager")
 
-        for name, submodule in model_eager.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                raise ValueError("The eager model should not have SDPA attention layers")
-
-        has_sdpa = False
-        for name, submodule in model_sdpa.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                has_sdpa = True
-                break
-
         texts = [
             "hi here's a longer context, getting longer and",
             "Hello this is a very long sentence my friend, very long for real",
