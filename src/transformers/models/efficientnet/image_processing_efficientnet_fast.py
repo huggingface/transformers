@@ -73,19 +73,53 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def offset(
-        self,
-        image: "torch.Tensor",
-        rescale_factor: float,
+    def rescale(
+    self,
+    image: "torch.Tensor",
+    scale: float,
+    offset: bool = True,
     ) -> "torch.Tensor":
+        """Rescale an image by a scale factor.
 
-        if rescale_factor not in (1 / 127, 1 / 255):
-            raise ValueError(f"Rescale offset is only supported for scale 1/127 or 1/255, got {rescale_factor}")
+        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
+        1/127.5, the image is rescaled between [-1, 1].
+        image = image * scale - 1
 
-        offset = 1 if rescale_factor == 1 / 127 else 0.5
-        rescaled = image - offset
+        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
+        image = image * scale
 
-        return rescaled
+        Args:
+        image (`np.ndarray`):
+            Image to rescale.
+        scale (`int` or `float`):
+            Scale to apply to the image.
+        offset (`bool`, *optional*):
+            Whether to scale the image in both negative and positive directions.
+        """
+        rescaled = image * scale
+
+        return rescaled if not offset else rescaled - 1
+
+    def rescale_and_normalize(
+        self,
+        images: "torch.Tensor",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
+        offset: bool = True,
+    ) -> "torch.Tensor":
+        """
+        Rescale and normalize images.
+        """
+        if do_rescale:
+            images = self.rescale(images, rescale_factor, offset)
+
+        if do_normalize:
+            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+
+        return images
 
     def _preprocess(
         self,
@@ -125,8 +159,6 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if rescale_offset:
-                stacked_images = self.offset(stacked_images, rescale_factor)
 
             if include_top:
                 stacked_images = self.normalize(stacked_images, 0, image_std)
