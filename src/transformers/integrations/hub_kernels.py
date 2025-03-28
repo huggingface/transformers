@@ -31,10 +31,58 @@ try:
                 repo_id="kernels-community/deformable-detr",
                 layer_name="MultiScaleDeformableAttention",
             )
-        }
+        }, 
+        "LlamaRMSNorm": {
+            "cuda": LayerRepository(
+                repo_id="kernels-community/triton-layer-norm",
+                layer_name="LlamaRMSNorm",
+                revision="pure-layer-test",
+            )
+        },
+        "LlamaMLP": {
+            "cuda": LayerRepository(
+                repo_id="medmekk/triton-llama-mlp",
+                layer_name="TritonLlamaMLP",
+            )
+        },
+        "LlamaAttention": {
+            "cuda": LayerRepository(
+                repo_id="medmekk/triton-flash-attn",
+                layer_name="LlamaAttention",
+            )
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
+
+    def use_kernel_attn_from_hub(layer_name: str, *, device: str = "cuda", use_fallback: bool = False):
+        from transformers import AttentionInterface
+        from kernels import get_kernel
+
+        def decorator(cls):
+            kernel = _KERNEL_MAPPING.get(layer_name)
+            if kernel is None:
+                if not use_fallback:
+                    raise ValueError(f"No attention implementation for `{layer_name}`")
+                return cls
+
+            device_obj = Device(type=device)
+            if device_obj is None:
+                return cls
+
+            repo = kernel.get(device)
+            if repo is None:
+                if not use_fallback:
+                    raise ValueError(
+                        f"No layer mapping for attention `{layer_name}` with device type `{device}`"
+                    )
+                return cls
+
+            attn_kernel = get_kernel(repo.repo_id)
+            AttentionInterface.register("attn_kernel", attn_kernel.attention)
+            cls.use_kernel = True
+            return cls
+        return decorator
 
 except ImportError:
     # Stub to make decorators int transformers work when `kernels`
@@ -62,7 +110,6 @@ except ImportError:
 
 def is_hub_kernels_available():
     return _hub_kernels_available
-
 
 __all__ = [
     "LayerRepository",
