@@ -549,6 +549,13 @@ def model_addition_debugger_context(*args, **kwargs):
 ROPE_INIT_FUNCTIONS = None
 
 
+class AttentionInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6700,6 +6707,13 @@ class MobileViTV2PreTrainedModel(metaclass=DummyObject):
 
 
 class ModernBertForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ModernBertForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

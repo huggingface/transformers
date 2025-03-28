@@ -29,6 +29,8 @@
       title: The Transformer model family
     - local: attention
       title: Attention mechanisms
+    - local: attention_interface
+      title: Customizing attention function
     title: Models
   - sections:
     - local: fast_tokenizers
