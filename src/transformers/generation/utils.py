@@ -3934,7 +3934,7 @@ class GenerationMixin:
         # Crop the static-shaped tensors to the actual size. `beam_indices` has -1 on positions that don't contain
         # generated tokens, and the used beam index where generated tokens are present -- we can use it to detect the
         # generated length, which may be != `cur_len` (e.g. early stopping with different lengths per beam)
-        max_generated_length = ((beam_indices+1).bool()).sum(dim=1).max()
+        max_generated_length = ((beam_indices + 1).bool()).sum(dim=1).max()
         output_length = decoder_prompt_len + max_generated_length
         sequences = sequences[:, :output_length]
         beam_indices = beam_indices[:, :max_generated_length]

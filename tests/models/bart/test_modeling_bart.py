@@ -939,8 +939,10 @@ class BartModelIntegrationTests(unittest.TestCase):
         PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
         EXPECTED_SUMMARY = (
+            "</s>"
             "California's largest power company has begun shutting off electricity to thousands of customers in the"
             " state."
+            "</s>"
         )
         dct = tok.batch_encode_plus(
             [PGE_ARTICLE],
@@ -962,10 +964,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             decoder_start_token_id=model.config.eos_token_id,
         )
 
-        decoded = tok.batch_decode(
-            hypotheses_batch,
-            skip_special_tokens=True,
-        )
+        decoded = tok.batch_decode(hypotheses_batch)
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
@@ -1189,26 +1188,32 @@ class BartModelIntegrationTests(unittest.TestCase):
         assert hypotheses_batch[:, 1].eq(0).all().item()
 
         EXPECTED = [
+            "</s><s>"
             "A French prosecutor says he is not aware of any video footage from on board the plane. Two German "
             "magazines claim to have found a cell phone video showing the crash. The publications say they watched "
             "the video, which was found by a source close to the investigation. All 150 on board Germanwings Flight "
-            "9525 were killed.",
+            "9525 were killed."
+            "</s>",
+            "</s><s>"
             "Palestinian Authority becomes 123rd member of the International Criminal Court. The move gives the court "
             "jurisdiction over alleged crimes in Palestinian territories. Israel and the United States opposed the "
             "Palestinians' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki said it was a "
-            "move toward greater justice.",
+            "move toward greater justice."
+            "</s><pad><pad><pad><pad>",
+            "</s><s>"
             "U.S. and its negotiating partners reached a strong framework agreement with Iran. Peter Bergen: The "
             "debate that has already begun will likely result in more heat than light. He says critics have made "
             "dubious assumptions and doubtful assertions. Bergen says the goal was to block Iran from building a "
-            "nuclear weapon.",
+            "nuclear weapon."
+            "</s><pad><pad><pad>",
+            "</s><s>"
             "Liana Barrientos, 39, has been married 10 times, sometimes within two weeks of each other. Prosecutors "
             "say the marriages were part of an immigration scam. She pleaded not guilty at State Supreme Court in the "
-            "Bronx on Friday. If convicted, she faces up to four years in prison.",
+            "Bronx on Friday. If convicted, she faces up to four years in prison."
+            "</s><pad><pad><pad><pad><pad>",
         ]
 
-        generated_summaries = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated_summaries = tok.batch_decode(hypotheses_batch.tolist())
         assert generated_summaries == EXPECTED
 
     @slow
