@@ -14,38 +14,36 @@
 # limitations under the License.
 """Fast Image processor class for Donut."""
 
+from typing import Optional, Union
+
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast, 
-    DefaultFastImageProcessorKwargs, 
-    BatchFeature
+    BaseImageProcessorFast,
+    BatchFeature,
+    DefaultFastImageProcessorKwargs,
 )
-from ...image_transforms import (
-    ChannelDimension,
-    group_images_by_shape,
-    reorder_images
-)
+from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN, 
-    IMAGENET_STANDARD_STD, 
-    PILImageResampling, 
-    SizeDict,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ImageInput,
-    get_image_size
-)
-from ...utils import (
-    add_start_docstrings, 
-    is_torch_available, 
-    is_torchvision_available, 
-    is_torchvision_v2_available, 
-    TensorType,
-    logging
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
 )
 from ...processing_utils import Unpack
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    logging,
+)
+
 
 logger = logging.get_logger(__name__)
 
@@ -148,7 +146,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         if (output_width < output_height and input_width > input_height) or (
             output_width > output_height and input_width < input_height
         ):
-            height_dim, width_dim = image.dim()-2, image.dim()-1
+            height_dim, width_dim = image.dim() - 2, image.dim() - 1
             image = torch.rot90(image, 3, dims=[height_dim, width_dim])
 
         return image
@@ -266,7 +264,9 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.align_long_axis(image=stacked_images, size=size)
             if do_resize:
                 shortest_edge = min(size.height, size.width)
-                stacked_images = self.resize(image=stacked_images, size=SizeDict(shortest_edge=shortest_edge), interpolation=interpolation)
+                stacked_images = self.resize(
+                    image=stacked_images, size=SizeDict(shortest_edge=shortest_edge), interpolation=interpolation
+                )
             if do_thumbnail:
                 stacked_images = self.thumbnail(image=stacked_images, size=size)
             if do_pad:
@@ -292,5 +292,6 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
 
 __all__ = ["DonutImageProcessorFast"]
