@@ -648,7 +648,7 @@ class TrainerIntegrationCommon:
         else:
             best_model = RegressionModel()
             if not safe_weights:
-                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME), weights_only=True)
             else:
                 state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
