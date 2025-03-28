@@ -345,6 +345,7 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_v3": ["DeepseekV3Config"],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
@@ -700,6 +701,13 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phi4_multimodal": [
+        "Phi4MultimodalAudioConfig",
+        "Phi4MultimodalConfig",
+        "Phi4MultimodalFeatureExtractor",
+        "Phi4MultimodalProcessor",
+        "Phi4MultimodalVisionConfig",
+    ],
     "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
@@ -1349,6 +1357,7 @@ else:
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
+    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
@@ -1475,7 +1484,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS"]
-    _import_structure["modeling_utils"] = ["PreTrainedModel"]
+    _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
 
     # PyTorch models structure
 
@@ -2014,6 +2023,13 @@ else:
             "DecisionTransformerGPT2PreTrainedModel",
             "DecisionTransformerModel",
             "DecisionTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deepseek_v3"].extend(
+        [
+            "DeepseekV3ForCausalLM",
+            "DeepseekV3Model",
+            "DeepseekV3PreTrainedModel",
         ]
     )
     _import_structure["models.deformable_detr"].extend(
@@ -2803,6 +2819,17 @@ else:
             "LlavaNextPreTrainedModel",
         ]
     )
+    _import_structure["models.phi4_multimodal"].extend(
+        [
+            "Phi4MultimodalForCausalLM",
+            "Phi4MultimodalPreTrainedModel",
+            "Phi4MultimodalAudioModel",
+            "Phi4MultimodalAudioPreTrainedModel",
+            "Phi4MultimodalModel",
+            "Phi4MultimodalVisionModel",
+            "Phi4MultimodalVisionPreTrainedModel",
+        ]
+    )
     _import_structure["models.llava_next_video"].extend(
         [
             "LlavaNextVideoForConditionalGeneration",
@@ -3029,6 +3056,7 @@ else:
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
+            "ModernBertForQuestionAnswering",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",
             "ModernBertModel",
@@ -5527,6 +5555,9 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_v3 import (
+        DeepseekV3Config,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -5916,6 +5947,13 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phi4_multimodal import (
+        Phi4MultimodalAudioConfig,
+        Phi4MultimodalConfig,
+        Phi4MultimodalFeatureExtractor,
+        Phi4MultimodalProcessor,
+        Phi4MultimodalVisionConfig,
+    )
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
@@ -6589,6 +6627,7 @@ if TYPE_CHECKING:
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
+        from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
@@ -6702,7 +6741,7 @@ if TYPE_CHECKING:
             model_addition_debugger_context,
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
-        from .modeling_utils import PreTrainedModel
+        from .modeling_utils import AttentionInterface, PreTrainedModel
         from .models.albert import (
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
@@ -7148,6 +7187,11 @@ if TYPE_CHECKING:
             DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
+        )
+        from .models.deepseek_v3 import (
+            DeepseekV3ForCausalLM,
+            DeepseekV3Model,
+            DeepseekV3PreTrainedModel,
         )
         from .models.deformable_detr import (
             DeformableDetrForObjectDetection,
@@ -7942,6 +7986,7 @@ if TYPE_CHECKING:
         )
         from .models.modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForQuestionAnswering,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,
@@ -8154,6 +8199,15 @@ if TYPE_CHECKING:
             Phi3ForTokenClassification,
             Phi3Model,
             Phi3PreTrainedModel,
+        )
+        from .models.phi4_multimodal import (
+            Phi4MultimodalAudioModel,
+            Phi4MultimodalAudioPreTrainedModel,
+            Phi4MultimodalForCausalLM,
+            Phi4MultimodalModel,
+            Phi4MultimodalPreTrainedModel,
+            Phi4MultimodalVisionModel,
+            Phi4MultimodalVisionPreTrainedModel,
         )
         from .models.phimoe import (
             PhimoeForCausalLM,
