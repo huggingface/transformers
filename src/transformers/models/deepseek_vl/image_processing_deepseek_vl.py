@@ -234,7 +234,6 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         return result
 
     @filter_out_non_signature_kwargs()
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.preprocess with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
     def preprocess(
         self,
         images: ImageInput,
@@ -343,29 +342,23 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        all_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(
+                    image=image, size=size_dict, resample=resample, input_data_format=input_data_format
+                )
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            all_images.append(image)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
+        data = {"pixel_values": all_images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
