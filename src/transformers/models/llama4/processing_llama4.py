@@ -135,7 +135,7 @@ chat_template = (
     "        {%- else %}\n"
     "            {%- for content in message['content'] %}\n"
     "                {%- if content['type'] == 'image' %}\n"
-    "                    {{- '<image>' }}\n"
+    "                    {{- '<|image|>' }}\n"
     "                {%- elif content['type'] == 'text' %}\n"
     "                    {{- content['text'] }}\n"
     "                {%- endif %}\n"
@@ -149,7 +149,7 @@ chat_template = (
     "        {%- else %}\n"
     "            {%- for content in message['content'] %}\n"
     "                {%- if content['type'] == 'image' %}\n"
-    "                    {{- '<image>' }}\n"
+    "                    {{- '<|image|>' }}\n"
     "                {%- elif content['type'] == 'text' %}\n"
     "                    {{- content['text'] }}\n"
     "                {%- endif %}\n"
@@ -193,7 +193,7 @@ class Llama4Processor(ProcessorMixin):
             The size of image patches for tokenization.
         img_size (`int`, *optional*, defaults to 364):
             The size of the image to be tokenized. This should correspond to the size given to the image processor.
-        image_token (`str`, *optional*, defaults to `"<image>"`):
+        image_token (`str`, *optional*, defaults to `"<|image|>"`):
             The token to be used to represent an image in the text.
         downsample_factor (`int`, *optional*, defaults to 1):
             The factor by which to scale the patch size.
@@ -279,7 +279,7 @@ class Llama4Processor(ProcessorMixin):
                         img_string += "<|tile_x_separator|>"
 
                 img_string += "<|tile_y_separator|>"
-        img_string += "<|image|>"
+        # img_string += "<|image|>"
         img_string += "<|patch|>" * num_patches_per_chunk
         img_string += "<|image_end|>"
 
@@ -345,20 +345,33 @@ class Llama4Processor(ProcessorMixin):
                 (image_height // self.patch_size) * (image_width // self.patch_size) // self.downsample_ratio
             )
             aspect_ratios = image_inputs.pop("aspect_ratios")
+
+            total_placeholders = sum(prompt.count(self.fake_image_token) for prompt in text)
+            if total_placeholders != len(images):
+                raise ValueError(
+                    f"Found {total_placeholders} placeholders across the batch, "
+                    f"but have {len(images)} flattened images."
+                )
+
             image_index = 0
             processed_text = []
             for prompt in text:
-                new_prompt = prompt
-                curr_num_image_patches = 0
-                while self.fake_image_token in new_prompt:
-                    # Replace the image placeholder with structured image tokens
-                    num_patches = aspect_ratios[image_index][0] * aspect_ratios[image_index][1]
-                    num_patches = num_patches + 1 if num_patches > 1 else num_patches
-                    image_tokens = self._prompt_split_image(aspect_ratios[image_index], num_patches_per_chunk)
-                    new_prompt = new_prompt.replace(self.fake_image_token, image_tokens, 1)
-                    curr_num_image_patches += num_patches
-                    image_index += 1
-                processed_text.append(new_prompt)
+                placeholder_count = prompt.count(self.fake_image_token)
+                if placeholder_count == 0:
+                    # do nothing if there is no image
+                    processed_text.append(prompt)
+                    continue
+                prompt_splits = prompt.split(self.fake_image_token)
+                new_prompt = []
+                for local_image_index, split_part in enumerate(prompt_splits):
+                    new_prompt.append(split_part)
+                    if local_image_index < placeholder_count:
+                        tokens_for_this_image = self._prompt_split_image(
+                            aspect_ratios[image_index], num_patches_per_chunk
+                        )
+                        image_index += 1
+                        new_prompt.append(tokens_for_this_image)
+                processed_text.append("".join(new_prompt))
 
             if image_index != len(images):
                 raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
