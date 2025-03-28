@@ -413,7 +413,14 @@ class PipelineTesterMixin:
         tokenizer = None
         if tokenizer_name is not None:
             tokenizer_class = getattr(transformers_module, tokenizer_name)
-            tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
+            try:
+                tokenizer = tokenizer_class.from_pretrained(repo_id, revision=commit)
+            except Exception:
+                logger.warning(
+                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
+                    f"the tokenizer from `{repo_id}` with `{tokenizer_class}`."
+                )
+                self.skipTest(f"Could not find or load the tokenizer from {repo_id} with {tokenizer_class}.")
 
         # -------------------- Load processors --------------------
 
