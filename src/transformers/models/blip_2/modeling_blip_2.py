@@ -1371,10 +1371,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             query_length if query_length is not None else query_embeds.shape[1] if query_embeds is not None else 0
         )
 
-        # Qformer and latent query tokens are kept in fp32. We cast `encoder_hidden_states` if not fp32 already
-        if query_embeds.dtype != encoder_hidden_states.dtype:
-            encoder_hidden_states = encoder_hidden_states.to(query_embeds.dtype)
-
         embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
@@ -1392,6 +1388,10 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
+            # Qformer and latent query tokens are kept in fp32. We cast `encoder_hidden_states` if not fp32 already
+            if encoder_hidden_states.dtype != query_embeds.dtype:
+                encoder_hidden_states = encoder_hidden_states.to(query_embeds.dtype)
+
             if isinstance(encoder_hidden_states, list):
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
             else:
