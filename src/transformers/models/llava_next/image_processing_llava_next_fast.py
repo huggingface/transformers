@@ -16,7 +16,7 @@
 
 from typing import List, Optional, Union
 
-from ...image_processing_utils import BatchFeature, select_best_resolution
+from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -34,7 +34,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    get_image_size_for_max_height_width,
     make_flat_list_of_images,
 )
 from ...processing_utils import Unpack
@@ -149,11 +148,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         Returns:
             "torch.Tensor": The resized and padded image.
         """
-        target_height, target_width = target_resolution
-        height, width = get_image_size(image)
-        new_height, new_width = get_image_size_for_max_height_width(
-            (height, width), max_height=target_height, max_width=target_width
-        )
+        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
         resized_image = F.resize(image, (new_height, new_width), interpolation=interpolation)
@@ -167,10 +162,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         Pad an image to a target resolution while maintaining aspect ratio.
         """
         target_height, target_width = target_resolution
-        height, width = get_image_size(image)
-        new_height, new_width = get_image_size_for_max_height_width(
-            (height, width), max_height=target_height, max_width=target_width
-        )
+        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2

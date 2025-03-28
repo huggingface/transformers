@@ -270,7 +270,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             logger.warning(
                 "`VideoLlavaImageProcessor` works only with image inputs and doesn't process videos anymore. "
                 "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `VideoLlavaVideoProcessor`. "
+                "Your videos should be forwarded to `VideoLlavaVideoProcessorFast`. "
             )
             videos = make_batched_videos(videos)
             pixel_values_videos = [

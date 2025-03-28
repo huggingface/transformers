@@ -26,8 +26,6 @@ if is_torch_available():
     pass
 
 if is_vision_available():
-    from transformers import VideoLlavaVideoProcessor
-
     if is_torchvision_available():
         from transformers import VideoLlavaVideoProcessorFast
 
@@ -102,7 +100,6 @@ class VideoLlavaVideoProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class VideoLlavaVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    video_processing_class = VideoLlavaVideoProcessor if is_vision_available() else None
     fast_video_processing_class = VideoLlavaVideoProcessorFast if is_torchvision_available() else None
 
     def setUp(self):

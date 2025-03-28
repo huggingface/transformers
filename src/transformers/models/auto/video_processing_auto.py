@@ -32,7 +32,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...video_processing_utils import BaseVideoProcessor
+from ...video_processing_utils_fast import BaseVideoProcessorFast
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -242,7 +242,7 @@ class AutoVideoProcessor:
                 - a string, the *model id* of a pretrained video_processor hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a video processor file saved using the
-                  [`~video_processing_utils.BaseVideoProcessor.save_pretrained`] method, e.g.,
+                  [`~video_processing_utils.BaseVideoProcessorFast.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
@@ -317,7 +317,7 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = BaseVideoProcessorFast.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
@@ -416,7 +416,7 @@ class AutoVideoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            slow_video_processor_class ([`BaseVideoProcessor`]):
+            slow_video_processor_class ([`BaseVideoProcessorFast`]):
                 The video processor to register.
         """
         if slow_video_processor_class is None and fast_video_processor_class is None:

@@ -805,6 +805,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
         # Qwen2-5-VL position_ids are prepareed with rope_deltas in forward
         model_inputs["position_ids"] = None
+
         if cache_position[0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None

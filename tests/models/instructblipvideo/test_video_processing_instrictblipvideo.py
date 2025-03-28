@@ -23,8 +23,6 @@ from ...test_video_processing_common import VideoProcessingTestMixin, prepare_vi
 
 
 if is_vision_available():
-    from transformers import InstructBlipVideoVideoProcessor
-
     if is_torchvision_available():
         from transformers import InstructBlipVideoVideoProcessorFast
 
@@ -90,7 +88,6 @@ class InstructBlipVideoVideoProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class InstructBlipVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    video_processing_class = InstructBlipVideoVideoProcessor if is_vision_available() else None
     fast_video_processing_class = InstructBlipVideoVideoProcessorFast if is_torchvision_available() else None
     input_name = "pixel_values"
 

@@ -235,7 +235,6 @@ def get_feature_extractor_config(
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
     )
-
     if resolved_config_file is None:
         logger.info(
             "Could not locate the feature extractor configuration file, will try to use the model config instead."

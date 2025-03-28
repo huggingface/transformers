@@ -30,7 +30,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Qwen2VLVideoProcessor
     from transformers.image_utils import get_image_size
     from transformers.models.qwen2_vl.video_processing_qwen2_vl import smart_resize
 
@@ -135,7 +134,6 @@ class Qwen2VLVideoProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    video_processing_class = Qwen2VLVideoProcessor if is_vision_available() else None
     fast_video_processing_class = Qwen2VLVideoProcessorFast if is_torchvision_available() else None
 
     def setUp(self):

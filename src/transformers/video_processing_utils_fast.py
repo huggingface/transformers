@@ -41,6 +41,7 @@ from .image_utils import (
 from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     VIDEO_PROCESSOR_NAME,
+    PushToHubMixin,
     TensorType,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
@@ -56,7 +57,6 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .video_processing_utils import BaseVideoProcessor
 from .video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -147,7 +147,7 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
     "Constructs a fast base VideoProcessor.",
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
 )
-class BaseVideoProcessorFast(BaseVideoProcessor):
+class BaseVideoProcessorFast(PushToHubMixin):
     resample = None
     image_mean = None
     image_std = None
@@ -959,8 +959,8 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
             raise TypeError(f"only a single or a list of entries is supported but got type={type(video_url_or_urls)}")
 
 
-BaseVideoProcessor.push_to_hub = copy_func(BaseVideoProcessor.push_to_hub)
-if BaseVideoProcessor.push_to_hub.__doc__ is not None:
-    BaseVideoProcessor.push_to_hub.__doc__ = BaseVideoProcessor.push_to_hub.__doc__.format(
+BaseVideoProcessorFast.push_to_hub = copy_func(BaseVideoProcessorFast.push_to_hub)
+if BaseVideoProcessorFast.push_to_hub.__doc__ is not None:
+    BaseVideoProcessorFast.push_to_hub.__doc__ = BaseVideoProcessorFast.push_to_hub.__doc__.format(
         object="video processor", object_class="AutoVideoProcessor", object_files="video processor file"
     )

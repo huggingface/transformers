@@ -70,7 +70,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         "num_additional_image_tokens",
     ]
     image_processor_class = "VideoLlavaImageProcessor"
-    video_processor_class = "VideoLlavaVideoProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
