@@ -42,11 +42,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..llama.modeling_llama import LlamaModel
-from ..sam.configuration_sam import SamVisionConfig
+from ..auto import AutoModel
 from ..sam.modeling_sam import SamVisionEncoder
-from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipVisionModel
 from .configuration_deepseek_vl import DeepseekVLConfig
 
 
@@ -142,7 +139,7 @@ DEEPSEEK_VL_INPUTS_DOCSTRING = r"""
 """
 
 
-class DeepseekVLSamVisionNeck(nn.Module):
+class DeepseekVLSamVisionProj(nn.Module):
     def __init__(self, config, output_size: int = 24):
         super().__init__()
         self.config = config
@@ -166,67 +163,6 @@ class DeepseekVLSamVisionNeck(nn.Module):
         features = self.conv1(features)
         features = self.conv2(features)
         return features
-
-
-class DeepseekVLSamVisionEncoder(nn.Module):
-    def __init__(self, config: SamVisionConfig, output_size: int = 24):
-        super().__init__()
-        self.config = config
-        self.output_size = output_size
-        self.global_attn_index = config.global_attn_indexes[0]
-
-        self.model = SamVisionEncoder(config)
-        self.global_neck = deepcopy(self.model.neck)
-        self.neck = DeepseekVLSamVisionNeck(config, output_size=output_size)
-        self.alpha = nn.Parameter(torch.zeros(1))
-
-        self.register_buffer("image_mean", torch.tensor(OPENAI_CLIP_MEAN).reshape(1, 3, 1, 1), persistent=False)
-        self.register_buffer("image_std", torch.tensor(OPENAI_CLIP_STD).reshape(1, 3, 1, 1), persistent=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        pixel_values = (pixel_values - self.image_mean) / self.image_std
-        output = self.model(
-            pixel_values=pixel_values,
-            output_hidden_states=True,
-        )
-        last_hidden_state = output[0]
-        last_hidden_state = self.neck(last_hidden_state)
-
-        hidden_states = output[1]
-        global_hidden_state = hidden_states[self.global_attn_index + 1]  # +1 for embedding layer
-        global_hidden_state = self.global_neck(global_hidden_state)
-        global_hidden_state = self.neck(global_hidden_state)
-
-        output = last_hidden_state + global_hidden_state * self.alpha
-
-        # batch_size, hidden_size, height, width -> batch_size, seq_len, hidden_size
-        output = output.permute(0, 2, 3, 1)
-        output = output.reshape(output.shape[0], -1, output.shape[-1])
-
-        return output
-
-
-class DeepseekVLSiglipVisionEncoder(nn.Module):
-    def __init__(self, config: SiglipVisionConfig):
-        super().__init__()
-        self.config = config
-
-        self.model = SiglipVisionModel(config)
-
-        self.register_buffer("image_mean", torch.tensor(IMAGENET_STANDARD_MEAN).reshape(1, 3, 1, 1), persistent=False)
-        self.register_buffer("image_std", torch.tensor(IMAGENET_STANDARD_STD).reshape(1, 3, 1, 1), persistent=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        pixel_values = F.interpolate(
-            pixel_values.float(),
-            size=self.config.image_size,
-            mode="bilinear",
-            antialias=True,
-        )
-        pixel_values = (pixel_values - self.image_mean) / self.image_std
-        output = self.model(pixel_values=pixel_values)
-        output = output[0]  # last_hidden_state
-        return output
 
 
 class DeepseekVLAligner(nn.Module):
@@ -300,14 +236,33 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         super().__init__(config)
         self.use_high_res_vision = config.use_high_res_vision
 
-        self.low_res_vision_encoder = DeepseekVLSiglipVisionEncoder(config.low_res_vision_config)
+        self.low_res_vision_model = AutoModel.from_config(config.low_res_vision_config)
+        self.register_buffer(
+            "low_res_vision_mean", torch.tensor(IMAGENET_STANDARD_MEAN).reshape(1, 3, 1, 1), persistent=False
+        )
+        self.register_buffer(
+            "low_res_vision_std", torch.tensor(IMAGENET_STANDARD_STD).reshape(1, 3, 1, 1), persistent=False
+        )
+
         if self.use_high_res_vision:
-            output_size = config.low_res_vision_config.image_size // config.low_res_vision_config.patch_size
-            self.high_res_vision_encoder = DeepseekVLSamVisionEncoder(
-                config.high_res_vision_config, output_size=output_size
+            self.output_size = config.low_res_vision_config.image_size // config.low_res_vision_config.patch_size
+            self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
+            # TODO: update this when https://github.com/huggingface/transformers/pull/36493 is merged
+            # self.high_res_vision_model = AutoModel.from_config(config.high_res_vision_config)
+            self.high_res_vision_model = SamVisionEncoder(config.high_res_vision_config)
+            self.high_res_vision_neck = deepcopy(self.high_res_vision_model.neck)
+            self.high_res_vision_proj = DeepseekVLSamVisionProj(
+                config.high_res_vision_config, output_size=self.output_size
+            )
+            self.high_res_vision_alpha = nn.Parameter(torch.zeros(1))
+            self.register_buffer(
+                "high_res_vision_mean", torch.tensor(OPENAI_CLIP_MEAN).reshape(1, 3, 1, 1), persistent=False
+            )
+            self.register_buffer(
+                "high_res_vision_std", torch.tensor(OPENAI_CLIP_STD).reshape(1, 3, 1, 1), persistent=False
             )
 
-        self.language_model = LlamaModel(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.aligner = DeepseekVLAligner(config)
 
         self.gradient_checkpointing = False
@@ -320,10 +275,44 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def get_high_res_image_features(self, pixel_values):
+        pixel_values = (pixel_values - self.high_res_vision_mean) / self.high_res_vision_std
+        output = self.high_res_vision_model(
+            pixel_values=pixel_values,
+            output_hidden_states=True,
+        )
+        last_hidden_state = output[0]
+        last_hidden_state = self.high_res_vision_proj(last_hidden_state)
+
+        hidden_states = output[1]
+        global_hidden_state = hidden_states[self.global_attn_index + 1]  # +1 for embedding layer
+        global_hidden_state = self.high_res_vision_neck(global_hidden_state)
+        global_hidden_state = self.high_res_vision_proj(global_hidden_state)
+
+        output = last_hidden_state + global_hidden_state * self.high_res_vision_alpha
+
+        # batch_size, hidden_size, height, width -> batch_size, seq_len, hidden_size
+        output = output.permute(0, 2, 3, 1)
+        output = output.reshape(output.shape[0], -1, output.shape[-1])
+
+        return output
+
+    def get_low_res_image_features(self, pixel_values):
+        pixel_values = F.interpolate(
+            pixel_values.float(),
+            size=self.config.low_res_vision_config.image_size,
+            mode="bilinear",
+            antialias=True,
+        )
+        pixel_values = (pixel_values - self.low_res_vision_mean) / self.low_res_vision_std
+        output = self.low_res_vision_model(pixel_values=pixel_values)
+        output = output[0]  # last_hidden_state
+        return output
+
     def get_image_features(self, pixel_values):
-        vision_encodings = (self.low_res_vision_encoder(pixel_values),)
+        vision_encodings = (self.get_low_res_image_features(pixel_values),)
         if self.use_high_res_vision:
-            vision_encodings += (self.high_res_vision_encoder(pixel_values),)
+            vision_encodings += (self.get_high_res_image_features(pixel_values),)
         images_embeds = self.aligner(*vision_encodings)
         return images_embeds
 
