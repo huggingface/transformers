@@ -1345,6 +1345,7 @@ else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["models.blip"].append("BlipImageProcessorFast")
     _import_structure["models.clip"].append("CLIPImageProcessorFast")
+    _import_structure["models.conditional_detr"].append("ConditionalDetrImageProcessorFast")
     _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
@@ -6604,6 +6605,7 @@ if TYPE_CHECKING:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.blip import BlipImageProcessorFast
         from .models.clip import CLIPImageProcessorFast
+        from .models.conditional_detr import ConditionalDetrImageProcessorFast
         from .models.convnext import ConvNextImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.deit import DeiTImageProcessorFast

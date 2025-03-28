@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
@@ -33,6 +33,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import ConditionalDetrImageProcessor
+
+    if is_torchvision_available():
+        from transformers import ConditionalDetrImageProcessorFast
 
 
 class ConditionalDetrImageProcessingTester:
@@ -133,6 +136,7 @@ class ConditionalDetrImageProcessingTester:
 @require_vision
 class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ConditionalDetrImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ConditionalDetrImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -143,23 +147,25 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
-        self.assertEqual(image_processor.do_pad, True)
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
+            self.assertEqual(image_processor.do_pad, True)
 
-        image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
-        )
-        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-        self.assertEqual(image_processor.do_pad, False)
+            image_processor = self.image_processing_class.from_dict(
+                self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+            )
+            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
+            self.assertEqual(image_processor.do_pad, False)
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
