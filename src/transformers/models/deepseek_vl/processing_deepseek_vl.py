@@ -52,21 +52,31 @@ class DeepseekVLProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         use_default_system_prompt (`str`, *optional*, defaults to `True`):
             Use default system prompt for Text Generation.
+        num_image_tokens (`int`, *optional*, defaults to `576`):
+            The number of special image tokens used as placeholders for visual content in text sequences.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "use_default_system_prompt"]
+    valid_kwargs = ["chat_template", "use_default_system_prompt", "num_image_tokens"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
-        self.num_image_tokens = 576
+    def __init__(
+        self,
+        image_processor,
+        tokenizer,
+        chat_template=None,
+        use_default_system_prompt=True,
+        num_image_tokens=576,
+    ):
         self.image_token = tokenizer.image_token
         self.use_default_system_prompt = use_default_system_prompt
+        self.num_image_tokens = num_image_tokens
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
