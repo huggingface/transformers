@@ -464,19 +464,19 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         >>> import requests
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
-        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
-        >>> processor = AutoProcessor.from_pretrained("google/PaliGemma-test-224px-hf")
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
+        >>> processor = AutoProcessor.from_pretrained("google/paligemma2-3b-mix-224")
 
-        >>> prompt = "answer en Where is the cow standing?"
-        >>> url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
+        >>> prompt = "Where is the cat standing?"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs,)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "answer en Where is the cow standing?\nbeach"
+        "Where is the cat standing?\nsnow"
         ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):

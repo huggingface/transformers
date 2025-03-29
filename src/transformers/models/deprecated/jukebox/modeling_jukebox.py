@@ -429,7 +429,7 @@ class JukeboxBottleneckBlock(nn.Module):
             entropy = -torch.sum(_codebook_prob * torch.log(_codebook_prob + 1e-8))  # entropy ie how diverse
             used_curr = (_codebook_elem >= self.threshold).sum()
             usage = torch.sum(usage)
-            dk = torch.norm(self.codebook - old_codebook) / np.sqrt(np.prod(old_codebook.shape))
+            dk = torch.linalg.norm(self.codebook - old_codebook) / np.sqrt(np.prod(old_codebook.shape))
         return {"entropy": entropy, "used_curr": used_curr, "usage": usage, "dk": dk}
 
     def preprocess(self, hidden_states):
@@ -437,11 +437,13 @@ class JukeboxBottleneckBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         if hidden_states.shape[-1] == self.codebook_width:
-            prenorm = torch.norm(hidden_states - torch.mean(hidden_states)) / np.sqrt(np.prod(hidden_states.shape))
+            prenorm = torch.linalg.norm(hidden_states - torch.mean(hidden_states)) / np.sqrt(
+                np.prod(hidden_states.shape)
+            )
         elif hidden_states.shape[-1] == 2 * self.codebook_width:
             x1, x2 = hidden_states[..., : self.codebook_width], hidden_states[..., self.codebook_width :]
-            prenorm = (torch.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (
-                torch.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape))
+            prenorm = (torch.linalg.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (
+                torch.linalg.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape))
             )
 
             # Normalise
@@ -517,7 +519,9 @@ class JukeboxBottleneckBlock(nn.Module):
             update_metrics = {}
 
         # Loss
-        commit_loss = torch.norm(dequantised_states.detach() - hidden_states) ** 2 / np.prod(hidden_states.shape)
+        commit_loss = torch.linalg.norm(dequantised_states.detach() - hidden_states) ** 2 / np.prod(
+            hidden_states.shape
+        )
 
         # Passthrough
         dequantised_states = hidden_states + (dequantised_states - hidden_states).detach()
@@ -1303,7 +1307,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             n_ctx (`int`, *optional*):
                 Number of tokens or lyrics tokens provided in a single pass.
             embed_dim (`int`, *optional*):
-                Either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codeboook dimension,
+                Either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codebook dimension,
                 if the model combines lyrics and music tokens, or simply n_vocab if the model is a seperate encoder
             audio_conditioning (`bool`, *optional*, defaults to `False`):
                 Whether or not the prior supports conditionning on audio.
@@ -1921,7 +1925,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def set_metadata_lyric_tokens(self, labels):
         """
-        Processes the full labels to only retreive the relevant lyric tokens and keep the metadata conditioning tokens.
+        Processes the full labels to only retrieve the relevant lyric tokens and keep the metadata conditioning tokens.
         """
         if self.nb_relevant_lyric_tokens > 0:
             tokens_list = torch.zeros(
@@ -2147,7 +2151,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def get_encoder_states(self, lyric_tokens, sample=False):
         """
-        Retreive the last hidden_states of the lyric encoder that will be attended to by the decoder. Forwards through
+        Retrieve the last hidden_states of the lyric encoder that will be attended to by the decoder. Forwards through
         the lyric encoder.
         """
         if self.nb_relevant_lyric_tokens != 0 and self.lyric_conditioning:
@@ -2205,12 +2209,12 @@ class JukeboxPrior(PreTrainedModel):
         loss += next_token_prediction_loss * self.next_token_prediction_loss_dims / self.total_loss_dims
 
         metrics = {
-            "bpd": next_token_prediction_loss.clone().detach(),
-            "encoder_loss": encoder_loss.clone().detach(),
-            "next_token_prediction_loss": next_token_prediction_loss.clone().detach(),
+            "bpd": next_token_prediction_loss.detach().clone(),
+            "encoder_loss": encoder_loss.detach().clone(),
+            "next_token_prediction_loss": next_token_prediction_loss.detach().clone(),
         }
         if get_preds:
-            metrics["preds"] = preds.clone().detach()
+            metrics["preds"] = preds.detach().clone()
         if get_attn_weights:
             saved_attn_weights = self.prior.transformer.saved_attn_weights
             self.prior.transformer.set_record_attn(False)
@@ -2366,7 +2370,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         new_tokens = sample_tokens - previous_sampled_tokens.shape[1]
 
         logger.info(
-            f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on"
+            f"Sampling {sample_tokens} tokens for [{start},{start + sample_tokens}]. Conditioning on"
             f" {conditioning_tokens} tokens"
         )
 
@@ -2390,7 +2394,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             name = ["Ancestral", "Primed"][music_tokens_i.shape[1] == 0]
             iterator.set_description(
                 f"[prior level {level}] {name} Sampling {sample_tokens} tokens out of"
-                f" {self.total_length//prior.raw_to_tokens}",
+                f" {self.total_length // prior.raw_to_tokens}",
                 refresh=True,
             )
             tokens_i = prior.sample(
