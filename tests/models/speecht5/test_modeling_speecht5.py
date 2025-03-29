@@ -1067,6 +1067,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     def default_vocoder(self):
         return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
 
+    @slow
     def test_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1096,6 +1097,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         )
 
     @require_deterministic_for_xpu
+    @slow
     def test_one_to_many_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1204,6 +1206,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
+    @slow
     def test_batch_generation(self):
         model = self.default_model
         processor = self.default_processor

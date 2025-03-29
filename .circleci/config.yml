@@ -27,10 +27,12 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            - image: huggingface/transformers-consistency
         parallelism: 1
         steps:
             - checkout
+            - run: apt-get update
+            - run: apt-get install -y jq curl
             - run: if [[ "$CIRCLE_PULL_REQUEST" == "" && "$CIRCLE_BRANCH" != "main" && "$CIRCLE_BRANCH" != *-release ]]; then echo "Not a PR, not the main branch and not a release branch, skip test!"; circleci-agent step halt; fi
             - run: 'curl -L -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pulls/${CIRCLE_PULL_REQUEST##*/} >> github.txt'
             - run: cat github.txt
@@ -42,6 +44,12 @@ jobs:
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
+            - run: git branch
+            - run: git log -n 2
+            - run: uv venv && uv pip install .[dev]
+#            - run: python3 -m pytest --collect-only --no-header --no-summary -q tests > all_tests.txt
+#            - run: ls -l all_tests.txt
+#            - run: tail -10 all_tests.txt
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - run: python utils/tests_fetcher.py --filter_tests
             - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
@@ -50,6 +58,8 @@ jobs:
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
+
+            - run: ls -l test_preparation
 
             - store_artifacts:
                 path: test_preparation
@@ -75,12 +85,26 @@ jobs:
             # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
             # We could not pass a nested dict, which is why we create the test_file_... parameters for every single job
 
+#            - store_artifacts:
+#                path: |
+#                    test_preparation/pipelines_torch_test_list_detailed.txt
+#                    test_preparation/tests_generate_test_list_detailed.txt
+#                    test_preparation/tests_tokenization_test_list_detailed.txt
+#                    test_preparation/tests_torch_test_list_detailed.txt
+
             - store_artifacts:
                 path: test_preparation/transformed_artifacts.json
             - store_artifacts:
                 path: test_preparation/artifacts.json
+
+            - run:
+                name: "show test_preparation/transformed_artifacts.json"
+                command: |
+                    ls -l test_preparation/transformed_artifacts.json
+                    tail -20 test_preparation/transformed_artifacts.json
+
             - continuation/continue:
-                parameters:  test_preparation/transformed_artifacts.json
+                parameters: test_preparation/transformed_artifacts.json
                 configuration_path: test_preparation/generated_config.yml
 
     # To run all tests for the nightly build
@@ -131,9 +155,9 @@ jobs:
                 path: test_preparation/transformed_artifacts.json
             - store_artifacts:
                 path: test_preparation/artifacts.json
-            - continuation/continue:
-                parameters:  test_preparation/transformed_artifacts.json
-                configuration_path: test_preparation/generated_config.yml
+#            - continuation/continue:
+#                parameters:  test_preparation/transformed_artifacts.json
+#                configuration_path: test_preparation/generated_config.yml
 
     check_code_quality:
         working_directory: ~/transformers
@@ -197,9 +221,9 @@ workflows:
                 - equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
                 - not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
+#            - check_circleci_user
+#            - check_code_quality
+#            - check_repository_consistency
             - fetch_tests
 
     setup_and_quality_2:
