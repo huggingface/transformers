@@ -37,42 +37,38 @@ class AIMv2VisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 2816):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-
-    Example:
-
-    ```python
-    >>> from transformers import AIMv2VisionConfig, AIMv2VisionModel
-
-    >>> # Initializing a AIMv2VisionConfig with google/aimv2-base-patch16-224 style configuration
-    >>> configuration = AIMv2VisionConfig()
-
-    >>> # Initializing a AIMv2VisionModel (with random weights) from the google/aimv2-base-patch16-224 style configuration
-    >>> model = AIMv2VisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+        projection_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for projection layer in Attention Module.
+        qkv_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a bias to the queries, keys and values.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a bias to the Linear layers or Not.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the for initializing all weight matrices.
+        use_head (`str`, *optional*, defaults to `True`):
+            Whether to use Attention Pooling Head or Not.
+    """
 
     model_type = "aimv2_vision_model"
     base_config_key = "vision_config"
@@ -127,50 +123,42 @@ class AIMv2TextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size of the AIMv2 text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`AIMv2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 64):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        projection_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for projection layer in Attention Module.
+        qkv_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a bias to the queries, keys and values.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a bias to the Linear layers or Not.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         pad_token_id (`int`, *optional*, defaults to 1):
             The id of the padding token in the vocabulary.
         bos_token_id (`int`, *optional*, defaults to 49406):
             The id of the beginning-of-sequence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 49407):
             The id of the end-of-sequence token in the vocabulary.
-        projection_size (`int`, *optional*, defaults to `hidden_size`):
-            The size of the projection head.
-
-    Example:
-
-    ```python
-    >>> from transformers import AIMv2TextConfig, AIMv2TextModel
-
-    >>> # Initializing a AIMv2TextConfig with google/aimv2-base-patch16-224 style configuration
-    >>> configuration = AIMv2TextConfig()
-
-    >>> # Initializing a AIMv2TextModel (with random weights) from the google/aimv2-base-patch16-224 style configuration
-    >>> model = AIMv2TextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+        max_position_embeddings (`int`, *optional*, defaults to 77):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the for initializing all weight matrices.
+    """
 
     model_type = "aimv2_text_model"
     base_config_key = "text_config"
@@ -228,6 +216,10 @@ class AIMv2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`AIMv2TextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`AIMv2VisionConfig`].
+        projection_dim (`int`, *optional*, defaults to 512):
+            Dimensionality of text and vision projection layers.
+        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
+            The initial value of the *logit_scale* parameter.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 

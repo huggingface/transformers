@@ -778,7 +778,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
 
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
-        self.max_log_logit_scale = math.log(config.max_logit_scale)
+        self.max_logit_scale = math.log(config.max_logit_scale)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -953,7 +953,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         image_embeds = image_embeds / _get_vector_norm(image_embeds)
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
-        logit_scale = self.logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
+        logit_scale = self.logit_scale.clamp(0.0, self.max_logit_scale).exp()
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
