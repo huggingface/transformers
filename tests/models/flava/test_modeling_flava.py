@@ -320,16 +320,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip this test as FlavaImageModel has no base class and is
-    # not available in MODEL_MAPPING
-    @unittest.skip(reason="FlavaImageModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/flava-full"
@@ -484,14 +474,6 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
         # FLAVA does not use inputs_embeds
-        pass
-
-    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="FlavaTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -650,14 +632,6 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="FlavaMultimodalModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/flava-full"
@@ -783,14 +757,6 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip
     def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="FlavaImageCodebook has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow

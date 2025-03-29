@@ -848,6 +848,8 @@ class BertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @dataclass

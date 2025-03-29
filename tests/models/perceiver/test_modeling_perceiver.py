@@ -812,14 +812,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass

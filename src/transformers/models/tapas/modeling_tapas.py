@@ -719,7 +719,7 @@ class TapasPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->Tapas
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -735,6 +735,8 @@ class TapasPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, TapasLMPredictionHead):
+            module.bias.data.zero_()
 
 
 TAPAS_START_DOCSTRING = r"""
