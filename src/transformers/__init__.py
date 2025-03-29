@@ -919,6 +919,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLMRobertaXLConfig"],
     "models.xlnet": ["XLNetConfig"],
+    "models.xlstm": ["xLSTMConfig"],
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
@@ -1406,6 +1407,7 @@ else:
         "SinkCache",
         "SlidingWindowCache",
         "StaticCache",
+        "xLSTMCache",
     ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
@@ -4103,6 +4105,13 @@ else:
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.xlstm"].extend(
+        [
+            "xLSTMForCausalLM",
+            "xLSTMModel",
+            "xLSTMPreTrainedModel",
+        ]
+    )
     _import_structure["models.xmod"].extend(
         [
             "XmodForCausalLM",
@@ -6196,6 +6205,7 @@ if TYPE_CHECKING:
         XLMRobertaXLConfig,
     )
     from .models.xlnet import XLNetConfig
+    from .models.xlstm import xLSTMConfig
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
@@ -6665,6 +6675,7 @@ if TYPE_CHECKING:
             SinkCache,
             SlidingWindowCache,
             StaticCache,
+            xLSTMCache,
         )
         from .data.datasets import (
             GlueDataset,
@@ -8803,6 +8814,11 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.xlstm import (
+            xLSTMForCausalLM,
+            xLSTMModel,
+            xLSTMPreTrainedModel,
         )
         from .models.xmod import (
             XmodForCausalLM,
