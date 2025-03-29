@@ -14,45 +14,75 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Qwen2.5-VL
-
-<div class="flex flex-wrap space-x-1">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
 
-## Overview
+# Qwen2.5-VL
 
-The [Qwen2.5-VL](https://qwenlm.github.io/blog/qwen2_5-vl/) model is an update to [Qwen2-VL](https://arxiv.org/abs/2409.12191) from Qwen team, Alibaba Group. 
+The [Qwen2.5-VL](https://qwenlm.github.io/blog/qwen2_5-vl/) model is a multimodal vision-language model developed by the Qwen team, Alibaba Group, combining an enhanced ViT encoder with the Qwen2.5 LLM. As an update to [Qwen2-VL](https://arxiv.org/abs/2409.12191), it offers improved visual reasoning and video understanding capabilities. The model uses a refined ViT architecture with SwiGLU and RMSNorm, making it more aligned with the LLM’s structure.
 
-The abstract from this update is the following:
+Qwen2.5-VL introduces window attention in the ViT, accelerating both training and inference. It also supports dynamic resolution across both spatial and temporal dimensions, making it highly effective for video analysis. The upgraded MRoPE (Multi-Resolutional Rotary Positional Encoding) now includes absolute time alignment on the time axis, enabling it to capture temporal dynamics across varying frame rates, enhancing its video comprehension abilities.
 
-*Qwen2.5-VL marks a major step forward from Qwen2-VL, built upon the latest Qwen2.5 LLM. We've accelerated training and testing through the strategic implementation of window attention within the ViT. The ViT architecture itself has been refined with SwiGLU and RMSNorm, aligning it more closely with the LLM's structure. A key innovation is the expansion of native dynamic resolution to encompass the temporal dimension, in addition to spatial aspects. Furthermore, we've upgraded MRoPE, incorporating absolute time alignment on the time axis to allow the model to effectively capture temporal dynamics, regardless of frame rate, leading to superior video understanding.*
+You can find all the original Qwen2.5-VL checkpoints under the [Qwen2.5-VL](https://huggingface.co/collections/Qwen/qwen25-vl-6795ffac22b334a837c0f9a5) collection.
 
-## Usage example
+> [!TIP]
+> Click on the Qwen2.5-VL models in the right sidebar for more examples of how to apply Qwen2.5-VL to different vision and language tasks.
 
-### Single Media inference
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-The model can accept both images and videos as input. Here's an example code for inference.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-```python
-
+```py
 import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+from transformers import pipeline
+pipe = pipeline(
+    task="image-text-to-text",
+    model="Qwen/Qwen2.5-VL-7B-Instruct",
+    device="cuda",
+    torch_dtype=torch.bfloat16
+)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            { "type": "text", "text": "Describe this image."},
+        ]
+    }
+]
+pipe(text=messages,max_new_tokens=20, return_full_text=False)
 
-# Load the model in half-precision on the available device(s)
-model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", device_map="auto")
+```
+</hfoption>
+
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2.5-VL-7B-Instruct",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
-
-
-conversation = [
+messages = [
     {
         "role":"user",
         "content":[
             {
                 "type":"image",
-                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
             },
             {
                 "type":"text",
@@ -60,120 +90,33 @@ conversation = [
             }
         ]
     }
+
 ]
 
+image = Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", stream=True).raw)
 inputs = processor.apply_chat_template(
-    conversation,
+    messages,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to(model.device)
+).to("cuda:0")
 
-
-# Inference: Generation of the output
-output_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
-output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-print(output_text)
-
-# Video
-conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "video", "path": "/path/to/video.mp4"},
-            {"type": "text", "text": "What happened in the video?"},
-        ],
-    }
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
 ]
-
-inputs = processor.apply_chat_template(
-    conversation,
-    video_fps=1,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt"
-).to(model.device)
-
-# Inference: Generation of the output
-output_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
-output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+output_text = processor.batch_decode(
+       generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
 print(output_text)
 ```
+</hfoption>
+</hfoptions>
 
-### Batch Mixed Media Inference
+### Notes
 
-The model can batch inputs composed of mixed samples of various types such as images, videos, and text. Here is an example.
-
-```python
-# Conversation for the first image
-conversation1 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "path": "/path/to/image1.jpg"},
-            {"type": "text", "text": "Describe this image."}
-        ]
-    }
-]
-
-# Conversation with two images
-conversation2 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "path": "/path/to/image2.jpg"},
-            {"type": "image", "path": "/path/to/image3.jpg"},
-            {"type": "text", "text": "What is written in the pictures?"}
-        ]
-    }
-]
-
-# Conversation with pure text
-conversation3 = [
-    {
-        "role": "user",
-        "content": "who are you?"
-    }
-]
-
-
-# Conversation with mixed midia
-conversation4 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "path": "/path/to/image3.jpg"},
-            {"type": "image", "path": "/path/to/image4.jpg"},
-            {"type": "video", "path": "/path/to/video.jpg"},
-            {"type": "text", "text": "What are the common elements in these medias?"},
-        ],
-    }
-]
-
-conversations = [conversation1, conversation2, conversation3, conversation4]
-# Preparation for batch inference
-ipnuts = processor.apply_chat_template(
-    conversations,
-    video_fps=1,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt"
-).to(model.device)
-
-
-# Batch Inference
-output_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
-output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-print(output_text)
-```
-
-### Usage Tips
+Qwen2.5-VL is a multimodal conversational model designed for image, video, and text understanding, making it highly versatile for both general-purpose and fine-tuned downstream tasks such as image captioning, visual question answering (VQA), scene description, and video understanding.
 
 #### Image Resolution trade-off
 
@@ -199,6 +142,16 @@ This ensures each image gets encoded using a number between 256-1024 tokens. The
 By default, images and video content are directly included in the conversation. When handling multiple images, it's helpful to add labels to the images and videos for better reference. Users can control this behavior with the following settings:
 
 ```python
+import torch
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2.5-VL-7B-Instruct",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
 conversation = [
     {
         "role": "user",
