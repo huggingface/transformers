@@ -87,9 +87,10 @@ class AIMv2VisionConfig(PretrainedConfig):
         projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         use_bias: bool = False,
-        hidden_act="silu",
-        initializer_range=0.02,
-        use_head=True,
+        hidden_act: str = "silu",
+        initializer_range: float = 0.02,
+        use_head: bool = True,
+        is_causal: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -110,6 +111,7 @@ class AIMv2VisionConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
+        self.is_causal = is_causal
 
 
 class AIMv2TextConfig(PretrainedConfig):
@@ -175,12 +177,13 @@ class AIMv2TextConfig(PretrainedConfig):
         projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         use_bias: bool = False,
-        hidden_act="silu",
-        pad_token_id=None,
-        bos_token_id=None,
+        hidden_act: str = "silu",
+        pad_token_id: int = None,
+        bos_token_id: int = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
-        initializer_range=0.02,
+        initializer_range: bool = 0.02,
+        is_causal: bool = True,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -199,6 +202,7 @@ class AIMv2TextConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
+        self.is_causal = is_causal
 
 
 class AIMv2Config(PretrainedConfig):
