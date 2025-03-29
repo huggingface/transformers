@@ -229,7 +229,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         filename=f"{filename}",
     )
 
-    state_dict = torch.load(filepath, map_location="cpu")
+    state_dict = torch.load(filepath, map_location="cpu", weights_only=True)
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:

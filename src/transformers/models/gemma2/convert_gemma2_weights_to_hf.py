@@ -97,11 +97,11 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
         for file in files:
             print(file)
-            loaded_state_dict = torch.load(os.path.join(input_base_path, file), map_location="cpu")
+            loaded_state_dict = torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
             model_state_dict.update(loaded_state_dict)
     else:
         print("Model does not seem to be sharded")
-        model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
+        model_state_dict = torch.load(input_base_path, map_location="cpu", weights_only=True)["model_state_dict"]
         model_state_dict.pop("freqs_cis")
 
     state_dict = {}
