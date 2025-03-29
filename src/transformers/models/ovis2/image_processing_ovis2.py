@@ -103,7 +103,7 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-def covering_area(left, upper, right, lower, side):
+def compute_patch_covering_area(left, upper, right, lower, side):
     w = right - left
     h = lower - upper
     w, h = max(w, h), min(w, h)
@@ -113,56 +113,57 @@ def covering_area(left, upper, right, lower, side):
     return w * h
 
 
-def _get_best_grid(
-    image_size: Tuple[int, int],
-    side: int,
-    max_partition: int = 9,
-    covering_threshold: float = 0.9,
-) -> Tuple[int, int]:
-    def _partition(h: int, w: int, grid: Tuple[int, int]) -> List[Tuple[int, int, int, int]]:
-        row_height = h // grid[0]
-        col_width = w // grid[1]
-        return [
-            (
-                col * col_width,
-                row * row_height,
-                w if col == grid[1] - 1 else (col + 1) * col_width,
-                h if row == grid[0] - 1 else (row + 1) * row_height,
-            )
-            for row in range(grid[0])
-            for col in range(grid[1])
-        ]
-
-    w, h = image_size[1], image_size[0]
-    img_area = w * h
-    candidate_grids = []
-    for i in range(1, max_partition + 1):
-        for j in range(1, max_partition + 1):
-            if i * j <= max_partition:
-                candidate_grids.append((i, j))
-    candidate_grids = [
-        (i, j) for i in range(1, max_partition + 1) for j in range(1, max_partition + 1) if i * j <= max_partition
+def split_image_into_grid(h: int, w: int, grid: Tuple[int, int]) -> List[Tuple[int, int, int, int]]:
+    row_height = h // grid[0]
+    col_width = w // grid[1]
+    return [
+        (
+            col * col_width,
+            row * row_height,
+            w if col == grid[1] - 1 else (col + 1) * col_width,
+            h if row == grid[0] - 1 else (row + 1) * row_height,
+        )
+        for row in range(grid[0])
+        for col in range(grid[1])
     ]
 
-    all_grids = []
-    good_grids = []
-    for grid in candidate_grids:
-        partition = _partition(h, w, grid)
-        covering_ratio = sum([covering_area(*p, side) for p in partition]) / img_area
 
-        all_grids.append((grid, covering_ratio))
-        if covering_ratio > covering_threshold:
-            good_grids.append((grid, covering_ratio))
+@lru_cache(maxsize=100)
+def get_min_tile_covering_grid(
+    image_size: Tuple[int, int],
+    target_patch_size: int,
+    max_image_tiles: int = 9,
+    covering_threshold: float = 0.9,
+) -> Tuple[int, int]:
+    image_height, image_width = image_size
+    image_area = image_width * image_height
 
-    if good_grids:
-        return sorted(good_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0][0]
+    candidate_tile_grids = get_all_supported_aspect_ratios(1, max_image_tiles)
+    evaluated_grids = []
+    sufficient_covering_grids = []
+
+    for tile_grid in candidate_tile_grids:
+        tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
+        tile_covering_ratio = (
+            sum([compute_patch_covering_area(*region, target_patch_size) for region in tile_regions])
+            / image_area
+        )
+
+        evaluated_grids.append((tile_grid, tile_covering_ratio))
+        if tile_covering_ratio > covering_threshold:
+            sufficient_covering_grids.append((tile_grid, tile_covering_ratio))
+
+    if sufficient_covering_grids:
+        # Prefer fewer tiles and higher covering ratio
+        return sorted(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0][0]
     else:
-        return sorted(all_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0][0]
+        # Fallback: prefer higher covering even if below threshold
+        return sorted(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0][0]
 
 
 class Ovis2ImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a GOT_OCR2 image processor.
+    Constructs a Ovis2 image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -306,6 +307,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        use_covering_area_grid: bool = True,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -419,14 +421,13 @@ class Ovis2ImageProcessor(BaseImageProcessor):
                     max_patches=max_patches,
                     patch_size=size,
                     data_format=input_data_format,
+                    use_covering_area_grid=use_covering_area_grid,
                 )
                 for image in images
             ]
-            num_patches = np.array([len(image) for image, _ in images])
             grids = [grid for _, grid in images]
             images = [image for images_list, _ in images for image in images_list]
         else:
-            num_patches = np.array([1] * len(images))
             grids = [(1, 1)] * len(images)
 
         for i, image in enumerate(images):
@@ -488,11 +489,12 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
         original_height, original_width = images.shape[-2:]
 
+        # calculate the number of patches from original ovis2
         if use_covering_area_grid:
-            num_columns, num_rows = _get_best_grid(
+            num_columns, num_rows = get_min_tile_covering_grid(
                 (original_height, original_width),
-                side=patch_size_height,
-                max_partition=max_patches,
+                side=patch_size_height,  # square patch size
+                max_image_tiles=max_patches,
                 covering_threshold=0.9,
             )
         else:
