@@ -83,8 +83,7 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
-    """
-
+        """
     def __init__(
         self,
         hidden_size: int = 1024,
@@ -174,8 +173,7 @@ class AIMv2TextConfig(SiglipTextConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the for initializing all weight matrices.
-    """
-
+        """
     def __init__(
         self,
         vocab_size: int = 49408,
@@ -268,7 +266,6 @@ class AIMv2Config(SiglipConfig):
 
     >>> config = AIMv2Config.from_text_vision_configs(config_text, config_vision)
     ```"""
-
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):

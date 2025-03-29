@@ -79,6 +79,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_encoder.trunk.blocks.(\d+).norm_2": r"text_model.encoder.layers.\1.rms_norm2",
     r"text_encoder.trunk.post_trunk_norm": r"text_model.rms_norm",
     r"text_projector": r"text_projection",
+    r"log_logit_scale": r"logit_scale",
+
 }
 
 
@@ -169,7 +171,7 @@ def write_model(
 
     state_dict = {}
     # For `apple/aimv2-large-patch14-native` we don't have position_embedding in state_dict
-    strict_loading = True
+    strict_loading = False
     result = convert_old_keys_to_new_keys(original_state_dict, key_mapping)
     all_keys = list(original_state_dict.keys())
 

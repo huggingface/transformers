@@ -50,10 +50,5 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
     - forward
 
 
-## AIMv2ForImageClassification
-
-[[autodoc]] AIMv2ForImageClassification
-    - forward
-
 </pt>
 <tf>
