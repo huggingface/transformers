@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_video_llava import *
     from .image_processing_video_llava import *
+    from .image_processing_video_llava_fast import *
     from .modeling_video_llava import *
     from .processing_video_llava import *
 else:
