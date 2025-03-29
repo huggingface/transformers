@@ -1037,11 +1037,6 @@ def is_flash_attn_2_available():
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
         return False
 
-    # Ascend does not support "flash_attn".
-    # If "flash_attn" is left in the env, is_flash_attn_2_available() should return False.
-    if is_torch_npu_available():
-        return False
-
     if torch.version.cuda:
         return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
     elif torch.version.hip:
