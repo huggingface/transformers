@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin
 
@@ -29,6 +29,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import Idefics3ImageProcessor
+
+    if is_torchvision_available():
+        from transformers import Idefics3ImageProcessorFast
 
 
 if is_torch_available():
@@ -165,6 +168,7 @@ class Idefics3ImageProcessingTester:
 @require_vision
 class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Idefics3ImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Idefics3ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -175,20 +179,21 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "resample"))
-        self.assertTrue(hasattr(image_processing, "do_image_splitting"))
-        self.assertTrue(hasattr(image_processing, "max_image_size"))
-        self.assertTrue(hasattr(image_processing, "do_rescale"))
-        self.assertTrue(hasattr(image_processing, "rescale_factor"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_pad"))
-        self.assertTrue(hasattr(image_processing, "do_image_splitting"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "resample"))
+            self.assertTrue(hasattr(image_processing, "do_image_splitting"))
+            self.assertTrue(hasattr(image_processing, "max_image_size"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_pad"))
+            self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processor_list:
