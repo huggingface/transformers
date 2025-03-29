@@ -40,18 +40,17 @@ The example below demonstrates how to calculate similarity scores between multip
 <hfoption id="Pipeline">
 
 ```py
-import requests
-from PIL import Image
+import torch
 from transformers import pipeline
 
-clip = pipeline("zero-shot-image-classification", model="openai/clip-vit-base-patch32")
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+clip = pipeline(
+   task="zero-shot-image-classification",
+   model="openai/clip-vit-base-patch32",
+   torch_dtype=torch.bfloat16,
+   device=0
+)
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
-
-similarity = clip(image, candidate_labels=labels)
-print(similarity)
+clip("http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=labels)
 ```
 
 </hfoption>
@@ -59,104 +58,34 @@ print(similarity)
 
 ```py
 import requests
+import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
-from PIL import Image
-import torch
 
-model = AutoModel.from_pretrained("openai/clip-vit-base-patch32")
+model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.bfloat16, attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-text = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
+labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
-inputs = processor(text=text, images=image, return_tensors="pt", padding=True)
-outputs = model(**inputs)
-
-image_features = outputs.image_embeds
-text_features = outputs.text_embeds
-
-similarity = torch.cosine_similarity(image_features, text_features)
-print(similarity)
-```
-
-</hfoption>
-<hfoption id="CLIPModel">
-
-```py
-from PIL import Image
-import requests
-
-from transformers import CLIPProcessor, CLIPModel
-
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=labels, images=image, return_tensors="pt", padding=True)
 
 outputs = model(**inputs)
-logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+logits_per_image = outputs.logits_per_image
+probs = logits_per_image.softmax(dim=1)
+most_likely_idx = probs.argmax(dim=1).item()
+most_likely_label = labels[most_likely_idx]
+print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_likely_idx].item():.3f}")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Using CLIP with Quantization and Flash Attention 2
-
-<Tip warning={true}>
-
-For small batch sizes, you might notice a slowdown in your model when using flash attention. Refer to the section [Expected speedups with Flash Attention and SDPA](#Expected-speedups-with-Flash-Attention-and-SDPA) below and select an appropriate attention implementation.
-
-</Tip>
-
-To load and run a model using Flash Attention 2 in a quantized manner, refer to the snippet below:
-
-```py
-import requests
-import torch
-from PIL import Image
-from transformers import AutoModel, AutoProcessor, BitsAndBytesConfig
-
-# Set up quantization config
-quant_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True
-)
-
-model = AutoModel.from_pretrained(
-    "openai/clip-vit-base-patch32",
-    quantization_config=quant_config,
-    device_map="auto",
-    attn_implementation="flash_attention_2" # FlashAttention only supports Ampere GPUs or newer
-)
-
-processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-text = ["a photo of a cat", "a photo of a dog"]
-
-inputs = processor(text=text, images=image, return_tensors="pt", padding=True)
-inputs = {k: v.to("cuda") for k, v in inputs.items()}
-
-with torch.no_grad():
-    outputs = model(**inputs)
-
-image_features = outputs.image_embeds
-text_features = outputs.text_embeds
-
-similarity = torch.cosine_similarity(image_features, text_features)
-```
-
 ## Notes
 
-- For the best speedups, we recommend loading the model in half-precision (e.g. torch.float16 or torch.bfloat16).
+- If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
+- The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## CLIPConfig
 
