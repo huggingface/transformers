@@ -117,7 +117,7 @@ class EncodecModelTester:
         config.normalize = True
 
         processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
-        input_values = list(input_values.numpy())
+        input_values = input_values.tolist()
         inputs_dict = processor(
             input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
         ).to(torch_device)
