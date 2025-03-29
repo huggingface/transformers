@@ -22,7 +22,12 @@ rendered properly in your Markdown viewer.
 
 # ModernBERT
 
-[ModernBERT](https://huggingface.co/papers/2412.13663) is an improved succesor model built on the traditional encoder architecture. It builds on BERT and implements many modern architectural improvements which have been developed since its original release, such as:
+[ModernBERT](https://huggingface.co/papers/2412.13663) is a modernized version of [`BERT`] trained on 2T tokens. It brings many improvements to the original architecture such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention.
+
+You can find all the original ModernBERT checkpoints under the [ModernBERT](https://huggingface.co/collections/answerdotai/modernbert-67627ad707a4acbf33c41deb) collection.
+
+> [!TIP]
+> Click on the ModernBERT models in the right sidebar for more examples of how to apply ModernBERT to different language tasks.
 - [Rotary Positional Embeddings](https://huggingface.co/blog/designing-positional-encoding) to support sequences of up to 8192 tokens.
 - [Unpadding](https://arxiv.org/abs/2208.08124) to ensure no compute is wasted on padding tokens, speeding up processing time for batches with mixed-length sequences.
 - [GeGLU](https://arxiv.org/abs/2002.05202) Replacing the original MLP layers with GeGLU layers, shown to improve performance.
