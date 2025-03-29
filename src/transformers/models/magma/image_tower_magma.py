@@ -36,7 +36,6 @@ from transformers.image_utils import (
 )
 
 from transformers.utils import TensorType, is_vision_available, logging
-# logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
@@ -201,16 +200,6 @@ def create_model(
             elif os.path.exists(pretrained):
                 checkpoint_path = pretrained
 
-            # if checkpoint_path:
-            #     logger.info(f'Loading pretrained {model_name} weights ({pretrained}).')
-            #     open_clip.load_checkpoint(model, checkpoint_path)
-            # else:
-            #     error_str = (
-            #         f'Pretrained weights ({pretrained}) not found for model {model_name}.'
-            #         f' Available pretrained tags ({list_pretrained_tags_by_model(model_name)}.')
-            #     logger.warning(error_str)
-            #     raise RuntimeError(error_str)
-            # pretrained_loaded = True
         elif has_hf_hub_prefix and require_pretrained:
             logger.info(f'Loading pretrained {model_name} weights ({checkpoint_path}).')
             print(f'Loading pretrained {model_name} weights ({checkpoint_path}).')

@@ -254,6 +254,4 @@ class MagmaImageProcessor(BaseImageProcessor):
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-# AutoImageProcessor.register("MagmaImageProcessor", MagmaImageProcessor)
-
 __all__ = ["MagmaImageProcessor"]

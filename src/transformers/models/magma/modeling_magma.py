@@ -701,11 +701,6 @@ class MagmaForCausalLM(MagmaPreTrainedModel):
                         image_feature = torch.cat((image_feature, self.multi_modal_projector.row_seperator.repeat(image_feature.shape[0],1,1)), dim=1)
                         selected_image_features.append(image_feature.flatten(0, 1))
 
-                    # raise NotImplementedError("crop strategy is not implemented yet")
-                    # image_features = self.vision_tower(pixel_values)
-                    # selected_image_feature = image_features[vision_feature_layer]            
-                    # image_features = torch.split(image_features, image_num_patches, dim=0)
-
                 # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
                 feature_lens = [elem.shape[0] for elem in selected_image_features]        
                 image_features = torch.cat(selected_image_features, 0)
@@ -1423,8 +1418,5 @@ class MagmaForConditionalGeneration(MagmaPreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
-
-# AutoConfig.register("magma", MagmaConfig)
-# AutoModelForCausalLM.register(MagmaConfig, MagmaForConditionalGeneration)
 
 __all__ = ["MagmaForCausalLM", "MagmaForConditionalGeneration"]

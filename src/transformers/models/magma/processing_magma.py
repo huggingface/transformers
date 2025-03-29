@@ -24,8 +24,6 @@ from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from transformers.utils import TensorType
-from .configuration_magma import MagmaConfig
-
 
 class MagmaProcessor(ProcessorMixin):
     r"""
@@ -46,7 +44,6 @@ class MagmaProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None):
-        # super().__init__(image_processor, tokenizer)
         self.image_processor = image_processor
         self.tokenizer = tokenizer        
 

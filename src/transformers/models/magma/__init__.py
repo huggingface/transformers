@@ -20,6 +20,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_magma import *
     from .modeling_magma import *
+    from .processing_magma import *
+    from .image_processing_magma import *
 else:
     import sys
 
