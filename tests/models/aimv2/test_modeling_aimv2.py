@@ -37,6 +37,7 @@ from transformers.utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -439,6 +440,30 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @unittest.skip(reason="AIMv2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
+
+    # override as the `logit_scale` parameter initialization is different for CLIP
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initialized as per the original implementation
+                    if name == "logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(1 / 0.07),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
