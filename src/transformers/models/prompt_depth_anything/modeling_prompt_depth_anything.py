@@ -486,7 +486,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         >>> # visualize the prediction
         >>> predicted_depth = post_processed_output[0]["predicted_depth"]
         >>> depth = predicted_depth * 1000.
-        >>> depth = depth.detach().numpy()
+        >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint16")) # mm
         ```"""
         loss = None

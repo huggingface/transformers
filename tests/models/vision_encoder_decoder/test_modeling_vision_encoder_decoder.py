@@ -1202,7 +1202,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
         decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]]).to(torch_device)
 
         with torch.no_grad():
-            logits = model(pixel_values, decoder_input_ids)[0].detach().numpy()
+            logits = model(pixel_values, decoder_input_ids)[0].detach().cpu().numpy()
 
         # verify the logits
         expected_shape = (1, 1, model.config.decoder.vocab_size)
@@ -1233,7 +1233,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
             preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             preds = [pred.strip() for pred in preds]
 
-            return preds, outputs.sequences_scores.detach().numpy()
+            return preds, outputs.sequences_scores.detach().cpu().numpy()
 
         preds, scores = generate_step(pixel_values)
 

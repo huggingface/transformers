@@ -296,7 +296,7 @@ def to_numpy(obj):
     """
 
     framework_to_numpy = {
-        "pt": lambda obj: obj.detach().numpy(),
+        "pt": lambda obj: obj.detach().cpu().numpy(),
         "tf": lambda obj: obj.numpy(),
         "jax": lambda obj: np.asarray(obj),
         "np": lambda obj: obj,

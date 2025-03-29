@@ -409,7 +409,7 @@ def validate_model_outputs(
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
         if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
-            ref_value = ref_outputs_dict[name].detach().numpy()
+            ref_value = ref_outputs_dict[name].detach().cpu().numpy()
         else:
             ref_value = ref_outputs_dict[name].numpy()
         logger.info(f'\t- Validating ONNX Model output "{name}":')

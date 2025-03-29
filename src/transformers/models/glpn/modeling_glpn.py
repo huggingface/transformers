@@ -733,7 +733,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         >>> # visualize the prediction
         >>> predicted_depth = post_processed_output[0]["predicted_depth"]
         >>> depth = predicted_depth * 255 / predicted_depth.max()
-        >>> depth = depth.detach().numpy()
+        >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

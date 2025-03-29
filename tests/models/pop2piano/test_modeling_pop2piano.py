@@ -703,7 +703,7 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
             self.assertEqual(outputs.size(0), 70)
 
             # check for values
-            self.assertEqual(outputs[0, :2].detach().numpy().tolist(), [0, 1])
+            self.assertEqual(outputs[0, :2].detach().cpu().numpy().tolist(), [0, 1])
 
     # This is the test for a real music from K-Pop genre.
     @slow

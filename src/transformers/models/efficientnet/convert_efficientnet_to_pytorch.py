@@ -287,7 +287,7 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
     hf_model.eval()
     with torch.no_grad():
         outputs = hf_model(**inputs)
-    hf_logits = outputs.logits.detach().numpy()
+    hf_logits = outputs.logits.detach().cpu().numpy()
 
     # Original model inference
     original_model.trainable = False

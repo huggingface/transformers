@@ -293,7 +293,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
     output_hf = hf_bort_model(**input_ids)[0]
 
     gluon_layer = output_gluon[0].asnumpy()
-    hf_layer = output_hf[0].detach().numpy()
+    hf_layer = output_hf[0].detach().cpu().numpy()
 
     max_absolute_diff = np.max(np.abs(hf_layer - gluon_layer)).item()
     success = np.allclose(gluon_layer, hf_layer, atol=1e-3)
