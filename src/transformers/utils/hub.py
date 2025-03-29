@@ -1150,7 +1150,7 @@ def create_and_tag_model_card(
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
-        ignore_metadata_errors (`str`):
+        ignore_metadata_errors (`bool`, *optional*, defaults to `False`):
             If True, errors while parsing the metadata section will be ignored. Some information might be lost during
             the process. Use it at your own risk.
     """
