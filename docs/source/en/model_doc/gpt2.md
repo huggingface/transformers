@@ -14,30 +14,30 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# OpenAI GPT2
-
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=gpt2">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt2-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/gpt2">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<div style="float: right;">
+  <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <a href="https://huggingface.co/models?filter=gpt2">
+      <img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt2-blueviolet">
+    </a>
+    <a href="https://huggingface.co/spaces/docs-demos/gpt2">
+      <img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+    </a>
+  </div>
 </div>
 
-## Overview
 
-OpenAI GPT-2 model was proposed in [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) by Alec
-Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei and Ilya Sutskever from [OpenAI](https://huggingface.co/openai). It's a causal (unidirectional)
-transformer pretrained using language modeling on a very large corpus of ~40 GB of text data.
+# GPT2
 
-The abstract from the paper is the following:
+GPT-2 is a causal transformer language model introduced by OpenAI through the paper [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf). The model represents a significant scaling up from its predecessor **GPT**, with 10× more parameters and training data.
 
-*GPT-2 is a large transformer-based language model with 1.5 billion parameters, trained on a dataset[1] of 8 million
-web pages. GPT-2 is trained with a simple objective: predict the next word, given all of the previous words within some
-text. The diversity of the dataset causes this simple goal to contain naturally occurring demonstrations of many tasks
-across diverse domains. GPT-2 is a direct scale-up of GPT, with more than 10X the parameters and trained on more than
-10X the amount of data.*
+GPT-2 was developed with a straightforward objective to predict the next word in a sequence based on all preceding words. By training on a diverse 40GB corpus of web text, this seemingly simple approach enabled the model to develop sophisticated text generation capabilities across multiple domains and writing styles without task-specific training.
+
+The model architecture uses a unidirectional (causal) attention mechanism where each token can only attend to previous tokens, making it particularly effective for text generation tasks.
+
 
 [Write With Transformer](https://transformer.huggingface.co/doc/gpt2-large) is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
@@ -45,51 +45,58 @@ different sizes: small, medium, large, xl and a distilled version of the small c
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://openai.com/blog/better-language-models/).
 
-## Usage tips
+> [!TIP]
+> Click on the GPT models in the right sidebar for more examples of how to apply GPT to different language tasks.
 
-- GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-- GPT-2 was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
-  token in a sequence. Leveraging this feature allows GPT-2 to generate syntactically coherent text as it can be
-  observed in the *run_generation.py* example script.
-- The model can take the *past_key_values* (for PyTorch) or *past* (for TF) as input, which is the previously computed
-  key/value attention pairs. Using this (*past_key_values* or *past*) value prevents the model from re-computing
-  pre-computed values in the context of text generation. For PyTorch, see *past_key_values* argument of the
-  [`GPT2Model.forward`] method, or for TF the *past* argument of the
-  [`TFGPT2Model.call`] method for more information on its usage.
+- GPT-2 has absolute position embeddings, hence advised to pad inputs on the right rather than the left.
+- The model was trained with a causal language modeling (CLM) objective, making it excellent at predicting the next token in a sequence. This enables GPT-2 to generate coherent text, as demonstrated in the `run_generation.py` example script.
+- For efficient text generation, GPT-2 can reuse previously computed key/value attention pairs. Access this feature via the past_key_values parameter in PyTorch (see [GPT2Model.forward] method) or the past parameter in TensorFlow (see [TFGPT2Model.call] method).
 - Enabling the *scale_attn_by_inverse_layer_idx* and *reorder_and_upcast_attn* flags will apply the training stability
   improvements from [Mistral](https://github.com/stanford-crfm/mistral/) (for PyTorch only).
 
-## Usage example
+The example below demonstrates how to generate text with [`Pipeline`] and [`Automodel`] class
 
-The `generate()` method can be used to generate text using GPT2 model.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+```py
+from transformers import pipeline, set_seed
 
->>> model = AutoModelForCausalLM.from_pretrained("gpt2")
->>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+generator = pipeline(task='text-generation', model='gpt2')
 
->>> prompt = "GPT2 is a model developed by OpenAI."
+set_seed(42)
 
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+generator("Hello, I'm a language model,", max_length=30, num_return_sequences=5)
+```
+</hfoption>
 
->>> gen_tokens = model.generate(
-...     input_ids,
-...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("gpt2")
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+prompt = "GPT2 is a model developed by OpenAI."
+
+input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+
+gen_tokens = model.generate(
+    input_ids,
+    do_sample=True,
+    temperature=0.9,
+    max_length=100,
+    )
+gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
 
-## Using Flash Attention 2
+</hfoption>
+</hfoptions>
 
-Flash Attention 2 is a faster, optimized version of the attention scores computation which relies on `cuda` kernels.
+Flash Attention 2 provides significant speedups for transformer models through optimized `CUDA` kernels for attention computation.
 
-### Installation 
-
-First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
+Do check whether your hardware is compatible with Flash Attention 2 before implementation. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
 
 Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
 
@@ -97,9 +104,7 @@ Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-fe
 pip install -U flash-attn --no-build-isolation
 ```
 
-### Usage
-
-To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
+Enable Flash Attention 2 by specifying `attn_implementation="flash_attention_2"` to to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained) when loading your model.For optimal performance, use half-precision (e.g., torch.float16), which maintains quality while reducing memory usage and accelerating inference:
 
 ```python
 >>> import torch
@@ -118,9 +123,6 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 >>> tokenizer.batch_decode(generated_ids)[0]
 ```
 
-
-### Expected speedups
-
 Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `gpt2` checkpoint and the Flash Attention 2 version of the model using a sequence length of 512.
 
 <div style="text-align: center">
@@ -128,7 +130,6 @@ Below is an expected speedup diagram that compares pure inference time between t
 </div>
 
 
-## Using Scaled Dot Product Attention (SDPA)
 PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
 encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
 [official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
@@ -141,7 +142,6 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("gpt2", torch_dtype=torch.float16, attn_implementation="sdpa")
-...
 ```
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
@@ -150,7 +150,8 @@ On a local benchmark (rtx3080ti-16GB, PyTorch 2.2.1, OS Ubuntu 22.04) using `flo
 [gpt2-large](https://huggingface.co/openai-community/gpt2-large), we saw the
 following speedups during training and inference.
 
-### Training
+The table below shows the training benchmark for GPT2 using Eager and SDPA implementations.
+
 | Batch size | Seq len |  Time per batch (Eager - s) | Time per batch (SDPA - s) | Speedup (%) | Eager peak mem (MB) | SDPA peak mem (MB) |    Mem saving (%) |
 |-----------:|--------:|----------------------------:|--------------------------:|------------:|--------------------:|-------------------:|------------------:|
 |          1 |     128 |                       0.039 |                     0.032 |      23.042 |             3482.32 |            3494.62 |            -0.352 |
@@ -166,7 +167,8 @@ following speedups during training and inference.
 |          4 |     512 |                       0.494 |                     0.406 |      21.687 |             12466.6 |            8102.64 |            53.858 |
 |          4 |    1024 |                         OOM |                     0.795 |           / |                 OOM |            14568.2 | SDPA does not OOM |
 
-### Inference
+The table below shows the inference time and memory usage for GPT2 using Eager and SDPA implementations.
+
 | Batch size | Seq len | Per token latency Eager (ms) | Per token latency SDPA (ms) | Speedup (%) | Mem Eager (MB) | Mem SDPA (MB) | Mem saved (%) |
 |-----------:|--------:|-----------------------------:|----------------------------:|------------:|---------------:|--------------:|--------------:|
 |          1 |     128 |                        7.991 |                       6.968 |      14.681 |         1685.2 |       1701.32 |        -0.947 |
@@ -185,7 +187,7 @@ following speedups during training and inference.
 
 
 
-## Resources
+## Notes
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GPT2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
