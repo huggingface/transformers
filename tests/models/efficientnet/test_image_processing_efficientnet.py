@@ -47,8 +47,8 @@ class EfficientNetImageProcessorTester:
         do_resize=True,
         size=None,
         do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
+        image_mean=0.5,
+        image_std=0.5,
         resample=PILImageResampling.BILINEAR, # NEAREST is too different between PIL and torchvision
     ):
         size = size if size is not None else {"height": 18, "width": 18}
