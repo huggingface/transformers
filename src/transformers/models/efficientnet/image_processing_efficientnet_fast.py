@@ -139,16 +139,16 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Union[float, list[float]],
         image_std: Union[float, list[float]],
-        offset: bool = True,
+        rescale_offset: bool = True,
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
         """
         if do_rescale:
-            images = self.rescale(images, rescale_factor, offset)
+            images = self.rescale(image=images, scale=rescale_factor, offset=rescale_offset)
 
         if do_normalize:
-            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+            images = self.normalize(image=images, mean=image_mean, std=image_std)
 
         return images
 
@@ -185,13 +185,20 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
+
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                images=stacked_images,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                rescale_offset=rescale_offset,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
             )
 
             if include_top:
-                stacked_images = self.normalize(stacked_images, (0, 0, 0), image_std)
+                stacked_images = self.normalize(stacked_images, mean=[0, 0, 0], std=image_std)
 
             processed_images_grouped[shape] = stacked_images
 
