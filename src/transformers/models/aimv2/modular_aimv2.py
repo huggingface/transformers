@@ -150,7 +150,7 @@ class AIMv2TextConfig(SiglipTextConfig):
     This is the configuration class to store the configuration of a [`AIMv2TextModel`]. It is used to instantiate a
     AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
-    [google/aimv2-base-patch16-224](https://huggingface.co/google/aimv2-base-patch16-224) architecture.
+    [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
