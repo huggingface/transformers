@@ -73,6 +73,7 @@ from . import (
     decision_transformer,
     deepseek_v3,
     deformable_detr,
+    plaindetr,
     deit,
     deprecated,
     depth_anything,
