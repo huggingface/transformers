@@ -534,6 +534,12 @@ _import_structure = {
         "InstructBlipVideoVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
+    "models.janus": [
+        "JanusConfig",
+        "JanusProcessor",
+        "JanusVisionConfig",
+        "JanusVQVAEConfig",
+    ],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
         "Kosmos2Config",
@@ -1285,6 +1291,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.janus"].append("JanusImageProcessor")
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -2725,6 +2732,15 @@ else:
             "JambaForSequenceClassification",
             "JambaModel",
             "JambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.janus"].extend(
+        [
+            "JanusForConditionalGeneration",
+            "JanusModel",
+            "JanusPreTrainedModel",
+            "JanusVisionModel",
+            "JanusVQVAE",
         ]
     )
     _import_structure["models.jetmoe"].extend(
@@ -5756,6 +5772,12 @@ if TYPE_CHECKING:
         InstructBlipVideoVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.janus import (
+        JanusConfig,
+        JanusProcessor,
+        JanusVisionConfig,
+        JanusVQVAEConfig,
+    )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
         Kosmos2Config,
@@ -6542,6 +6564,7 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
+        from .models.janus import JanusImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -7741,6 +7764,13 @@ if TYPE_CHECKING:
             JambaForSequenceClassification,
             JambaModel,
             JambaPreTrainedModel,
+        )
+        from .models.janus import (
+            JanusForConditionalGeneration,
+            JanusModel,
+            JanusPreTrainedModel,
+            JanusVisionModel,
+            JanusVQVAE,
         )
         from .models.jetmoe import (
             JetMoeForCausalLM,
