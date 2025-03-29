@@ -61,7 +61,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"image_encoder.trunk.post_trunk_norm": r"vision_model.rms_norm",
     r"image_projector": r"visual_projection",
     # Vision Head
-    r"image_encoder.head": r"vision_model.head",
+    r"image_encoder.head.cls_token": r"vision_model.head.cls_token",
+    r"image_encoder.head.k": r"vision_model.head.k_proj",
+    r"image_encoder.head.v": r"vision_model.head.v_proj",
+    r"image_encoder.head.linear": r"vision_model.head.output_proj",
     # Text Embeddings
     r"text_encoder.preprocessor.text_embedding.weight": r"text_model.embeddings.token_embedding.weight",
     r"text_encoder.preprocessor.positional_embedding": r"text_model.embeddings.position_embedding.weight",
@@ -166,7 +169,7 @@ def write_model(
 
     state_dict = {}
     # For `apple/aimv2-large-patch14-native` we don't have position_embedding in state_dict
-    strict_loading = False
+    strict_loading = True
     result = convert_old_keys_to_new_keys(original_state_dict, key_mapping)
     all_keys = list(original_state_dict.keys())
 

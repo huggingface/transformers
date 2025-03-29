@@ -29,10 +29,11 @@ import torch.nn.functional as F
 from torch import nn
 
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -50,7 +51,6 @@ logger = logging.get_logger(__name__)
 class AIMv2Output(ModelOutput):
     """
     Args:
-
         logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
             The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
             similarity scores.
@@ -207,23 +207,37 @@ class AIMv2TextEmbeddings(nn.Module):
         return embeddings
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward(
     module: nn.Module,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
+    scaling: float,
     dropout: float = 0.0,
     **kwargs,
 ):
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-
-    # Only apply attention dropout during training.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -246,6 +260,9 @@ class AIMv2Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
+
+        self.num_key_value_groups = 1
+        self.scaling = 1.0
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
@@ -289,6 +306,7 @@ class AIMv2Attention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             is_causal=False,
             **kwargs,
         )
@@ -421,30 +439,35 @@ class AIMv2Encoder(nn.Module):
 class AIMv2AttentionPoolingHead(nn.Module):
     def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
-        dim = config.hidden_size
-        qkv_bias = config.qkv_bias
-
+        self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        self.k = nn.Linear(dim, dim, bias=qkv_bias)
-        self.v = nn.Linear(dim, dim, bias=qkv_bias)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, dim) * 0.02)
-        self.linear = nn.Linear(dim, dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.qkv_bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, N, C = x.shape
-        cls_token = self.cls_token.expand(B, -1, -1)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.hidden_size))
+        self.output_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
 
-        q = cls_token.reshape(B, 1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        k = self.k(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        v = self.v(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, hidden_dim = hidden_states.shape
 
-        x_cls = F.scaled_dot_product_attention(q, k, v)
-        x_cls = x_cls.transpose(1, 2).reshape(B, 1, C)
-        x_cls = x_cls.mean(dim=1)
+        cls_token = self.cls_token.expand(batch_size, -1, -1)
 
-        out = self.linear(x_cls)
-        return out
+        key = self.k_proj(hidden_states).reshape(batch_size, seq_len, self.num_heads, hidden_dim // self.num_heads)
+        value = self.v_proj(hidden_states).reshape(batch_size, seq_len, self.num_heads, hidden_dim // self.num_heads)
+        query = cls_token.reshape(batch_size, 1, self.num_heads, hidden_dim // self.num_heads)
+
+        key = key.permute(0, 2, 1, 3)
+        value = value.permute(0, 2, 1, 3)
+        query = query.permute(0, 2, 1, 3)
+
+        attn_output = F.scaled_dot_product_attention(query, key, value)
+
+        attn_output = attn_output.transpose(1, 2).reshape(batch_size, 1, hidden_dim)
+        attn_output = attn_output.mean(dim=1)
+
+        output = self.output_proj(attn_output)
+        return output
 
 
 class AIMv2PreTrainedModel(PreTrainedModel):
@@ -471,8 +494,6 @@ class AIMv2PreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 class AIMv2VisionModel(AIMv2PreTrainedModel):
@@ -756,10 +777,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
 
-        # Verify whether it's working right or not.
-        logit_scale_tensor = torch.tensor(self.config.logit_scale_init_value)
-        self.log_logit_scale = nn.Parameter(torch.log(logit_scale_tensor))
-
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
         self.max_log_logit_scale = math.log(config.max_logit_scale)
 
         # Initialize weights and apply final processing
@@ -887,9 +905,9 @@ class AIMv2Model(AIMv2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, CLIPModel
+        >>> from transformers import AutoProcessor, AIMv2Model
 
-        >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = AIMv2Model.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -935,7 +953,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         image_embeds = image_embeds / _get_vector_norm(image_embeds)
         text_embeds = text_embeds / _get_vector_norm(text_embeds)
 
-        logit_scale = self.log_logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
+        logit_scale = self.logit_scale.clamp(0.0, self.max_log_logit_scale).exp()
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
