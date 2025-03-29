@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+
 np.random.seed(42)
 
 global_rng = random.Random()
