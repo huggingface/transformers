@@ -46,7 +46,7 @@ class AIMv2VisionConfig(SiglipVisionConfig):
     This is the configuration class to store the configuration of a [`AIMv2VisionModel`]. It is used to instantiate a
     AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
-    [google/aimv2-base-patch16-224](https://huggingface.co/google/aimv2-base-patch16-224) architecture.
+    [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -83,7 +83,22 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
-    """
+        is_causal (`bool`, *optional*, defaults to `False`):
+            Whether to apply causal masking in scaled dot-product attention.
+    Example:
+
+    ```python
+    >>> from transformers import SiglipVisionConfig, SiglipVisionModel
+
+    >>> # Initializing a AIMv2VisionConfig with apple/aimv2-large-patch14-224 style configuration
+    >>> configuration = AIMv2VisionConfig()
+
+    >>> # Initializing a AIMv2VisionModel (with random weights) from the apple/aimv2-large-patch14-224 style configuration
+    >>> model = AIMv2VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     def __init__(
         self,
@@ -176,6 +191,8 @@ class AIMv2TextConfig(SiglipTextConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the for initializing all weight matrices.
+        is_causal (`bool`, *optional*, defaults to `True`):
+            Whether to apply causal masking in scaled dot-product attention.
     """
 
     def __init__(
@@ -232,7 +249,7 @@ class AIMv2Config(SiglipConfig):
     [`AIMv2Config`] is the configuration class to store the configuration of a [`AIMv2Model`]. It is used to
     instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
-    [google/aimv2-base-patch16-224](https://huggingface.co/google/aimv2-base-patch16-224) architecture.
+    [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -254,10 +271,10 @@ class AIMv2Config(SiglipConfig):
     ```python
     >>> from transformers import AIMv2Config, AIMv2Model
 
-    >>> # Initializing a AIMv2Config with google/aimv2-base-patch16-224 style configuration
+    >>> # Initializing a AIMv2Config with apple/aimv2-large-patch14-224-lit style configuration
     >>> configuration = AIMv2Config()
 
-    >>> # Initializing a AIMv2Model (with random weights) from the google/aimv2-base-patch16-224 style configuration
+    >>> # Initializing a AIMv2Model (with random weights) from the apple/aimv2-large-patch14-224-lit style configuration
     >>> model = AIMv2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -270,7 +287,7 @@ class AIMv2Config(SiglipConfig):
     >>> config_text = AIMv2TextConfig()
     >>> config_vision = AIMv2VisionConfig()
 
-    >>> config = AIMv2Config.from_text_vision_configs(config_text, config_vision)
+    >>> config = AIMv2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
     def __init__(

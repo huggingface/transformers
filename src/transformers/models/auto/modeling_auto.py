@@ -607,6 +607,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image mapping
+        ("aimv2_vision_model", "AIMv2VisionModel"),
         ("beit", "BeitModel"),
         ("bit", "BitModel"),
         ("conditional_detr", "ConditionalDetrModel"),

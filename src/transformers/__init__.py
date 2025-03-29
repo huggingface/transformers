@@ -6755,6 +6755,7 @@ if TYPE_CHECKING:
         from .modeling_utils import AttentionInterface, PreTrainedModel
         from .models.aimv2 import (
             AIMv2Model,
+            AIMv2PreTrainedModel,
             AIMv2TextModel,
             AIMv2VisionModel,
         )
