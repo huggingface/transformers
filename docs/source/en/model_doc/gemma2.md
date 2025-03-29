@@ -14,8 +14,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
-# Gemma2
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -27,16 +25,18 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+# Gemma2
+
 ## Overview
 
-**[Gemma 2](https://arxiv.org/pdf/2408.00118)** is Google's open-weight language model family (2B, 9B, 27B parameters) featuring interleaved local-global attention (4K sliding window + 8K global context), knowledge distillation for smaller models, and GQA for efficient inference. The 27B variant rivals models twice its size, scoring 75.2 on MMLU and 74.0 on GSM8K, while the instruction-tuned versions excel in multi-turn chat. 
+[Gemma 2](https://huggingface.co/papers/2408.00118) is a family of language models with pretrained and instruction-tuned variants, available in 2B, 9B, 27B parameters. The architecture is similar to the previous Gemma, except it features interleaved local attention (4096 tokens) and global attention (8192 tokens) and grouped-query attention (GQA) to increase inference performance.
 
-Key improvements over Gemma 1 include deeper networks, logit soft-capping, and stricter safety filters (<0.1% memorization). Available in base and instruction-tuned variants.
+The 2B and 9B models are trained with knowledge distillation, and the instruction-tuned variant was post-trained with supervised fine-tuning and reinforcement learning.
 
-The original checkpoints of Gemma 2 can be found [here](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315).
+You can find all the original Gemma 2 checkpoints under the [Gemma 2](https://huggingface.co/collections/google/gemma-2-release-667d6600fd5220e7b967f315) release.
 
 > [!TIP]
-> Click on the CLIP models in the right sidebar for more examples of how to apply CLIP to different image and language tasks.
+> Click on the Gemma 2 models in the right sidebar for more examples of how to apply Gemma to different language tasks.
 
 
 <Tip warning={true}>
@@ -48,106 +48,88 @@ The original checkpoints of Gemma 2 can be found [here](https://huggingface.co/c
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [Pedro Cuenca](https://huggingface.co/pcuenq) and [Tom Arsen]().
 
-<Tip>
-Click the right sidebar's Gemma 2 models for additional task examples.
-</Tip>
-
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to chat with the model with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 
-### Text Generation with `Pipeline`
-
 ```python
-from transformers import pipeline
 import torch
+from transformers import pipeline
 
 pipe = pipeline(
-    "text-generation",
-    model="google/gemma-2-9b-it",
-    model_kwargs={"torch_dtype": torch.bfloat16},
+    task="text-generation",
+    model="google/gemma-2-9b",
+    torch_dtype=torch.bfloat16,
     device="cuda",
 )
 
-messages = [
-    {"role": "user", "content": "Explain quantum computing simply"},
-]
-outputs = pipe(messages, max_new_tokens=256)
-print(outputs[0]["generated_text"])
+pipe("Explain quantum computing simply. ", max_new_tokens=50)
 ```
-### Text Generation with `AutoModel`
+
+</hfoption>
+<hfoption id="AutoModel">
+    
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b-it")
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2-9b-it",
+    "google/gemma-2-9b",
+    torch_dtype=torch.bfloat16,
     device_map="auto",
+    attn_implementation="sdpa"
 )
 
-input_text = "Write me a poem about Machine Learning."
+input_text = "Explain quantum computing simply."
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-outputs = model.generate(**input_ids, max_new_tokens=32)
-print(tokenizer.decode(outputs[0]))
-```
-### Using `transformers-cli`
-```
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model google/gemma-2-2b --device 0 
+outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+
 ```
 
-### Quantized version through `bitsandbytes`
+</hfoption>
+<hfoption id="transformers-cli">
 
-Quantization reduces model size and speeds up inference by converting high-precision numbers (e.g., 32-bit floats) to lower-precision formats (e.g., 8-bit integers), with minimal accuracy loss
-#### Using 8-bit precision (int8)
+```
+echo -e "Explain quantum computing simply." | transformers-cli run --task text-generation --model google/gemma-2-2b --device 0
+```
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+	
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b-it")
-model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2-27b-it",
-    quantization_config=quantization_config,
-)
-
-input_text = "Write me a poem about Machine Learning."
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-outputs = model.generate(**input_ids, max_new_tokens=32)
-print(tokenizer.decode(outputs[0]))
-```
-#### Using 4-bit precision
-```python
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b-it")
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b")
 model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2-27b-it",
-    quantization_config=quantization_config,
+    "google/gemma-2-27b",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
 )
 
-input_text = "Write me a poem about Machine Learning."
+input_text = "Explain quantum computing simply."
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-outputs = model.generate(**input_ids, max_new_tokens=32)
-print(tokenizer.decode(outputs[0]))
-
+outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
-### AttentionMaskVisualizer
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
 
 ```python
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("google/gemma-2b")
 visualizer("You are an assistant. Make sure you print me") 
 ```
-## Notes
-- Gemma 2's sliding window attention enables efficient long-context processing - see sidebar examples for >4K token use cases
 
 ## Gemma2Config
 
