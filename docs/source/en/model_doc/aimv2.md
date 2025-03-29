@@ -36,19 +36,29 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## AIMv2Config
 
 [[autodoc]] AIMv2Config
-    - from_text_vision_configs
 
 ## AIMv2TextConfig
 
+[[autodoc]] AIMv2TextConfig
+
+## AIMv2VisionConfig
+
+[[autodoc]] AIMv2VisionConfig
+
+## AIMv2Model
 
 [[autodoc]] AIMv2Model
+    - forward
+
+## AIMv2VisionModel
+
+[[autodoc]] AIMv2VisionModel
     - forward
 
 ## AIMv2TextModel
 
 [[autodoc]] AIMv2TextModel
     - forward
-
 
 </pt>
 <tf>
