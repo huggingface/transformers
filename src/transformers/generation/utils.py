@@ -3768,7 +3768,7 @@ class GenerationMixin:
             device=input_ids.device,
         )
         running_sequences[:, :, :cur_len] = self._unflatten_beam_dim(input_ids, batch_size, num_beams)
-        sequences = running_sequences.clone().detach()
+        sequences = running_sequences.detach().clone()
 
         # per batch, beam-item score, logprobs
         # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
@@ -3789,7 +3789,7 @@ class GenerationMixin:
         running_beam_indices = torch.full(
             (batch_size, num_beams, max_length - cur_len), fill_value=-1, dtype=torch.int32, device=input_ids.device
         )
-        beam_indices = running_beam_indices.clone().detach()
+        beam_indices = running_beam_indices.detach().clone()
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -5100,7 +5100,7 @@ def _dola_select_contrast(
 
     # 6. Reduce the batchmean
     js_divs = js_divs.mean(-1)  # shape: (num_premature_layers,)
-    premature_layer = candidate_premature_layers[int(js_divs.argmax().cpu().item())]
+    premature_layer = candidate_premature_layers[int(js_divs.argmax().item())]
 
     base_logits = candidate_premature_logits[premature_layer]
     final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
