@@ -314,13 +314,13 @@ class AIMv2Output(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`AIMv2TextModel`].
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`AIMv2VisionModel`].
         text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`CLIPTextModel`].
+            The output of the [`AIMv2TextModel`].
         vision_model_output (`BaseModelOutput`):
-            The output of the [`CLIPVisionModel`].
+            The output of the [`AIMv2VisionModel`].
     """
 
     logits_per_image: torch.FloatTensor = None
@@ -594,12 +594,10 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         self.encoder = AIMv2Encoder(config)
         self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
-        # Use attention pooling head only for lit vairant
         self.use_head = config.use_head
         if self.use_head:
             self.head = AIMv2AttentionPoolingHead(config)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -632,9 +630,7 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.rms_norm(last_hidden_state)
 
-        pooler_output = None
-        if self.use_head:
-            pooler_output = self.head(last_hidden_state)
+        pooler_output = self.head(last_hidden_state) if self.use_head else None
 
         output = BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -658,7 +654,6 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
 
         self.eos_token_id = config.eos_token_id
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -721,27 +716,12 @@ class AIMv2Model(CLIPModel, nn.Module):
     def __init__(self, config: AIMv2Config):
         nn.Module().__init__(config)
 
-        if not isinstance(config.vision_config, AIMv2VisionConfig):
-            raise TypeError(
-                "config.vision_config is expected to be of type AIMv2VisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
-
-        if not isinstance(config.text_config, AIMv2TextConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type AIMv2TextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        vision_config = config.vision_config
-        text_config = config.text_config
-
         self.projection_dim = config.projection_dim
-        self.vision_embed_dim = vision_config.hidden_size
-        self.text_embed_dim = text_config.hidden_size
+        self.vision_embed_dim = config.vision_config.hidden_size
+        self.text_embed_dim = config.text_config.hidden_size
 
-        self.vision_model = AIMv2VisionModel._from_config(vision_config)
-        self.text_model = AIMv2TextModel._from_config(text_config)
+        self.vision_model = AIMv2VisionModel._from_config(config.vision_config)
+        self.text_model = AIMv2TextModel._from_config(config.text_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -749,7 +729,6 @@ class AIMv2Model(CLIPModel, nn.Module):
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
         self.max_logit_scale = math.log(config.max_logit_scale)
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
@@ -772,8 +751,8 @@ class AIMv2Model(CLIPModel, nn.Module):
         >>> import requests
         >>> from transformers import AutoProcessor, AIMv2Model
 
-        >>> model = AIMv2Model.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = AIMv2Model.from_pretrained("apple/aimv2-large-patch14-224-lit")
+        >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-224-lit")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
