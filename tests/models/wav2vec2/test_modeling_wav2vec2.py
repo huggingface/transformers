@@ -121,7 +121,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
 
         # use a spawn pool, which should trigger a warning if different than fork
         with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
-            transcription = processor.batch_decode(logits.numpy(), pool).text
+            transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
         unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
@@ -129,7 +129,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
         # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
         multiprocessing.set_start_method("spawn", force=True)
         with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
-            transcription = processor.batch_decode(logits.numpy()).text
+            transcription = processor.batch_decode(logits.cpu().numpy()).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
         unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
@@ -1034,7 +1034,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         # more losses
         mask_time_indices[:, : mask_time_indices.shape[-1] // 2] = True
 
-        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices.numpy())
+        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices.cpu().numpy())
         sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
         loss_more_masked = model(
             inputs_dict["input_values"],
@@ -1429,7 +1429,9 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         features = torch.where(mask[:, :, None].expand(features.shape).bool(), features, -100)
 
         # sample negative indices
-        sampled_negative_indices = _sample_negative_indices((batch_size, sequence_length), num_negatives, mask.numpy())
+        sampled_negative_indices = _sample_negative_indices(
+            (batch_size, sequence_length), num_negatives, mask.cpu().numpy()
+        )
         sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
         negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
         negatives = negatives.view(batch_size, sequence_length, -1, hidden_size).permute(2, 0, 1, 3)
@@ -1850,7 +1852,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(input_values.to(torch_device)).logits
 
-        transcription = processor.batch_decode(logits.numpy()).text
+        transcription = processor.batch_decode(logits.cpu().numpy()).text
 
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
@@ -1878,7 +1880,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         # test user-managed pool
         with multiprocessing.get_context("fork").Pool(2) as pool:
-            transcription = processor.batch_decode(logits.numpy(), pool).text
+            transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
@@ -1887,7 +1889,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
             multiprocessing.get_context("fork").Pool(2) as pool,
         ):
-            transcription = processor.batch_decode(logits.numpy(), pool, num_processes=2).text
+            transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)
         self.assertIn("it will be ignored", cl.out)

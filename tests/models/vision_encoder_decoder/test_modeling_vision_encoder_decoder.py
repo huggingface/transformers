@@ -182,7 +182,7 @@ class EncoderDecoderMixin:
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
             )
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -195,7 +195,7 @@ class EncoderDecoderMixin:
                     decoder_input_ids=decoder_input_ids,
                     decoder_attention_mask=decoder_attention_mask,
                 )
-                out_1 = after_outputs[0].numpy()
+                out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
@@ -213,7 +213,7 @@ class EncoderDecoderMixin:
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
             )
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with (
@@ -232,7 +232,7 @@ class EncoderDecoderMixin:
                     decoder_input_ids=decoder_input_ids,
                     decoder_attention_mask=decoder_attention_mask,
                 )
-                out_1 = after_outputs[0].numpy()
+                out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
@@ -376,7 +376,7 @@ class EncoderDecoderMixin:
 
         with torch.no_grad():
             outputs = model_2(**inputs)
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -385,7 +385,7 @@ class EncoderDecoderMixin:
                 model_1.to(torch_device)
 
                 after_outputs = model_1(**inputs)
-                out_1 = after_outputs[0].numpy()
+                out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)

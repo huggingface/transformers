@@ -111,7 +111,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             raise ValueError(f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}")
 
         if self._not_supports_tensor_input and isinstance(images, torch.Tensor):
-            images = images.numpy()
+            images = images.cpu().numpy()
 
         # If the input is a torch tensor, then no conversion is needed
         # Otherwise, we need to pass in a list of PIL images

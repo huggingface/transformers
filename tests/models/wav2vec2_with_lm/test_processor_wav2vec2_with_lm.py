@@ -476,7 +476,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
 
         with torch.no_grad():
-            logits = model(input_values).logits.numpy()
+            logits = model(input_values).logits.cpu().numpy()
 
         output = processor.decode(logits[0], output_word_offsets=True)
 

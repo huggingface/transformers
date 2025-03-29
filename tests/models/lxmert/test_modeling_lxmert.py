@@ -753,16 +753,16 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             elif isinstance(value, bool):
                 tf_inputs_dict[key] = value
             elif key == "input_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.float32)
+                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
             elif key == "pixel_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.float32)
+                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
             elif key == "input_features":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.float32)
+                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
             # other general float inputs
             elif value.is_floating_point():
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.float32)
+                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
             else:
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.int32)
+                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.int32)
 
         return tf_inputs_dict
 

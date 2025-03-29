@@ -819,7 +819,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> # 1. Encode
         >>> question_hidden_states = model.question_encoder(input_ids)[0]
         >>> # 2. Retrieve
-        >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+        >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
         ... ).squeeze(1)
@@ -1290,7 +1290,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> # 1. Encode
         >>> question_hidden_states = model.question_encoder(input_ids)[0]
         >>> # 2. Retrieve
-        >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+        >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
         >>> doc_scores = torch.bmm(
         ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
         ... ).squeeze(1)

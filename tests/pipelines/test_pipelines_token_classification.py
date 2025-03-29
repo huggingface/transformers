@@ -711,8 +711,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             return_special_tokens_mask=True,
             return_offsets_mapping=True,
         )
-        offset_mapping = tokens.pop("offset_mapping").numpy()[0]
-        special_tokens_mask = tokens.pop("special_tokens_mask").numpy()[0]
+        offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
+        special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
         input_ids = tokens["input_ids"].numpy()[0]
         # First element in [CLS]
         scores = np.array([[1, 0, 0], [0.1, 0.3, 0.6], [0.8, 0.1, 0.1]])
@@ -755,8 +755,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             return_special_tokens_mask=True,
             return_offsets_mapping=True,
         )
-        offset_mapping = tokens.pop("offset_mapping").numpy()[0]
-        special_tokens_mask = tokens.pop("special_tokens_mask").numpy()[0]
+        offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
+        special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
         input_ids = tokens["input_ids"].numpy()[0]
         scores = np.array([[1, 0] for _ in input_ids])  # values irrelevant for heuristic
 

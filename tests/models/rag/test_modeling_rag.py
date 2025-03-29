@@ -963,7 +963,9 @@ class RagModelIntegrationTests(unittest.TestCase):
         attention_mask = input_dict.attention_mask.to(torch_device)
 
         question_hidden_states = rag_sequence.question_encoder(input_ids, attention_mask=attention_mask)[0]
-        docs_dict = retriever(input_ids.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+        docs_dict = retriever(
+            input_ids.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt"
+        )
         doc_scores = torch.bmm(
             question_hidden_states.unsqueeze(1),
             docs_dict["retrieved_doc_embeds"].to(torch_device).float().transpose(1, 2),

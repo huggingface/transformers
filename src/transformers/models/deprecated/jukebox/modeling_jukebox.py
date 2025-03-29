@@ -148,7 +148,7 @@ def get_alignment(music_tokens, labels, prior, config):
             del w_hop
         weights = torch.cat(w_hops, dim=0)
         del w_hops
-        alignment_hop = weights.float().numpy()
+        alignment_hop = weights.to(device="cpu", dtype=torch.float).numpy()
         del weights
 
         # alignment_hop has shape (bs, n_ctx, nb_relevant_lyric_tokens)
@@ -174,7 +174,7 @@ def get_alignment(music_tokens, labels, prior, config):
 
 
 def save_temp_audio(fname, lvl, metas, aud):
-    aud = torch.clamp(aud, -1, 1).numpy()
+    aud = torch.clamp(aud, -1, 1).cpu().numpy()
     for i in list(range(aud.shape[0])):
         if metas is not None:
             artists, genres, lyrics = list(metas)[i].values()

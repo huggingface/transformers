@@ -265,7 +265,7 @@ class EncoderDecoderMixin:
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
             )
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -279,7 +279,7 @@ class EncoderDecoderMixin:
                     attention_mask=attention_mask,
                     decoder_attention_mask=decoder_attention_mask,
                 )
-                out_1 = after_outputs[0].numpy()
+                out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
@@ -306,7 +306,7 @@ class EncoderDecoderMixin:
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
             )
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with (
@@ -327,7 +327,7 @@ class EncoderDecoderMixin:
                     attention_mask=attention_mask,
                     decoder_attention_mask=decoder_attention_mask,
                 )
-                out_1 = after_outputs[0].numpy()
+                out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
@@ -669,7 +669,7 @@ class EncoderDecoderMixin:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
             )
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -682,7 +682,7 @@ class EncoderDecoderMixin:
                     decoder_input_ids=decoder_input_ids,
                     attention_mask=attention_mask,
                 )
-                out_1 = after_outputs[0].numpy()
+                out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)

@@ -1724,7 +1724,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
                 final_h, final_w = to_tuple(target_size)
 
-                seg_img = PIL.Image.fromarray(id_to_rgb(m_id.view(h, w).numpy()))
+                seg_img = PIL.Image.fromarray(id_to_rgb(m_id.view(h, w).cpu().numpy()))
                 seg_img = seg_img.resize(size=(final_w, final_h), resample=PILImageResampling.NEAREST)
 
                 np_seg_img = torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes()))

@@ -1142,7 +1142,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
             # based on assumption that prefix bboxes are negative
             is_prefix = bbox[:, :, 1] < 0
             num_prefix = is_prefix.sum(-1)
-            for idx, num_prefix_row in enumerate(num_prefix.numpy()):
+            for idx, num_prefix_row in enumerate(num_prefix.cpu().numpy()):
                 rp_bucket[idx, :num_prefix_row, num_prefix_row:] = self.relative_attention_num_buckets
                 rp_bucket[idx, num_prefix_row:, :num_prefix_row] = self.relative_attention_num_buckets + 1
 

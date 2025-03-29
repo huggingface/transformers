@@ -625,7 +625,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         # convert type to ndarray if necessary
         if hasattr(token_ids, "numpy"):
             if "torch" in str(type(token_ids)):
-                token_ids = token_ids.numpy()
+                token_ids = token_ids.cpu().numpy()
             elif "tensorflow" in str(type(token_ids)):
                 token_ids = token_ids.numpy()
         elif "jaxlib" in str(type(token_ids)):

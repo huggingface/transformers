@@ -1083,7 +1083,7 @@ class LogitsProcessorTest(unittest.TestCase):
                 _ = logits_processor(ngrams[:, :idx], fixed_logits)
 
             updated_scores = logits_processor(ngrams, fixed_logits)
-            updated_softmaxes += torch.nn.functional.softmax(updated_scores, dim=1).numpy()
+            updated_softmaxes += torch.nn.functional.softmax(updated_scores, dim=1).cpu().numpy()
 
         updated_softmaxes = np.mean(updated_softmaxes, axis=0) / num_keys
         is_close = torch.all(

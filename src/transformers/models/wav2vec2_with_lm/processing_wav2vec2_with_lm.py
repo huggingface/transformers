@@ -553,7 +553,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> # forward sample through model to get greedily predicted transcription ids
         >>> input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
         >>> with torch.no_grad():
-        ...     logits = model(input_values).logits[0].numpy()
+        ...     logits = model(input_values).logits[0].cpu().numpy()
 
         >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
         >>> outputs = processor.decode(logits, output_word_offsets=True)

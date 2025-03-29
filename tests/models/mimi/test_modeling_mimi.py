@@ -323,8 +323,8 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
         def check_determinism(first, second):
             # outputs are not tensors but list (since each sequence don't have the same frame_length)
-            out_1 = first.numpy()
-            out_2 = second.numpy()
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
             out_2 = out_2[~np.isnan(out_2)]
             max_diff = np.amax(np.abs(out_1 - out_2))
@@ -504,8 +504,8 @@ class MimiIntegrationTest(unittest.TestCase):
             # make sure audios are more or less equal
             # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
             rmse = compute_rmse(
-                audio_output_concat_context.squeeze().numpy(),
-                audio_output_entire_context.squeeze().numpy(),
+                audio_output_concat_context.squeeze().cpu().numpy(),
+                audio_output_entire_context.squeeze().cpu().numpy(),
             )
             self.assertTrue(rmse < 1e-3)
 
@@ -560,8 +560,8 @@ class MimiIntegrationTest(unittest.TestCase):
                 # make sure shape matches
                 self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
 
-                arr = inputs["input_values"][0].numpy()
-                arr_enc_dec = input_values_enc_dec[0].numpy()
+                arr = inputs["input_values"][0].cpu().numpy()
+                arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
 
                 # make sure audios are more or less equal
                 # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
