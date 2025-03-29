@@ -331,6 +331,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
+    "models.d_fine": ["DFineConfig"],
     "models.dab_detr": ["DabDetrConfig"],
     "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
@@ -512,6 +513,7 @@ _import_structure = {
     ],
     "models.helium": ["HeliumConfig"],
     "models.herbert": ["HerbertTokenizer"],
+    "models.hgnet_v2": ["HGNetV2Config"],
     "models.hiera": ["HieraConfig"],
     "models.hubert": ["HubertConfig"],
     "models.ibert": ["IBertConfig"],
@@ -1953,6 +1955,13 @@ else:
             "CvtPreTrainedModel",
         ]
     )
+    _import_structure["models.d_fine"].extend(
+        [
+            "DFineForObjectDetection",
+            "DFineModel",
+            "DFinePreTrainedModel",
+        ]
+    )
     _import_structure["models.dab_detr"].extend(
         [
             "DabDetrForObjectDetection",
@@ -2594,7 +2603,6 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
-
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2602,6 +2610,7 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
+
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2624,6 +2633,13 @@ else:
             "HeliumForTokenClassification",
             "HeliumModel",
             "HeliumPreTrainedModel",
+        ]
+    )
+    _import_structure["models.hgnet_v2"].extend(
+        [
+            "HGNetV2Backbone",
+            "HGNetV2ForImageClassification",
+            "HGNetV2PreTrainedModel",
         ]
     )
     _import_structure["models.hiera"].extend(
@@ -5531,6 +5547,7 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.d_fine import DFineConfig
     from .models.dab_detr import (
         DabDetrConfig,
     )
@@ -5732,6 +5749,7 @@ if TYPE_CHECKING:
     )
     from .models.helium import HeliumConfig
     from .models.herbert import HerbertTokenizer
+    from .models.hgnet_v2 import HGNetV2Config
     from .models.hiera import HieraConfig
     from .models.hubert import HubertConfig
     from .models.ibert import IBertConfig
@@ -7127,6 +7145,11 @@ if TYPE_CHECKING:
             CvtModel,
             CvtPreTrainedModel,
         )
+        from .models.d_fine import (
+            DFineForObjectDetection,
+            DFineModel,
+            DFinePreTrainedModel,
+        )
         from .models.dab_detr import (
             DabDetrForObjectDetection,
             DabDetrModel,
@@ -7664,6 +7687,11 @@ if TYPE_CHECKING:
             HeliumForTokenClassification,
             HeliumModel,
             HeliumPreTrainedModel,
+        )
+        from .models.hgnet_v2 import (
+            HGNetV2Backbone,
+            HGNetV2ForImageClassification,
+            HGNetV2PreTrainedModel,
         )
         from .models.hiera import (
             HieraBackbone,

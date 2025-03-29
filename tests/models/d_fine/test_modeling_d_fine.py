@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch RT_DETR model."""
+"""Testing suite for the PyTorch D-FINE model."""
 
 import inspect
 import math
@@ -22,39 +22,34 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
-    RTDetrConfig,
-    RTDetrImageProcessor,
-    RTDetrResNetConfig,
+    DFineConfig,
+    HGNetV2Config,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_accelerator,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import DFineForObjectDetection, DFineModel
+
+if is_vision_available():
+    from PIL import Image
+
+from transformers import RTDetrImageProcessor
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
-
-    from transformers import RTDetrForObjectDetection, RTDetrModel
-
-if is_vision_available():
-    from PIL import Image
+CHECKPOINT = "vladislavbro/dfine_s_coco"
 
 
-CHECKPOINT = "PekingU/rtdetr_r50vd"  # TODO: replace
-
-
-class RTDetrModelTester:
+class DFineModelTester:
     def __init__(
         self,
         parent,
@@ -83,13 +78,14 @@ class RTDetrModelTester:
         activation_function="silu",
         eval_size=None,
         normalize_before=False,
-        # decoder RTDetrTransformer
+        # decoder DFineTransformer
         d_model=32,
         num_queries=30,
         decoder_in_channels=[32, 32, 32],
         decoder_ffn_dim=64,
         num_feature_levels=3,
-        decoder_n_points=4,
+        decoder_n_points=[3, 6, 3],
+        decoder_n_levels=3,
         decoder_layers=2,
         decoder_attention_heads=2,
         decoder_activation_function="relu",
@@ -102,6 +98,13 @@ class RTDetrModelTester:
         image_size=64,
         disable_custom_kernels=True,
         with_box_refine=True,
+        decoder_offset_scale=0.5,
+        eval_idx=-1,
+        layer_scale=1,
+        reg_max=32,
+        reg_scale=4.0,
+        depth_mult=0.34,
+        hidden_expansion=0.5,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -134,10 +137,17 @@ class RTDetrModelTester:
         self.decoder_ffn_dim = decoder_ffn_dim
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
+        self.decoder_n_levels = decoder_n_levels
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_activation_function = decoder_activation_function
         self.attention_dropout = attention_dropout
+        self.decoder_offset_scale = decoder_offset_scale
+        self.eval_idx = eval_idx
+        self.layer_scale = layer_scale
+        self.reg_max = reg_max
+        self.reg_scale = reg_scale
+        self.depth_mult = depth_mult
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
@@ -146,6 +156,7 @@ class RTDetrModelTester:
         self.image_size = image_size
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
+        self.hidden_expansion = hidden_expansion
 
         self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
 
@@ -171,18 +182,28 @@ class RTDetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        hidden_sizes = [10, 20, 30, 40]
-        backbone_config = RTDetrResNetConfig(
+        hidden_sizes = [64, 128, 256, 512]
+        backbone_config = HGNetV2Config(
+            stage_in_channels=[16, 64, 128, 256],
+            stage_mid_channels=[16, 32, 64, 128],
+            stage_out_channels=[64, 128, 256, 512],
+            stage_num_blocks=[1, 1, 2, 1],
+            stage_downsample=[False, True, True, True],
+            stage_light_block=[False, False, True, True],
+            stage_kernel_size=[3, 3, 5, 5],
+            stage_numb_of_layers=[3, 3, 3, 3],
             embeddings_size=10,
             hidden_sizes=hidden_sizes,
             depths=[1, 1, 2, 1],
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
+            stem_channels=[3, 16, 16],
+            use_lab=True,
         )
-        return RTDetrConfig.from_backbone_configs(
+        return DFineConfig.from_backbone_configs(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
-            encoder_in_channels=hidden_sizes[1:],
+            encoder_in_channels=self.encoder_in_channels,
             feat_strides=self.feat_strides,
             encoder_layers=self.encoder_layers,
             encoder_ffn_dim=self.encoder_ffn_dim,
@@ -201,9 +222,16 @@ class RTDetrModelTester:
             decoder_ffn_dim=self.decoder_ffn_dim,
             num_feature_levels=self.num_feature_levels,
             decoder_n_points=self.decoder_n_points,
+            decoder_n_levels=self.decoder_n_levels,
             decoder_layers=self.decoder_layers,
             decoder_attention_heads=self.decoder_attention_heads,
             decoder_activation_function=self.decoder_activation_function,
+            decoder_offset_scale=self.decoder_offset_scale,
+            eval_idx=self.eval_idx,
+            layer_scale=self.layer_scale,
+            reg_max=self.reg_max,
+            reg_scale=self.reg_scale,
+            depth_mult=self.depth_mult,
             attention_dropout=self.attention_dropout,
             num_denoising=self.num_denoising,
             label_noise_ratio=self.label_noise_ratio,
@@ -220,8 +248,8 @@ class RTDetrModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
-    def create_and_check_rt_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = RTDetrModel(config=config)
+    def create_and_check_d_fine_model(self, config, pixel_values, pixel_mask, labels):
+        model = DFineModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -230,8 +258,8 @@ class RTDetrModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.d_model))
 
-    def create_and_check_rt_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = RTDetrForObjectDetection(config=config)
+    def create_and_check_d_fine_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+        model = DFineForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -249,10 +277,10 @@ class RTDetrModelTester:
 
 
 @require_torch
-class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
+class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (DFineModel, DFineForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection}
+        {"image-feature-extraction": DFineModel, "object-detection": DFineForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -268,7 +296,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "DFineForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -284,10 +312,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = RTDetrModelTester(self)
+        self.model_tester = DFineModelTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=RTDetrConfig,
+            config_class=DFineConfig,
             has_text_modality=False,
             common_properties=["hidden_size", "num_attention_heads"],
         )
@@ -295,31 +323,31 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_rt_detr_model(self):
+    def test_d_fine_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_rt_detr_model(*config_and_inputs)
+        self.model_tester.create_and_check_d_fine_model(*config_and_inputs)
 
-    def test_rt_detr_object_detection_head_model(self):
+    def test_d_fine_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_rt_detr_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_d_fine_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="RTDetr does not use inputs_embeds")
+    @unittest.skip(reason="DFine does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not use test_inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="DFine does not use test_inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not support input and output embeddings")
+    @unittest.skip(reason="DFine does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not support input and output embeddings")
+    @unittest.skip(reason="DFine does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not use token embeddings")
+    @unittest.skip(reason="DFine does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -370,7 +398,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "DFineForObjectDetection":
                 correct_outlen += 2
 
             self.assertEqual(out_len, correct_outlen)
@@ -395,9 +423,11 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
                 [
+                    self.model_tester.num_queries,
                     self.model_tester.decoder_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.decoder_n_points,
+                    self.model_tester.decoder_n_levels * self.model_tester.decoder_n_points
+                    if isinstance(self.model_tester.decoder_n_points, int)
+                    else sum(self.model_tester.decoder_n_points),
                 ],
             )
 
@@ -413,7 +443,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
             else:
-                # RTDetr should maintin encoder_hidden_states output
+                # DFine should maintin encoder_hidden_states output
                 added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
@@ -528,6 +558,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # let's pick a random timm backbone
+        config.encoder_in_channels = [24, 40, 432]
         config.backbone = "tf_mobilenetv3_small_075"
         config.backbone_config = None
         config.use_timm_backbone = True
@@ -540,17 +571,17 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "DFineForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
+                # Confirm out_indices was propogated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propagated to backbone
+                # Confirm out_indices was propogated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -572,17 +603,17 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
+            if model_class.__name__ == "DFineForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
+                # Confirm out_indices was propogated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propagated to backbone
+                # Confirm out_indices was propogated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -600,7 +631,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             # Skip the check for the backbone
             for name, module in model.named_modules():
-                if module.__class__.__name__ == "RTDetrConvEncoder":
+                if module.__class__.__name__ == "DFineConvEncoder":
                     backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
                     break
 
@@ -608,7 +639,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
-                        if not torch.allclose(param.data, bias_tensor, atol=1e-4):
+                        try:
+                            torch.testing.assert_close(param.data, bias_tensor, atol=1e-4, rtol=1e-4)
+                        except AssertionError:
                             failed_cases.append(
                                 f"Parameter {name} of model {model_class} seems not properly initialized. "
                                 f"Biases should be initialized to {bias_value}, got {param.data}"
@@ -638,7 +671,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_accelerator
+    @require_torch_gpu
     @slow
     def test_inference_with_different_dtypes(self, torch_dtype_str):
         torch_dtype = {
@@ -660,7 +693,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_accelerator
+    @require_torch_gpu
     @slow
     def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
         torch_dtype = {
@@ -694,11 +727,8 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 outputs_static = model_static(**self._prepare_for_class(inputs_dict, model_class))
                 outputs_dynamic = model_dynamic(**self._prepare_for_class(inputs_dict, model_class))
 
-            self.assertTrue(
-                torch.allclose(
-                    outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4
-                ),
-                f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
+            torch.testing.assert_close(
+                outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4
             )
 
 
@@ -713,13 +743,13 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class RTDetrModelIntegrationTest(unittest.TestCase):
+class DFineModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+        model = DFineForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -733,43 +763,40 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-4.64763879776001, -5.001153945922852, -4.978509902954102],
-                [-4.159348487854004, -4.703853607177734, -5.946484565734863],
-                [-4.437461853027344, -4.65836238861084, -6.235235691070557],
+                [-3.8097816, -4.7724586, -5.994499],
+                [-5.2974715, -9.499067, -6.1653666],
+                [-5.3502765, -3.9530406, -6.3630295],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.1688060760498047, 0.19992263615131378, 0.21225441992282867],
-                [0.768376350402832, 0.41226309537887573, 0.4636859893798828],
-                [0.25953856110572815, 0.5483334064483643, 0.4777486026287079],
+                [0.7677696, 0.41479152, 0.46441072],
+                [0.16912134, 0.19869131, 0.2123824],
+                [0.2581653, 0.54818195, 0.47512347],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor(
-            [0.9703017473220825, 0.9599503874778748, 0.9575679302215576, 0.9506784677505493], device=torch_device
-        )
-        expected_labels = [57, 15, 15, 65]
+        expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
+        expected_labels = [15, 65, 15, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [0.13774872, 0.37821293, 640.13074, 476.21088],
-                [343.38132, 24.276838, 640.1404, 371.49573],
-                [13.225126, 54.179348, 318.98422, 472.2207],
-                [40.114475, 73.44104, 175.9573, 118.48469],
+                [1.3186283e01, 5.4130211e01, 3.1726535e02, 4.7212445e02],
+                [4.0275269e01, 7.2975174e01, 1.7620003e02, 1.1776848e02],
+                [3.4276117e02, 2.3427944e01, 6.3998401e02, 3.7477191e02],
+                [5.8418274e-01, 1.1794567e00, 6.3933154e02, 4.7485995e02],
             ],
             device=torch_device,
         )
-
-        torch.testing.assert_close(results["scores"][:4], expected_scores, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes[:4], atol=1e-3, rtol=1e-4)
