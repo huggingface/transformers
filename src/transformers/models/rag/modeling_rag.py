@@ -981,7 +981,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             context_input_ids = self.retriever(
                 input_ids,
-                question_hidden_states.detach().to(devoce="cpu", dtype=torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=self.generator.config.prefix,
                 n_docs=n_docs,
                 return_tensors="pt",
