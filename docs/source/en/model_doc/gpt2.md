@@ -39,7 +39,7 @@ GPT-2 was developed with a straightforward objective to predict the next word in
 The model architecture uses a unidirectional (causal) attention mechanism where each token can only attend to previous tokens, making it particularly effective for text generation tasks.
 
 
-[Write With Transformer](https://transformer.huggingface.co/doc/gpt2-large) is a webapp created and hosted by
+[Write With Transformer](https://huggingface.co/spaces/merve/write-with-transformer) is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
 different sizes: small, medium, large, xl and a distilled version of the small checkpoint: *distilgpt-2*.
 
