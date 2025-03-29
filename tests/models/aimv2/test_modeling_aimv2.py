@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import requests
 from pytest import mark
 
 from transformers import AIMv2Config, AIMv2TextConfig, AIMv2VisionConfig
@@ -26,6 +27,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_vision,
     slow,
     torch_device,
 )
@@ -57,7 +59,9 @@ if is_torch_available():
 
 
 if is_vision_available():
-    pass
+    from PIL import Image
+
+    from transformers import AutoImageProcessor, AutoProcessor
 
 
 class AIMv2VisionModelTester:
@@ -441,7 +445,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initialization is different for CLIP
+    # Override as the `logit_scale` parameter initialization is different for AIMv2
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -569,3 +573,103 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     torch.allclose(logits_per_text_eager, logits_per_text_sdpa, atol=4e-2, rtol=4e-2),
                     f"Text logits max diff: {torch.max(torch.abs(logits_per_text_eager - logits_per_text_sdpa))}",
                 )
+
+
+@require_vision
+@require_torch
+class AIMv2ModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model_name = "yaswanthgali/aimv2-large-patch14-224-lit-HF"
+        model = AIMv2Model.from_pretrained(model_name, device_map="auto")
+        processor = AutoProcessor.from_pretrained(model_name)
+
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        inputs = processor(
+            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
+        ).to(model.device)
+
+        # Forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # Verify the logits
+        self.assertEqual(
+            outputs.logits_per_image.shape,
+            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+        )
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+        )
+
+        # handle device
+        expected_logits = torch.tensor([[34.2415, 24.6724]]).to(model.device)
+        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+
+
+@require_vision
+class AIMv2VisionModelIntegrationTests(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
+
+        model = AIMv2VisionModel.from_pretrained(model_name, device_map="auto")
+        processor = AutoImageProcessor.from_pretrained(model_name)
+
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        inputs = processor(image, return_tensors="pt").to(model.device)
+
+        with torch.no_grad():
+            output = model(**inputs)
+
+        # Verify logits shape
+        self.assertEqual(output.last_hidden_state.shape, torch.Size([1, 256, 1024]))
+
+        # Verify logits slice
+        # fmt: off
+        expected_logits = torch.tensor(
+        [[ 0.0510,  0.0806, -0.0990, -0.0154],
+        [ 2.7850, -2.5143, -0.3320,  2.4196],
+        [ 2.8179, -2.4089, -0.2770,  2.3218],
+        [ 2.7641, -2.4114, -0.3684,  2.2998],
+        [ 2.7972, -2.3180, -0.4490,  2.2302],
+        [ 2.8584, -2.5322, -0.2302,  2.4936],
+        [-2.7849,  2.4121,  1.3670, -1.5514]]).to(model.device)
+        # fmt: on
+
+        output_slice = output.last_hidden_state.squeeze(0)[0:7, 0:4]
+        self.assertTrue(torch.allclose(output_slice, expected_logits, atol=1e-3))
+
+    @slow
+    def test_inference_for_native_resolution(self):
+        model_name = "yaswanthgali/aimv2-large-patch14-native-HF"
+
+        model = AIMv2VisionModel.from_pretrained(model_name, device_map="auto")
+        processor = AutoImageProcessor.from_pretrained(model_name)
+
+        image = image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+        inputs = processor(image, return_tensors="pt").to(model.device)
+
+        with torch.no_grad():
+            output = model(**inputs)
+
+        # Verify logits shape
+        self.assertEqual(output.last_hidden_state.shape, torch.Size([1, 1530, 1024]))
+
+        # Verify logits slice
+        # fmt: off
+        expected_logits = torch.tensor(
+        [[-1.3342,  0.3720,  0.0963,  0.4159],
+        [-1.5328,  0.4677,  0.0936,  0.4321],
+        [-0.3775, -0.2758, -0.0803, -0.5367],
+        [-1.3877,  0.5561, -1.9064, -1.1766],
+        [-0.5148,  0.0108, -0.4515, -0.6402],
+        [-0.3400, -0.1711, -0.1855, -0.4219],
+        [-1.2877, -0.0585, -0.1646,  0.7420]]).to(model.device)
+        # fmt: on
+
+        output_slice = output.last_hidden_state.squeeze(0)[0:7, 0:4]
+        self.assertTrue(torch.allclose(output_slice, expected_logits, atol=1e-3))

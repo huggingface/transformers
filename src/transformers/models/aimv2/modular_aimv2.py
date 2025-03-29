@@ -83,7 +83,8 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             The standard deviation of the for initializing all weight matrices.
         use_head (`str`, *optional*, defaults to `True`):
             Whether to use Attention Pooling Head or Not.
-        """
+    """
+
     def __init__(
         self,
         hidden_size: int = 1024,
@@ -98,9 +99,9 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         use_bias: bool = False,
-        hidden_act: str ="silu",
-        initializer_range: float =0.02,
-        use_head: bool =True,
+        hidden_act: str = "silu",
+        initializer_range: float = 0.02,
+        use_head: bool = True,
         is_causal: bool = False,
         **kwargs,
     ):
@@ -124,7 +125,7 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.is_causal=is_causal
+        self.is_causal = is_causal
 
         del self.layer_norm_eps
 
@@ -175,7 +176,8 @@ class AIMv2TextConfig(SiglipTextConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the for initializing all weight matrices.
-        """
+    """
+
     def __init__(
         self,
         vocab_size: int = 49408,
@@ -188,12 +190,12 @@ class AIMv2TextConfig(SiglipTextConfig):
         projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         use_bias: bool = False,
-        hidden_act: str="silu",
-        pad_token_id: int=None,
-        bos_token_id: int=None,
+        hidden_act: str = "silu",
+        pad_token_id: int = None,
+        bos_token_id: int = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
-        initializer_range: bool=0.02,
+        initializer_range: bool = 0.02,
         is_causal: bool = True,
         **kwargs,
     ):
@@ -217,7 +219,7 @@ class AIMv2TextConfig(SiglipTextConfig):
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
         self.projection_dropout = projection_dropout
-        self.is_causal=is_causal
+        self.is_causal = is_causal
 
         del self.bos_token_id
         del self.pad_token_id
@@ -270,6 +272,7 @@ class AIMv2Config(SiglipConfig):
 
     >>> config = AIMv2Config.from_text_vision_configs(config_text, config_vision)
     ```"""
+
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
@@ -378,7 +381,11 @@ class AIMv2VisionEmbeddings(nn.Module):
 
         if self.config.image_size != height or self.config.image_size != width:
             pos_embed = self.build_2d_sincos_position_embedding(
-                height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
+                height // self.patch_size,
+                width // self.patch_size,
+                embed_dim=self.config.hidden_size,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
             )
         else:
             pos_embed = self.position_embedding(self.position_ids)
@@ -408,7 +415,7 @@ class AIMv2Attention(nn.Module):
             )
 
         self.num_key_value_groups = 1
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)

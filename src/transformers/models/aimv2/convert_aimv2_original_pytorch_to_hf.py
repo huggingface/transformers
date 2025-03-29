@@ -80,7 +80,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_encoder.trunk.post_trunk_norm": r"text_model.rms_norm",
     r"text_projector": r"text_projection",
     r"log_logit_scale": r"logit_scale",
-
 }
 
 
@@ -162,8 +161,8 @@ def write_model(
     config = config_class.from_pretrained(hf_repo_id)
 
     # Checkpoint `apple/aimv2-large-patch14-224-lit` uses AttentionPoolingHead hence set the required attr in config.
-    if hf_repo_id == "apple/aimv2-large-patch14-224-lit":
-        config.vision_config.use_head = True
+    if hf_repo_id != "apple/aimv2-large-patch14-224-lit":
+        config.use_head = False
 
     original_state_dict = load_original_state_dict(hf_repo_id)
 

@@ -158,7 +158,11 @@ class AIMv2VisionEmbeddings(nn.Module):
 
         if self.config.image_size != height or self.config.image_size != width:
             pos_embed = self.build_2d_sincos_position_embedding(
-                height // self.patch_size, width // self.patch_size, embed_dim=self.config.hidden_size
+                height // self.patch_size,
+                width // self.patch_size,
+                embed_dim=self.config.hidden_size,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
             )
         else:
             pos_embed = self.position_embedding(self.position_ids)
