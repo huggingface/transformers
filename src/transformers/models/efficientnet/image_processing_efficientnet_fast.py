@@ -16,7 +16,12 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, BatchFeature
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    BatchFeature,
+    DefaultFastImageProcessorKwargs,
+)
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...utils import (
@@ -38,6 +43,11 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    rescale_offset: bool
+    include_top: bool
+
+
 @add_start_docstrings(
     "Constructs a fast EfficientNet image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -55,6 +65,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     rescale_offset = False
     do_normalize = True
     include_top = True
+    valid_kwargs = EfficientNetFastImageProcessorKwargs
 
 
 def _preprocess(
@@ -93,7 +104,7 @@ def _preprocess(
             stacked_images = self.center_crop(stacked_images, crop_size)
         # Fused rescale and normalize
         stacked_images = self.rescale_and_normalize(
-            stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std, rescale_offset
         )
         if include_top:
             images = self.normalize(images.to(dtype=torch.float32), 0, image_std)
@@ -103,6 +114,35 @@ def _preprocess(
     processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
     return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+    def rescale_and_normalize(
+        self,
+        images: "torch.Tensor",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
+        rescale_offset: bool = True,
+    ) -> "torch.Tensor":
+        """
+        Rescale and normalize images.
+        """
+        image_mean, image_std, do_rescale = self._fuse_mean_std_and_rescale_factor(
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            device=images.device,
+        )
+        # if/elif as we use fused rescale and normalize if both are set to True
+        if do_normalize:
+            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+        elif do_rescale:
+            images = self.rescale(images, rescale_factor, rescale_offset)
+
+        return images
 
     def rescale(
         self,
