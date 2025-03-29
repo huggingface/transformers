@@ -1363,6 +1363,7 @@ else:
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
+    _import_structure["models.zoedepth"].append("ZoeDepthImageProcessorFast")
 
 try:
     if not (is_torchvision_available() and is_timm_available()):
@@ -6632,6 +6633,7 @@ if TYPE_CHECKING:
         from .models.siglip import SiglipImageProcessorFast
         from .models.siglip2 import Siglip2ImageProcessorFast
         from .models.vit import ViTImageProcessorFast
+        from .models.zoedepth import ZoeDepthImageProcessorFast
 
     try:
         if not (is_torchvision_available() and is_timm_available()):
