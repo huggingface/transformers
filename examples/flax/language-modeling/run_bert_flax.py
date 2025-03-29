@@ -53,4 +53,4 @@ for _ in range(nbenchmark):
     func()
 end = time.time()
 print(end - start)
-print(f"Throughput: {((nbenchmark * BS)/(end-start)):.3f} examples/sec")
+print(f"Throughput: {((nbenchmark * BS) / (end - start)):.3f} examples/sec")
