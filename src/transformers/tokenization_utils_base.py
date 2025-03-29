@@ -724,26 +724,31 @@ class BatchEncoding(UserDict):
                 )
             import tensorflow as tf
 
-            as_tensor = tf.constant
+            def as_tensor(value):
+                return tf.constant(value, dtype=tf.int32)
+
             is_tensor = tf.is_tensor
+
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            is_tensor = torch.is_tensor
-
-            def as_tensor(value, dtype=None):
+            def as_tensor(value):
                 if isinstance(value, list) and isinstance(value[0], np.ndarray):
-                    return torch.from_numpy(np.array(value))
-                return torch.tensor(value)
+                    return torch.from_numpy(np.array(value)).to(torch.int64)
+                return torch.tensor(value, dtype=torch.int64)
+
+            is_tensor = torch.is_tensor
 
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             import jax.numpy as jnp  # noqa: F811
 
-            as_tensor = jnp.array
+            def as_tensor(value):
+                return jnp.array(value, dtype=jnp.int32)
+
             is_tensor = is_jax_tensor
 
         elif tensor_type == TensorType.MLX:
@@ -751,19 +756,20 @@ class BatchEncoding(UserDict):
                 raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
             import mlx.core as mx
 
-            as_tensor = mx.array
+            def as_tensor(value):
+                return mx.array(value, dtype=mx.int32)
 
             def is_tensor(obj):
                 return isinstance(obj, mx.array)
         else:
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value):
                 if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
                     value_lens = [len(val) for val in value]
-                    if len(set(value_lens)) > 1 and dtype is None:
+                    if len(set(value_lens)) > 1:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                return np.asarray(value, dtype=dtype)
+                return np.asarray(value, dtype=np.int64)
 
             is_tensor = is_numpy_array
 
