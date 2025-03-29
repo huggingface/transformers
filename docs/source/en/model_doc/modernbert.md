@@ -14,10 +14,12 @@ rendered properly in your Markdown viewer.
 
 -->
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
 
 # ModernBERT
@@ -94,27 +96,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 </hfoption>
 </hfoptions>
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ModernBert.
-
-<PipelineTag pipeline="text-classification"/>
-
-- A notebook on how to [finetune for General Language Understanding Evaluation (GLUE) with Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/finetune_modernbert_on_glue.ipynb), also available as a Google Colab [notebook](https://colab.research.google.com/github/AnswerDotAI/ModernBERT/blob/main/examples/finetune_modernbert_on_glue.ipynb). 🌎
-
-<PipelineTag pipeline="sentence-similarity"/>
-
-- A script on how to [finetune for text similarity or information retrieval with Sentence Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_st.py). 🌎
-- A script on how to [finetune for information retrieval with PyLate](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_pylate.py). 🌎
-
-<PipelineTag pipeline="fill-mask"/>
-
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-
-<PipelineTag pipeline="question-answering"/>
-
-- [`ModernBertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [colab notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 
 ## ModernBertConfig
 
