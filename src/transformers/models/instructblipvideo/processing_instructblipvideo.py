@@ -20,7 +20,6 @@ import os
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import VideoInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
     AddedToken,
@@ -31,6 +30,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import TensorType, logging
+from ...video_utils import VideoInput
 from ..auto import AutoTokenizer
 
 
@@ -46,8 +46,8 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     docstring of [`~InstructBlipVideoProcessor.__call__`] and [`~InstructBlipVideoProcessor.decode`] for more information.
 
     Args:
-        image_processor (`InstructBlipVideoImageProcessor`):
-            An instance of [`InstructBlipVideoImageProcessor`]. The image processor is a required input.
+        video_processor (`InstructBlipVideoVideoProcessor`):
+            An instance of [`InstructBlipVideoVideoProcessor`]. The video processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
         qformer_tokenizer (`AutoTokenizer`):
@@ -56,20 +56,20 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
+    attributes = ["video_processor", "tokenizer", "qformer_tokenizer"]
     valid_kwargs = ["num_query_tokens"]
-    image_processor_class = "InstructBlipVideoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "video_token"):
             self.video_token = AddedToken("<video>", normalized=False, special=True)
             tokenizer.add_tokens([self.video_token], special_tokens=True)
         else:
             self.video_token = tokenizer.video_token
         self.num_query_tokens = num_query_tokens
-        super().__init__(image_processor, tokenizer, qformer_tokenizer)
+        super().__init__(video_processor, tokenizer, qformer_tokenizer)
 
     def __call__(
         self,
@@ -176,7 +176,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
         if images is not None:
-            image_encoding = self.image_processor(images, return_tensors=return_tensors)
+            image_encoding = self.video_processor(images, return_tensors=return_tensors)
             encoding.update(image_encoding)
 
         return encoding
@@ -234,3 +234,6 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
         processor.qformer_tokenizer = qformer_tokenizer
         return processor
+
+
+__all__ = ["InstructBlipVideoProcessor"]

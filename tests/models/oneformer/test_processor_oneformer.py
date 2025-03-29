@@ -407,7 +407,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             feat_extract_first.save_pretrained(tmpdirname)
-            check_json_file_has_correct_format(os.path.join(tmpdirname, "preprocessor_config.json"))
+            check_json_file_has_correct_format(os.path.join(tmpdirname, "image_preprocessor_config.json"))
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         self.assertEqual(feat_extract_second.image_processor.to_dict(), feat_extract_first.image_processor.to_dict())

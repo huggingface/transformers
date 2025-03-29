@@ -30,6 +30,7 @@ _import_structure = {
     "image_processing_auto": ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"],
     "processing_auto": ["PROCESSOR_MAPPING", "AutoProcessor"],
     "tokenization_auto": ["TOKENIZER_MAPPING", "AutoTokenizer"],
+    "video_processing_auto": ["VIDEO_PROCESSOR_MAPPING", "AutoVideoProcessor"],
 }
 
 try:
@@ -221,6 +222,7 @@ if TYPE_CHECKING:
     from .image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
     from .processing_auto import PROCESSOR_MAPPING, AutoProcessor
     from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
+    from .video_processing_auto import VIDEO_PROCESSOR_MAPPING, AutoVideoProcessor
 
     try:
         if not is_torch_available():
