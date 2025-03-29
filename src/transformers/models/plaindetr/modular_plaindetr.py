@@ -1,144 +1,95 @@
-from typing import List, Tuple, Union
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
-
-from ...image_transforms import center_to_corners_format
-from ...utils import (
-    TensorType,
-    is_torch_available,
-    logging,
-)
+from ..deformable_detr.modeling_deformable_detr import DeformableDetrSinePositionEmbedding, DeformableDetrLearnedPositionEmbedding
 
 
-if is_torch_available():
-    import torch
+
+class PlainDetrSinePositionEmbedding(DeformableDetrSinePositionEmbedding):
+    pass
+
+class PlainDetrLearnedPositionEmbedding(DeformableDetrLearnedPositionEmbedding):
+    pass
+
+def build_position_encoding(config):
+    if config.position_embedding_type == "sine":
+        position_embedding = PlainDetrSinePositionEmbedding(n_steps, normalize=True)
+    elif config.position_embedding_type == "learned":
+        position_embedding = PlainDetrLearnedPositionEmbedding(n_steps)
+    elif config.position_embedding_type == "sine":
+        position_embedding = PlainDetrSinePositionEmbedding(n_steps, normalize=False)
+    else:
+        raise ValueError(f"Unknown position embedding type: {config.position_embedding_type}")
+    
+    return position_embedding
 
 
-logger = logging.get_logger(__name__)
-
-
-class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`PlainDetrForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
-
-        Args:
-            outputs ([`PlainDetrObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
-                original image size (before any data augmentation). For visualization, this should be the image size
-                after data augment, but before padding.
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        logger.warning_once(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-        )
-
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
-
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
-
-    def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+class PlainDetrGlobalAttentionWithPositionEmbedding(nn.Module):
+    """
+    Global cross-attention module used in PlainDETR.
+    
+    This module implements cross-attention between query embeddings and 
+    flattened feature maps, incorporating position information.
+    """
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        qkv_bias=True,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
     ):
-        """
-        Converts the raw output of [`PlainDetrForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim**-0.5
 
-        Args:
-            outputs ([`DetrObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
-            top_k (`int`, *optional*, defaults to 100):
-                Keep only top k bounding boxes before filtering by thresholding.
+        self.query_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.key_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.value_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.attention_dropout = nn.Dropout(attn_drop)
+        self.output_proj = nn.Linear(dim, dim)
+        self.output_dropout = nn.Dropout(proj_drop)
+        self.softmax = nn.Softmax(dim=-1)
 
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+    def forward(
+        self,
+        query_vectors,
+        key_input_flatten,
+        value_input_flatten,
+        attention_mask=None,
+    ):
+        batch_size, seq_len, embedding_dim = key_input_flatten.shape
+        keys = self.key_proj(key_input_flatten).reshape(
+            batch_size, seq_len, self.num_heads, embedding_dim // self.num_heads
+        )
+        keys = keys.permute(0, 2, 1, 3)
+        values = self.value_proj(value_input_flatten).reshape(
+            batch_size, seq_len, self.num_heads, embedding_dim // self.num_heads
+        )
+        values = values.permute(0, 2, 1, 3)
+        
+        batch_size, seq_len, embedding_dim = query_vectors.shape
+        queries = self.query_proj(query_vectors).reshape(
+            batch_size, seq_len, self.num_heads, embedding_dim // self.num_heads
+        )
+        queries = queries.permute(0, 2, 1, 3)
+        queries = queries * self.scale
 
-        if target_sizes is not None:
-            if len(out_logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-        prob = out_logits.sigmoid()
-        prob = prob.view(out_logits.shape[0], -1)
-        k_value = min(top_k, prob.size(1))
-        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
-
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
-        results = []
-        for s, l, b in zip(scores, labels, boxes):
-            score = s[s > threshold]
-            label = l[s > threshold]
-            box = b[s > threshold]
-            results.append({"scores": score, "labels": label, "boxes": box})
-
-        return results
-
-    def post_process_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for PlainDetr yet.")
-
-    def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for PlainDetr yet.")
-
-    def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for PlainDetr yet.")
-
-    def post_process_instance_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for PlainDetr yet.")
-
-    def post_process_semantic_segmentation():
-        raise NotImplementedError("Semantic segmentation post-processing is not implemented for PlainDetr yet.")
-
-    def post_process_panoptic_segmentation():
-        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for PlainDetr yet.")
-
-
-__all__ = ["DeformableDetrImageProcessorFast"]
+        attention_scores = torch.matmul(queries, keys.transpose(-2, -1))
+        
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask[:, None, None] * -100
+            
+        attention_probs = self.softmax(attention_scores)
+        attention_probs = self.attention_dropout(attention_probs)
+        
+        context_layer = torch.matmul(attention_probs, values)
+        context_layer = context_layer.transpose(1, 2).reshape(batch_size, seq_len, embedding_dim)
+        output = self.output_proj(context_layer)
+        output = self.output_dropout(output)
+        
+        return output
