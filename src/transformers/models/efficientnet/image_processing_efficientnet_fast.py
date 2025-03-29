@@ -191,7 +191,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
             )
 
             if include_top:
-                stacked_images = self.normalize(stacked_images, 0, image_std)
+                stacked_images = self.normalize(stacked_images, (0, 0, 0), image_std)
 
             processed_images_grouped[shape] = stacked_images
 
