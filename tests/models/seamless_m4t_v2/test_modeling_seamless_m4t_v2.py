@@ -592,7 +592,7 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     # TODO: @ydshieh: refer to #34968
     @unittest.skip(reason="Failing on multi-gpu runner")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        self.skipTest(reason="Failing on multi-gpu runner")
 
 
 @require_torch
