@@ -2896,6 +2896,14 @@ else:
             "M2M100PreTrainedModel",
         ]
     )
+    _import_structure["models.magma"].extend(
+        [
+            "MagmaForCausalLM",
+            "MagmaForConditionalGeneration",
+            "MagmaModel",
+            "MagmaPreTrainedModel",
+        ]
+    )
     _import_structure["models.mamba"].extend(
         [
             "MambaForCausalLM",
@@ -7868,6 +7876,12 @@ if TYPE_CHECKING:
             M2M100ForConditionalGeneration,
             M2M100Model,
             M2M100PreTrainedModel,
+        )
+        from .models.magma import (
+            MagmaForCausalLM,
+            MagmaForConditionalGeneration,
+            MagmaModel,
+            MagmaPreTrainedModel,
         )
         from .models.mamba import (
             MambaForCausalLM,
