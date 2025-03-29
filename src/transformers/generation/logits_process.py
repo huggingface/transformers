@@ -1157,7 +1157,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
         # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
         # with simpler logic.
-        self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
+        self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float, device=scores.device)
         for sequence_ids, bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:
                 self.length_1_bias[sequence_ids[-1]] = bias
