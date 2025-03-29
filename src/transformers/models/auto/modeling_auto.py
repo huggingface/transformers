@@ -684,7 +684,6 @@ MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
-        ("aimv2", "AIMv2ForImageClassification"),
         ("beit", "BeitForImageClassification"),
         ("bit", "BitForImageClassification"),
         ("clip", "CLIPForImageClassification"),
