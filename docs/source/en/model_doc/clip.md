@@ -34,7 +34,7 @@ You can find all the original CLIP checkpoints under the [OpenAI](https://huggin
 > [!TIP]
 > Click on the CLIP models in the right sidebar for more examples of how to apply CLIP to different image and language tasks.
 
-The example below demonstrates how to calculate similarity scores between multiple textual options and a given image with [`Pipeline`], [`AutoModel`], and [`CLIPModel`].
+The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
