@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 # CLIP
 
-[CLIP](https://huggingface.co/papers/2103.00020) is a is a multi-modal vision and language model trained on a variety of (image, text) pairs. It can be instructed in natural language to predict the most relevant text snippet, given an image, without directly optimizing for the task, similarly to the zero-shot capabilities of GPT-2 and 3. It can also be used for zero-shot image classification. The crux of the ideology behind the model is to use a ViT like transformer to get the visual features and a causal language model to get the text features. Both these features are then projected to a latent space with the same number of dimensions and their dot product gives us a similarity score.
+[CLIP](https://huggingface.co/papers/2103.00020) is a is a multimodal vision and language model motivated by overcoming the fixed number of object categories when training a computer vision model. CLIP learns about images directly from raw text by jointly training on 400M (image, text) pairs with an image encoder and text encoder. Both features are projected to a latent space with the same number of dimensions and their dot product gives a similarity score.
 
 You can find all the original CLIP checkpoints under the `Models` section of [OpenAI's Company Page](https://huggingface.co/openai).
 
