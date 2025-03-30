@@ -56,6 +56,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
+        AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
@@ -125,6 +126,8 @@ VLM_CLASS_NAMES = [
     "qwen2_5_vl",
     "ayavision",
     "gemma3",
+    "mistral3",
+    "chameleon",
 ]
 
 
@@ -173,7 +176,7 @@ class GenerationTesterMixin:
     def _check_similar_generate_outputs(self, output_1, output_2, atol=1e-5, rtol=1e-5):
         """
         Checks whether a pair of generate outputs are similar. Two `generate` call outputs are considered similar in
-        the following siturations:
+        the following situations:
         1. The sequences are the same
         2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
         """
@@ -1098,70 +1101,6 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
-    @pytest.mark.generate
-    def test_beam_search_low_memory(self):
-        # Check that choosing 'low_memory' does not change the model output
-        for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="May fix in the future: need custom cache handling")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "ctrl",
-                    "gptbigcode",
-                    "transo_xl",
-                    "xlnet",
-                    "cpm",
-                    "jamba",
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
-            set_model_tester_for_less_flaky_test(self)
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            set_config_for_less_flaky_test(config)
-            # batch_size=1 is ok, but batch_size>1 will cause non-identical output
-
-            config.use_cache = True
-            config.is_decoder = True
-
-            # test output equality of low versus high memory
-            model = model_class(config).to(torch_device).eval()
-            set_model_for_less_flaky_test(model)
-
-            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
-
-            low_output = model.generate(
-                **inputs_dict,
-                max_new_tokens=8,
-                num_beams=5,
-                early_stopping=True,
-                low_memory=True,
-                use_cache=True,
-                output_scores=True,
-                output_logits=True,
-                return_dict_in_generate=True,
-                **logits_processor_kwargs,
-            )
-
-            high_output = model.generate(
-                **inputs_dict,
-                max_new_tokens=8,
-                num_beams=5,
-                early_stopping=True,
-                low_memory=False,
-                use_cache=True,
-                output_scores=True,
-                output_logits=True,
-                return_dict_in_generate=True,
-                **logits_processor_kwargs,
-            )
-            # The two outputs must match and their shape must be as expected
-            self._check_similar_generate_outputs(low_output, high_output)
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
@@ -1617,7 +1556,7 @@ class GenerationTesterMixin:
             embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
             per_head_embed_dim = embed_dim // num_attention_heads
 
-            # some models have diffent num-head for query vs key/value so we need to assign correct value
+            # some models have different num-head for query vs key/value so we need to assign correct value
             # BUT only after `per_head_embed_dim` is set
             num_attention_heads = (
                 text_config.num_key_value_heads
@@ -2316,7 +2255,7 @@ class GenerationTesterMixin:
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.
-        NOTE: despite the test logic being the same, different implementations actually need diferent decorators, hence
+        NOTE: despite the test logic being the same, different implementations actually need different decorators, hence
         this separate function.
         """
         max_new_tokens = 30
@@ -2962,19 +2901,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         transition_scores_sum = transition_scores.sum(-1)
 
         torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
-
-    def test_beam_search_low_memory(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
-        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
-
-        low_output = model.generate(model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=True)
-
-        high_output = model.generate(
-            model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
-        )
-        self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @slow
     def test_green_red_watermark_generation(self):
@@ -4310,6 +4236,42 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(decoded_assisted, [expected_output])
 
     @slow
+    def test_beam_search_advanced_stopping_criteria(self):
+        """
+        Tests that beam search works with a stopping criteria that is not max length or EOS token. Prior to the beam
+        search vectorization PR (#35802), beam search was not accepting other stopping criteria. Test inspired on
+        the original issue (#34843).
+        """
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct").to(torch_device)
+
+        prompt = (
+            "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. "
+            "How many clips did Natalia sell altogether in April and May?"
+        )
+        tokens = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        generation_config = GenerationConfig(num_beams=3, do_sample=False, length_penalty=1.0, max_new_tokens=100)
+
+        # This particular prompt should result in a ":" being present in the answer
+        out = model.generate(**tokens, generation_config=generation_config, tokenizer=tokenizer)
+        output_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        last_non_special_token_decoded = tokenizer.decode(out[out != tokenizer.pad_token_id][-1])
+        self.assertTrue(":" in output_text)
+        self.assertFalse(":" in output_text[-5:])
+        self.assertFalse(":" in last_non_special_token_decoded)
+
+        # Adding an advanced stopping criteria: text generation should stop when a ":" is generated.
+        # Note that:
+        # 1 - the text up to ":" doesn't have to be the same, it can belong to a different beam
+        # 2 - ":" may not be the last char, but it must be in the last non-special token
+        generation_config.stop_strings = ":"
+        out = model.generate(**tokens, generation_config=generation_config, tokenizer=tokenizer)
+        output_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        last_non_special_token_decoded = tokenizer.decode(out[out != tokenizer.pad_token_id][-1])
+        self.assertTrue(":" in output_text)
+        self.assertTrue(":" in output_text[-5:])
+        self.assertTrue(":" in last_non_special_token_decoded)
+
     def test_max_time(self):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
         model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
@@ -4619,7 +4581,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(diff < 1e-4)
 
     def test_generate_input_ids_as_kwarg(self):
-        """Test that `input_ids` work equaly as a positional and keyword argument in decoder-only models"""
+        """Test that `input_ids` work equally as a positional and keyword argument in decoder-only models"""
         article = "I need input_ids to generate"
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=15)
@@ -4636,7 +4598,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sequences.shape, (1, 15))
 
     def test_generate_input_ids_as_encoder_kwarg(self):
-        """Test that `input_ids` work equaly as a positional and keyword argument in encoder-decoder models"""
+        """Test that `input_ids` work equally as a positional and keyword argument in encoder-decoder models"""
         article = "Justin Timberlake and Jessica Biel, welcome to parenthood."
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart")
@@ -4758,6 +4720,60 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))
+
+    @slow
+    @require_torch_gpu
+    def test_cache_device_map_with_vision_layer_device_map(self):
+        """
+        Test that the cache device map is correctly set when the vision layer has a device map. Regression test for
+        #36942
+        """
+        # gemma 3 uses hybrid cache, which can be compiled -> needs a device map at allocation time
+        model_id = "google/gemma-3-4b-it"
+
+        # important part of this device map: the `.layers.` pattern is NOT present in the decoder
+        device_map = {
+            "vision_tower.vision_model.embeddings": 0,
+            "vision_tower.vision_model.encoder.layers.0": 0,
+            "vision_tower.vision_model.encoder.layers.1": 0,
+            "vision_tower.vision_model.encoder.layers.2": 0,
+            "vision_tower.vision_model.encoder.layers.3": 0,
+            "vision_tower.vision_model.encoder.layers.4": 0,
+            "vision_tower.vision_model.encoder.layers.5": 0,
+            "vision_tower.vision_model.encoder.layers.6": 0,
+            "vision_tower.vision_model.encoder.layers.7": 0,
+            "vision_tower.vision_model.encoder.layers.8": 0,
+            "vision_tower.vision_model.encoder.layers.9": 0,
+            "vision_tower.vision_model.encoder.layers.10": 0,
+            "vision_tower.vision_model.encoder.layers.11": 0,
+            "vision_tower.vision_model.encoder.layers.12": 0,
+            "vision_tower.vision_model.encoder.layers.13": 0,
+            "vision_tower.vision_model.encoder.layers.14": "cpu",
+            "vision_tower.vision_model.encoder.layers.15": "cpu",
+            "vision_tower.vision_model.encoder.layers.16": "cpu",
+            "vision_tower.vision_model.encoder.layers.17": "cpu",
+            "vision_tower.vision_model.encoder.layers.18": "cpu",
+            "vision_tower.vision_model.encoder.layers.19": "cpu",
+            "vision_tower.vision_model.encoder.layers.20": "cpu",
+            "vision_tower.vision_model.encoder.layers.21": "cpu",
+            "vision_tower.vision_model.encoder.layers.22": "cpu",
+            "vision_tower.vision_model.encoder.layers.23": "cpu",
+            "vision_tower.vision_model.encoder.layers.24": "cpu",
+            "vision_tower.vision_model.encoder.layers.25": "cpu",
+            "vision_tower.vision_model.encoder.layers.26": "cpu",
+            "vision_tower.vision_model.post_layernorm": "cpu",
+            "multi_modal_projector": "cpu",
+            "language_model": "cpu",
+        }
+
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_id, device_map=device_map, torch_dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(["This is a text input"], return_tensors="pt").to(model.device)
+
+        # If the generate doesn't infer the DECODER device map correctly, this will fail
+        _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
 
 @require_torch

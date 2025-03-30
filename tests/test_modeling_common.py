@@ -138,16 +138,16 @@ TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
     (
         # test name for the test runner
         f"{dtype}_pad_{padding_side}{'' if use_attention_mask else '_no_attn_mask'}"
-        f"{'_output_attn' if output_attentions else ''}{'_sdpa_kernels' if enable_kernels else ''}",
+        f"{'_sdpa_kernels' if enable_kernels else ''}",
         # parameterization
-        *(dtype, padding_side, use_attention_mask, output_attentions, enable_kernels),
+        *(dtype, padding_side, use_attention_mask, False, enable_kernels),
     )
     for dtype in ("fp16", "fp32", "bf16")
     for padding_side in ("left", "right")
     for use_attention_mask in (True, False)
-    for output_attentions in (True, False)
     for enable_kernels in (True, False)
-]
+    # Extra test case: `output_attentions=True` has special attention mask handling and sdpa reverts to eager
+] + [("fp32_pad_left_output_attentions", "fp32", "left", True, True, False)]
 
 
 def _config_zero_init(config):
@@ -315,8 +315,6 @@ class ModelTesterMixin:
         return inputs_dict
 
     def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         def check_save_load(out1, out2):
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
@@ -330,6 +328,7 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -508,16 +507,16 @@ class ModelTesterMixin:
 
     @is_flaky(description="low likelihood of failure, reason not yet discovered")
     def test_save_load_fast_init_from_base(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.__class__ not in MODEL_MAPPING:
-            self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
-
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
-
         for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.__class__ not in MODEL_MAPPING:
+                self.skipTest(reason=f"{config.__class__.__name__} not in MODEL_MAPPING")
+
+            base_class = MODEL_MAPPING[config.__class__]
+
+            if isinstance(base_class, tuple):
+                base_class = base_class[0]
+
             if model_class == base_class:
                 continue
 
@@ -2228,9 +2227,9 @@ class ModelTesterMixin:
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             self.skipTest(reason="test_missing_keys is set to `False`")
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             base_model_prefix = model.base_model_prefix
 
@@ -2287,8 +2286,8 @@ class ModelTesterMixin:
 
     @require_safetensors
     def test_can_use_safetensors(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
@@ -2323,9 +2322,9 @@ class ModelTesterMixin:
                     )
 
     def test_load_save_without_tied_weights(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = False
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config.tie_word_embeddings = False
             model = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
@@ -2373,8 +2372,8 @@ class ModelTesterMixin:
             )
 
     def test_model_weights_reload_no_missing_tied_weights(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
@@ -3087,6 +3086,7 @@ class ModelTesterMixin:
                 "ModernBertForSequenceClassification",
                 "ModernBertForTokenClassification",
                 "TimmWrapperForImageClassification",
+                "ModernBertForQuestionAnswering",
             ]
             special_param_names = [
                 r"^bit\.",
@@ -3235,9 +3235,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             num_params = model.num_parameters()
-            assert (
-                num_params < 1000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
+            assert num_params < 1000000, (
+                f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
+            )
 
     @require_flash_attn
     @require_torch_gpu
@@ -3618,7 +3618,7 @@ class ModelTesterMixin:
             ("cuda", False, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-4,
-            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.bfloat16): 3e-2,  # (different from others)
             ("cuda", True, torch.float16): 5e-3,
         }
 

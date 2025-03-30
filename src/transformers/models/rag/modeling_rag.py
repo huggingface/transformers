@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation import BeamSearchScorer, GenerationConfig, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -245,8 +245,8 @@ class RagPreTrainedModel(PreTrainedModel):
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: str = None,
-        generator_pretrained_model_name_or_path: str = None,
+        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        generator_pretrained_model_name_or_path: Optional[str] = None,
         retriever: RagRetriever = None,
         **kwargs,
     ) -> PreTrainedModel:
@@ -494,9 +494,9 @@ class RagModel(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an question_encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an question_encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -517,9 +517,9 @@ class RagModel(RagPreTrainedModel):
 
         self.retriever = retriever
         if self.retriever is not None:
-            assert isinstance(
-                retriever, RagRetriever
-            ), f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            assert isinstance(retriever, RagRetriever), (
+                f"`self.retriever` is of type {type(self.retriever)}, but should be of type `RagRetriever`"
+            )
             self.retriever = retriever
 
         self.question_encoder = question_encoder
@@ -660,9 +660,9 @@ class RagModel(RagPreTrainedModel):
                     " retriever using the `set_retriever(...)` function."
                 )
 
-        assert (
-            doc_scores is not None
-        ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        assert doc_scores is not None, (
+            "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
+        )
 
         assert (doc_scores.shape[1] % n_docs) == 0, (
             f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
@@ -740,9 +740,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -973,9 +973,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        assert (
-            input_ids is not None or context_input_ids is not None
-        ), " At least one of input_ids or context_input_ids must be given"
+        assert input_ids is not None or context_input_ids is not None, (
+            " At least one of input_ids or context_input_ids must be given"
+        )
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
@@ -1138,9 +1138,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
-        assert config is not None or (
-            question_encoder is not None and generator is not None
-        ), "Either a configuration or an encoder and a generator has to be provided."
+        assert config is not None or (question_encoder is not None and generator is not None), (
+            "Either a configuration or an encoder and a generator has to be provided."
+        )
 
         if config is None:
             config = RagConfig.from_question_encoder_generator_configs(
@@ -1563,18 +1563,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         elif generation_config.num_beams > 1:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=generation_config.num_beams,
-                device=self.device,
-                length_penalty=generation_config.length_penalty,
-                do_early_stopping=generation_config.early_stopping,
-                num_beam_hyps_to_keep=generation_config.num_return_sequences,
-                max_length=generation_config.max_length,
-            )
             return self._beam_search(
                 input_ids,
-                beam_scorer,
                 logits_processor=pre_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,

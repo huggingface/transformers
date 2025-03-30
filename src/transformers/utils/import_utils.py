@@ -45,6 +45,11 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
     package_version = "N/A"
     if package_exists:
         try:
+            # TODO: Once python 3.9 support is dropped, `importlib.metadata.packages_distributions()`
+            # should be used here to map from package name to distribution names
+            # e.g. PIL -> Pillow, Pillow-SIMD; quark -> amd-quark; onnxruntime -> onnxruntime-gpu.
+            # `importlib.metadata.packages_distributions()` is not available in Python 3.9.
+
             # Primary method to get the package version
             package_version = importlib.metadata.version(pkg_name)
         except importlib.metadata.PackageNotFoundError:
@@ -61,6 +66,12 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                         package_exists = False
                 except ImportError:
                     # If the package can't be imported, it's not available
+                    package_exists = False
+            elif pkg_name == "quark":
+                # TODO: remove once `importlib.metadata.packages_distributions()` is supported.
+                try:
+                    package_version = importlib.metadata.version("amd-quark")
+                except Exception:
                     package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
@@ -95,6 +106,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
+TORCHAO_MIN_VERSION = "0.4.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -149,6 +161,7 @@ _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
+_quark_available = _is_package_available("quark")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -191,7 +204,7 @@ _tf2onnx_available = _is_package_available("tf2onnx")
 _timm_available = _is_package_available("timm")
 _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
-_torchao_available = _is_package_available("torchao")
+_torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
@@ -1057,11 +1070,21 @@ def is_flash_attn_greater_or_equal(library_version: str):
 
 
 @lru_cache()
-def is_torch_greater_or_equal(library_version: str):
+def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
     if not _is_package_available("torch"):
         return False
 
-    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -1113,6 +1136,10 @@ def is_auto_awq_available():
 def is_optimum_quanto_available():
     # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
     return _is_optimum_quanto_available
+
+
+def is_quark_available():
+    return _quark_available
 
 
 def is_compressed_tensors_available():
@@ -1277,8 +1304,8 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
-def is_torchao_available():
-    return _torchao_available
+def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION):
+    return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
 def is_speech_available():

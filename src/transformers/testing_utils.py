@@ -32,13 +32,13 @@ import tempfile
 import threading
 import time
 import unittest
-from collections import defaultdict
-from collections.abc import Mapping
+from collections import UserDict, defaultdict
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from dataclasses import MISSING, fields
-from functools import wraps
+from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -116,6 +116,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quark_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -1299,6 +1300,13 @@ def require_fbgemm_gpu(test_case):
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
 
 
+def require_quark(test_case):
+    """
+    Decorator for quark dependency
+    """
+    return unittest.skipUnless(is_quark_available(), "test requires quark")(test_case)
+
+
 def require_flute_hadamard(test_case):
     """
     Decorator marking a test that requires higgs and hadamard
@@ -1456,14 +1464,13 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
 
 
 def evaluate_side_effect_factory(
-    side_effect_values: List[Dict[str, float]],
-) -> Generator[Dict[str, float], None, None]:
+    side_effect_values: list[dict[str, float]],
+) -> Generator[dict[str, float], None, None]:
     """
     Function that returns side effects for the _evaluate method.
     Used when we're unsure of exactly how many times _evaluate will be called.
     """
-    for side_effect_value in side_effect_values:
-        yield side_effect_value
+    yield from side_effect_values
 
     while True:
         yield side_effect_values[-1]
@@ -2360,8 +2367,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
-            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:")),
-            _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:")),
+            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
         ],
         timeout=timeout,
     )
@@ -2444,7 +2451,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -2471,7 +2478,7 @@ class SubprocessCallException(Exception):
     pass
 
 
-def run_command(command: List[str], return_stdout=False):
+def run_command(command: list[str], return_stdout=False):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occurred while running `command`
@@ -2904,7 +2911,7 @@ class HfDoctestModule(Module):
                 yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
 
 
-def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
+def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
 
@@ -2992,7 +2999,7 @@ if is_torch_available():
 
         torch_device = device_name
 
-        def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name: str):
+        def update_mapping_from_spec(device_fn_dict: dict[str, Callable], attribute_name: str):
             try:
                 # Try to import the function directly
                 spec_fn = getattr(device_spec_module, attribute_name)
@@ -3042,3 +3049,78 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+
+
+# Type definition of key used in `Expectations` class.
+DeviceProperties = tuple[Union[str, None], Union[int, None]]
+
+
+@cache
+def get_device_properties() -> DeviceProperties:
+    """
+    Get environment device properties.
+    """
+    if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
+        import torch
+
+        major, _ = torch.cuda.get_device_capability()
+        if IS_ROCM_SYSTEM:
+            return ("rocm", major)
+        else:
+            return ("cuda", major)
+    else:
+        return (torch_device, None)
+
+
+class Expectations(UserDict[DeviceProperties, Any]):
+    def get_expectation(self) -> Any:
+        """
+        Find best matching expectation based on environment device properties.
+        """
+        return self.find_expectation(get_device_properties())
+
+    @staticmethod
+    def is_default(key: DeviceProperties) -> bool:
+        return all(p is None for p in key)
+
+    @staticmethod
+    def score(key: DeviceProperties, other: DeviceProperties) -> int:
+        """
+        Returns score indicating how similar two instances of the `Properties` tuple are.
+        Points are calculated using bits, but documented as int.
+        Rules are as follows:
+            * Matching `type` gives 8 points.
+            * Semi-matching `type`, for example cuda and rocm, gives 4 points.
+            * Matching `major` (compute capability major version) gives 2 points.
+            * Default expectation (if present) gives 1 points.
+        """
+        (device_type, major) = key
+        (other_device_type, other_major) = other
+
+        score = 0b0
+        if device_type == other_device_type:
+            score |= 0b1000
+        elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
+            score |= 0b100
+
+        if major == other_major and other_major is not None:
+            score |= 0b10
+
+        if Expectations.is_default(other):
+            score |= 0b1
+
+        return int(score)
+
+    def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
+        """
+        Find best matching expectation based on provided device properties.
+        """
+        (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
+
+        if Expectations.score(key, result_key) == 0:
+            raise ValueError(f"No matching expectation found for {key}")
+
+        return result
+
+    def __repr__(self):
+        return f"{self.data}"
