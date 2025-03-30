@@ -116,7 +116,7 @@ The example below is written in pseudocode for readability rather than performan
 1. There is no batch size limit.
 2. The timeout is reset on every queue fetch, so you could end up waiting much longer than the `timeout` value before processing a request. This would also delay the first inference request by that amount of time. The web server always waits 1ms even if the queue is empty, which is inefficient, because that time can be used to start inference. It could make sense though if batching is essential to your use case.
 
-    It would be better to have a single 1ms deadline, instead of resetting it on every fetch, we can enhance `server_loop` as below.
+    It would be better to have a single 1ms deadline, instead of resetting it on every fetch, as shown below.
 
 ```py
 async def server_loop(q):
