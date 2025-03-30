@@ -18,11 +18,12 @@ import unittest
 
 import numpy as np
 
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-from transformers.image_utils import PILImageResampling
+
 
 if is_vision_available():
     from transformers import EfficientNetImageProcessor
@@ -45,7 +46,7 @@ class EfficientNetImageProcessorTester:
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        resample=PILImageResampling.BILINEAR, # NEAREST is too different between PIL and torchvision
+        resample=PILImageResampling.BILINEAR,  # NEAREST is too different between PIL and torchvision
     ):
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
