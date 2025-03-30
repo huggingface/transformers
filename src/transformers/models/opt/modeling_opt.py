@@ -105,7 +105,7 @@ class OPTAttention(nn.Module):
     def __init__(
         self,
         config: OPTConfig,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
@@ -369,7 +369,7 @@ OPT_ATTENTION_CLASSES = {
 
 
 class OPTDecoderLayer(nn.Module):
-    def __init__(self, config: OPTConfig, layer_idx: int = None):
+    def __init__(self, config: OPTConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
 
@@ -643,7 +643,7 @@ class OPTDecoder(OPTPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -1322,7 +1322,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

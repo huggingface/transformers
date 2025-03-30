@@ -213,7 +213,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
     def test_original_dtype(self):
         r"""
-        A simple test to check if the model succesfully stores the original dtype
+        A simple test to check if the model successfully stores the original dtype
         """
         self.assertTrue(hasattr(self.model_8bit.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
@@ -655,8 +655,8 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
     def test_pipeline(self):
         r"""
         The aim of this test is to verify that the mixed int8 is compatible with `pipeline` from transformers. Since
-        we used pipline for inference speed benchmarking we want to make sure that this feature does not break anything
-        on pipline.
+        we used pipeline for inference speed benchmarking we want to make sure that this feature does not break anything
+        on pipeline.
         """
         # self._clear_cuda_cache()
         self.pipe = pipeline(
@@ -682,9 +682,39 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         This tests that the model has been loaded and can be used correctly on a multi-GPU setup.
         Let's just try to load a model on 2 GPUs and see if it works. The model we test has ~2GB of total, 3GB should suffice
         """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": 0,
+            "transformer.h.0": 0,
+            "transformer.h.1": 0,
+            "transformer.h.2": 0,
+            "transformer.h.3": 0,
+            "transformer.h.4": 0,
+            "transformer.h.5": 0,
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 0,
+            "transformer.h.10": 1,
+            "transformer.h.11": 1,
+            "transformer.h.12": 1,
+            "transformer.h.13": 1,
+            "transformer.h.14": 1,
+            "transformer.h.15": 1,
+            "transformer.h.16": 1,
+            "transformer.h.17": 0,
+            "transformer.h.18": 0,
+            "transformer.h.19": 0,
+            "transformer.h.20": 0,
+            "transformer.h.21": 0,
+            "transformer.h.22": 0,
+            "transformer.h.23": 1,
+            "transformer.ln_f": 0,
+        }
 
         model_parallel = AutoModelForCausalLM.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map="balanced"
+            self.model_name, load_in_8bit=True, device_map=device_map
         )
 
         # Check correct device map
@@ -966,3 +996,37 @@ class MixedInt8LlamaTest(MixedInt8Test):
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@require_torch_gpu_if_bnb_not_multi_backend_enabled
+@slow
+@apply_skip_if_not_implemented
+class Bnb8bitCompile(unittest.TestCase):
+    model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    input_text = "Hello my name is"
+
+    def setUp(self):
+        # Models and tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+
+    def test_generate_compile(self):
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # if nothing is set, compile will be disabled for bnb
+        self.model_8bit.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
+            max_new_tokens=10,
+            cache_implementation="static",
+        )
+
+        with self.assertRaises(Exception):
+            object.__setattr__(self.model_8bit.hf_quantizer, "is_compileable", True)
+            self.model_8bit.generate(
+                input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
+                max_new_tokens=10,
+                cache_implementation="static",
+            )
