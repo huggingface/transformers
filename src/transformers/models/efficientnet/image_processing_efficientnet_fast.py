@@ -24,6 +24,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,
@@ -67,53 +68,44 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     include_top = True
     valid_kwargs = EfficientNetFastImageProcessorKwargs
 
+    def __init__(self, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
-def _preprocess(
-    self,
-    images: list["torch.Tensor"],
-    do_resize: bool,
-    size: SizeDict,
-    interpolation: Optional["F.InterpolationMode"],
-    do_center_crop: bool,
-    crop_size: SizeDict,
-    do_rescale: bool,
-    rescale_factor: float,
-    rescale_offset: bool,
-    do_normalize: bool,
-    include_top: bool,
-    image_mean: Optional[Union[float, list[float]]],
-    image_std: Optional[Union[float, list[float]]],
-    return_tensors: Optional[Union[str, TensorType]],
-    **kwargs,
-) -> BatchFeature:
-    # Group images by size for batched resizing
-    grouped_images, grouped_images_index = group_images_by_shape(images)
-    resized_images_grouped = {}
-    for shape, stacked_images in grouped_images.items():
-        if do_resize:
-            stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-        resized_images_grouped[shape] = stacked_images
-    resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+    def rescale(
+        self,
+        image: "torch.Tensor",
+        scale: float,
+        offset: Optional[bool] = True,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Rescale an image by a scale factor.
 
-    # Group images by size for further processing
-    # Needed in case do_resize is False, or resize returns images with different sizes
-    grouped_images, grouped_images_index = group_images_by_shape(resized_images)
-    processed_images_grouped = {}
-    for shape, stacked_images in grouped_images.items():
-        if do_center_crop:
-            stacked_images = self.center_crop(stacked_images, crop_size)
-        # Fused rescale and normalize
-        stacked_images = self.rescale_and_normalize(
-            stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std, rescale_offset
-        )
-        if include_top:
-            images = self.normalize(images.to(dtype=torch.float32), 0, image_std)
-        processed_images_grouped[shape] = stacked_images
+        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
+        1/127.5, the image is rescaled between [-1, 1].
+            image = image * scale - 1
 
-    processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-    processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
+            image = image * scale
 
-    return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        Args:
+            image (`torch.Tensor`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            offset (`bool`, *optional*):
+                Whether to scale the image in both negative and positive directions.
+
+        Returns:
+            `torch.Tensor`: The rescaled image.
+        """
+
+        rescaled_image = image * scale
+
+        if offset:
+            rescaled_image -= 1
+
+        return rescaled_image
 
     def rescale_and_normalize(
         self,
@@ -144,41 +136,52 @@ def _preprocess(
 
         return images
 
-    def rescale(
+    def _preprocess(
         self,
-        image: "torch.Tensor",
-        scale: Union[int, float],
-        offset: bool = True,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        rescale_offset: bool,
+        do_normalize: bool,
+        include_top: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Rescale an image by a scale factor.
+    ) -> BatchFeature:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
-        1/127.5, the image is rescaled between [-1, 1].
-            image = image * scale - 1
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std, rescale_offset
+            )
+            if include_top:
+                stacked_images = self.normalize(stacked_images.to(dtype=torch.float32), 0, image_std)
+            processed_images_grouped[shape] = stacked_images
 
-        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
-            image = image * scale
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            offset (`bool`, *optional*):
-                Whether to scale the image in both negative and positive directions.
-
-        Returns:
-            `torch.Tensor`: The rescaled image.
-        """
-
-        rescaled_image = image * scale
-
-        if offset:
-            rescaled_image = rescaled_image - 1
-
-        return rescaled_image
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
 __all__ = ["EfficientNetImageProcessorFast"]
