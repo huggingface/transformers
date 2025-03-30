@@ -16,9 +16,7 @@
 """PyTorch Qwen2.5Omni model (Audio, Image, Video)."""
 
 import math
-import operator
 from dataclasses import dataclass
-from itertools import accumulate
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -29,6 +27,7 @@ from torch import nn
 from torch.nn import ConvTranspose1d, Parameter
 
 from transformers.models.llama.modeling_llama import rotate_half
+from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
@@ -36,10 +35,11 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLModel,
     Qwen2_5_VLVisionBlock,
 )
+from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 
-from ...cache_utils import EncoderDecoderCache, StaticCache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -52,17 +52,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.hub import cached_file
-from .configuration_qwen2_5_omni import (
-    Qwen2_5OmniAudioEncoderConfig,
-    Qwen2_5OmniBigVGANConfig,
-    Qwen2_5OmniConfig,
-    Qwen2_5OmniDiTConfig,
-    Qwen2_5OmniTalkerConfig,
-    Qwen2_5OmniTextConfig,
-    Qwen2_5OmniThinkerConfig,
-    Qwen2_5OmniToken2WavConfig,
-    Qwen2_5OmniVisionEncoderConfig,
-)
 
 
 if is_flash_attn_2_available():
@@ -74,6 +63,1025 @@ else:
 
 
 logger = logging.get_logger(__name__)
+
+
+class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerVision`]. It is used to instantiate a
+    Qwen2.5-VL vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2.5-VL
+    architecture.
+
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        depth (`int`, *optional*, defaults to 32):
+            Number of layers (depth) in the model.
+        hidden_size (`int`, *optional*, defaults to 3584):
+            The size of the hidden layers.
+        hidden_act (`str`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function used in the model. Supported options include `"quick_gelu"` and others as applicable.
+        mlp_ratio (`float`, *optional*, defaults to 4):
+            The ratio used to determine the size of the MLP (Multi-Layer Perceptron) hidden layer.
+        num_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size of the patches extracted from the input.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The size used for patches along the temporal dimension.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen2_5OmniVisionEncoderConfig, Qwen2_5OmniVisionEncoder
+
+    >>> # Initializing a Qwen2_5OmniVisionEncoderConfig
+    >>> configuration = Qwen2_5OmniVisionEncoderConfig()
+
+    >>> # Initializing a Qwen2_5OmniVisionEncoder (with random weights)
+    >>> model = Qwen2_5OmniVisionEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen2_5_omni_vision_encoder"
+
+    def __init__(
+        self,
+        depth=32,
+        hidden_size=3584,
+        hidden_act="silu",
+        intermediate_size=3420,
+        num_heads=16,
+        in_channels=3,
+        patch_size=14,
+        spatial_merge_size=2,
+        temporal_patch_size=2,
+        window_size=112,
+        out_hidden_size=3584,
+        fullatt_block_indexes=[7, 15, 23, 31],
+        **kwargs,
+    ):
+        super().__init__(
+            depth,
+            hidden_size,
+            hidden_act,
+            intermediate_size,
+            num_heads,
+            in_channels,
+            patch_size,
+            spatial_merge_size,
+            temporal_patch_size,
+            window_size,
+            out_hidden_size,
+            fullatt_block_indexes,
+            **kwargs,
+        )
+        del self.tokens_per_second
+
+
+class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniAudioEncoder`]. It is used to instantiate a
+    Qwen2.5-Omni-Thinker audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
+    architecture.
+
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Number of mel features used per input features. Should correspond to the value used in the
+            `Qwen2_5OmniProcessor` class.
+        encoder_layers (`int`, *optional*, defaults to 32):
+            Number of encoder layers.
+        encoder_attention_heads (`int`, *optional*, defaults to 20):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 5120):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        d_model (`int`, *optional*, defaults to 1280):
+            Dimensionality of the layers.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by diving by sqrt(d_model).
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        max_source_positions (`int`, *optional*, defaults to 1500):
+            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        n_window (`int`, *optional*, defaults to 100):
+            The chunk for conv and flash attn in AudioEncoder.
+        output_dim (`int`, *optional*, defaults to 3584):
+            The output dimention of AudioEncoder.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen2_5OmniAudioEncoderConfig, Qwen2_5OmniAudioEncoder
+
+    >>> # Initializing a Qwen2_5OmniAudioEncoderConfig
+    >>> configuration = Qwen2_5OmniAudioEncoderConfig()
+
+    >>> # Initializing a Qwen2_5OmniAudioEncoder (with random weights)
+    >>> model = Qwen2_5OmniAudioEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen2_5_omni_audio_encoder"
+
+    def __init__(
+        self,
+        num_mel_bins=128,
+        encoder_layers=32,
+        encoder_attention_heads=20,
+        encoder_ffn_dim=5120,
+        encoder_layerdrop=0,
+        d_model=1280,
+        dropout=0,
+        attention_dropout=0,
+        activation_function="gelu",
+        activation_dropout=0,
+        scale_embedding=False,
+        init_std=0.02,
+        max_source_positions=1500,
+        n_window=100,
+        output_dim=3584,
+        **kwargs,
+    ):
+        super().__init__(
+            num_mel_bins,
+            encoder_layers,
+            encoder_attention_heads,
+            encoder_ffn_dim,
+            encoder_layerdrop,
+            d_model,
+            dropout,
+            attention_dropout,
+            activation_function,
+            activation_dropout,
+            scale_embedding,
+            init_std,
+            max_source_positions,
+            **kwargs,
+        )
+        self.n_window = n_window
+        self.output_dim = output_dim
+
+
+class Qwen2_5OmniTextConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
+    Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
+
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 152064):
+            Vocabulary size of the QwenOmni model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Qwen2VLModel`]
+        hidden_size (`int`, *optional*, defaults to 3584):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 18944):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 28):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 28):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*, defaults to 4):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 32768):
+            The maximum sequence length that this model might ever be used with.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
+            The base period of the RoPE embeddings.
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Whether to use sliding window attention.
+        sliding_window (`int`, *optional*, defaults to 32768):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
+        max_window_layers (`int`, *optional*, defaults to 28):
+            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniThinkerConfig, Qwen2_5OmniAudioEncoderConfig, Qwen2_5OmniVisionEncoderConfig
+
+    >>> # Initializing a Qwen2_5OmniAudioEncoder config
+    >>> audio_config = Qwen2_5OmniAudioEncoderConfig()
+
+    >>> # Initializing a Qwen2_5OmniVisionEncoder config
+    >>> vision_config = Qwen2_5OmniVisionEncoderConfig()
+
+    >>> # Initializing a Qwen2.5OmniThinker configuration
+    >>> configuration = Qwen2_5OmniThinkerConfig(audio_config, vision_config)
+
+    >>> # Initializing a model from the Qwen-Omni style configuration
+    >>> model = Qwen2_5OmniThinkerForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen2_5_omni_text"
+    is_composition = False
+
+    def __init__(
+        self,
+        vocab_size=152064,
+        hidden_size=3584,
+        intermediate_size=18944,
+        num_hidden_layers=28,
+        num_attention_heads=28,
+        num_key_value_heads=4,
+        hidden_act="silu",
+        max_position_embeddings=32768,
+        rms_norm_eps=1e-06,
+        use_cache=True,
+        rope_theta=1000000.0,
+        use_sliding_window=False,
+        sliding_window=32768,
+        max_window_layers=28,
+        attention_dropout=0.0,
+        rope_scaling=None,
+        init_std=0.02,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
+        self.rope_scaling = rope_scaling
+        if self.rope_scaling is None:
+            self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
+        self.init_std = init_std
+
+        super().__init__(**kwargs)
+
+
+class Qwen2_5OmniThinkerConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
+    Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
+
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        audio_config (`dict`,  *optional*):
+            The config dictionary of the audio backbone.
+        vision_config (`dict`, *optional*):
+            The config dictionary of the vision backbone.
+        text_config (`dict`, *optional*):
+            The config dictionary of the text backbone.
+        audio_token_index (`int`, *optional*, defaults to 151646):
+            The audio token index to encode the audio prompt.
+        image_token_index (`int`, *optional*, defaults to 151655):
+            The image token index to encode the image prompt.
+        video_token_index (`int`, *optional*, defaults to 151656):
+            The video token index to encode the video prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
+        position_id_per_seconds (`int`, *optional*, defaults to 25):
+            The increment of position id per second.
+        seconds_per_chunk (`int`, *optional*, defaults to 2):
+            The duration in seconds of the chunk of audio and video data.
+        audio_start_token_id (`int`, *optional*, defaults to 151647):
+            The audio start token index to encode the audio prompt.
+        audio_end_token_id (`int`, *optional*, defaults to 151648):
+            The audio end token index to encode the audio prompt.
+        user_token_id (`int, *optional*, defaults to 872):
+            The user token index to encode the user token.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniThinkerConfig, Qwen2_5OmniAudioEncoderConfig, Qwen2_5OmniVisionEncoderConfig
+
+    >>> # Initializing a Qwen2_5OmniAudioEncoder config
+    >>> audio_config = Qwen2_5OmniAudioEncoderConfig()
+
+    >>> # Initializing a Qwen2_5OmniVisionEncoder config
+    >>> vision_config = Qwen2_5OmniVisionEncoderConfig()
+
+    >>> # Initializing a Qwen2_5OmniTextConfig config
+    >>> text_config = Qwen2_5OmniTextConfig()
+
+    >>> # Initializing a Qwen2.5OmniThinker configuration
+    >>> configuration = Qwen2_5OmniThinkerConfig(audio_config, vision_config, text_config)
+
+    >>> # Initializing a model from the Qwen-Omni style configuration
+    >>> model = Qwen2_5OmniThinkerForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen2_5_omni_thinker"
+    sub_configs = {
+        "audio_config": Qwen2_5OmniAudioEncoderConfig,
+        "vision_config": Qwen2_5OmniVisionEncoderConfig,
+        "text_config": Qwen2_5OmniTextConfig,
+    }
+    is_composition = True
+
+    def __init__(
+        self,
+        audio_config=None,
+        vision_config=None,
+        text_config=None,
+        audio_token_index=151646,
+        image_token_index=151655,
+        video_token_index=151656,
+        tie_word_embeddings=False,
+        position_id_per_seconds=25,
+        seconds_per_chunk=2,
+        audio_start_token_id=151647,
+        audio_end_token_id=151648,
+        user_token_id=872,
+        init_std=0.02,
+        **kwargs,
+    ):
+        self.audio_token_index = audio_token_index
+        self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
+        # 2025.02.20 the add
+        self.user_token_id = user_token_id
+        self.position_id_per_seconds = position_id_per_seconds
+        self.seconds_per_chunk = seconds_per_chunk
+        self.audio_start_token_id = audio_start_token_id
+        self.audio_end_token_id = audio_end_token_id
+        self.init_std = init_std
+
+        if isinstance(vision_config, dict):
+            vision_config = Qwen2_5OmniVisionEncoderConfig(**vision_config)
+        elif vision_config is None:
+            vision_config = Qwen2_5OmniVisionEncoderConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Qwen2_5OmniAudioEncoderConfig(**audio_config)
+        elif audio_config is None:
+            audio_config = Qwen2_5OmniAudioEncoderConfig()
+        self.audio_config = audio_config
+
+        if isinstance(text_config, dict):
+            text_config = Qwen2_5OmniTextConfig(**text_config)
+        elif text_config is None:
+            text_config = Qwen2_5OmniTextConfig()
+        self.text_config = text_config
+
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+class Qwen2_5OmniTalkerConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniTalkerForConditionalGeneration`]. It is used to instantiate an
+    Qwen2.5-Omni-Talker model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
+
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        audio_token_index (`int`, *optional*, defaults to 151646):
+            The audio token index to encode the audio prompt.
+        image_token_index (`int`, *optional*, defaults to 151655):
+            The image token index to encode the image prompt.
+        video_token_index (`int`, *optional*, defaults to 151656):
+            The video token index to encode the video prompt.
+        vocab_size (`int`, *optional*, defaults to 8448):
+            Vocabulary size of the QwenOmni model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Qwen2VLModel`]
+        tts_text_start_token_id (`int`, *optional*, defaults to 151860):
+            The tts text start token index to encode the start of tts text.
+        tts_text_end_token_id (`int`, *optional*, defaults to 151861):
+            The tts text end token index to encode the end of tts text.
+        tts_text_pad_token_id (`int`, *optional*, defaults to 151859):
+            The tts text pad token index to encode the pad of tts text.
+        tts_codec_start_token_id (`int`, *optional*, defaults to 8293):
+            The tts codec start token index to encode the start of tts codec.
+        tts_codec_end_token_id (`int`, *optional*, defaults to 8294):
+            The tts codec end token index to encode the end of tts codec.
+        tts_codec_pad_token_id (`int`, *optional*, defaults to 8292):
+            The tts codec pad token index to encode the pad of tts codec.
+        tts_codec_mask_token_id (`int`, *optional*, defaults to 8296):
+            The tts codec mask token index to encode the mask of tts codec.
+        vision_start_token_id (`int`, *optional*, defaults to 151652):
+            The tts vision start token index to encode the start of vision.
+        vision_end_token_id (`int`, *optional*, defaults to 151653):
+            The tts vision end token index to encode the end of vision.
+        embedding_size (`int`, *optional*, defaults to 3584):
+            Dimension of the embedding representations.
+        hidden_size (`int`, *optional*, defaults to 3584):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 18944):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 28):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 28):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*, defaults to 4):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 32768):
+            The maximum sequence length that this model might ever be used with.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        head_dim (`int`, *optional*, defaults to 128):
+            The dimension of each attention head.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
+            The base period of the RoPE embeddings.
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Whether to use sliding window attention.
+        sliding_window (`int`, *optional*, defaults to 32768):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
+        max_window_layers (`int`, *optional*, defaults to 28):
+            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        position_id_per_seconds (`int`, *optional*, defaults to 25):
+            The increment of position id per second.
+        seconds_per_chunk (`int`, *optional*, defaults to 2):
+            The duration in seconds of the chunk of audio and video data.
+        audio_start_token_id (`int`, *optional*, defaults to 151647):
+            The audio start token index to encode the audio prompt.
+        audio_end_token_id (`int`, *optional*, defaults to 151648):
+            The audio end token index to encode the audio prompt.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen2_5OmniTalkerForConditionalGeneration, Qwen2_5OmniThinkerConfig, Qwen2_5OmniAudioEncoderConfig, Qwen2_5OmniVisionEncoderConfig
+
+    >>> # Initializing a Qwen2_5OmniAudioEncoder config
+    >>> audio_config = Qwen2_5OmniAudioEncoderConfig()
+
+    >>> # Initializing a Qwen2 config
+    >>> text_config = Qwen2Config()
+
+    >>> # Initializing a Qwen2_5Omni configuration
+    >>> configuration = Qwen2_5OmniThinkerConfig(audio_config, text_config)
+
+    >>> # Initializing a model from the qwen2-audio style configuration
+    >>> model = Qwen2_5OmniTalkerForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen2_5_omni_talker"
+    is_composition = False
+
+    def __init__(
+        self,
+        audio_token_index=151646,
+        image_token_index=151655,
+        video_token_index=151656,
+        vocab_size=8448,
+        tts_text_start_token_id=151860,
+        tts_text_end_token_id=151861,
+        tts_text_pad_token_id=151859,
+        tts_codec_start_token_id=8293,
+        tts_codec_end_token_id=8294,
+        tts_codec_pad_token_id=8292,
+        tts_codec_mask_token_id=8296,
+        vision_start_token_id=151652,
+        vision_end_token_id=151653,
+        embedding_size=3584,
+        hidden_size=3584,
+        intermediate_size=18944,
+        num_hidden_layers=28,
+        num_attention_heads=28,
+        num_key_value_heads=4,
+        hidden_act="silu",
+        max_position_embeddings=32768,
+        rms_norm_eps=1e-06,
+        head_dim=128,
+        use_cache=True,
+        tie_word_embeddings=False,
+        rope_theta=1000000.0,
+        use_sliding_window=False,
+        sliding_window=32768,
+        max_window_layers=28,
+        attention_dropout=0.0,
+        rope_scaling=None,
+        position_id_per_seconds=25,
+        seconds_per_chunk=2,
+        audio_start_token_id=151647,
+        audio_end_token_id=151648,
+        init_std=0.02,
+        spatial_merge_size=2,
+        **kwargs,
+    ):
+        self.audio_token_index = audio_token_index
+        self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
+
+        self.tts_text_start_token_id = tts_text_start_token_id
+        self.tts_text_end_token_id = tts_text_end_token_id
+        self.tts_text_pad_token_id = tts_text_pad_token_id
+        self.tts_codec_start_token_id = tts_codec_start_token_id
+        self.tts_codec_end_token_id = tts_codec_end_token_id
+        self.tts_codec_pad_token_id = tts_codec_pad_token_id
+
+        self.tts_codec_mask_token_id = tts_codec_mask_token_id
+
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
+
+        self.vocab_size = vocab_size
+        self.head_dim = head_dim
+        self.embedding_size = embedding_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
+        self.rope_scaling = rope_scaling
+        self.position_id_per_seconds = position_id_per_seconds  # zf
+        self.seconds_per_chunk = seconds_per_chunk  # zf
+        self.audio_start_token_id = audio_start_token_id  # zf
+        self.audio_end_token_id = audio_end_token_id  # zf
+
+        self.init_std = init_std
+        self.spatial_merge_size = spatial_merge_size
+
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+class Qwen2_5OmniDiTConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavDiT used in the Qwen2.5-Omni-Token2Wav model.
+    It defines the architecture of the DiT model, which is used for generating mel-spectrograms from tokens.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1024):
+            The dimension of the model.
+        num_hidden_layers (`int`, *optional*, defaults to 22):
+            The number of transformer blocks in the DiT model.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            The number of attention heads in each transformer block.
+        ff_mult (`int`, *optional*, defaults to 2):
+            The multiplier for the feedforward layer in each transformer block.
+        emb_dim (`int`, *optional*, defaults to 512):
+            The dimension of the embedding layer.
+        head_dim (`int`, *optional*, defaults to 64):
+            The dimension of each attention head.
+        repeats (`int`, *optional*, defaults to 2):
+            The number of times the codec embeddings are repeated.
+        num_embeds (`int`, *optional*, defaults to 8193):
+            The number of unique embeddings in the codec.
+        mel_dim (`int`, *optional*, defaults to 80):
+            The dimension of the mel-spectrogram.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout rate for the transformer blocks.
+
+        enc_emb_dim (`int`, *optional*, defaults to 192):
+            The dimension of the pre-trained speaker embedding.
+        enc_dim (`int`, *optional*, defaults to 128):
+            The dimension of the encoder output.
+        enc_channels (`List[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
+            A list of output channels for each TDNN/SERes2Net layer in the encoder.
+        enc_kernel_sizes (`List[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
+            A list of kernel sizes for each layer in the encoder.
+        enc_dilations (`List[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
+            A list of dilations for each layer in the encoder.
+        enc_attention_channels (`int`, *optional*, defaults to 64):
+            The number of attention channels in the SEBlock.
+        enc_res2net_scale (`int`, *optional*, defaults to 2):
+            The scale of the Res2Net block in the encoder.
+        enc_se_channels (`int`, *optional*, defaults to 64):
+            The number of output channels after squeeze in the SEBlock.
+    """
+
+    model_type = "qwen2_5_omni_dit"
+
+    def __init__(
+        self,
+        hidden_size=1024,
+        num_hidden_layers=22,
+        num_attention_heads=16,
+        ff_mult=2,
+        emb_dim=512,
+        head_dim=64,
+        rope_theta=10000.0,
+        max_position_embeddings=32768,
+        block_size=24,
+        look_ahead_layers=[10],
+        look_backward_layers=[0, 20],
+        repeats=2,
+        num_embeds=8193,
+        mel_dim=80,
+        dropout=0.1,
+        enc_emb_dim=192,
+        enc_dim=128,
+        enc_channels=[256, 256, 256, 256, 768],
+        enc_kernel_sizes=[5, 3, 3, 3, 1],
+        enc_dilations=[1, 2, 3, 4, 1],
+        enc_attention_channels=64,
+        enc_res2net_scale=2,
+        enc_se_channels=64,
+        **kwargs,
+    ):
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.ff_mult = ff_mult
+        self.emb_dim = emb_dim
+        self.head_dim = head_dim
+        self.rope_theta = rope_theta
+        self.max_position_embeddings = max_position_embeddings
+        self.block_size = block_size
+        self.look_ahead_layers = look_ahead_layers
+        self.look_backward_layers = look_backward_layers
+        self.repeats = repeats
+        self.num_embeds = num_embeds
+        self.mel_dim = mel_dim
+        self.dropout = dropout
+        self.enc_emb_dim = enc_emb_dim
+        self.enc_dim = enc_dim
+        self.enc_channels = enc_channels
+        self.enc_kernel_sizes = enc_kernel_sizes
+        self.enc_dilations = enc_dilations
+        self.enc_attention_channels = enc_attention_channels
+        self.enc_res2net_scale = enc_res2net_scale
+        self.enc_se_channels = enc_se_channels
+        super().__init__(**kwargs)
+
+
+class Qwen2_5OmniBigVGANConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavBigVGAN module used in the Qwen2.5-Omni-Token2Wav model.
+    It defines the architecture of the BigVGAN model, which is used for converting mel-spectrograms to waveforms.
+
+    Args:
+        mel_dim (`int`, *optional*, defaults to 80):
+            The dimension of the mel-spectrogram.
+        upsample_initial_channel (`int`, *optional*, defaults to 1536):
+            The number of channels in the initial upsampling layer.
+        resblock_kernel_sizes (`List[int]`, *optional*, defaults to `[3, 7, 11]`):
+            A list of kernel sizes for each residual block.
+        resblock_dilation_sizes (`List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+            A list of dilation sizes for each residual block.
+        upsample_rates (`List[int]`, *optional*, defaults to `[5, 3, 2, 2, 2, 2]`):
+            A list of upsampling rates for each upsampling layer.
+        upsample_kernel_sizes (`List[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
+            A list of kernel sizes for each upsampling layer.
+    """
+
+    model_type = "qwen2_5_omni_bigvgan"
+
+    def __init__(
+        self,
+        mel_dim=80,
+        upsample_initial_channel=1536,
+        resblock_kernel_sizes=[3, 7, 11],
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        upsample_rates=[5, 3, 2, 2, 2, 2],
+        upsample_kernel_sizes=[11, 7, 4, 4, 4, 4],
+        **kwargs,
+    ):
+        self.mel_dim = mel_dim
+        self.upsample_initial_channel = upsample_initial_channel
+        self.resblock_kernel_sizes = resblock_kernel_sizes
+        self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.upsample_rates = upsample_rates
+        self.upsample_kernel_sizes = upsample_kernel_sizes
+        super().__init__(**kwargs)
+
+
+class Qwen2_5OmniToken2WavConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniToken2WavModel`].
+    It is used to instantiate the Qwen2.5-Omni-Token2Wav model which combines a Diffusion Transformer (DiT) for mel-spectrogram generation with a BigVGAN model for waveform synthesis. The configuration contains sub-configurations for both components.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        dit_config ([`DiT_Args`], *optional*):
+            Configuration class for the Diffusion Transformer (DiT) module responsible for generating mel-spectrograms.
+        bigvgan_config ([`BigVGAN_Args`], *optional*):
+            Configuration class for the BigVGAN module responsible for converting mel-spectrograms to waveforms.
+    Example:
+
+    ```python
+    >>> from transformers import Qwen2_5OmniToken2WavModel, DiT_Args, BigVGAN_Args
+
+    >>> # Initialize DiT configuration
+    >>> dit_config = DiT_Args(
+    ...     dim=1024,
+    ...     depth=22,
+    ...     heads=16,
+    ...     ff_mult=2
+    ... )
+
+    >>> # Initialize BigVGAN configuration
+    >>> bigvgan_config = BigVGAN_Args(
+    ...     mel_dim=80,
+    ...     upsample_rates=[5,3,2,2,2,2]
+    ... )
+
+    >>> # Initialize main configuration
+    >>> config = Qwen2_5OmniToken2WavConfig(dit_config, bigvgan_config)
+
+    >>> # Initialize model with config
+    >>> model = Qwen2_5OmniToken2Wav(config)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    """
+
+    model_type = "qwen2_5_omni_token2wav"
+    sub_configs = {
+        "dit_config": Qwen2_5OmniDiTConfig,
+        "bigvgan_config": Qwen2_5OmniBigVGANConfig,
+    }
+    is_composition = True
+
+    def __init__(self, dit_config=None, bigvgan_config=None, **kwargs):
+        if dit_config is None:
+            dit_config = {}
+        if bigvgan_config is None:
+            bigvgan_config = {}
+        self.dit_config = Qwen2_5OmniDiTConfig(**dit_config)
+        self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**bigvgan_config)
+        super().__init__(**kwargs)
+
+
+class Qwen2_5OmniConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`Qwen2_5OmniModel`]. It is used to instantiate a Qwen2.5Omni
+    model according to the specified sub-models configurations, defining the model architecture.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
+        talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
+        token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
+        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enabel audio output and load talker and token2wav module.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     Qwen2_5OmniThinkerConfig,
+    ...     Qwen2_5OmniTalkerConfig,
+    ...     Qwen2_5OmniToken2WavConfig,
+    ...     Qwen2_5OmniModel,
+    ...     Qwen2_5OmniConfig,
+    ... )
+
+    >>> # Initializing sub-modules configurations.
+    >>> thinker_config = Qwen2_5OmniThinkerConfig()
+    >>> talker_config = Qwen2_5OmniTalkerConfig()
+    >>> token2wav_config = Qwen2_5OmniToken2WavConfig()
+
+
+    >>> # Initializing a module style configuration
+    >>> configuration = Qwen2_5OmniConfig.from_sub_model_configs(
+    ...     thinker_config, talker_config, token2wav_config
+    ... )
+
+    >>> # Initializing a model (with random weights)
+    >>> model = Qwen2_5OmniModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "qwen2_5_omni"
+    sub_configs = {
+        "thinker_config": Qwen2_5OmniThinkerConfig,
+        "talker_config": Qwen2_5OmniTalkerConfig,
+        "token2wav_config": Qwen2_5OmniToken2WavConfig,
+    }
+    is_composition = True
+
+    def __init__(
+        self,
+        thinker_config=None,
+        talker_config=None,
+        token2wav_config=None,
+        enable_audio_output: bool = True,
+        **kwargs,
+    ):
+        if thinker_config is None:
+            thinker_config = {}
+            logger.info("thinker_config is None. Initializing thinker model with default values")
+
+        if talker_config is None:
+            talker_config = {}
+            logger.info("talker_config is None. Initializing talker model with default values")
+
+        if token2wav_config is None:
+            token2wav_config = {}
+            logger.info("token2wav_config is None. Initializing token2wav model with default values")
+
+        self.thinker_config = Qwen2_5OmniThinkerConfig(**thinker_config)
+        self.talker_config = Qwen2_5OmniTalkerConfig(**talker_config)
+        self.token2wav_config = Qwen2_5OmniToken2WavConfig(**token2wav_config)
+        self.enable_audio_output = enable_audio_output
+
+        super().__init__(**kwargs)
+
+    @classmethod
+    def from_sub_model_configs(
+        cls,
+        thinker_config: Qwen2_5OmniThinkerConfig,
+        talker_config: Qwen2_5OmniTalkerConfig,
+        token2wav_config: Qwen2_5OmniToken2WavConfig,
+        enable_audio_output: bool = True,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a [`Qwen2_5OmniConfig`] (or a derived class) from sub-models configuration.
+
+        Returns:
+            [`Qwen2_5OmniConfig`]: An instance of a configuration object
+        """
+        return cls(
+            thinker_config=thinker_config.to_dict(),
+            talker_config=talker_config.to_dict(),
+            token2wav_config=token2wav_config.to_dict(),
+            enable_audio_output=enable_audio_output,
+            **kwargs,
+        )
+
 
 QWEN2_5OMNI_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -92,10 +1100,6 @@ QWEN2_5OMNI_START_DOCSTRING = r"""
 """
 
 
-# @add_start_docstrings(
-#     "The bare Qwen2.5Omni Model outputting raw hidden-states without any specific head on top.",
-#     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniConfig"),
-# )
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config_class = Qwen2_5OmniConfig
     base_model_prefix = "model"
@@ -176,12 +1180,6 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                 )
 
         return causal_mask
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_llm_pos_ids_for_vision(
         self,
@@ -556,91 +1554,41 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
     def __init__(
         self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        layer_idx: Optional[int] = None,
-        config: Optional[Qwen2_5OmniThinkerConfig] = None,
+        config: Qwen2_5OmniAudioEncoderConfig,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
+        self.embed_dim = config.d_model
+        self.num_heads = config.encoder_attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
         self.config = config
 
-        if (self.head_dim * num_heads) != self.embed_dim:
+        if (self.head_dim * self.num_heads) != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
+                f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-        self.is_causal = is_causal
+        self.is_decoder = False
+        self.is_causal = False
 
-        if layer_idx is None and is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-        self.layer_idx = layer_idx
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         seq_length, _ = hidden_states.size()
 
-        # get query proj
-        # query_states = self.q_proj(hidden_states)
-        query_states = (hidden_states @ self.q_proj.weight.t()) + self.q_proj.bias
-
-        query_states = query_states.reshape(seq_length, self.num_heads, -1)
-
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
-            else:
-                past_key_value = past_key_value.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            value_states = self.v_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
 
         query_states = query_states.transpose(0, 1)
         key_states = key_states.transpose(0, 1)
@@ -660,14 +1608,6 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query_states.dtype)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights
-
         attn_output = torch.matmul(attn_weights, value_states).transpose(0, 1).reshape(seq_length, self.embed_dim)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
@@ -675,7 +1615,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output
 
 
 class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
@@ -696,138 +1636,40 @@ class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if isinstance(past_key_value, StaticCache):
-            raise ValueError(
-                "The `static` cache implementation is not compatible with `attn_implementation='flash_attention_2'`. "
-                "Use `attn_implementation='sdpa'` in the meantime, and open an issue at https://github.com/huggingface/transformers"
-            )
-        # Qwen2.5OmniThinkerFlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("Qwen2.5OmniThinkerFlashAttention2 attention does not support output_attentions")
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         seq_length, all_dim = hidden_states.size()
-        query_states = (hidden_states @ self.q_proj.weight.t()) + (
-            self.q_proj.bias if self.q_proj.bias is not None else 0
-        )
+        query_states = self.q_proj(hidden_states)
         query_states = query_states.reshape(seq_length, self.num_heads, -1)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
-            else:
-                past_key_value = past_key_value.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = (current_states @ self.k_proj.weight.t()) + (
-                self.k_proj.bias if self.k_proj.bias is not None else 0
-            )
-            key_states = key_states.reshape(seq_length, self.num_heads, -1)
-            value_states = (current_states @ self.v_proj.weight.t()) + (
-                self.v_proj.bias if self.v_proj.bias is not None else 0
-            )
-            value_states = value_states.reshape(seq_length, self.num_heads, -1)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+        key_states = self.k_proj(hidden_states)
+        key_states = key_states.reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states)
+        value_states = value_states.reshape(seq_length, self.num_heads, -1)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         attn_output = flash_attn_varlen_func(
             query_states, key_states, value_states, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen, dropout_p=0.0
         )
         attn_output = attn_output.reshape(seq_length, all_dim)
-        attn_output = (attn_output @ self.out_proj.weight.t()) + (
-            self.out_proj.bias if self.out_proj.bias is not None else 0
-        )
+        attn_output = self.out_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
+        return attn_output
 
 
 class Qwen2_5OmniAudioSdpaAttention(Qwen2_5OmniAudioAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
-            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "Qwen2_5OmniThinkerModel is using Qwen2_5OmniThinkerSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
-                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states,
-                key_value_states=key_value_states,
-                past_key_value=past_key_value,
-                cu_seqlens=cu_seqlens,
-                layer_head_mask=layer_head_mask,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         seq_length, _ = hidden_states.size()
 
-        # get query proj
         query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
-            else:
-                past_key_value = past_key_value.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            value_states = self.v_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
 
         attention_mask = torch.zeros(
             [1, seq_length, key_states.shape[0]], device=query_states.device, dtype=torch.bool
@@ -856,7 +1698,7 @@ class Qwen2_5OmniAudioSdpaAttention(Qwen2_5OmniAudioAttention):
         # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(seq_length, self.embed_dim)
         attn_output = self.out_proj(attn_output)
-        return attn_output, None, past_key_value
+        return attn_output
 
 
 QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES = {
@@ -869,34 +1711,25 @@ QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES = {
 class Qwen2_5OmniAudioEncoderLayer(Qwen2AudioEncoderLayer):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__(config)
-        self.self_attn = QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES[config._attn_implementation](
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
+        self.self_attn = QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES[config._attn_implementation](config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = (hidden_states @ self.fc1.weight.t()) + (self.fc1.bias if self.fc1.bias is not None else 0)
+        hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = (hidden_states @ self.fc2.weight.t()) + (self.fc2.bias if self.fc2.bias is not None else 0)
+        hidden_states = self.fc2(hidden_states)
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16 and (
@@ -907,16 +1740,14 @@ class Qwen2_5OmniAudioEncoderLayer(Qwen2AudioEncoderLayer):
 
         outputs = (hidden_states,)
 
-        if output_attentions:
-            outputs += (attn_weights,)
-
         return outputs
 
 
 class SinusoidsPositionEmbedding(nn.Module):
     def __init__(self, length, channels, max_timescale=10000):
         super().__init__()
-        assert channels % 2 == 0
+        if channels % 2 != 0:
+            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
         scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
@@ -928,6 +1759,21 @@ class SinusoidsPositionEmbedding(nn.Module):
 
     def forward(self, seqlen: int):
         return self.positional_embedding[:seqlen, :]
+
+
+QWEN_OMNI_AUDIO_INPUTS = r"""
+        Args:
+            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+
+            feature_lens: [B], torch.LongTensor , mel length
+
+            aftercnn_lens : [B], torch.LongTensor , mel length after cnn
+        """
 
 
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
@@ -977,50 +1823,13 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @add_start_docstrings_to_model_forward(QWEN_OMNI_AUDIO_INPUTS)
     def forward(
         self,
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
     ):
-        r"""
-        Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-
-            feature_lens: [B], torch.LongTensor , mel length
-
-            aftercnn_lens : [B], torch.LongTensor , mel length after cnn
-
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
 
         chunk_lengths = torch.tensor(
@@ -1028,7 +1837,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             dtype=torch.long,
             device=feature_lens.device,
         )
-        tail_chunk_index = list(accumulate(chunk_num.tolist(), func=operator.add, initial=-1))[1:]
+        tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
         chunk_lengths[tail_chunk_index] = feature_lens % (self.n_window * 2)
         chunk_lengths = torch.where(chunk_lengths == 0, self.n_window * 2, chunk_lengths)
 
@@ -1049,19 +1858,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                 padded_mask_after_cnn.sum(1).cumsum(0),
             )
         ).to(torch.int32)
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
 
         tmp_hidden_states = []
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None and head_mask.size()[0] != (len(self.layers)):
-            raise ValueError(
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
 
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -1078,22 +1878,15 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                         encoder_layer.__call__,
                         hidden_states,
                         cu_seqlens,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
                         cu_seqlens,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
                     )
 
                 hidden_states = layer_outputs[0]
                 tmp_hidden_states.append(hidden_states)
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
         token_audio_list = []
@@ -1103,12 +1896,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             each_audio_states = self.proj(each_audio_states)
             token_audio_list.append(each_audio_states)
         token_audio = torch.cat(token_audio_list, dim=0)
-        if output_hidden_states:
-            encoder_states = encoder_states + (token_audio,)
-
-        if not return_dict:
-            return tuple(v for v in [token_audio, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=token_audio, hidden_states=encoder_states, attentions=all_attentions)
+        return BaseModelOutput(last_hidden_state=token_audio)
 
     def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
         max_len = tensor_len.max()
@@ -1279,9 +2067,9 @@ QWEN2_5_OMNI_VISION_ATTENTION_CLASSES = {
 
 
 class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
-    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
-        super().__init__(config, attn_implementation)
-        self.attn = QWEN2_5_OMNI_VISION_ATTENTION_CLASSES[attn_implementation](
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
+        super().__init__(config, config._attn_implementation)
+        self.attn = QWEN2_5_OMNI_VISION_ATTENTION_CLASSES[config._attn_implementation](
             config.hidden_size, num_heads=config.num_heads
         )
 
@@ -1297,11 +2085,9 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     config_class = Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
-        self.blocks = nn.ModuleList(
-            [Qwen2_5OmniVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
-        )
+        self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
 
     def get_dtype(self) -> torch.dtype:
         return self.blocks[0].mlp.gate_proj.weight.dtype
@@ -1421,7 +2207,7 @@ class Qwen2MLP(Qwen2_5_VLMLP):
     "The bare Qwen2.5OmniThinker Model outputting raw hidden-states without any specific head on top.",
     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniTextConfig"),
 )
-class Qwen2_5OmniThinkerModel(Qwen2_5_VLModel):
+class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLModel):
     config_class = Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
@@ -1537,13 +2323,20 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         )
 
         self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerModel._from_config(
+        self.model = Qwen2_5OmniThinkerTextModel._from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.rope_deltas = None
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(QWEN2_5OMNITHINKER_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -1627,7 +2420,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         else:
             audio_feature_lengths = None
         if attention_mask is not None and position_ids is None:
-            if cache_position is None or (cache_position is not None and cache_position[0] == 0):
+            if (
+                cache_position is None
+                or (cache_position is not None and cache_position[0] == 0)
+                or self.rope_deltas is None
+            ):
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -1639,12 +2436,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                     video_second_per_grid,
                 )
                 rope_deltas = rope_deltas - delta0
-
+                self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = (
-                    cache_position[0] + rope_deltas if cache_position is not None and rope_deltas is not None else 0
-                )
+                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -1653,48 +2448,48 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         if inputs_embeds is None:
             # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
-            embeds_to_talker = inputs_embeds.clone()
+        embeds_to_talker = inputs_embeds.clone()
 
-            # 2. Merge text , audios , image and video
-            if input_ids.shape[1] != 1:
-                if input_features is not None:
-                    audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
-                        audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-                    )
-                    feature_lens = (
-                        audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-                    )
-                    audio_outputs = self.audio_tower(
-                        input_features,
-                        feature_lens=feature_lens,
-                        aftercnn_lens=audio_feat_lengths,
-                    )
-                    audio_features = audio_outputs.last_hidden_state
-                    if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
-                        raise ValueError("length of audio_features should match audio_output_lengths")
-                    audio_mask = (input_ids == self.config.audio_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
-                    embeds_to_talker = embeds_to_talker.masked_scatter(audio_mask, torch.zeros_like(audio_features))
+        # 2. Merge text , audios , image and video
+        if input_ids.shape[1] != 1:  # Prefill stage
+            if input_features is not None:
+                audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
+                    audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+                )
+                feature_lens = (
+                    audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+                )
+                audio_outputs = self.audio_tower(
+                    input_features,
+                    feature_lens=feature_lens,
+                    aftercnn_lens=audio_feat_lengths,
+                )
+                audio_features = audio_outputs.last_hidden_state
+                if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
+                    raise ValueError("length of audio_features should match audio_output_lengths")
+                audio_mask = (input_ids == self.config.audio_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
+                embeds_to_talker = embeds_to_talker.masked_scatter(audio_mask, torch.zeros_like(audio_features))
 
-                if pixel_values is not None:
-                    pixel_values = pixel_values.type(self.visual.get_dtype())
-                    image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-                    image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-                    embeds_to_talker = embeds_to_talker.masked_scatter(image_mask, torch.zeros_like(image_embeds))
+            if pixel_values is not None:
+                pixel_values = pixel_values.type(self.visual.get_dtype())
+                image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+                image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                embeds_to_talker = embeds_to_talker.masked_scatter(image_mask, torch.zeros_like(image_embeds))
 
-                if pixel_values_videos is not None:
-                    pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
-                    video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-                    video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-                    embeds_to_talker = embeds_to_talker.masked_scatter(video_mask, torch.zeros_like(video_embeds))
+            if pixel_values_videos is not None:
+                pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
+                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+                embeds_to_talker = embeds_to_talker.masked_scatter(video_mask, torch.zeros_like(video_embeds))
 
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(inputs_embeds.device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
 
         outputs = self.model(
             attention_mask=attention_mask,
@@ -1713,20 +2508,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         loss = None
         if labels is not None:
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
 
         if not return_dict:
             output = (logits,) + ((embeds_to_talker, outputs[0])) + outputs[1:]
@@ -1739,7 +2521,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             hidden_states=(embeds_to_talker, outputs.hidden_states),
             attentions=outputs.attentions,
             attention_mask=attention_mask,
-            rope_deltas=rope_deltas,
+            rope_deltas=self.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
@@ -1802,9 +2584,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
-
-        if getattr(outputs, "rope_deltas", None) is not None:
-            model_kwargs["rope_deltas"] = outputs.rope_deltas
 
         return model_kwargs
 
@@ -1892,8 +2671,15 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         self.text_pad_token = config.tts_text_pad_token_id
 
         self.spatial_merge_size = self.config.spatial_merge_size
+        self.rope_deltas = None
 
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(QWEN2_5OMNITHINKER_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -1959,7 +2745,11 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None and position_ids is None:
-            if cache_position is None or (cache_position is not None and cache_position[0] == 0):
+            if (
+                cache_position is None
+                or (cache_position is not None and cache_position[0] == 0)
+                or self.rope_deltas is None
+            ):
                 position_ids, rope_deltas = self.get_rope_index(
                     input_text_ids,
                     image_grid_thw,
@@ -1976,19 +2766,18 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                 inputs_embeds[:, -2, :] += self.get_input_embeddings()(
                     torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
                 )
+                self.rope_deltas = rope_deltas
 
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = (
-                    cache_position[0] + rope_deltas if cache_position is not None and rope_deltas is not None else 0
-                )
+                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
         if inputs_embeds is None:
-            # 1. 推理第 2 个以及之后的 token
+            # 1. Inference tokens after second token
             codec_embeds = self.get_input_embeddings()(input_ids)
             inputs_embeds = codec_embeds + thinker_reply_part[:, :1, :]
             if thinker_reply_part.shape[1] > 1:
@@ -2027,7 +2816,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             hidden_states=hidden_states,
             attentions=outputs.attentions,
             attention_mask=attention_mask,
-            rope_deltas=rope_deltas,
+            rope_deltas=self.rope_deltas,
             thinker_reply_part=thinker_reply_part,
         )
 
@@ -2096,9 +2885,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
-
-        if getattr(outputs, "rope_deltas", None) is not None:
-            model_kwargs["rope_deltas"] = outputs.rope_deltas
 
         if getattr(outputs, "thinker_reply_part", None) is not None:
             model_kwargs["thinker_reply_part"] = outputs.thinker_reply_part
@@ -2208,8 +2994,6 @@ class Res2NetBlock(torch.nn.Module):
 
     def __init__(self, in_channels, out_channels, scale=8, kernel_size=3, dilation=1):
         super().__init__()
-        assert in_channels % scale == 0
-        assert out_channels % scale == 0
 
         in_channel = in_channels // scale
         hidden_channel = out_channels // scale
@@ -2227,18 +3011,18 @@ class Res2NetBlock(torch.nn.Module):
         )
         self.scale = scale
 
-    def forward(self, x):
-        y = []
-        for i, x_i in enumerate(torch.chunk(x, self.scale, dim=1)):
+    def forward(self, hidden):
+        outputs = []
+        for i, hidden_part in enumerate(torch.chunk(hidden, self.scale, dim=1)):
             if i == 0:
-                y_i = x_i
+                output_part = hidden_part
             elif i == 1:
-                y_i = self.blocks[i - 1](x_i)
+                output_part = self.blocks[i - 1](hidden_part)
             else:
-                y_i = self.blocks[i - 1](x_i + y_i)
-            y.append(y_i)
-        y = torch.cat(y, dim=1)
-        return y
+                output_part = self.blocks[i - 1](hidden_part + output_part)
+            outputs.append(output_part)
+        output = torch.cat(outputs, dim=1)
+        return output
 
 
 class SEBlock(nn.Module):
@@ -2330,7 +3114,6 @@ class AttentiveStatisticsPooling(nn.Module):
         mask : tensor
             The binary mask.
         """
-        assert len(length.shape) == 1
 
         if max_len is None:
             max_len = length.max().long().item()  # using arange to generate mask
@@ -2464,8 +3247,10 @@ class ECAPA_TDNN(torch.nn.Module):
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
         super().__init__()
-        assert len(config.enc_channels) == len(config.enc_kernel_sizes)
-        assert len(config.enc_channels) == len(config.enc_dilations)
+        if len(config.enc_channels) != len(config.enc_kernel_sizes) or len(config.enc_channels) != len(
+            config.enc_dilations
+        ):
+            raise ValueError("enc_channels, enc_kernel_sizes and enc_dilations should have same length")
         self.channels = config.enc_channels
         self.blocks = nn.ModuleList()
 
@@ -3248,7 +4033,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         y0 = y_all[:, :max_duration].to(code.device)
         batch = ref_mel.shape[0]
         cond = cond.unsqueeze(1).repeat(1, max_duration, 1)
-        assert batch == 1, "only support batch size = 1 currently"
+        if batch != 1:
+            raise ValueError("only support batch size = 1 currently")
 
         def fn(t, x):
             if cfg_strength < 1e-5:
@@ -3342,7 +4128,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """,
     QWEN2_5OMNI_START_DOCSTRING.format(config_class=Qwen2_5OmniConfig),
 )
-class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
+class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config_class = Qwen2_5OmniConfig
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
@@ -3376,10 +4162,6 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
         if hasattr(self, "token2wav"):
             del self.token2wav
         self.has_talker = False
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        return True
 
     @classmethod
     def from_pretrained(
@@ -3609,8 +4391,12 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
 
 
 __all__ = [
+    "Qwen2_5OmniConfig",
+    "Qwen2_5OmniThinkerConfig",
+    "Qwen2_5OmniTalkerConfig",
+    "Qwen2_5OmniToken2WavConfig",
     "Qwen2_5OmniModel",
-    "Qwen2_5OmniThinkerModel",
+    "Qwen2_5OmniThinkerTextModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen2_5OmniTalkerModel",
     "Qwen2_5OmniTalkerForConditionalGeneration",

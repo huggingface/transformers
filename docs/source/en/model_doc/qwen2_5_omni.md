@@ -270,9 +270,9 @@ model = Qwen2_5OmniModel.from_pretrained(
 
 [[autodoc]] Qwen2_5OmniThinkerForConditionalGeneration
 
-## Qwen2_5OmniThinkerModel
+## Qwen2_5OmniThinkerTextModel
 
-[[autodoc]] Qwen2_5OmniThinkerModel
+[[autodoc]] Qwen2_5OmniThinkerTextModel
 
 ## Qwen2_5OmniTalkerConfig
 

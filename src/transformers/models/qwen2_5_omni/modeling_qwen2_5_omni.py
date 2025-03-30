@@ -21,9 +21,7 @@
 # limitations under the License.
 
 import math
-import operator
 from dataclasses import dataclass
-from itertools import accumulate
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -33,7 +31,7 @@ import torch.nn.functional as F
 from torch.nn import ConvTranspose1d, Parameter
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, ModelOutput
@@ -78,10 +76,6 @@ else:
 logger = logging.get_logger(__name__)
 
 
-# @add_start_docstrings(
-#     "The bare Qwen2.5Omni Model outputting raw hidden-states without any specific head on top.",
-#     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniConfig"),
-# )
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config_class = Qwen2_5OmniConfig
     base_model_prefix = "model"
@@ -162,12 +156,6 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                 )
 
         return causal_mask
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_llm_pos_ids_for_vision(
         self,
@@ -542,91 +530,41 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
     def __init__(
         self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        layer_idx: Optional[int] = None,
-        config: Optional[Qwen2_5OmniThinkerConfig] = None,
+        config: Qwen2_5OmniAudioEncoderConfig,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
+        self.embed_dim = config.d_model
+        self.num_heads = config.encoder_attention_heads
+        self.dropout = config.attention_dropout
+        self.head_dim = self.embed_dim // self.num_heads
         self.config = config
 
-        if (self.head_dim * num_heads) != self.embed_dim:
+        if (self.head_dim * self.num_heads) != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
+                f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-        self.is_causal = is_causal
+        self.is_decoder = False
+        self.is_causal = False
 
-        if layer_idx is None and is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-        self.layer_idx = layer_idx
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         seq_length, _ = hidden_states.size()
 
-        # get query proj
-        # query_states = self.q_proj(hidden_states)
-        query_states = (hidden_states @ self.q_proj.weight.t()) + self.q_proj.bias
-
-        query_states = query_states.reshape(seq_length, self.num_heads, -1)
-
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
-            else:
-                past_key_value = past_key_value.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            value_states = self.v_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
 
         query_states = query_states.transpose(0, 1)
         key_states = key_states.transpose(0, 1)
@@ -646,14 +584,6 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query_states.dtype)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights
-
         attn_output = torch.matmul(attn_weights, value_states).transpose(0, 1).reshape(seq_length, self.embed_dim)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
@@ -661,7 +591,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output
 
 
 class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
@@ -682,138 +612,40 @@ class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if isinstance(past_key_value, StaticCache):
-            raise ValueError(
-                "The `static` cache implementation is not compatible with `attn_implementation='flash_attention_2'`. "
-                "Use `attn_implementation='sdpa'` in the meantime, and open an issue at https://github.com/huggingface/transformers"
-            )
-        # Qwen2.5OmniThinkerFlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("Qwen2.5OmniThinkerFlashAttention2 attention does not support output_attentions")
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         seq_length, all_dim = hidden_states.size()
-        query_states = (hidden_states @ self.q_proj.weight.t()) + (
-            self.q_proj.bias if self.q_proj.bias is not None else 0
-        )
+        query_states = self.q_proj(hidden_states)
         query_states = query_states.reshape(seq_length, self.num_heads, -1)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
-            else:
-                past_key_value = past_key_value.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = (current_states @ self.k_proj.weight.t()) + (
-                self.k_proj.bias if self.k_proj.bias is not None else 0
-            )
-            key_states = key_states.reshape(seq_length, self.num_heads, -1)
-            value_states = (current_states @ self.v_proj.weight.t()) + (
-                self.v_proj.bias if self.v_proj.bias is not None else 0
-            )
-            value_states = value_states.reshape(seq_length, self.num_heads, -1)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+        key_states = self.k_proj(hidden_states)
+        key_states = key_states.reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states)
+        value_states = value_states.reshape(seq_length, self.num_heads, -1)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         attn_output = flash_attn_varlen_func(
             query_states, key_states, value_states, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen, dropout_p=0.0
         )
         attn_output = attn_output.reshape(seq_length, all_dim)
-        attn_output = (attn_output @ self.out_proj.weight.t()) + (
-            self.out_proj.bias if self.out_proj.bias is not None else 0
-        )
+        attn_output = self.out_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
+        return attn_output
 
 
 class Qwen2_5OmniAudioSdpaAttention(Qwen2_5OmniAudioAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
-            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "Qwen2_5OmniThinkerModel is using Qwen2_5OmniThinkerSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
-                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states,
-                key_value_states=key_value_states,
-                past_key_value=past_key_value,
-                cu_seqlens=cu_seqlens,
-                layer_head_mask=layer_head_mask,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         seq_length, _ = hidden_states.size()
 
-        # get query proj
         query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
-            else:
-                past_key_value = past_key_value.self_attention_cache
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            value_states = self.v_proj(current_states).reshape(seq_length, self.num_heads, -1)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
+        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
 
         attention_mask = torch.zeros(
             [1, seq_length, key_states.shape[0]], device=query_states.device, dtype=torch.bool
@@ -842,7 +674,7 @@ class Qwen2_5OmniAudioSdpaAttention(Qwen2_5OmniAudioAttention):
         # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(seq_length, self.embed_dim)
         attn_output = self.out_proj(attn_output)
-        return attn_output, None, past_key_value
+        return attn_output
 
 
 QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES = {
@@ -856,12 +688,7 @@ class Qwen2_5OmniAudioEncoderLayer(nn.Module):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES[config._attn_implementation](
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
+        self.self_attn = QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES[config._attn_implementation](config)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -874,8 +701,6 @@ class Qwen2_5OmniAudioEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
     ) -> torch.Tensor:
         """
         Args:
@@ -890,18 +715,16 @@ class Qwen2_5OmniAudioEncoderLayer(nn.Module):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = (hidden_states @ self.fc1.weight.t()) + (self.fc1.bias if self.fc1.bias is not None else 0)
+        hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = (hidden_states @ self.fc2.weight.t()) + (self.fc2.bias if self.fc2.bias is not None else 0)
+        hidden_states = self.fc2(hidden_states)
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16 and (
@@ -912,16 +735,14 @@ class Qwen2_5OmniAudioEncoderLayer(nn.Module):
 
         outputs = (hidden_states,)
 
-        if output_attentions:
-            outputs += (attn_weights,)
-
         return outputs
 
 
 class SinusoidsPositionEmbedding(nn.Module):
     def __init__(self, length, channels, max_timescale=10000):
         super().__init__()
-        assert channels % 2 == 0
+        if channels % 2 != 0:
+            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
         scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
@@ -933,6 +754,21 @@ class SinusoidsPositionEmbedding(nn.Module):
 
     def forward(self, seqlen: int):
         return self.positional_embedding[:seqlen, :]
+
+
+QWEN_OMNI_AUDIO_INPUTS = r"""
+        Args:
+            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+
+            feature_lens: [B], torch.LongTensor , mel length
+
+            aftercnn_lens : [B], torch.LongTensor , mel length after cnn
+        """
 
 
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
@@ -982,50 +818,13 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @add_start_docstrings_to_model_forward(QWEN_OMNI_AUDIO_INPUTS)
     def forward(
         self,
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
     ):
-        r"""
-        Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-
-            feature_lens: [B], torch.LongTensor , mel length
-
-            aftercnn_lens : [B], torch.LongTensor , mel length after cnn
-
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
 
         chunk_lengths = torch.tensor(
@@ -1033,7 +832,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             dtype=torch.long,
             device=feature_lens.device,
         )
-        tail_chunk_index = list(accumulate(chunk_num.tolist(), func=operator.add, initial=-1))[1:]
+        tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
         chunk_lengths[tail_chunk_index] = feature_lens % (self.n_window * 2)
         chunk_lengths = torch.where(chunk_lengths == 0, self.n_window * 2, chunk_lengths)
 
@@ -1054,19 +853,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                 padded_mask_after_cnn.sum(1).cumsum(0),
             )
         ).to(torch.int32)
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
 
         tmp_hidden_states = []
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None and head_mask.size()[0] != (len(self.layers)):
-            raise ValueError(
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
 
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -1083,22 +873,15 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                         encoder_layer.__call__,
                         hidden_states,
                         cu_seqlens,
-                        (head_mask[idx] if head_mask is not None else None),
-                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
                         cu_seqlens,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
                     )
 
                 hidden_states = layer_outputs[0]
                 tmp_hidden_states.append(hidden_states)
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
         token_audio_list = []
@@ -1108,12 +891,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             each_audio_states = self.proj(each_audio_states)
             token_audio_list.append(each_audio_states)
         token_audio = torch.cat(token_audio_list, dim=0)
-        if output_hidden_states:
-            encoder_states = encoder_states + (token_audio,)
-
-        if not return_dict:
-            return tuple(v for v in [token_audio, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=token_audio, hidden_states=encoder_states, attentions=all_attentions)
+        return BaseModelOutput(last_hidden_state=token_audio)
 
     def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
         max_len = tensor_len.max()
@@ -1121,7 +899,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         padded_tensor = torch.full(
             size=(len(tensor_list), dim, max_len),
             fill_value=padding_value,
-            dtype=tensor_list[0].dtype,
+            dtype=self.dtype,
             device=tensor_list[0].device,
         )
 
@@ -1325,11 +1103,11 @@ QWEN2_5_OMNI_VISION_ATTENTION_CLASSES = {
 
 
 class Qwen2_5OmniVisionBlock(nn.Module):
-    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = QWEN2_5_OMNI_VISION_ATTENTION_CLASSES[attn_implementation](
+        self.attn = QWEN2_5_OMNI_VISION_ATTENTION_CLASSES[config._attn_implementation](
             config.hidden_size, num_heads=config.num_heads
         )
         self.mlp = Qwen2_5OmniMLP(config, bias=True)
@@ -1400,7 +1178,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -1417,9 +1195,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
-        self.blocks = nn.ModuleList(
-            [Qwen2_5OmniVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
-        )
+        self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen2_5OmniPatchMerger(
             dim=config.out_hidden_size,
             context_dim=config.hidden_size,
@@ -2117,7 +1893,7 @@ QWEN2_5OMNI_START_DOCSTRING = r"""
     "The bare Qwen2.5OmniThinker Model outputting raw hidden-states without any specific head on top.",
     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniTextConfig"),
 )
-class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModel):
+class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
@@ -2275,7 +2051,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModel):
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Qwen25OmniThinker. Make sure to "
+                        " this may lead to unexpected behaviour for Flash Attention version of Qwen25OmniThinkerText. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:
@@ -2375,7 +2151,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
                 Batch size.
-            config (`Qwen25OmniThinkerConfig`):
+            config (`Qwen25OmniThinkerTextConfig`):
                 The model's configuration class
             past_key_values (`Cache`):
                 The cache class that is being used currently to generate
@@ -2522,13 +2298,20 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         )
 
         self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerModel._from_config(
+        self.model = Qwen2_5OmniThinkerTextModel._from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.rope_deltas = None
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(QWEN2_5OMNITHINKER_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -2612,7 +2395,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         else:
             audio_feature_lengths = None
         if attention_mask is not None and position_ids is None:
-            if cache_position is None or (cache_position is not None and cache_position[0] == 0):
+            if (
+                cache_position is None
+                or (cache_position is not None and cache_position[0] == 0)
+                or self.rope_deltas is None
+            ):
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -2624,12 +2411,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                     video_second_per_grid,
                 )
                 rope_deltas = rope_deltas - delta0
-
+                self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = (
-                    cache_position[0] + rope_deltas if cache_position is not None and rope_deltas is not None else 0
-                )
+                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -2638,48 +2423,48 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         if inputs_embeds is None:
             # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
-            embeds_to_talker = inputs_embeds.clone()
+        embeds_to_talker = inputs_embeds.clone()
 
-            # 2. Merge text , audios , image and video
-            if input_ids.shape[1] != 1:
-                if input_features is not None:
-                    audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
-                        audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-                    )
-                    feature_lens = (
-                        audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-                    )
-                    audio_outputs = self.audio_tower(
-                        input_features,
-                        feature_lens=feature_lens,
-                        aftercnn_lens=audio_feat_lengths,
-                    )
-                    audio_features = audio_outputs.last_hidden_state
-                    if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
-                        raise ValueError("length of audio_features should match audio_output_lengths")
-                    audio_mask = (input_ids == self.config.audio_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
-                    embeds_to_talker = embeds_to_talker.masked_scatter(audio_mask, torch.zeros_like(audio_features))
+        # 2. Merge text , audios , image and video
+        if input_ids.shape[1] != 1:  # Prefill stage
+            if input_features is not None:
+                audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
+                    audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+                )
+                feature_lens = (
+                    audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+                )
+                audio_outputs = self.audio_tower(
+                    input_features,
+                    feature_lens=feature_lens,
+                    aftercnn_lens=audio_feat_lengths,
+                )
+                audio_features = audio_outputs.last_hidden_state
+                if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
+                    raise ValueError("length of audio_features should match audio_output_lengths")
+                audio_mask = (input_ids == self.config.audio_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
+                embeds_to_talker = embeds_to_talker.masked_scatter(audio_mask, torch.zeros_like(audio_features))
 
-                if pixel_values is not None:
-                    pixel_values = pixel_values.type(self.visual.get_dtype())
-                    image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-                    image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-                    embeds_to_talker = embeds_to_talker.masked_scatter(image_mask, torch.zeros_like(image_embeds))
+            if pixel_values is not None:
+                pixel_values = pixel_values.type(self.visual.get_dtype())
+                image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+                image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                embeds_to_talker = embeds_to_talker.masked_scatter(image_mask, torch.zeros_like(image_embeds))
 
-                if pixel_values_videos is not None:
-                    pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
-                    video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-                    video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-                    video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-                    embeds_to_talker = embeds_to_talker.masked_scatter(video_mask, torch.zeros_like(video_embeds))
+            if pixel_values_videos is not None:
+                pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
+                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+                embeds_to_talker = embeds_to_talker.masked_scatter(video_mask, torch.zeros_like(video_embeds))
 
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(inputs_embeds.device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
 
         outputs = self.model(
             attention_mask=attention_mask,
@@ -2698,20 +2483,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         loss = None
         if labels is not None:
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
 
         if not return_dict:
             output = (logits,) + ((embeds_to_talker, outputs[0])) + outputs[1:]
@@ -2724,7 +2496,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             hidden_states=(embeds_to_talker, outputs.hidden_states),
             attentions=outputs.attentions,
             attention_mask=attention_mask,
-            rope_deltas=rope_deltas,
+            rope_deltas=self.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
@@ -2787,9 +2559,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
-
-        if getattr(outputs, "rope_deltas", None) is not None:
-            model_kwargs["rope_deltas"] = outputs.rope_deltas
 
         return model_kwargs
 
@@ -3164,8 +2933,15 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         self.text_pad_token = config.tts_text_pad_token_id
 
         self.spatial_merge_size = self.config.spatial_merge_size
+        self.rope_deltas = None
 
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(QWEN2_5OMNITHINKER_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -3231,7 +3007,11 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None and position_ids is None:
-            if cache_position is None or (cache_position is not None and cache_position[0] == 0):
+            if (
+                cache_position is None
+                or (cache_position is not None and cache_position[0] == 0)
+                or self.rope_deltas is None
+            ):
                 position_ids, rope_deltas = self.get_rope_index(
                     input_text_ids,
                     image_grid_thw,
@@ -3248,19 +3028,18 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                 inputs_embeds[:, -2, :] += self.get_input_embeddings()(
                     torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
                 )
+                self.rope_deltas = rope_deltas
 
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = (
-                    cache_position[0] + rope_deltas if cache_position is not None and rope_deltas is not None else 0
-                )
+                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
         if inputs_embeds is None:
-            # 1. 推理第 2 个以及之后的 token
+            # 1. Inference tokens after second token
             codec_embeds = self.get_input_embeddings()(input_ids)
             inputs_embeds = codec_embeds + thinker_reply_part[:, :1, :]
             if thinker_reply_part.shape[1] > 1:
@@ -3299,7 +3078,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             hidden_states=hidden_states,
             attentions=outputs.attentions,
             attention_mask=attention_mask,
-            rope_deltas=rope_deltas,
+            rope_deltas=self.rope_deltas,
             thinker_reply_part=thinker_reply_part,
         )
 
@@ -3368,9 +3147,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
-
-        if getattr(outputs, "rope_deltas", None) is not None:
-            model_kwargs["rope_deltas"] = outputs.rope_deltas
 
         if getattr(outputs, "thinker_reply_part", None) is not None:
             model_kwargs["thinker_reply_part"] = outputs.thinker_reply_part
@@ -3444,8 +3220,6 @@ class Res2NetBlock(torch.nn.Module):
 
     def __init__(self, in_channels, out_channels, scale=8, kernel_size=3, dilation=1):
         super().__init__()
-        assert in_channels % scale == 0
-        assert out_channels % scale == 0
 
         in_channel = in_channels // scale
         hidden_channel = out_channels // scale
@@ -3463,18 +3237,18 @@ class Res2NetBlock(torch.nn.Module):
         )
         self.scale = scale
 
-    def forward(self, x):
-        y = []
-        for i, x_i in enumerate(torch.chunk(x, self.scale, dim=1)):
+    def forward(self, hidden):
+        outputs = []
+        for i, hidden_part in enumerate(torch.chunk(hidden, self.scale, dim=1)):
             if i == 0:
-                y_i = x_i
+                output_part = hidden_part
             elif i == 1:
-                y_i = self.blocks[i - 1](x_i)
+                output_part = self.blocks[i - 1](hidden_part)
             else:
-                y_i = self.blocks[i - 1](x_i + y_i)
-            y.append(y_i)
-        y = torch.cat(y, dim=1)
-        return y
+                output_part = self.blocks[i - 1](hidden_part + output_part)
+            outputs.append(output_part)
+        output = torch.cat(outputs, dim=1)
+        return output
 
 
 class SEBlock(nn.Module):
@@ -3566,7 +3340,6 @@ class AttentiveStatisticsPooling(nn.Module):
         mask : tensor
             The binary mask.
         """
-        assert len(length.shape) == 1
 
         if max_len is None:
             max_len = length.max().long().item()  # using arange to generate mask
@@ -3700,8 +3473,10 @@ class ECAPA_TDNN(torch.nn.Module):
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
         super().__init__()
-        assert len(config.enc_channels) == len(config.enc_kernel_sizes)
-        assert len(config.enc_channels) == len(config.enc_dilations)
+        if len(config.enc_channels) != len(config.enc_kernel_sizes) or len(config.enc_channels) != len(
+            config.enc_dilations
+        ):
+            raise ValueError("enc_channels, enc_kernel_sizes and enc_dilations should have same length")
         self.channels = config.enc_channels
         self.blocks = nn.ModuleList()
 
@@ -4520,7 +4295,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         y0 = y_all[:, :max_duration].to(code.device)
         batch = ref_mel.shape[0]
         cond = cond.unsqueeze(1).repeat(1, max_duration, 1)
-        assert batch == 1, "only support batch size = 1 currently"
+        if batch != 1:
+            raise ValueError("only support batch size = 1 currently")
 
         def fn(t, x):
             if cfg_strength < 1e-5:
@@ -4614,7 +4390,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     """,
     QWEN2_5OMNI_START_DOCSTRING.format(config_class=Qwen2_5OmniConfig),
 )
-class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
+class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config_class = Qwen2_5OmniConfig
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
@@ -4648,10 +4424,6 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
         if hasattr(self, "token2wav"):
             del self.token2wav
         self.has_talker = False
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        return True
 
     @classmethod
     def from_pretrained(
@@ -4882,7 +4654,7 @@ class Qwen2_5OmniModel(Qwen2_5OmniPreTrainedModel):
 
 __all__ = [
     "Qwen2_5OmniModel",
-    "Qwen2_5OmniThinkerModel",
+    "Qwen2_5OmniThinkerTextModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen2_5OmniTalkerModel",
     "Qwen2_5OmniTalkerForConditionalGeneration",

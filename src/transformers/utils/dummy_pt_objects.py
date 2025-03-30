@@ -8039,7 +8039,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Qwen2_5OmniThinkerModel(metaclass=DummyObject):
+class Qwen2_5OmniThinkerTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
