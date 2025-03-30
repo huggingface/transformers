@@ -103,7 +103,7 @@ print(logits)
                     return_tensors="pt")
     outputs = model(**inputs)  # automatically uses the attention_mask
     ```
-- When using the discriminator for your downstream task, you can load it into any of the ELECTRA model classes (e.g., `ElectraForSequenceClassification`, `ElectraForTokenClassification`).
+- When using the discriminator for a downstream task, you can load it into any of the ELECTRA model classes ([`ElectraForSequenceClassification`], [`ElectraForTokenClassification`], etc.).
 
 ## ElectraConfig
 
