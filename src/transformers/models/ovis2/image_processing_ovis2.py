@@ -103,7 +103,13 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-def compute_patch_covering_area(left, upper, right, lower, side):
+def compute_patch_covering_area(
+    left: int, 
+    upper: int, 
+    right: int, 
+    lower: int,
+    side: int
+) -> float:
     w = right - left
     h = lower - upper
     w, h = max(w, h), min(w, h)
@@ -132,7 +138,7 @@ def split_image_into_grid(h: int, w: int, grid: Tuple[int, int]) -> List[Tuple[i
 def get_min_tile_covering_grid(
     image_size: Tuple[int, int],
     target_patch_size: int,
-    max_image_tiles: int = 9,
+    max_image_tiles: int,
     covering_threshold: float = 0.9,
 ) -> Tuple[int, int]:
     image_height, image_width = image_size
@@ -221,6 +227,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
+        use_covering_area_grid: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -363,6 +370,9 @@ class Ovis2ImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+                Whether to use the covering area grid to determine the number of patches. Only has an effect if
+                `crop_to_patches` is set to `True`.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         crop_to_patches = crop_to_patches if crop_to_patches is not None else self.crop_to_patches
@@ -459,6 +469,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         use_covering_area_grid: bool = True,
         patch_size: Union[Tuple, int, dict] = None,
         data_format: ChannelDimension = None,
+        covering_threshold: float = 0.9,    
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -489,13 +500,13 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
         original_height, original_width = images.shape[-2:]
 
-        # calculate the number of patches from original ovis2
         if use_covering_area_grid:
+            # Use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90% of the image area
             num_columns, num_rows = get_min_tile_covering_grid(
                 (original_height, original_width),
-                side=patch_size_height,  # square patch size
+                target_patch_size=patch_size_height,  # square patch size
                 max_image_tiles=max_patches,
-                covering_threshold=0.9,
+                covering_threshold=covering_threshold,
             )
         else:
             # find the closest aspect ratio to the target

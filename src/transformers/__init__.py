@@ -1363,7 +1363,11 @@ else:
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
+<<<<<<< HEAD
     _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
+=======
+    _import_structure["models.ovis2"].append("Ovis2ImageProcessorFast")
+>>>>>>> Add Ovis2 ImageProcessorFast
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
@@ -6668,6 +6672,7 @@ if TYPE_CHECKING:
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
         from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
+        from .models.ovis2 import Ovis2ImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
