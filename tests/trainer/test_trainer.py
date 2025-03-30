@@ -35,6 +35,7 @@ import numpy as np
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
+from transformers.trainer import find_batch_size
 
 from transformers import (
     AutoFeatureExtractor,
@@ -236,6 +237,15 @@ class RegressionDataset:
         result["input_x"] = self.x[i]
         return result
 
+#A class to test Trainer with an evaluation dataset limit
+class TrainerEvalSampleLimit(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observed_num_batches = 0
+
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        self.observed_num_batches += 1
+        return super().prediction_step(model, inputs, prediction_loss_only, ignore_keys)
 
 # Converting Bytes to Megabytes
 def bytes2megabytes(x):
@@ -1305,66 +1315,61 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         args = TrainingArguments(
             self.get_auto_remove_tmp_dir(),
-            max_eval_samples=1,
+            max_eval_batches=4,
             evaluation_strategy="epoch",  # Enable evaluation at the end of each epoch
-            num_train_epochs=2,  # Train for at least one epoch to trigger evaluation
+            num_train_epochs=1,  # leave 1 so that testing works. If > 1, test below will fail. Since it is 
+            #prediction batch limit per epoch
             per_device_train_batch_size=4,  # You'll likely want to set your batch size
             per_device_eval_batch_size=4,  # You'll likely want to set your evaluation batch size
         )
 
 
-        trainer = Trainer(
+        trainer = TrainerEvalSampleLimit(
             model=tiny_llama,
             args=args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-        )  # noqa
-        trainer.train()
-        self.assertEqual(trainer.max_eval_samples, trainer.observed_num_examples)
+        ) 
 
+        trainer.train()
+        self.assertEqual(args.max_eval_batches, trainer.observed_num_batches)
+
+        trainer.observed_num_batches = 0
 
         trainer.evaluate()
-        self.assertNotEqual(trainer.max_eval_samples, trainer.observed_num_examples)
-        self.assertEqual(trainer.max_eval_samples, -1)
-        self.assertEqual(trainer.observed_num_examples, len(eval_dataset))
+        self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
     
     def test_number_of_eval_samples_unset(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
-
-
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
         eval_dataset = RepeatDataset(x)
 
-
         args = TrainingArguments(
             self.get_auto_remove_tmp_dir(),
             evaluation_strategy="epoch",  # Enable evaluation at the end of each epoch
-            num_train_epochs=2,  # Train for at least one epoch to trigger evaluation
+            num_train_epochs=1,  # leave 1 so that testing works. If > 1, test below will fail. Since it is 
+            #prediction batch limit per epoch
             per_device_train_batch_size=4,  # You'll likely want to set your batch size
             per_device_eval_batch_size=4,  # You'll likely want to set your evaluation batch size
         )
 
-
-        trainer = Trainer(
+        trainer = TrainerEvalSampleLimit(
             model=tiny_llama,
             args=args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-        )  # noqa
-        trainer.train()
-        self.assertEqual(trainer.max_eval_samples, -1)
-        self.assertNotEqual(trainer.max_eval_samples, trainer.observed_num_examples)
-        self.assertEqual(trainer.observed_num_examples, len(eval_dataset))
+        ) 
 
+        trainer.train()
+        self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
+
+        trainer.observed_num_batches = 0
 
         trainer.evaluate()
-        self.assertNotEqual(trainer.max_eval_samples, trainer.observed_num_examples)
-        self.assertEqual(trainer.max_eval_samples, -1)
-        self.assertEqual(trainer.observed_num_examples, len(eval_dataset))
-
+        self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
 
 
