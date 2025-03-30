@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 This approach is super efficient because ELECTRA learns from every single token in the input, not just the masked ones. That's why even the small ELECTRA models can match or outperform much larger models while using way less computing resources.
 
-You can find all the original ELECTRA checkpoints under the [ELECTRA release](https://huggingface.co/collections/google/electra-release-64ff6e8b18830fabea30a1ab) collection.
+You can find all the original ELECTRA checkpoints under the [ELECTRA](https://huggingface.co/collections/google/electra-release-64ff6e8b18830fabea30a1ab) release.
 
 > [!TIP]
 > Click on the right sidebar for more examples of how to use ELECTRA for different language tasks like sequence classification, token classification, and question answering.
