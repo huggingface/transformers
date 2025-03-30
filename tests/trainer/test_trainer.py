@@ -35,7 +35,6 @@ import numpy as np
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
-from transformers.trainer import find_batch_size
 
 from transformers import (
     AutoFeatureExtractor,
