@@ -18,12 +18,13 @@ from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -115,7 +116,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Union[float, list[float]],
         image_std: Union[float, list[float]],
-        rescale_offset: bool = True,
+        rescale_offset: bool = False,
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -129,10 +130,10 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
             device=images.device,
         )
         # if/elif as we use fused rescale and normalize if both are set to True
-        if do_normalize:
-            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
-        elif do_rescale:
+        if do_rescale:
             images = self.rescale(images, rescale_factor, rescale_offset)
+        elif do_normalize:
+            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
 
         return images
 
@@ -175,13 +176,25 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std, rescale_offset
             )
             if include_top:
-                stacked_images = self.normalize(stacked_images.to(dtype=torch.float32), 0, image_std)
+                stacked_images = self.normalize(stacked_images, 0, image_std)
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+    @add_start_docstrings(
+        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+        """
+        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
+            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
+        include_top (`bool`, *optional*, defaults to `self.include_top`):
+            Normalize the image again with the standard deviation only for image classification if set to True.
+        """,
+    )
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = ["EfficientNetImageProcessorFast"]
