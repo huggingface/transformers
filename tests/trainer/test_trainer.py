@@ -1330,11 +1330,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset=eval_dataset,
         ) 
 
+        # when calling train, it will set limit_max_eval_sample to True and will apply limit
         trainer.train()
         self.assertEqual(args.max_eval_batches, trainer.observed_num_batches)
 
+        #reset number of batches seen
         trainer.observed_num_batches = 0
 
+        # when calling evaluate directly, it will set limit_max_eval_sample to False and won't apply the limit
         trainer.evaluate()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
@@ -1362,11 +1365,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset=eval_dataset,
         ) 
 
+        # when calling train, it will set limit_max_eval_sample to True and will apply limit
         trainer.train()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
+        #reset number of batches seen
         trainer.observed_num_batches = 0
 
+        # when calling evaluate directly, it will set limit_max_eval_sample to False and won't apply the limit
         trainer.evaluate()
         self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
