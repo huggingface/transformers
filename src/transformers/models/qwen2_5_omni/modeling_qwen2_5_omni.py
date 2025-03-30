@@ -26,8 +26,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
 from torch.nn import ConvTranspose1d, Parameter
 
 from ...activations import ACT2FN
@@ -2043,7 +2043,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -2779,7 +2779,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -4356,7 +4356,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
             attn_impl = "sdpa"
         elif config._attn_implementation == "eager":
             logger.warning_once(
-                "Qwen2_5OmniToken2WavModel does not support eager attention implementation, " "fall back to sdpa"
+                "Qwen2_5OmniToken2WavModel does not support eager attention implementation, fall back to sdpa"
             )
             attn_impl = "sdpa"
         self.code2wav_dit_model = Qwen2_5OmniToken2WavDiTModel._from_config(

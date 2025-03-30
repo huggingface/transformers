@@ -4094,7 +4094,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
             attn_impl = "sdpa"
         elif config._attn_implementation == "eager":
             logger.warning_once(
-                "Qwen2_5OmniToken2WavModel does not support eager attention implementation, " "fall back to sdpa"
+                "Qwen2_5OmniToken2WavModel does not support eager attention implementation, fall back to sdpa"
             )
             attn_impl = "sdpa"
         self.code2wav_dit_model = Qwen2_5OmniToken2WavDiTModel._from_config(
