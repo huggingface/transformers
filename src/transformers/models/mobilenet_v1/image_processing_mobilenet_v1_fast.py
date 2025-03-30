@@ -14,7 +14,12 @@
 # limitations under the License.
 """Fast Image processor class for MobileNetV1."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    Unpack,
+)
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...utils import add_start_docstrings
 
@@ -44,7 +49,9 @@ class MobileNetV1ImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = None
+
+    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> None:
+        super().__init__(**kwargs)
 
 
 __all__ = ["MobileNetV1ImageProcessorFast"]
