@@ -176,7 +176,7 @@ class Llama4TextConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_scaling="llama3",
+        rope_scaling=None,
         **kwargs,
     ):
         super().__init__(

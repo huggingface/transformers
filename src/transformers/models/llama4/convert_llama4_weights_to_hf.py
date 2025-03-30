@@ -219,8 +219,9 @@ def write_model(
     rms_norm_eps = params["norm_eps"]
     rope_theta = params["rope_theta"]
 
-    # some constans from original code
+    config_kwargs = {}
     if params["use_scaled_rope"]:
+        # some constans from original code
         rope_scaling = {
             "rope_type": "llama3",
             "factor": 8.0,
@@ -228,8 +229,7 @@ def write_model(
             "high_freq_factor": 4.0,
             "original_max_position_embeddings": 8192,
         }
-    else:
-        rope_scaling = "default"
+        config_kwargs.update(dict(rope_scaling=rope_scaling))
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
@@ -242,7 +242,7 @@ def write_model(
     interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
 
     bos_token_id = 200000
-    eos_token_id = [200001, 200002, 200003] if instruct else 200001
+    eos_token_id = [200001, 200002, 200003, 200008] if instruct else 200001
     pad_token_id = 200008
 
     text_config = Llama4TextConfig(
@@ -254,7 +254,6 @@ def write_model(
         num_hidden_layers=num_layers,
         intermediate_size=8192,
         intermediate_size_mlp=16384,
-        rope_scaling=rope_scaling,
         num_local_experts=num_experts,
         interleave_moe_layer_step=interleave_moe_layer_step,
         use_qk_norm=params["use_qk_norm"],
@@ -263,6 +262,7 @@ def write_model(
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
+        **config_kwargs,
     )
     # default vision config frmo params
 
@@ -465,10 +465,7 @@ def write_model(
         print("Loading the checkpoint in a Llama4 model.")
         state_dict.pop("")
         model.load_state_dict(state_dict, strict=True, assign=True)
-        print("Model reloaded successfully. Checking logits...")
-        # ipdb.set_trace()
-        # zero_out = model.forward(inputs_embeds=torch.zeros((1,743, 4096)))
-        # ipdb.set_trace()
+        print("Model reloaded successfully.")
         print("Saving the model.")
         model.save_pretrained(model_path, safe_serialization=safe_serialization)
         del state_dict, model
@@ -481,8 +478,7 @@ def write_model(
         model = Llama4ForConditionalGeneration.from_pretrained(
             model_path, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
         )
-        # ipdb.set_trace()
-        model.eval()
+
         model.generation_config.top_p = 0.9
         model.generation_config.temperature = 0.6
         print("Model reloaded successfully.")
