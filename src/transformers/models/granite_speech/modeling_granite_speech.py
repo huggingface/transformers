@@ -1253,6 +1253,8 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         and potentially labels.
         """
         is_audio_index = input_ids == self.config.audio_token_index
+        assert torch.all(is_audio_index.int().sum(dim=1) == input_features_mask.int().sum(dim=1)).item(), \
+            "number of features should align"
         llm_input_ids = torch.where(is_audio_index, 0, input_ids)
         inputs_embeds = self.language_model.get_input_embeddings()(llm_input_ids)  # [bsz, # features, hidden size]
 
