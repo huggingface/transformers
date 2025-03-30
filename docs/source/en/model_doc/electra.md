@@ -94,7 +94,7 @@ print(logits)
 - ELECTRA consists of two transformer models, a generator (G) and a discriminator (D). For most downstream tasks, use the discriminator model (as indicated by `*-discriminator` in the name) rather than the generator.
 - ELECTRA comes in three sizes: Small (14M parameters), Base (110M parameters), and Large (335M parameters).
 - ELECTRA can use a smaller embedding size than the hidden size for efficiency. When `embedding_size` is smaller than `hidden_size` in the configuration, a projection layer connects them.
-- When using batched inputs with padding, make sure to use attention masks to prevent the model from attending to padding tokens:
+- When using batched inputs with padding, make sure to use attention masks to prevent the model from attending to padding tokens.
 
     ```py
     # Example of properly handling padding with attention masks
