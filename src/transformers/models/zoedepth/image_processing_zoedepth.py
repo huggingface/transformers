@@ -244,6 +244,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         return resized_image
 
+    #  TODO  ( check common tests)looks like we need this to be tested
     def pad_image(
         self,
         image: np.array,

@@ -17,15 +17,20 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import ZoeDepthImageProcessor
+
+    if is_torchvision_available():
+        from transformers import ZoeDepthImageProcessorFast
 
 
 class ZoeDepthImageProcessingTester:
@@ -93,6 +98,7 @@ class ZoeDepthImageProcessingTester:
 @require_vision
 class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ZoeDepthImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ZoeDepthImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -104,23 +110,25 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "ensure_multiple_of"))
-        self.assertTrue(hasattr(image_processing, "do_rescale"))
-        self.assertTrue(hasattr(image_processing, "rescale_factor"))
-        self.assertTrue(hasattr(image_processing, "do_pad"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "ensure_multiple_of"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "do_pad"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_ensure_multiple_of(self):
         # Test variable by turning off all other variables which affect the size, size which is not multiple of 32
@@ -128,14 +136,15 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         size = {"height": 380, "width": 513}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(
-            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
-        )
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(
+                do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+            )
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
-        self.assertTrue(pixel_values.shape[2] % multiple == 0)
-        self.assertTrue(pixel_values.shape[3] % multiple == 0)
+            self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
+            self.assertTrue(pixel_values.shape[2] % multiple == 0)
+            self.assertTrue(pixel_values.shape[3] % multiple == 0)
 
         # Test variable by turning off all other variables which affect the size, size which is already multiple of 32
         image = np.zeros((511, 511, 3))
@@ -143,14 +152,15 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         height, width = 512, 512
         size = {"height": height, "width": width}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(
-            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
-        )
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(
+                do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+            )
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, height, width])
-        self.assertTrue(pixel_values.shape[2] % multiple == 0)
-        self.assertTrue(pixel_values.shape[3] % multiple == 0)
+            self.assertEqual(list(pixel_values.shape), [1, 3, height, width])
+            self.assertTrue(pixel_values.shape[2] % multiple == 0)
+            self.assertTrue(pixel_values.shape[3] % multiple == 0)
 
     def test_keep_aspect_ratio(self):
         # Test `keep_aspect_ratio=True` by turning off all other variables which affect the size
