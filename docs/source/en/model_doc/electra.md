@@ -34,7 +34,7 @@ You can find all the original ELECTRA checkpoints under the [ELECTRA](https://hu
 > [!TIP]
 > Click on the right sidebar for more examples of how to use ELECTRA for different language tasks like sequence classification, token classification, and question answering.
 
-The example below demonstrates how to use ELECTRA for text classification tasks with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to classify text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
