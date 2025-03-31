@@ -376,6 +376,10 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_fsdp
     @unittest.skipIf(not is_fsdp2_available, "FSDP2 is not available")
     def test_fsdp2_cpu_offloading(self):
+        # TODO: This file is missing and should be added or the test should be removed
+        if not os.path.exists("utils/testing_scripts/fsdp_cpu_offloading.py"):
+            raise unittest.SkipTest("FSDP 2 CPU offloading script not found!")
+
         try:
             subprocess.run(
                 "accelerate launch --fsdp_version 2 utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
