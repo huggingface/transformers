@@ -45,7 +45,10 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
+
 from transformers.utils import is_torchao_available
+
+
 if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
