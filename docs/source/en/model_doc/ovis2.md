@@ -53,3 +53,28 @@ with torch.inference_mode():
     output_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
     print(output_text)
 ```
+
+## Ovis2Config
+
+[[autodoc]] Ovis2Config
+
+## Ovis2VisionConfig
+
+[[autodoc]] Ovis2VisionConfig
+
+## Ovis2ForConditionalGeneration
+
+[[autodoc]] Ovis2ForConditionalGeneration
+    - forward
+
+## Ovis2ImageProcessor
+
+[[autodoc]] Ovis2ImageProcessor
+
+## Ovis2ImageProcessorFast
+
+[[autodoc]] Ovis2ImageProcessorFast
+
+## Ovis2Processor
+
+[[autodoc]] Ovis2Processor

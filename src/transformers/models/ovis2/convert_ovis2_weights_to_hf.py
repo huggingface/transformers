@@ -180,7 +180,6 @@ def get_ovis2_config(model_name_or_path):
         vision_config=Ovis2VisionConfig(**visual_tokenizer_config),
         hidden_size=llm_config["hidden_size"],
         vocab_size=llm_config["vocab_size"],
-        sliding_window=orig_config.multimodal_max_length,
     )
 
 

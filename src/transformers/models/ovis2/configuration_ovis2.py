@@ -20,36 +20,33 @@ class Ovis2VisionConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05): <fill_docstring>
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the RMSNorm layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout (`float`, *optional*, defaults to 0.0): <fill_docstring>
-        qkv_bias (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        use_bias (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        projection_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the projection layers.
+        qkv_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a learnable bias to the query, key, and value sequences at each attention head.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias term in SwiGLUFFN layers.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        vocab_size (`<fill_type>`, *optional*, defaults to 16384): <fill_docstring>
-        hidden_stride (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        vision_feature_select_strategy (`<fill_type>`, *optional*, defaults to `"full"`): <fill_docstring>
-        num_visual_indicator_tokens (`<fill_type>`, *optional*, defaults to 5): <fill_docstring>
-        tokenize_function (`<fill_type>`, *optional*, defaults to `"softmax"`): <fill_docstring>
-
-    Example:
-
-    ```python
-    >>> from transformers import Ovis2VisionConfig, Ovis2VisionModel
-
-    >>> # Initializing a Ovis2VisionConfig with google/ovis2-base-patch16-224 style configuration
-    >>> configuration = Ovis2VisionConfig()
-
-    >>> # Initializing a Ovis2VisionModel (with random weights) from the google/ovis2-base-patch16-224 style configuration
-    >>> model = Ovis2VisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+        vocab_size (`int`, *optional*, defaults to 16384):
+            Vocabulary size of the Vision Transformer.
+        hidden_stride (`int`, *optional*, defaults to 1):
+            The stride of the hidden layer in the Vision Transformer.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
+        num_visual_indicator_tokens (`int`, *optional*, defaults to 5):
+            Number of visual indicator tokens.
+        tokenize_function (`str`, *optional*, defaults to `"softmax"`):
+            The function used to tokenize the visual indicator tokens.
     ```"""
-    
+
     base_config_key = "vision_config"
 
     def __init__(
@@ -98,6 +95,42 @@ class Ovis2VisionConfig(PretrainedConfig):
 
 
 class Ovis2Config(PretrainedConfig):
+    r"""This is the configuration class to store the configuration of a [`Ovis2ForConditionalGeneration`]. It is used to instantiate a
+    Ovis2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of Ovis2.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    [thisisiron/Ovis2-1B-hf](https://huggingface.co/thisisiron/Ovis2-1B-hf)
+
+    Args:
+        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `Ovis2VisionConfig`):
+            The config object or dictionary of the vision backbone.
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
+            The config object or dictionary of the text backbone.
+        image_token_id (`int`, *optional*, defaults to 151665):
+            The image token id to encode the image prompt.
+        visual_indicator_token_ids (`List[int]`, *optional*, defaults to `[151666, 151667, 151668, 151669, 151670]`):
+            The visual indicator token ids to encode the image prompt.
+        vocab_size (`int`, *optional*, defaults to 151643):
+            Vocabulary size of the text model.
+        hidden_size (`int`, *optional*, defaults to 1536):
+            Dimensionality of the encoder layers and the pooler layer.
+
+    ```python
+    >>> from transformers import Ovis2ForConditionalGeneration, Ovis2Config
+
+    >>> # Initializing a Ovis2 style configuration
+    >>> configuration = Ovis2Config()
+
+    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> model = Ovis2ForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "ovis2"
     sub_configs = {"text_config": Qwen2Config, "vision_config": Ovis2VisionConfig}
 
@@ -108,7 +141,6 @@ class Ovis2Config(PretrainedConfig):
         image_token_id=151665,
         visual_indicator_token_ids=[151666, 151667, 151668, 151669, 151670],
         vocab_size=151643,
-        sliding_window=32768,
         hidden_size=1536,
         **kwargs,
     ):
@@ -127,7 +159,6 @@ class Ovis2Config(PretrainedConfig):
             self.text_config = Qwen2Config()
 
         self.vocab_size = vocab_size
-        self.sliding_window = sliding_window
         self.hidden_size = hidden_size
 
         self.image_token_id = image_token_id

@@ -6617,6 +6617,7 @@ if TYPE_CHECKING:
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
+        from .models.ovis2 import Ovis2ImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
@@ -8168,6 +8169,7 @@ if TYPE_CHECKING:
         )
         from .models.ovis2 import (
             Ovis2ForConditionalGeneration,
+            Ovis2PreTrainedModel,
         )
         from .models.owlv2 import (
             Owlv2ForObjectDetection,

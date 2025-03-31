@@ -92,6 +92,9 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
             max_patches (`int`, *optional*, defaults to 12):
                 The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
                 set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+            use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+                Whether to use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90%
+                of the image area. If `False`, the closest aspect ratio to the target is used.
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_kwargs]) -> BatchFeature:
@@ -120,11 +123,16 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
                 The minimum number of patches to be extracted from the image.
             max_patches (`int`):
                 The maximum number of patches to be extracted from the image.
-            use_thumbnail (`bool`, *optional*, defaults to `True`):
-                Whether to add a thumbnail image to the list of cropped patches.
+            use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+                Whether to use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90%
+                of the image area. If `False`, the closest aspect ratio to the target is used.
+            covering_threshold (`float`, *optional*, defaults to `0.9`):
+                The threshold for the covering area. Only has an effect if `use_covering_area_grid` is set to `True`.
             patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
                 The size of the output patches.
                 The format of the image data. If `None`, the format is inferred from the input image.
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
 
         Returns:
             List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.

@@ -202,7 +202,10 @@ class Ovis2ImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        use_covering_area_grid (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+            Whether to use the covering area grid to determine the number of patches. Only has an effect if
+            `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+            `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -484,6 +487,9 @@ class Ovis2ImageProcessor(BaseImageProcessor):
                 The size of the output patches.
             data_format (`ChannelDimension`, *optional*):
                 The format of the image data. If `None`, the format is inferred from the input image.
+            covering_threshold (`float`, *optional*, defaults to `0.9`):
+                The threshold for the covering area grid. If the covering area is less than this value, the grid is
+                considered invalid.
 
         Returns:
             List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.

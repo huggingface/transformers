@@ -1,4 +1,3 @@
-import math
 from typing import Iterable, List, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -12,7 +11,6 @@ logger = logging.get_logger(__name__)
 
 
 class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -23,15 +21,15 @@ class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Ovis2Processor(ProcessorMixin):
     r"""
-    Constructs a LLaVa-Onevision processor which wraps LLaVa-NeXT image processor and a LLaMa tokenizer into a single processor.
+    Constructs a Ovis2 processor which wraps Ovis2 image processor and a Qwen2 tokenizer into a single processor.
 
-    [`LlavaNextProcessor`] offers all the functionalities of [`Ovis2VideoProcessor`], [`Ovis2ImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~Ovis2VideoProcessor.__call__`], [`~LlavaNextProcessor.__call__`] and [`~LlavaNextProcessor.decode`] for more information.
+    [`Ovis2Processor`] offers all the functionalities of [`Ovis2VideoProcessor`], [`Ovis2ImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`~Ovis2Processor.__call__`] and [`~Ovis2Processor.decode`] for more information.
 
     Args:
         image_processor ([`Ovis2ImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
+        tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -72,9 +70,9 @@ class Ovis2Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
+        Ovis2ImageProcessor's [`~Ovis2ImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -143,59 +141,25 @@ class Ovis2Processor(ProcessorMixin):
             processed_text.append(sample)
         return processed_text
 
-    # Adapted from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
-    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
-        """
-        Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
-        because it divided each image into patches depending on its resolution. Therefore we need to calculate how many
-        patches an image is divided into and get the number of features from that.
-        """
-        current_height = patches_height * scale_height
-        current_width = patches_width * scale_width
-
-        original_aspect_ratio = width / height
-        current_aspect_ratio = current_width / current_height
-        if original_aspect_ratio > current_aspect_ratio:
-            new_height = int(round(height * (current_width / width), 7))
-            padding = (current_height - new_height) // 2
-            current_height -= padding * 2
-        else:
-            new_width = int(round(width * (current_height / height), 7))
-            padding = (current_width - new_width) // 2
-            current_width -= padding * 2
-
-        unpadded_features = current_height * current_width
-        newline_features = current_height
-
-        ratio = math.sqrt(current_height * current_width / (9 * patches_height**2))
-        if ratio > 1.1:
-            unpadded_features = int(current_height // ratio) * int(current_width // ratio)
-            newline_features = int(current_height // ratio)
-
-        return (unpadded_features, newline_features)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(tokenizer_input_names) + list(image_processor_input_names)
 
 
 __all__ = ["Ovis2Processor"]
