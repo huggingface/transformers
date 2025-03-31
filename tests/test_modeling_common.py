@@ -515,9 +515,8 @@ class ModelTesterMixin:
             if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
                 addition_year = int(match_object.group(1))
             
-            # For now, skip everything older than 2024 and important models (too much models to patch otherwise)
-            # Also use `supports_cache_class` as a way to prioritize models that have been refactored most recently
-            # (because they were somehow deemed "important")
+            # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
+            # Use `supports_cache_class` as a proxy to judge "important" models in order to prioritize them
             # TODO: relax this as we patch more and more models
             if addition_year < 2024 and not model_class._supports_cache_class:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
