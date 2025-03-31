@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -41,6 +40,7 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
+        ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
@@ -216,7 +216,7 @@ class ModernBertModelTester:
 
 
 @require_torch
-class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     all_model_classes = (
@@ -225,6 +225,7 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
+            ModernBertForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -236,6 +237,7 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
+            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -290,7 +292,12 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
                 if param.requires_grad and not (
                     name == "classifier.weight"
-                    and model_class in [ModernBertForSequenceClassification, ModernBertForTokenClassification]
+                    and model_class
+                    in [
+                        ModernBertForSequenceClassification,
+                        ModernBertForTokenClassification,
+                        ModernBertForQuestionAnswering,
+                    ]
                 ):
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),

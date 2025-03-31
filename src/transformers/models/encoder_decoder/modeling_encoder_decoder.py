@@ -264,6 +264,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         self.tie_weights()
 
     def tie_weights(self):
+        self.encoder.tie_weights()
+        self.decoder.tie_weights()
         # tie encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
@@ -278,6 +280,12 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             # attributed not an instance member, therefore modifying it will modify the entire class
             # Leading to issues on subsequent calls by different tests or subsequent calls.
             self._dynamic_tied_weights_keys = tied_weights
+
+    def _init_weights(self, module):
+        if module in self.encoder.modules():
+            self.encoder._init_weights(module)
+        elif module in self.decoder.modules():
+            self.decoder._init_weights(module)
 
     def get_encoder(self):
         return self.encoder
@@ -385,21 +393,13 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
                 return model
 
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for EncoderDecoderModel. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        encoder_pretrained_model_name_or_path: Optional[str] = None,
+        decoder_pretrained_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -598,6 +598,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+        if "num_items_in_batch" in kwargs_encoder:
+            kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(

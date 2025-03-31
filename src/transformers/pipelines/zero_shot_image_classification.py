@@ -145,8 +145,11 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             inputs = inputs.to(self.torch_dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        padding = "max_length" if self.model.config.model_type == "siglip" else True
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=padding, **tokenizer_kwargs)
+        tokenizer_default_kwargs = {"padding": True}
+        if "siglip" in self.model.config.model_type:
+            tokenizer_default_kwargs.update(padding="max_length", max_length=64, truncation=True)
+        tokenizer_default_kwargs.update(tokenizer_kwargs)
+        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, **tokenizer_default_kwargs)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -170,7 +173,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs):
         candidate_labels = model_outputs.pop("candidate_labels")
         logits = model_outputs["logits"][0]
-        if self.framework == "pt" and self.model.config.model_type == "siglip":
+        if self.framework == "pt" and "siglip" in self.model.config.model_type:
             probs = torch.sigmoid(logits).squeeze(-1)
             scores = probs.tolist()
             if not isinstance(scores, list):

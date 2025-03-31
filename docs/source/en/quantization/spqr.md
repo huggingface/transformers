@@ -16,11 +16,16 @@ rendered properly in your Markdown viewer.
 
 # SpQR
 
-[SpQR](https://github.com/Vahe1994/SpQR) quantization algorithm involves a 16x16 tiled bi-level group 3-bit quantization structure, with sparse outliers as detailed in [SpQR: A Sparse-Quantized Representation for Near-Lossless LLM Weight Compression](https://arxiv.org/abs/2306.03078).
+The [SpQR]((https://hf.co/papers/2306.03078)) quantization algorithm involves a 16x16 tiled bi-level group 3-bit quantization structure with sparse outliers.
 
-To SpQR-quantize a model, refer to the [Vahe1994/SpQR](https://github.com/Vahe1994/SpQR) repository.
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/spqr-diagram.png">
+</div>
 
-Load a pre-SpQR-quantized model in [`~PreTrainedModel.from_pretrained`].
+> [!TIP]
+> To quantize a model with SpQR, refer to the [Vahe1994/SpQR](https://github.com/Vahe1994/SpQR) repository.
+
+Load a SpQR-quantized model with [`~PreTrainedModel.from_pretrained`].
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM

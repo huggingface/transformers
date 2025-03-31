@@ -28,8 +28,9 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CpmAntTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = [
             "<d>",
@@ -49,8 +50,8 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "n",
             "t",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     @tooslow

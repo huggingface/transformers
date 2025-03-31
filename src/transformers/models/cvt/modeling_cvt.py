@@ -544,7 +544,7 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CvtStage):
             if self.config.cls_token[module.stage]:
                 module.cls_token.data = nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                    module.cls_token.data, mean=0.0, std=self.config.initializer_range
                 )
 
 

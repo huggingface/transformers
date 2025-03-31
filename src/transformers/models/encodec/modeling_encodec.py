@@ -121,7 +121,7 @@ class EncodecConv1d(nn.Module):
 
         self.register_buffer("stride", stride, persistent=False)
         self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", torch.tensor(kernel_size - stride, dtype=torch.int64), persistent=False)
+        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
 
     def _get_extra_padding_for_conv1d(
         self,
@@ -617,8 +617,7 @@ class EncodecModel(EncodecPreTrainedModel):
             bandwidth = self.config.target_bandwidths[0]
         if bandwidth not in self.config.target_bandwidths:
             raise ValueError(
-                f"This model doesn't support the bandwidth {bandwidth}. "
-                f"Select one of {self.config.target_bandwidths}."
+                f"This model doesn't support the bandwidth {bandwidth}. Select one of {self.config.target_bandwidths}."
             )
 
         _, channels, input_length = input_values.shape
