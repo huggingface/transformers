@@ -93,6 +93,11 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] MobileViTImageProcessor
     - preprocess
+
+## MobileViTImageProcessorFast
+
+[[autodoc]] MobileViTImageProcessorFast
+    - preprocess
     - post_process_semantic_segmentation
 
 <frameworkcontent>
