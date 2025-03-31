@@ -33,39 +33,21 @@ from transformers import AutoVideoProcessor
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
 ```
 
-## Fast Video Processors
+Currently, if using base image processor for videos, it processes video data by treating each frame as an individual image and applying transformations frame-by-frame. While functional, this approach is not highly efficient. Using `AutoVideoProcessor` allows us to take advantage of **fast video processors**, leveraging the [torchvision](https://pytorch.org/vision/stable/index.html) library. Fast processors handle the whole batch of videos at once, without iterating over each video or frame. These updates introduce GPU acceleration and significantly enhance processing speed, especially for tasks requiring high throughput.
 
-Currently, the base video processor processes video data by treating each frame as an individual image and applying transformations frame-by-frame. While functional, this approach is not highly efficient. For faster processing we have added **fast video processors**, leveraging the [torchvision](https://pytorch.org/vision/stable/index.html) library. Fast processors handle the whole batch of videos at once, without iterating over each video or frame. These updates introduce GPU acceleration and significantly enhance processing speed, especially for tasks requiring high throughput.
-
-Fast video processors are available for all models and can be used by adding `use_fast=True` when loading the processor. They have the same API as the base video processors and can be used as drop-in replacements.
+Fast video processors are available for all models and are loaded by default when an `AutoVideoProcessor` is initialized. When using a fast video processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise. For even more speed improvement, we can compile the processor when using 'cuda' as device.
 
 ```python
-from transformers import AutoVideoProcessor
-
-processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", use_fast=True)
-```
-Note that `use_fast` will be set to `True` by default in a future release.
-
-When using a fast video processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
-
-```python
+import torch
 from transformers.video_utils import load_video
 from transformers import DetrImageProcessorFast
 
 video = load_video("video.mp4")
-processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", use_fast=True, device="cuda")
+processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device="cuda")
+processor = torch.compile(processor)
 processed_video = processor(video, return_tensors="pt")
 ```
 
-Here are some speed comparisons between the base and fast video processors with [Llava Onevision model](llava-hf/llava-onevision-qwen2-0.5b-ov-hf):
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fast_video_processors.png"
-alt="drawing" width="400"/>
-
-
-## BaseVideoProcessor
-
-[[autodoc]] video_processing_utils.BaseVideoProcessor
 
 ## BaseVideoProcessorFast
 
