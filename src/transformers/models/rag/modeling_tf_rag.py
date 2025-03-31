@@ -232,8 +232,8 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: str = None,
-        generator_pretrained_model_name_or_path: str = None,
+        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
+        generator_pretrained_model_name_or_path: Optional[str] = None,
         retriever: RagRetriever = None,
         *model_args,
         **kwargs,

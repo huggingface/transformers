@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
 
 from .integrations import (
     is_optuna_available,
@@ -37,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 class HyperParamSearchBackendBase:
     name: str
-    pip_package: str = None
+    pip_package: Optional[str] = None
 
     @staticmethod
     def is_available():

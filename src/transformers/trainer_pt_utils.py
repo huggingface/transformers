@@ -1204,7 +1204,7 @@ if is_sagemaker_mp_enabled():
             return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
-        return tensor.concat().detach().cpu()
+        return tensor.detach().concat().cpu()
 
 
 @dataclass
@@ -1263,7 +1263,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: bool = field(
+    dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"

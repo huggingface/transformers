@@ -73,12 +73,12 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
         `torch.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if layer.bias is not None:
         if dim == 1:
-            b = layer.bias.clone().detach()
+            b = layer.bias.detach().clone()
         else:
-            b = layer.bias[index].clone().detach()
+            b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
@@ -137,11 +137,11 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
         [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if dim == 0:
-        b = layer.bias.clone().detach()
+        b = layer.bias.detach().clone()
     else:
-        b = layer.bias[index].clone().detach()
+        b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
