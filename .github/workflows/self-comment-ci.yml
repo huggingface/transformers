@@ -51,6 +51,9 @@ jobs:
         id: set_pr_number
         run: echo "PR_NUMBER=${{ env.PR_NUMBER }}" >> "$GITHUB_OUTPUT"
 
+      - name: Sleep
+        run: sleep 3m
+
   get-sha:
     runs-on: ubuntu-22.04
     needs: get-pr-number
