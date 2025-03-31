@@ -103,6 +103,7 @@ from .utils import (
     is_safetensors_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
+    is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
     is_torch_xla_available,
@@ -774,17 +775,20 @@ def _load_state_dict_into_meta_model(
     """
     tensor_device = "cpu"
     if device_map is not None and device_map.get("", None) is not None:
-        tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
+        if device_map[""] not in ("cpu", torch.device("cpu")):
+            tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
     if device_map is not None:
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_meta_state_dict = shard_file.endswith(".safetensors") and not is_quantized
-
+    is_meta_state_dict = shard_file.endswith(".safetensors")
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
+    # Used to fix the issue mentioned in #37031: when loading a model with tied weights in state_dict + `tie_word_embeddings = False`,
+    # we need to make sure they are not loaded as tied weights!
+    data_ptrs = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -795,7 +799,7 @@ def _load_state_dict_into_meta_model(
             serialized_param_name = reverse_renaming_mapping[param_name]
             param = file_pointer.get_slice(serialized_param_name)
         else:
-            param = empty_param  # It is actually not empty!
+            param = empty_param.to(tensor_device)  # It is actually not empty!
 
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
@@ -813,7 +817,7 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                tensor_device,  # the rank
+                int(os.environ["RANK"]),  # the rank
                 device_mesh,
             )
         else:
@@ -854,11 +858,19 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
                 module, param_type = get_module_from_name(model, param_name)
+
+                # avoid tied weights
+                if param.data_ptr() in data_ptrs:
+                    param = param.clone()
+
                 module.load_state_dict(
                     {param_type: param.to(param_device)},
                     strict=False,
                     assign=True,
                 )
+
+                # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
+                data_ptrs.add(model.state_dict()[param_name].data_ptr())
             else:
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
@@ -2264,11 +2276,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
             if importlib.util.find_spec("flash_attn") is None:
+                # package `flash-attn` can not be installed on Ascend NPU, ignore related validation logic and early exit.
                 if is_torch_npu_available():
-                    recommend_message_npu = "You should use attn_implementation='sdpa' instead when using NPU. "
-                    raise ImportError(
-                        f"{preface} the package flash_attn is not supported on Ascend NPU. {recommend_message_npu}"
-                    )
+                    if not hard_check_only:
+                        config._attn_implementation = "flash_attention_2"
+
+                    logger.info("Detect using FlashAttention2 on Ascend NPU.")
+                    return config
                 else:
                     raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
 
@@ -2312,11 +2326,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
         # or the model may be initialized under the context manager `with torch.device("cuda"):`.
-        if check_device_map and device_map is None and torch.empty(0).device.type != "cuda":
+        if check_device_map and device_map is None and torch.empty(0).device.type not in ["cuda", "mlu"]:
             if torch.cuda.is_available():
                 logger.warning_once(
                     "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
+                )
+            elif is_torch_mlu_available():
+                logger.warning_once(
+                    "You are attempting to use Flash Attention 2.0 with a model not initialized on MLU. Make sure to move the model to MLU"
+                    " after initializing it on CPU with `model.to('mlu')`."
                 )
             else:
                 raise ValueError(
@@ -4100,27 +4119,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if tp_plan is not None:
             if not is_torch_greater_or_equal("2.5"):
                 raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
+
+            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+            device_type = torch._C._get_accelerator().type
+
             if not torch.distributed.is_initialized():
                 try:
-                    logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
                     rank = int(os.environ["RANK"])
                     world_size = int(os.environ["WORLD_SIZE"])
-                    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
-                    torch.cuda.set_device(rank)
+                    if device_type == "cuda":
+                        torch.distributed.init_process_group(
+                            "nccl", rank=rank, world_size=world_size, init_method="env://"
+                        )
+                        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+                    elif device_type == "cpu":
+                        cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
+                        torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
+
                 except Exception as e:
                     raise EnvironmentError(
                         "We tried to initialize torch.distributed for you, but it failed, make"
                         "sure you init torch distributed in your script to use `tp_plan='auto'`"
                     ) from e
 
-            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-            device_type = torch._C._get_accelerator().type
-            device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            index = None if device_type == "cpu" else torch.cuda.current_device()
+            tp_device = torch.device(device_type, index)
+
+            if index is not None and index > 0:
+                import sys
+
+                sys.stdout = open(os.devnull, "w")
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
@@ -4871,9 +4902,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None and hf_quantizer is None:
+        if device_map is not None:  # and hf_quantizer is None:
             expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model_to_load, expanded_device_map)
+            caching_allocator_warmup(model_to_load, expanded_device_map, factor=2 if hf_quantizer is None else 4)
 
         error_msgs = []
         mismatched_keys = []
@@ -4885,7 +4916,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             map_location = "cpu"
             if low_cpu_mem_usage:
-                if shard_file.endswith(".safetensors") and not is_quantized:
+                if shard_file.endswith(".safetensors"):
                     map_location = "meta"
                 elif (
                     device_map is not None
@@ -5834,7 +5865,7 @@ def expand_device_map(device_map, param_names):
     return new_device_map
 
 
-def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
+def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, factor=2):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
     the model, which is actually the loading speed botteneck.
@@ -5865,7 +5896,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
-
     total_byte_count = defaultdict(lambda: 0)
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
@@ -5886,7 +5916,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
             # Allow up to 95% of max device memory
             byte_count = min(byte_count, int(0.95 * device_memory))
         # Allocate memory
-        _ = torch.empty(byte_count // 2, dtype=torch.float16, device=device, requires_grad=False)
+        _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):
@@ -5906,7 +5936,7 @@ class AttentionInterface(MutableMapping):
     """
     Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
     with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
-    it needs to declare a new instance of this class inside the `modeling.py`, and declare it on that instance.
+    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -5935,7 +5965,7 @@ class AttentionInterface(MutableMapping):
 
     def __iter__(self):
         # Ensure we use all keys, with the overwritten ones on top
-        return iter(self._global_mapping.update(self._local_mapping))
+        return iter({**self._global_mapping, **self._local_mapping})
 
     def __len__(self):
         return len(self._global_mapping.keys() | self._local_mapping.keys())
@@ -5945,7 +5975,7 @@ class AttentionInterface(MutableMapping):
         cls._global_mapping.update({key: value})
 
     def valid_keys(self) -> List[str]:
-        return list(self._global_mapping.keys() | self._local_mapping.keys())
+        return list(self.keys())
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones

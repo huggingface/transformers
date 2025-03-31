@@ -144,6 +144,7 @@ from .utils import (
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -940,6 +941,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mlu" and not is_torch_mlu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MLU is unavailable. Please double-check your testing environment."
+            )
         if torch_device == "hpu" and not is_torch_hpu_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
@@ -956,6 +961,8 @@ if is_torch_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
+    elif _run_third_party_device_tests and is_torch_mlu_available():
+        torch_device = "mlu"
     elif _run_third_party_device_tests and is_torch_hpu_available():
         torch_device = "hpu"
     elif _run_third_party_device_tests and is_torch_xpu_available():
@@ -2927,9 +2934,21 @@ def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], 
 if is_torch_available():
     # Mappings from device names to callable functions to support device agnostic
     # testing.
-    BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
-    BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
-    BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+    BACKEND_MANUAL_SEED = {
+        "cuda": torch.cuda.manual_seed,
+        "cpu": torch.manual_seed,
+        "default": torch.manual_seed,
+    }
+    BACKEND_EMPTY_CACHE = {
+        "cuda": torch.cuda.empty_cache,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_DEVICE_COUNT = {
+        "cuda": torch.cuda.device_count,
+        "cpu": lambda: 0,
+        "default": lambda: 1,
+    }
 else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
@@ -2938,6 +2957,11 @@ else:
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_mlu_available():
+    BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
+    BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
+    BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
 
 if is_torch_npu_available():
     BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
