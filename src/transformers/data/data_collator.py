@@ -1999,9 +1999,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     ):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
+        self.separator_id = separator_id
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
-        self.separator_id = separator_id
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
 
