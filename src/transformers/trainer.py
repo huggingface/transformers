@@ -3043,7 +3043,7 @@ class Trainer:
                 f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
             )
 
-    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False, limit_eval_sample_size = False):
+    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False, limit_eval_sample_size=False):
         metrics = self.evaluate(ignore_keys=ignore_keys_for_eval, limit_eval_sample_size=limit_eval_sample_size)
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
@@ -3090,8 +3090,8 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            #When calling evaluate directly, it will only limit with max_eval_sample=True
-            metrics = self._evaluate(trial, ignore_keys_for_eval, limit_eval_sample_size = True) 
+            # When calling evaluate directly, it will only limit with max_eval_sample=True
+            metrics = self._evaluate(trial, ignore_keys_for_eval, limit_eval_sample_size=True)
             is_new_best_metric = self._determine_best_metric(metrics=metrics, trial=trial)
 
             if self.args.save_strategy == SaveStrategy.BEST:
@@ -4071,7 +4071,7 @@ class Trainer:
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
-        limit_eval_sample_size : bool = False
+        limit_eval_sample_size: bool = False,
     ) -> dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -4143,7 +4143,7 @@ class Trainer:
             prediction_loss_only=True if self.compute_metrics is None else None,
             ignore_keys=ignore_keys,
             metric_key_prefix=metric_key_prefix,
-            limit_eval_sample_size = limit_eval_sample_size
+            limit_eval_sample_size=limit_eval_sample_size,
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
@@ -4243,7 +4243,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
-        limit_eval_sample_size : bool = False
+        limit_eval_sample_size: bool = False,
     ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
@@ -4320,13 +4320,13 @@ class Trainer:
         # Will be useful when we have an iterable dataset so don't know its length.
         observed_num_examples = 0
 
-        #setting the maximum number of samples the evaluation loop processes 
-        max_eval_samples_checker = limit_eval_sample_size and self.args.max_eval_batches  != -1
+        # setting the maximum number of samples the evaluation loop processes
+        max_eval_samples_checker = limit_eval_sample_size and self.args.max_eval_batches != -1
         max_eval_samples = self.args.max_eval_batches * self.args.eval_batch_size if max_eval_samples_checker else -1
 
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
-            # check to see if maximum amount of eval samples reached 
+            # check to see if maximum amount of eval samples reached
             if max_eval_samples != -1 and observed_num_examples >= max_eval_samples:
                 break
             # Update the observed num examples
@@ -4396,7 +4396,7 @@ class Trainer:
 
                 del losses, logits, labels, inputs
                 torch.cuda.empty_cache()
-        
+
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
         self.gather_function = self.accelerator.gather_for_metrics
         if args.past_index and hasattr(self, "_past"):
@@ -4852,7 +4852,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
-        limit_eval_sample_size : bool = False
+        limit_eval_sample_size: bool = False,
     ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
