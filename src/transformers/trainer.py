@@ -5252,7 +5252,8 @@ class Trainer:
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
 
-                if num_items_in_batch.dim() == 0:
+                if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
+                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
                     num_items_in_batch = num_items_in_batch.unsqueeze(0)
 
         return batch_samples, num_items_in_batch
