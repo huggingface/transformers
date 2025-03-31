@@ -92,7 +92,9 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+        # return super().preprocess(images, **kwargs)
+        # TODO: revert once the issue is fixed: https://huggingface.slack.com/archives/C02TXKQQLE5/p1743411133979019
+        return super().preprocess(images, image_mean=0.0, image_std=0.0, **kwargs)
 
     def normalize(
         self,
@@ -240,6 +242,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
                     max_patches=max_patches,
                     patch_size=patch_size,
                 )
+                # TODO: We need to extend the lists with correct number of elements.
                 # flattened_patches.append(f)
                 # width.append(w)
                 # height.append(h)
