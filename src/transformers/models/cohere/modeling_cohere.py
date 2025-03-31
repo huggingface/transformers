@@ -27,6 +27,7 @@
 # This file is based on the LLama model definition file in transformers
 
 
+from functools import partial
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -613,7 +614,7 @@ class CohereModel(CoherePreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,
