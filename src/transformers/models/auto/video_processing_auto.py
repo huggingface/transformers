@@ -29,7 +29,6 @@ from ...utils import (
     VIDEO_PROCESSOR_NAME,
     cached_file,
     is_torchvision_available,
-    is_vision_available,
     logging,
 )
 from ...video_processing_utils_fast import BaseVideoProcessorFast
@@ -52,27 +51,23 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("instructblipvideo", ("InstructBlipVideoVideoProcessor", "InstructBlipVideoVideoProcessorFast")),
-            ("llava_next_video", ("LlavaNextVideoVideoProcessor", "LlavaNextVideoVideoProcessorFast")),
-            ("llava_onevision", ("LlavaOnevisionVideoProcessor", "LlavaOnevisionVideoProcessorFast")),
-            ("qwen2_5_vl", ("Qwen2_5_VLVideoProcessor", "Qwen2_5_VLVideoProcessorFast")),
-            ("qwen2_vl", ("Qwen2VLVideoProcessor", "Qwen2VLVideoProcessorFast")),
-            ("video_llava", ("VideoLlavaVideoProcessor", "VideoLlavaVideoProcessorFast")),
+            ("instructblipvideo", "InstructBlipVideoVideoProcessorFast"),
+            ("llava_next_video", "LlavaNextVideoVideoProcessorFast"),
+            ("llava_onevision", "LlavaOnevisionVideoProcessorFast"),
+            ("qwen2_5_vl", "Qwen2_5_VLVideoProcessorFast"),
+            ("qwen2_vl", "Qwen2VLVideoProcessorFast"),
+            ("video_llava", "VideoLlavaVideoProcessorFast"),
         ]
     )
 
 for model_type, video_processors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-    slow_video_processor_class, *fast_video_processor_class = video_processors
-    if not is_vision_available():
-        slow_video_processor_class = None
+    fast_video_processor_class = video_processors
 
-    # If the fast video processor is not defined, or torchvision is not available, we set it to None
-    if not fast_video_processor_class or fast_video_processor_class[0] is None or not is_torchvision_available():
+    # If the torchvision is not available, we set it to None
+    if not is_torchvision_available():
         fast_video_processor_class = None
-    else:
-        fast_video_processor_class = fast_video_processor_class[0]
 
-    VIDEO_PROCESSOR_MAPPING_NAMES[model_type] = (slow_video_processor_class, fast_video_processor_class)
+    VIDEO_PROCESSOR_MAPPING_NAMES[model_type] = fast_video_processor_class
 
 VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR_MAPPING_NAMES)
 
@@ -202,13 +197,6 @@ def get_video_processor_config(
         return json.load(reader)
 
 
-def _warning_fast_video_processor_available(fast_class):
-    logger.warning(
-        f"Fast video processor class {fast_class} is available for this model. "
-        "Using slow video processor class. To use the fast video processor class set `use_fast=True`."
-    )
-
-
 class AutoVideoProcessor:
     r"""
     This is a generic video processor class that will be instantiated as one of the video processor classes of the
@@ -265,10 +253,6 @@ class AutoVideoProcessor:
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            use_fast (`bool`, *optional*, defaults to `False`):
-                Use a fast torchvision-base video processor if it is supported for a given model.
-                If a fast tokenizer is not available for a given model, a normal numpy-based video processor
-                is returned instead.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final video processor object. If `True`, then this
                 functions returns a `Tuple(video_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
@@ -313,7 +297,6 @@ class AutoVideoProcessor:
             kwargs["token"] = use_auth_token
 
         config = kwargs.pop("config", None)
-        use_fast = kwargs.pop("use_fast", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
@@ -345,12 +328,6 @@ class AutoVideoProcessor:
                 video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
 
         if video_processor_class is not None:
-            # Update class name to reflect the use_fast option. If class is not found, None is returned.
-            if use_fast is not None:
-                if use_fast and not video_processor_class.endswith("Fast"):
-                    video_processor_class += "Fast"
-                elif not use_fast and video_processor_class.endswith("Fast"):
-                    video_processor_class = video_processor_class[:-4]
             video_processor_class = video_processor_class_from_name(video_processor_class)
 
         has_remote_code = video_processor_auto_map is not None
@@ -359,18 +336,8 @@ class AutoVideoProcessor:
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
 
-        if video_processor_auto_map is not None and not isinstance(video_processor_auto_map, tuple):
-            # In some configs, only the slow video processor class is stored
-            video_processor_auto_map = (video_processor_auto_map, None)
-
         if has_remote_code and trust_remote_code:
-            if not use_fast and video_processor_auto_map[1] is not None:
-                _warning_fast_video_processor_available(video_processor_auto_map[1])
-
-            if use_fast and video_processor_auto_map[1] is not None:
-                class_ref = video_processor_auto_map[1]
-            else:
-                class_ref = video_processor_auto_map[0]
+            class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
@@ -380,22 +347,14 @@ class AutoVideoProcessor:
             return video_processor_class.from_dict(config_dict, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
-            video_processor_tuple = VIDEO_PROCESSOR_MAPPING[type(config)]
+            video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
 
-            video_processor_class_py, video_processor_class_fast = video_processor_tuple
-
-            if not use_fast and video_processor_class_fast is not None:
-                _warning_fast_video_processor_available(video_processor_class_fast)
-
-            if video_processor_class_fast and (use_fast or video_processor_class_py is None):
-                return video_processor_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            if video_processor_class is not None:
+                return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
-                if video_processor_class_py is not None:
-                    return video_processor_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                else:
-                    raise ValueError(
-                        "This video processor cannot be instantiated. Please make sure you have `Pillow` installed."
-                    )
+                raise ValueError(
+                    "This video processor cannot be instantiated. Please make sure you have `torchvision` installed."
+                )
 
         raise ValueError(
             f"Unrecognized video processor in {pretrained_model_name_or_path}. Should have a "
@@ -406,8 +365,7 @@ class AutoVideoProcessor:
     @staticmethod
     def register(
         config_class,
-        slow_video_processor_class=None,
-        fast_video_processor_class=None,
+        video_processor_class,
         exist_ok=False,
     ):
         """
@@ -416,22 +374,7 @@ class AutoVideoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            slow_video_processor_class ([`BaseVideoProcessorFast`]):
+            video_processor_class ([`BaseVideoProcessorFast`]):
                 The video processor to register.
         """
-        if slow_video_processor_class is None and fast_video_processor_class is None:
-            raise ValueError("You need to specify either slow_video_processor_class or fast_video_processor_class")
-        if fast_video_processor_class is not None:
-            raise ValueError("We do not support `fast_video_processor_class` yet.")
-
-        # Avoid resetting a set slow/fast video processor if we are passing just the other ones.
-        if config_class in VIDEO_PROCESSOR_MAPPING._extra_content:
-            existing_slow, existing_fast = VIDEO_PROCESSOR_MAPPING[config_class]
-            if slow_video_processor_class is None:
-                slow_video_processor_class = existing_slow
-            if fast_video_processor_class is None:
-                fast_video_processor_class = existing_fast
-
-        VIDEO_PROCESSOR_MAPPING.register(
-            config_class, (slow_video_processor_class, fast_video_processor_class), exist_ok=exist_ok
-        )
+        VIDEO_PROCESSOR_MAPPING.register(config_class, video_processor_class, exist_ok=exist_ok)

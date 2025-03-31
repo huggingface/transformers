@@ -1,5 +1,5 @@
-from transformers import LlavaOnevisionVideoProcessor
+from transformers import LlavaOnevisionVideoProcessorFast
 
 
-class CustomVideoProcessor(LlavaOnevisionVideoProcessor):
+class CustomVideoProcessor(LlavaOnevisionVideoProcessorFast):
     pass

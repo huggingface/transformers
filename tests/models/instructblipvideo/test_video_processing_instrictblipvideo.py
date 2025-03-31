@@ -100,7 +100,7 @@ class InstructBlipVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCas
         return self.video_processor_tester.prepare_video_processor_dict()
 
     def test_image_processor_properties(self):
-        video_processing = self.video_processing_class(**self.video_processor_dict)
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
         self.assertTrue(hasattr(video_processing, "do_resize"))
         self.assertTrue(hasattr(video_processing, "size"))
         self.assertTrue(hasattr(video_processing, "do_normalize"))
@@ -109,8 +109,8 @@ class InstructBlipVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCas
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
 
     def test_video_processor_from_dict_with_kwargs(self):
-        video_processor = self.video_processing_class.from_dict(self.video_processor_dict)
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
         self.assertEqual(video_processor.size, {"height": 18, "width": 18})
 
-        video_processor = self.video_processing_class.from_dict(self.video_processor_dict, size=42)
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42)
         self.assertEqual(video_processor.size, {"height": 42, "width": 42})

@@ -337,7 +337,6 @@ class ImageProcessingMixin(PushToHubMixin):
             try:
                 # Try to load with an new config name first and if not successfull try with
                 # the old file name. In case we can load only with old name, raise warning.
-                # Deprecated until v5.0
                 image_processor_file = image_processor_filename
                 resolved_image_processor_file = cached_file(
                     pretrained_model_name_or_path,

@@ -16,8 +16,8 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.testing_utils import require_av, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -27,22 +27,25 @@ if is_vision_available():
         AutoProcessor,
         LlavaOnevisionImageProcessor,
         LlavaOnevisionProcessor,
-        LlavaOnevisionVideoProcessor,
         Qwen2TokenizerFast,
     )
+
+    if is_torchvision_available():
+        from transformers import LlavaOnevisionVideoProcessorFast
 
 if is_torch_available:
     pass
 
 
 @require_vision
+@require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = LlavaOnevisionImageProcessor()
-        video_processor = LlavaOnevisionVideoProcessor()
+        video_processor = LlavaOnevisionVideoProcessorFast()
         tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
         processor_kwargs = self.prepare_processor_dict()
 

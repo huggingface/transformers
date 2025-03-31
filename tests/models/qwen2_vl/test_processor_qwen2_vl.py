@@ -21,13 +21,16 @@ import pytest
 
 from transformers import AutoProcessor, Qwen2Tokenizer
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2VLImageProcessor, Qwen2VLProcessor, Qwen2VLVideoProcessor
+    from transformers import Qwen2VLImageProcessor, Qwen2VLProcessor
+
+    if is_torchvision_available():
+        from transformers import Qwen2VLVideoProcessorFast
 
 
 @require_vision
@@ -70,7 +73,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
         self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
-        self.assertIsInstance(processor.video_processor, Qwen2VLVideoProcessor)
+        self.assertIsInstance(processor.video_processor, Qwen2VLVideoProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

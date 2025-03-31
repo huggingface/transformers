@@ -31,7 +31,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers.image_utils import get_image_size
-    from transformers.models.qwen2_vl.video_processing_qwen2_vl import smart_resize
+    from transformers.models.qwen2_vl.video_processing_qwen2_vl_fast import smart_resize
 
     if is_torchvision_available():
         from transformers import Qwen2VLVideoProcessorFast
@@ -145,7 +145,7 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         return self.video_processor_tester.prepare_video_processor_dict()
 
     def test_video_processor_properties(self):
-        video_processing = self.video_processing_class(**self.video_processor_dict)
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
         self.assertTrue(hasattr(video_processing, "do_resize"))
         self.assertTrue(hasattr(video_processing, "size"))
         self.assertTrue(hasattr(video_processing, "do_center_crop"))

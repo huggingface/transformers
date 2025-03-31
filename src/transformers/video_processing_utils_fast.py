@@ -148,6 +148,8 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
 )
 class BaseVideoProcessorFast(PushToHubMixin):
+    _auto_class = None
+
     resample = None
     image_mean = None
     image_std = None
@@ -165,7 +167,19 @@ class BaseVideoProcessorFast(PushToHubMixin):
     model_input_names = ["pixel_values_videos"]
 
     def __init__(self, model_init_kwargs, **kwargs: Unpack[VideosKwargs]) -> None:
-        super().__init__(**kwargs)
+        super().__init__()
+
+        self._processor_class = kwargs.pop("processor_class", None)
+
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error(f"Can't set {key} with value {value} for {self}")
+                raise err
+
+        # Prepare size related keys and turn then into `SizeDict`
         size = kwargs.pop("size", self.size)
         self.size = (
             get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
@@ -182,6 +196,9 @@ class BaseVideoProcessorFast(PushToHubMixin):
                 setattr(self, key, kwargs[key])
             else:
                 setattr(self, key, getattr(self, key, None))
+
+    def __call__(self, videos, **kwargs) -> BatchFeature:
+        return self.preprocess(videos, **kwargs)
 
     def resize(
         self,
@@ -898,6 +915,41 @@ class BaseVideoProcessorFast(PushToHubMixin):
         output.pop("_valid_processor_keys", None)
 
         return output
+
+    def to_json_string(self) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
+        """
+        dictionary = self.to_dict()
+
+        for key, value in dictionary.items():
+            if isinstance(value, np.ndarray):
+                dictionary[key] = value.tolist()
+
+        # make sure private name "_processor_class" is correctly
+        # saved as "processor_class"
+        _processor_class = dictionary.pop("_processor_class", None)
+        if _processor_class is not None:
+            dictionary["processor_class"] = _processor_class
+
+        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this image_processor instance's parameters will be saved.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            writer.write(self.to_json_string())
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
 
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]):

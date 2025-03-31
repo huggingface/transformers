@@ -17,7 +17,6 @@ import inspect
 import json
 import os
 import tempfile
-import time
 import warnings
 
 import numpy as np
@@ -97,20 +96,14 @@ def prepare_video_inputs(
 
 class VideoProcessingTestMixin:
     test_cast_dtype = None
-    video_processing_class = None
     fast_video_processing_class = None
     video_processor_list = None
-    test_slow_video_processor = True
-    test_fast_video_processor = True
     input_name = "pixel_values_videos"
 
     def setUp(self):
         video_processor_list = []
 
-        if self.test_slow_video_processor and self.video_processing_class:
-            video_processor_list.append(self.video_processing_class)
-
-        if self.test_fast_video_processor and self.fast_video_processing_class:
+        if self.fast_video_processing_class:
             video_processor_list.append(self.fast_video_processing_class)
 
         self.video_processor_list = video_processor_list
@@ -134,11 +127,11 @@ class VideoProcessingTestMixin:
             self.assertEqual(video_processor_second.to_dict(), video_processor_first.to_dict())
 
     def test_video_processor_from_dict_with_kwargs(self):
-        video_processor = self.video_processing_class.from_dict(self.video_processor_dict)
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
         self.assertEqual(video_processor.size, {"shortest_edge": 20})
         self.assertEqual(video_processor.crop_size, {"height": 18, "width": 18})
 
-        video_processor = self.video_processing_class.from_dict(self.video_processor_dict, size=42, crop_size=84)
+        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42, crop_size=84)
         self.assertEqual(video_processor.size, {"shortest_edge": 42})
         self.assertEqual(video_processor.crop_size, {"height": 84, "width": 84})
 
@@ -170,223 +163,6 @@ class VideoProcessingTestMixin:
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class()
             self.assertIsNotNone(video_processor)
-
-    @require_vision
-    @require_torch
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_video_processor or not self.test_fast_video_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.video_processing_class is None or self.fast_video_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the video processors is not defined")
-
-        if hasattr(self.video_processor_tester, "do_center_crop") and self.video_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
-
-        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
-        video_processor_slow = self.video_processing_class(**self.video_processor_dict)
-        video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
-
-        encoding_slow = video_processor_slow(video_inputs, return_tensors="pt")
-        encoding_fast = video_processor_fast(video_inputs, return_tensors="pt")
-        torch.testing.assert_close(
-            encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1, rtol=1e-3
-        )
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow[self.input_name] - encoding_fast[self.input_name])).item(), 1e-3
-        )
-
-    @require_vision
-    @require_torch
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_video_processor or not self.test_fast_video_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.video_processing_class is None or self.fast_video_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the video processors is not defined")
-
-        if hasattr(self.video_processor_tester, "do_center_crop") and self.video_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
-            )
-
-        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
-        video_processor_slow = self.video_processing_class(**self.video_processor_dict)
-        video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
-
-        encoding_slow = video_processor_slow(video_inputs, return_tensors="pt")
-        encoding_fast = video_processor_fast(video_inputs, return_tensors="pt")
-
-        torch.testing.assert_close(
-            encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1, rtol=1e-3
-        )
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow[self.input_name] - encoding_fast[self.input_name])).item(), 1e-3
-        )
-
-    @require_vision
-    @require_torch
-    def test_fast_is_faster_than_slow(self):
-        if not self.test_slow_video_processor or not self.test_fast_video_processor:
-            self.skipTest(reason="Skipping speed test")
-
-        if self.video_processing_class is None or self.fast_video_processing_class is None:
-            self.skipTest(reason="Skipping speed test as one of the video processors is not defined")
-
-        def measure_time(video_processor, video):
-            # Warmup
-            for _ in range(5):
-                _ = video_processor(video, return_tensors="pt")
-            start = time.perf_counter()
-            _ = video_processor(video, return_tensors="pt")
-            return time.perf_counter() - start
-
-        video_processor_slow = self.video_processing_class(**self.video_processor_dict)
-        video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
-
-        # Inputs in torch.Tensor
-        video_inputs_torch = self.video_processor_tester.prepare_video_inputs(
-            equal_resolution=False, return_tensors="torch"
-        )
-        fast_time_torch = measure_time(video_processor_fast, video_inputs_torch)
-        slow_time_torch = measure_time(video_processor_slow, video_inputs_torch)
-
-        self.assertLessEqual(fast_time_torch, slow_time_torch)
-
-        # Inputs in np.ndarray
-        self.video_processor_tester.batch_size = 7
-        video_inputs_np = self.video_processor_tester.prepare_video_inputs(equal_resolution=True, return_tensors="np")
-        fast_time_np = measure_time(video_processor_fast, video_inputs_np)
-        slow_time_np = measure_time(video_processor_slow, video_inputs_np)
-
-        self.assertLessEqual(fast_time_np, slow_time_np)
-
-        # Inputs in PIL.Image
-        video_inputs_pil = self.video_processor_tester.prepare_video_inputs(
-            equal_resolution=False, return_tensors="pil"
-        )
-        fast_time_pil = measure_time(video_processor_fast, video_inputs_pil)
-        slow_time_pil = measure_time(video_processor_slow, video_inputs_pil)
-
-        self.assertLessEqual(fast_time_pil, slow_time_pil)
-
-    def test_save_load_fast_slow(self):
-        "Test that we can load a fast video processor from a slow one and vice-versa."
-        if self.video_processing_class is None or self.fast_video_processing_class is None:
-            self.skipTest("Skipping slow/fast save/load test as one of the video processors is not defined")
-
-        video_processor_dict = self.video_processor_tester.prepare_video_processor_dict()
-        video_processor_slow_0 = self.video_processing_class(**video_processor_dict)
-
-        # Load fast video processor from slow one
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            video_processor_slow_0.save_pretrained(tmpdirname)
-            video_processor_fast_0 = self.fast_video_processing_class.from_pretrained(tmpdirname)
-
-        video_processor_fast_1 = self.fast_video_processing_class(**video_processor_dict)
-
-        # Load slow video processor from fast one
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            video_processor_fast_1.save_pretrained(tmpdirname)
-            video_processor_slow_1 = self.video_processing_class.from_pretrained(tmpdirname)
-
-        dict_slow_0 = video_processor_slow_0.to_dict()
-        dict_slow_1 = video_processor_slow_1.to_dict()
-        difference = {
-            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
-            for key in set(dict_slow_0) ^ set(dict_slow_1)
-        }
-        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additioefanal keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(
-            all(
-                value is None
-                for key, value in difference.items()
-                if key not in ["default_to_square", "model_valid_processing_keys"]
-            )
-        )
-        # check that the remaining keys are the same
-        self.assertEqual(dict_slow_1, dict_slow_0)
-
-        dict_fast_0 = video_processor_fast_0.to_dict()
-        dict_fast_1 = video_processor_fast_1.to_dict()
-        difference = {
-            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
-            for key in set(dict_fast_0) ^ set(dict_fast_1)
-        }
-        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(
-            all(
-                value is None
-                for key, value in difference.items()
-                if key not in ["default_to_square", "model_valid_processing_keys"]
-            )
-        )
-        # check that the remaining keys are the same
-        self.assertEqual(dict_fast_0, dict_fast_1)
-
-    def test_save_load_fast_slow_auto(self):
-        "Test that we can load a fast video processor from a slow one and vice-versa using AutoVideoProcessor."
-        if self.video_processing_class is None or self.fast_video_processing_class is None:
-            self.skipTest("Skipping slow/fast save/load test as one of the video processors is not defined")
-
-        video_processor_dict = self.video_processor_tester.prepare_video_processor_dict()
-        video_processor_slow_0 = self.video_processing_class(**video_processor_dict)
-
-        # Load fast video processor from slow one
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            video_processor_slow_0.save_pretrained(tmpdirname)
-            video_processor_fast_0 = AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=True)
-
-        video_processor_fast_1 = self.fast_video_processing_class(**video_processor_dict)
-
-        # Load slow video processor from fast one
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            video_processor_fast_1.save_pretrained(tmpdirname)
-            video_processor_slow_1 = AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=False)
-
-        dict_slow_0 = video_processor_slow_0.to_dict()
-        dict_slow_1 = video_processor_slow_1.to_dict()
-        difference = {
-            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
-            for key in set(dict_slow_0) ^ set(dict_slow_1)
-        }
-        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(
-            all(
-                value is None
-                for key, value in difference.items()
-                if key not in ["default_to_square", "model_valid_processing_keys"]
-            )
-        )
-        # check that the remaining keys are the same
-        self.assertEqual(dict_slow_0, dict_slow_1)
-
-        dict_fast_0 = video_processor_fast_0.to_dict()
-        dict_fast_1 = video_processor_fast_1.to_dict()
-        difference = {
-            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
-            for key in set(dict_fast_0) ^ set(dict_fast_1)
-        }
-        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
-        self.assertTrue(
-            all(
-                value is None
-                for key, value in difference.items()
-                if key not in ["default_to_square", "model_valid_processing_keys"]
-            )
-        )
-        # check that the remaining keys are the same
-        self.assertEqual(dict_fast_0, dict_fast_1)
 
     @slow
     @require_torch_gpu

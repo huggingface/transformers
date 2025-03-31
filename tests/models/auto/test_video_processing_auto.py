@@ -26,9 +26,9 @@ from transformers import (
     AutoConfig,
     AutoVideoProcessor,
     LlavaOnevisionConfig,
-    LlavaOnevisionVideoProcessor,
+    LlavaOnevisionVideoProcessorFast,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torch
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -37,26 +37,30 @@ from test_module.custom_configuration import CustomConfig  # noqa E402
 from test_module.custom_video_processing import CustomVideoProcessor  # noqa E402
 
 
+@require_torch
 class AutoVideoProcessorTest(unittest.TestCase):
     def setUp(self):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
     def test_video_processor_from_model_shortcut(self):
         config = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
-        self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
+        self.assertIsInstance(config, LlavaOnevisionVideoProcessorFast)
 
     def test_video_processor_from_local_directory_from_key(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
-                {"video_processor_type": "LlavaOnevisionVideoProcessor", "processor_class": "LlavaOnevisionProcessor"},
+                {
+                    "video_processor_type": "LlavaOnevisionVideoProcessorFast",
+                    "processor_class": "LlavaOnevisionProcessor",
+                },
                 open(processor_tmpfile, "w"),
             )
             json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
 
             config = AutoVideoProcessor.from_pretrained(tmpdirname)
-            self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
+            self.assertIsInstance(config, LlavaOnevisionVideoProcessorFast)
 
     def test_video_processor_from_local_directory_from_preprocessor_key(self):
         # Ensure we can load the image processor from the feature extractor config
@@ -64,13 +68,16 @@ class AutoVideoProcessorTest(unittest.TestCase):
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
-                {"video_processor_type": "LlavaOnevisionVideoProcessor", "processor_class": "LlavaOnevisionProcessor"},
+                {
+                    "video_processor_type": "LlavaOnevisionVideoProcessorFast",
+                    "processor_class": "LlavaOnevisionProcessor",
+                },
                 open(processor_tmpfile, "w"),
             )
             json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
 
             config = AutoVideoProcessor.from_pretrained(tmpdirname)
-            self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
+            self.assertIsInstance(config, LlavaOnevisionVideoProcessorFast)
 
     def test_video_processor_from_local_directory_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -80,7 +87,10 @@ class AutoVideoProcessorTest(unittest.TestCase):
             processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
-                {"video_processor_type": "LlavaOnevisionVideoProcessor", "processor_class": "LlavaOnevisionProcessor"},
+                {
+                    "video_processor_type": "LlavaOnevisionVideoProcessorFast",
+                    "processor_class": "LlavaOnevisionProcessor",
+                },
                 open(processor_tmpfile, "w"),
             )
             json.dump({"model_type": "llava_onevision"}, open(config_tmpfile, "w"))
@@ -89,7 +99,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
             config_dict = AutoVideoProcessor.from_pretrained(tmpdirname).to_dict()
 
             config_dict.pop("video_processor_type")
-            config = LlavaOnevisionVideoProcessor(**config_dict)
+            config = LlavaOnevisionVideoProcessorFast(**config_dict)
 
             # save in new folder
             model_config.save_pretrained(tmpdirname)
@@ -101,18 +111,21 @@ class AutoVideoProcessorTest(unittest.TestCase):
             dict_as_saved = json.loads(config.to_json_string())
             self.assertTrue("_processor_class" not in dict_as_saved)
 
-        self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
+        self.assertIsInstance(config, LlavaOnevisionVideoProcessorFast)
 
     def test_video_processor_from_local_file(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
             json.dump(
-                {"video_processor_type": "LlavaOnevisionVideoProcessor", "processor_class": "LlavaOnevisionProcessor"},
+                {
+                    "video_processor_type": "LlavaOnevisionVideoProcessorFast",
+                    "processor_class": "LlavaOnevisionProcessor",
+                },
                 open(processor_tmpfile, "w"),
             )
 
             config = AutoVideoProcessor.from_pretrained(processor_tmpfile)
-            self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
+            self.assertIsInstance(config, LlavaOnevisionVideoProcessorFast)
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
@@ -178,14 +191,14 @@ class AutoVideoProcessorTest(unittest.TestCase):
             AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor)
             # Trying to register something existing in the Transformers library will raise an error
             with self.assertRaises(ValueError):
-                AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor)
+                AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessorFast)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
                 config_tmpfile = Path(tmpdirname) / "config.json"
                 json.dump(
                     {
-                        "video_processor_type": "LlavaOnevisionVideoProcessor",
+                        "video_processor_type": "LlavaOnevisionVideoProcessorFast",
                         "processor_class": "LlavaOnevisionProcessor",
                     },
                     open(processor_tmpfile, "w"),
@@ -207,7 +220,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
                 del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_video_processor_conflict(self):
-        class NewVideoProcessor(LlavaOnevisionVideoProcessor):
+        class NewVideoProcessor(LlavaOnevisionVideoProcessorFast):
             is_local = True
 
         try:

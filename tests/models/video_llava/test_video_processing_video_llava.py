@@ -111,7 +111,7 @@ class VideoLlavaVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
         return self.video_processor_tester.prepare_video_processor_dict()
 
     def test_video_processor_properties(self):
-        video_processing = self.video_processing_class(**self.video_processor_dict)
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
         self.assertTrue(hasattr(video_processing, "do_resize"))
         self.assertTrue(hasattr(video_processing, "size"))
         self.assertTrue(hasattr(video_processing, "do_center_crop"))
