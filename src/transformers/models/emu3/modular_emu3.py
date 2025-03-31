@@ -33,7 +33,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
@@ -49,10 +48,6 @@ from ..llama.modeling_llama import (
 )
 from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
-
-
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
 _CONFIG_FOR_DOC = "Emu3Config"
