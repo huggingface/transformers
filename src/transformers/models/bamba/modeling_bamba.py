@@ -47,10 +47,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_mamba_2_ssm_available,
-)
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
 
 

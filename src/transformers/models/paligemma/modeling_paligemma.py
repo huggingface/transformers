@@ -28,19 +28,13 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from .configuration_paligemma import PaliGemmaConfig
-
-
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
 from ..auto import AutoModel, AutoModelForCausalLM
+from .configuration_paligemma import PaliGemmaConfig
 
 
 logger = logging.get_logger(__name__)
