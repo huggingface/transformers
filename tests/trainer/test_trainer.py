@@ -1315,7 +1315,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments(
             self.get_auto_remove_tmp_dir(),
             max_eval_batches=4,
-            evaluation_strategy="epoch",  # Enable evaluation at the end of each epoch
+            eval_strategy="epoch",  # Enable evaluation at the end of each epoch
             num_train_epochs=1,  # leave 1 so that testing works. If > 1, test below will fail. Since it is
             # prediction batch limit per epoch
             per_device_train_batch_size=4,  # You'll likely want to set your batch size
@@ -1349,7 +1349,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         args = TrainingArguments(
             self.get_auto_remove_tmp_dir(),
-            evaluation_strategy="epoch",  # Enable evaluation at the end of each epoch
+            eval_strategy="epoch",  # Enable evaluation at the end of each epoch
             num_train_epochs=1,  # leave 1 so that testing works. If > 1, test below will fail. Since it is
             # prediction batch limit per epoch
             per_device_train_batch_size=4,  # You'll likely want to set your batch size
