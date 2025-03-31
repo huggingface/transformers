@@ -27,7 +27,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -36,17 +35,10 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_timesfm import TimesFmConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -354,9 +346,6 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
@@ -516,10 +505,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Convert paddings to attention mask and combine with causal mask
         hidden_states = model_input
-        attention_mask = self._update_causal_mask(
+        attention_mask = self._prepare_4d_attention_mask(
             attention_mask=patched_padding,
-            input_tensor=hidden_states,
-            output_attentions=output_attentions,
+            sequence_length=hidden_states.shape[1],
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
+            is_causal=True,
         )
 
         all_attentions = []
@@ -550,44 +541,6 @@ class TimesFmModel(TimesFmPreTrainedModel):
             scale=stats[1],
         )
         return output if return_dict else output.to_tuple()
-
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        output_attentions: bool = False,
-    ):
-        """Updates the causal mask based on the attention implementation being used."""
-        # For Flash Attention 2, return None if no padding mask is needed
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-
-        # For Flex Attention, convert to block mask format
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
-
-        if self.config._attn_implementation == "sdpa" and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=0,
-                is_training=self.training,
-            ):
-                return None
-
-        # For other cases, create the 4D attention mask
-        return self._prepare_4d_attention_mask(
-            attention_mask=attention_mask,
-            sequence_length=input_tensor.shape[1],
-            dtype=input_tensor.dtype,
-            device=input_tensor.device,
-            is_causal=True,
-        )
 
     @staticmethod
     def _prepare_4d_attention_mask(
