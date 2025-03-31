@@ -17,7 +17,6 @@
 import unittest
 
 import requests
-from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
@@ -337,13 +336,21 @@ class Ovis2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(
-            "thisisiron/Ovis2-1B-hf",
+            "thisisiron/Ovis2-2B-hf",
         )
-        image_file = hf_hub_download(
-            repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
-        )
-        self.image = Image.open(image_file)
-        self.prompt_image = "user\n<image>\nWhat do you see in this image?<|im_end|>\n<|im_start|>assistant\n"
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.prompt_image = ""
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What do you see in this image?"},
+                ],
+            }
+        ]
+        self.text = self.processor.apply_chat_template(self.messages, add_generation_prompt=True, tokenize=False)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -352,22 +359,23 @@ class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-1B-hf", torch_dtype="float16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
         )
 
-        inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(
-            torch_device, torch.float16
+        inputs = self.processor(images=self.image, text=self.text, return_tensors="pt").to(
+            torch_device, torch.bfloat16
         )
-        self.assertTrue(inputs.input_ids.shape[1] == 6567)  # should expand num-image-tokens times
-        self.assertTrue(inputs.pixel_values.shape == torch.Size([1, 3, 448, 448]))
-        # self.assertTrue(inputs.grids.tolist() == [[899, 1024]])
+
+        self.assertTrue(inputs.input_ids.shape[1] == 1314)  # should expand num-image-tokens times
+        self.assertTrue(inputs.pixel_values.shape == torch.Size([5, 3, 448, 448]))
+        self.assertTrue(inputs.grids.tolist() == [[2, 2]])
 
         # verify single forward pass
         inputs = inputs.to(torch_device)
 
         # verify generation
-        output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1'  # fmt: skip
+        output = model.generate(**inputs, max_new_tokens=64)
+        EXPECTED_DECODED_TEXT = 'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -377,20 +385,19 @@ class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-1B-hf", torch_dtype="float16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
         )
 
         inputs = self.processor(
-            text=[self.prompt_image],
+            text=[self.text],
             images=self.image,
             return_tensors="pt",
             padding=True,
-        ).to(torch_device, torch.float16)
+        ).to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related', 'user\n\nWhat do you see in this video?\nassistant\nA child wearing a light blue sleeveless top and pink pants is seen sitting on a bed, eng']  # fmt: skip
-
+        EXPECTED_DECODED_TEXT = ['system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.']  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -401,23 +408,30 @@ class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_multi_image(self):
         # related to (#29835)
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-1B-hf",
-            torch_dtype="float16",
+            "thisisiron/Ovis2-2B-hf",
+            torch_dtype="bfloat16",
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
-        prompt = (
-            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
+        prompt = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "image"},
+                    {"type": "text", "text": "What do you see in these images?"},
+                ],
+            }
+        ]
+        text = self.processor.apply_chat_template(prompt, add_generation_prompt=True, tokenize=False)
+        inputs = self.processor(text=text, images=[self.image, image], return_tensors="pt").to(
+            torch_device, torch.bfloat16
         )
-        inputs = self.processor(text=prompt, images=[self.image, image], return_tensors="pt").to(
-            torch_device, torch.float16
-        )
-
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The"  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'system\nYou are a helpful assistant.\nuser\n\n\nWhat do you see in these images?\nassistant\nIn the first image, I see two cats lying on a pink blanket with remote controls nearby. The second image shows a dog standing on a wooden floor near a kitchen cabinet.'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -428,24 +442,25 @@ class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-1B-hf", torch_dtype="float16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs = self.processor(
-            text=[self.prompt_image, self.prompt_image],
-            images=[lowres_img, cats_image],
+            text=[self.text, self.text],
+            images=[lowres_img, self.image],
             return_tensors="pt",
             padding=True,
-        ).to(torch_device, torch.float16)
+        ).to(torch_device, torch.bfloat16)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a wildlife camera, likely a security camera, capturing a moment in a natural setting. It features two deer, one larger and one smaller, grazing on the grass. The environment is foggy, suggesting early morning or late', 'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a forested area with two deer in the foreground. The deer are brown in color and appear to be grazing on the grass. The scene is quite foggy, creating a misty atmosphere. The deer are positioned on a grassy',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -455,26 +470,24 @@ class Ovis2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_matches_single(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-1B-hf",
-            torch_dtype="float16",
+            "thisisiron/Ovis2-2B-hf",
+            torch_dtype="bfloat16",
             device_map=torch_device,
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
 
         inputs_batched = self.processor(
-            text=[self.prompt_image, self.prompt_image],
-            images=[lowres_img, cats_image],
+            text=[self.text, self.text],
+            images=[self.image, lowres_img],
             return_tensors="pt",
             padding=True,
-        ).to(torch_device, torch.float16)
+        ).to(torch_device, torch.bfloat16)
 
-        inputs_single = self.processor(
-            text=self.prompt_image, images=lowres_img, return_tensors="pt", padding=True
-        ).to(torch_device, torch.float16)
+        inputs_single = self.processor(text=self.text, images=self.image, return_tensors="pt", padding=True).to(
+            torch_device, torch.bfloat16
+        )
 
         # verify generation
         output_batched = model.generate(**inputs_batched, max_new_tokens=50)
