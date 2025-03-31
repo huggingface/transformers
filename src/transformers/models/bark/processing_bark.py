@@ -103,7 +103,7 @@ class BarkProcessor(ProcessorMixin):
             )
             if speaker_embeddings_path is None:
                 logger.warning(
-                    f"""`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_dict_path)}` does not exists
+                    f"""`{os.path.join(pretrained_processor_name_or_path, speaker_embeddings_dict_path)}` does not exists
                     , no preloaded speaker embeddings will be used - Make sure to provide a correct path to the json
                     dictionnary if wanted, otherwise set `speaker_embeddings_dict_path=None`."""
                 )
@@ -175,7 +175,7 @@ class BarkProcessor(ProcessorMixin):
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
-    def _load_voice_preset(self, voice_preset: str = None, **kwargs):
+    def _load_voice_preset(self, voice_preset: Optional[str] = None, **kwargs):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}
@@ -202,7 +202,7 @@ class BarkProcessor(ProcessorMixin):
             )
             if path is None:
                 raise ValueError(
-                    f"""`{os.path.join(self.speaker_embeddings.get("repo_or_path", "/"),voice_preset_paths[key])}` does not exists
+                    f"""`{os.path.join(self.speaker_embeddings.get("repo_or_path", "/"), voice_preset_paths[key])}` does not exists
                     , no preloaded voice preset will be used - Make sure to provide correct paths to the {voice_preset}
                     embeddings."""
                 )

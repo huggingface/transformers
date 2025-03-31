@@ -244,7 +244,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 model.eval()
 
                 if model.__class__.__name__ == "VitMatteForImageMatting":
-                    # Confirm out_indices propogated to backbone
+                    # Confirm out_indices propagated to backbone
                     self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
