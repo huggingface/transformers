@@ -216,7 +216,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             quantized_stats = {}
             for k, v in state_dict.items():
                 if param_name + "." in k:
-                    quantized_stats[k] = v
+                    # the state dict may be loaded on meta -> move back to cpu in this case
+                    param = torch.empty_like(v, device="cpu") if v.device.type == "meta" else v
+                    quantized_stats[k] = param
                     if unexpected_keys is not None and k in unexpected_keys:
                         unexpected_keys.remove(k)
 
