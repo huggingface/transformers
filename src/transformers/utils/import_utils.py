@@ -811,6 +811,10 @@ def is_torch_hpu_available():
 
     import torch
 
+    if os.environ.get("PT_HPU_LAZY_MODE", "1") == "1":
+        # import habana_frameworks.torch in case of lazy mode to patch torch with torch.hpu
+        import habana_frameworks.torch  # noqa: F401
+
     if not hasattr(torch, "hpu") or not torch.hpu.is_available():
         return False
 
