@@ -183,7 +183,7 @@ class TimesFmPositionalEmbedding(nn.Module):
 
         if position is None:
             # [1, seqlen]
-            position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)
+            position = torch.arange(seq_length, dtype=torch.float32, device=self.inv_timescales.device).unsqueeze(0)
         elif position.ndim != 2:
             raise ValueError(f"position must be 2-dimensional, got shape {position.shape}")
 
@@ -495,7 +495,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         # A patch should not be padded even if there is at least one zero.
         patched_padding = torch.min(patched_pads, dim=-1)[0]  # Get the values from the min result
         if self.config.use_positional_embedding:
-            pos_emb = self.position_emb(model_input.shape[1]).to(model_input.device)
+            pos_emb = self.position_emb(model_input.shape[1])
             pos_emb = torch.concat([pos_emb] * model_input.shape[0], dim=0)
             pos_emb = self._timesfm_shift_padded_seq(patched_padding, pos_emb)
             model_input += pos_emb
@@ -665,7 +665,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         indices[~new_mask.any(dim=1)] = -1
 
         # Create index ranges for each sequence in the batch
-        idx_range = torch.arange(num_seq).to(seq.device).view(1, -1, 1).expand(batch_size, -1, feature_dim)
+        idx_range = torch.arange(num_seq, device=seq.device).view(1, -1, 1).expand(batch_size, -1, feature_dim)
 
         # Calculate shifted indices for each element in each sequence
         shifted_idx = (idx_range - indices[:, None, None]) % num_seq
@@ -844,7 +844,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             output_hidden_states = self.config.output_hidden_states
 
         input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
-
         # Move tensors to the same device as input
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
