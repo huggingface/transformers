@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-import io
 import json
 import math
 import os
@@ -22,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from huggingface_hub import get_full_repo_name
 from packaging import version
@@ -146,7 +145,6 @@ class OptimizerNames(ExplicitEnum):
     Stores the acceptable string identifiers for optimizers.
     """
 
-    ADAMW_HF = "adamw_hf"
     ADAMW_TORCH = "adamw_torch"
     ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
@@ -628,7 +626,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-            The optimizer to use, such as "adamw_hf", "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
+            The optimizer to use, such as "adamw_torch", "adamw_torch_fused", "adamw_apex_fused", "adamw_anyprecision",
             "adafactor". See `OptimizerNames` in [training_args.py](https://github.com/huggingface/transformers/blob/main/src/transformers/training_args.py)
             for a full list of optimizers.
         optim_args (`str`, *optional*):
@@ -770,14 +768,6 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        split_batches (`bool`, *optional*):
-            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices
-            during distributed training. If
-
-            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it
-            must be a
-
-            round multiple of the number of processes you are using (such as GPUs).
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
 
@@ -1139,7 +1129,7 @@ class TrainingArguments:
             )
         },
     )
-    debug: Union[str, List[DebugOption]] = field(
+    debug: Union[str, list[DebugOption]] = field(
         default="",
         metadata={
             "help": (
@@ -1199,7 +1189,7 @@ class TrainingArguments:
     remove_unused_columns: Optional[bool] = field(
         default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
-    label_names: Optional[List[str]] = field(
+    label_names: Optional[list[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
     load_best_model_at_end: Optional[bool] = field(
@@ -1226,7 +1216,7 @@ class TrainingArguments:
             )
         },
     )
-    fsdp: Optional[Union[List[FSDPOption], str]] = field(
+    fsdp: Optional[Union[list[FSDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -1319,7 +1309,7 @@ class TrainingArguments:
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
-    report_to: Union[None, str, List[str]] = field(
+    report_to: Union[None, str, list[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
     ddp_find_unused_parameters: Optional[bool] = field(
@@ -1407,7 +1397,7 @@ class TrainingArguments:
             "help": "This argument is deprecated and will be removed in version 5 of 🤗 Transformers. Use `include_for_metrics` instead."
         },
     )
-    include_for_metrics: List[str] = field(
+    include_for_metrics: list[str] = field(
         default_factory=list,
         metadata={
             "help": "List of strings to specify additional data to include in the `compute_metrics` function."
@@ -1427,10 +1417,6 @@ class TrainingArguments:
             "help": "Deprecated. Use half_precision_backend instead",
             "choices": ["auto", "apex", "cpu_amp"],
         },
-    )
-    evaluation_strategy: Union[IntervalStrategy, str] = field(
-        default=None,
-        metadata={"help": "Deprecated. Use `eval_strategy` instead"},
     )
     push_to_hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
@@ -1506,16 +1492,6 @@ class TrainingArguments:
         },
     )
 
-    dispatch_batches: Optional[bool] = field(
-        default=None,
-        metadata={"help": "Deprecated. Pass {'dispatch_batches':VALUE} to `accelerator_config`."},
-    )
-
-    split_batches: Optional[bool] = field(
-        default=None,
-        metadata={"help": "Deprecated. Pass {'split_batches':True} to `accelerator_config`."},
-    )
-
     include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
@@ -1535,7 +1511,7 @@ class TrainingArguments:
         },
     )
 
-    optim_target_modules: Union[None, str, List[str]] = field(
+    optim_target_modules: Union[None, str, list[str]] = field(
         default=None,
         metadata={
             "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment."
@@ -1608,13 +1584,6 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
-        if self.evaluation_strategy is not None:
-            warnings.warn(
-                "`evaluation_strategy` is deprecated and will be removed in version 4.46 of 🤗 Transformers. Use `eval_strategy` instead",
-                FutureWarning,
-            )
-            self.eval_strategy = self.evaluation_strategy
-
         if isinstance(self.eval_strategy, EvaluationStrategy):
             warnings.warn(
                 "using `EvaluationStrategy` for `eval_strategy` is deprecated and will be removed in version 5"
@@ -1641,7 +1610,7 @@ class TrainingArguments:
             self.do_eval = True
 
         if self.torch_empty_cache_steps is not None:
-            if not (isinstance(self.torch_empty_cache_steps, int) or self.torch_empty_cache_steps > 0):
+            if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
                 raise ValueError(
                     f"`torch_empty_cache_steps` must be an integer bigger than 0, got {self.torch_empty_cache_steps}."
                 )
@@ -1773,7 +1742,7 @@ class TrainingArguments:
 
         # We need to setup the accelerator config here *before* the first call to `self.device`
         if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
+            if not isinstance(self.accelerator_config, AcceleratorConfig):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
                 elif isinstance(self.accelerator_config, dict):
@@ -1787,22 +1756,6 @@ class TrainingArguments:
                     )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
-
-            if self.dispatch_batches is not None:
-                warnings.warn(
-                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.dispatch_batches = self.dispatch_batches
-
-            if self.split_batches is not None:
-                warnings.warn(
-                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'split_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.split_batches = self.split_batches
 
         # Initialize device before we proceed
         if self.framework == "pt" and is_torch_available():
@@ -1941,7 +1894,7 @@ class TrainingArguments:
         if isinstance(self.fsdp_config, str):
             if len(self.fsdp) == 0:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
-            with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
+            with open(self.fsdp_config, encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
                 for k in list(self.fsdp_config.keys()):
                     if k.startswith("fsdp_"):
@@ -2547,7 +2500,7 @@ class TrainingArguments:
         )
         return warmup_steps
 
-    def _dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+    def _dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
         Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
@@ -2587,7 +2540,7 @@ class TrainingArguments:
         """
         return json.dumps(self.to_dict(), indent=2)
 
-    def to_sanitized_dict(self) -> Dict[str, Any]:
+    def to_sanitized_dict(self) -> dict[str, Any]:
         """
         Sanitized serialization to use with TensorBoard’s hparams
         """
@@ -2830,7 +2783,7 @@ class TrainingArguments:
         self,
         strategy: Union[str, IntervalStrategy] = "steps",
         steps: int = 500,
-        report_to: Union[str, List[str]] = "none",
+        report_to: Union[str, list[str]] = "none",
         level: str = "passive",
         first_step: bool = False,
         nan_inf_filter: bool = False,
@@ -2986,7 +2939,7 @@ class TrainingArguments:
 
         Args:
             name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
-                The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
+                The optimizer to use: `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
                 `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):
                 The initial learning rate.

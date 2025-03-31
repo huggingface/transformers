@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
+from ...image_processing_utils import ImageProcessingMixin
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
@@ -111,6 +111,7 @@ else:
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),
@@ -123,9 +124,11 @@ else:
             ("owlvit", ("OwlViTImageProcessor",)),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor",)),
+            ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor",)),
+            ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
@@ -136,6 +139,7 @@ else:
             ("sam", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
+            ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("superglue", "SuperGlueImageProcessor"),
@@ -490,7 +494,7 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
-        # TODO: @yoni, change logic in v4.50 (when use_fast set to True by default)
+        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
         if image_processor_type is not None:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
@@ -498,7 +502,7 @@ class AutoImageProcessor:
                 if not use_fast:
                     logger.warning_once(
                         "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                        "`use_fast=True` will be the default behavior in v4.50, even if the model was saved with a slow processor. "
+                        "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
                         "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
                     )
             # Update class name to reflect the use_fast option. If class is not found, we fall back to the slow version.
@@ -606,8 +610,10 @@ class AutoImageProcessor:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
             raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
-        if fast_image_processor_class is not None and issubclass(fast_image_processor_class, BaseImageProcessor):
-            raise ValueError("You passed a slow image processor in as the `fast_image_processor_class`.")
+        if fast_image_processor_class is not None and not issubclass(
+            fast_image_processor_class, BaseImageProcessorFast
+        ):
+            raise ValueError("The `fast_image_processor_class` should inherit from `BaseImageProcessorFast`.")
 
         if (
             slow_image_processor_class is not None

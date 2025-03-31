@@ -1102,7 +1102,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         self._convert_list_arguments_into_dict()
 
         # Bias variables that will be populated on the first call (for retrocompatibility purposes, the vocabulary size
-        # is infered in the first usage, which inhibits initializing here)
+        # is inferred in the first usage, which inhibits initializing here)
         self.length_1_bias = None
         self.prepared_bias_variables = False
 
@@ -2749,9 +2749,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             ngram keys (batch_size, num_ngrams, depth).
         """
         if len(ngrams.shape) != 3:
-            raise ValueError(
-                "Ngrams should be of shape (batch_size, num_ngrams, ngram_len), but" f" is {ngrams.shape}"
-            )
+            raise ValueError(f"Ngrams should be of shape (batch_size, num_ngrams, ngram_len), but is {ngrams.shape}")
         if ngrams.shape[2] != self.ngram_len:
             raise ValueError(
                 "Ngrams should be of shape (batch_size, num_ngrams, ngram_len),"
@@ -2836,7 +2834,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     def _check_input_ids_shape(self, input_ids: torch.LongTensor):
         """Checks the shape of input ids."""
         if len(input_ids.shape) != 2:
-            raise ValueError("Input ids should be of shape (batch_size, input_len), but is" f" {input_ids.shape}")
+            raise ValueError(f"Input ids should be of shape (batch_size, input_len), but is {input_ids.shape}")
 
     def compute_g_values(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         """

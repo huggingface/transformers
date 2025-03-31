@@ -1076,6 +1076,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
         fine_generation_config = BarkFineGenerationConfig(**self.model.generation_config.fine_acoustics_config)
         return fine_generation_config
 
+    def test_model_can_generate(self):
+        # Bark has custom generate without inheriting GenerationMixin. This test could prevent regression.
+        self.assertTrue(self.model.can_generate())
+
     @slow
     def test_generate_semantic(self):
         input_ids = self.inputs

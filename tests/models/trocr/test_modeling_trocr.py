@@ -173,14 +173,6 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="trocr has no base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="trocr has no base model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
