@@ -244,6 +244,7 @@ from .import_utils import (
     is_yt_dlp_available,
     requires_backends,
     torch_only_method,
+    is_kernels_available,
 )
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,

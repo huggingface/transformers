@@ -113,6 +113,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_sdpa_available,
     is_torch_xla_available,
+    is_kernels_available,
     logging,
     replace_return_docstrings,
     strtobool,
@@ -156,6 +157,9 @@ if is_safetensors_available():
 
 if is_deepspeed_available():
     import deepspeed
+
+if is_kernels_available():
+    from kernels import get_kernel
 
 logger = logging.get_logger(__name__)
 
@@ -2024,25 +2028,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible.'
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
-            
+
             if config._attn_implementation == "use_kernel":
-                from kernels import get_kernel
+                if not is_kernels_available():
+                    raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
 
                 if kernel_config is None:
                     raise ValueError("kernel_config is required when attn_implementation is 'use_kernel'")
-                
+
                 if "repo_id" not in kernel_config or "kernel_name" not in kernel_config:
-                    raise ValueError("kernel_config must contain a 'repo_id' key pointing to a kernel repository in the hub and a 'kernel_name' key pointing to the kernel implementation function")
-                
+                    raise ValueError(
+                        "kernel_config must contain a 'repo_id' key pointing to a kernel repository in the hub and a 'kernel_name' key pointing to the kernel implementation function"
+                    )
+
                 repo_id = kernel_config.get("repo_id")
 
                 try:
                     kernel = get_kernel(repo_id)
                 except Exception as e:
                     raise ValueError(f"Could not find kernel repository '{repo_id}' in the hub: {e}")
-                
+
                 # Add the kernel implementation to ALL_ATTENTION_FUNCTIONS
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_config.get("kernel_name")))
+                ALL_ATTENTION_FUNCTIONS.register(
+                    f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_config.get("kernel_name"))
+                )
                 config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
 
             if (
@@ -4315,7 +4324,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
-                config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map, kernel_config=kernel_config
+                config,
+                use_flash_attention_2=use_flash_attention_2,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
+                kernel_config=kernel_config,
             )
 
         with ContextManagers(model_init_context):
