@@ -139,7 +139,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["images_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
