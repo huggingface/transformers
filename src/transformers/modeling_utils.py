@@ -45,6 +45,7 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
+from torchao.quantization import Int4WeightOnlyConfig
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -4849,7 +4850,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map is not None
                 and hf_quantizer is not None
                 and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
+                and (hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"] or
+                     isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
+                )
             ):
                 map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
