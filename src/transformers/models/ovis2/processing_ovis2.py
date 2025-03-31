@@ -33,13 +33,13 @@ class Ovis2Processor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        image_seq_length (`int`, *optional*, defaults to `256`):
-            The maximum sequence length for image tokens.
-            Shoudl be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
+        image_seq_length (`int`, *optional*, defaults to 256):
+            The maximum sequence length for image tokens.
+            Shoudl be same as in model's config
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -113,7 +113,7 @@ class Ovis2Processor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             grids = iter(image_inputs["grids"])
-            text = self._expand_image_tokens(text, grids, self.image_token)
+            text = self._expand_image_tokens(text, grids)
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         return BatchFeature(data={**text_inputs, **image_inputs})
@@ -122,7 +122,6 @@ class Ovis2Processor(ProcessorMixin):
         self,
         text: List[TextInput],
         grids: Iterable[Union[List[int], int]],
-        special_token: str,
     ):
         processed_text = []
         for sample in text:

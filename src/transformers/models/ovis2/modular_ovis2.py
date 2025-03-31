@@ -248,15 +248,6 @@ class Ovis2Encoder(SiglipEncoder):
     pass
 
 
-class Ovis2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Ovis2VisionConfig
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Ovis2EncoderLayer", "Ovis2VisionEmbeddings"]
-    _supports_sdpa = True
-    _supports_flash_attn_2 = True
-
-
 class Ovis2VisionTransformer(nn.Module):
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__()
@@ -264,7 +255,8 @@ class Ovis2VisionTransformer(nn.Module):
         self.embeddings = Ovis2VisionEmbeddings(config)
         self.encoder = Ovis2Encoder(config)
         self.rms_norm = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-
+        self.gradient_checkpointing = False
+    
     def forward(
         self,
         pixel_values,
@@ -310,9 +302,18 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
         self._fill_padding_idx_with_zero()
 
 
-class Ovis2VisionModel(Ovis2VisionPreTrainedModel):
+# class Ovis2VisionPreTrainedModel(PreTrainedModel):
+#     config_class = Ovis2VisionConfig
+#     main_input_name = "pixel_values"
+#     supports_gradient_checkpointing = True
+#     _no_split_modules = ["Ovis2EncoderLayer", "Ovis2VisionEmbeddings"]
+#     _supports_sdpa = True
+#     _supports_flash_attn_2 = True
+
+
+class Ovis2VisionModel(nn.Module):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         self.transformer = Ovis2VisionTransformer(config)
         self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
@@ -325,7 +326,6 @@ class Ovis2VisionModel(Ovis2VisionPreTrainedModel):
             ),
             nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens),
         )
-        self.post_init()
 
     def get_prob_token(self, logits):
         if self.config.tokenize_function == "gumbel_argmax":
@@ -374,8 +374,9 @@ class Ovis2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 
 class Ovis2PreTrainedModel(PreTrainedModel):
     config_class = Ovis2Config
-    base_model_prefix = "ovis2"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Ovis2VisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
@@ -421,7 +422,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_input_embeddings
@@ -568,9 +568,10 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
-                inputs_embeds[(input_ids == visual_indicator_id)] = (
+                mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
+                inputs_embeds[mask] = (
                     visual_indicator_features[i]
-                    .expand_as(inputs_embeds[(input_ids == visual_indicator_id)])
+                    .expand_as(inputs_embeds[mask])
                     .to(inputs_embeds.device, inputs_embeds.dtype)
                 )
 
@@ -654,4 +655,4 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Ovis2ForConditionalGeneration"]
+__all__ = ["Ovis2ForConditionalGeneration", "Ovis2PreTrainedModel"]

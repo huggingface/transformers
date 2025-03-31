@@ -3244,7 +3244,6 @@ else:
     _import_structure["models.ovis2"].extend(
         [
             "Ovis2ForConditionalGeneration",
-            "Ovis2VisionModel",
             "Ovis2PreTrainedModel",
         ]
     )

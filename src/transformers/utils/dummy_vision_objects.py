@@ -527,13 +527,6 @@ class OneFormerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class Ovis2ImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class Owlv2ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

@@ -209,6 +209,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("open-llama", "OpenLlamaModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),
+        ("ovis2", "Ovis2ForConditionalGeneration"),
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("patchtsmixer", "PatchTSMixerModel"),

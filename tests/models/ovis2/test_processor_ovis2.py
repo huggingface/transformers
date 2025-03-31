@@ -31,9 +31,7 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = Qwen2TokenizerFast.from_pretrained("thisisiron/Ovis2-1B-hf")
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = Ovis2Processor(
-            image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
-        )
+        processor = Ovis2Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):

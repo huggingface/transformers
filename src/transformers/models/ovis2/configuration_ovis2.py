@@ -49,8 +49,7 @@ class Ovis2VisionConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
-    model_type = "ovis2_vision_model"
+    
     base_config_key = "vision_config"
 
     def __init__(
