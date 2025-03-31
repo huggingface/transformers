@@ -529,6 +529,7 @@ str_to_torch_dtype = {
     "F32": torch.float32,
     "F64": torch.float64,
     "I64": torch.int64,
+    "F8_E4M3": torch.float8_e4m3fn
 }
 
 if is_torch_greater_or_equal("2.3.0"):
@@ -4061,7 +4062,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not torch.distributed.is_initialized():
                 try:
                     rank = int(os.environ["LOCAL_RANK"])
-                    world_size = int(os.environ["ROLE_WORLD_SIZE"]) 
+                    world_size = int(os.environ["ROLE_WORLD_SIZE"])
                     logger.warning(
                         "Tensor Parallel requires torch.distributed to be initialized first."
                         f"Initializing with world size {world_size} on rank {rank}"

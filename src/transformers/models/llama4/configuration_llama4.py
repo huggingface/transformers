@@ -177,6 +177,7 @@ class Llama4TextConfig(PretrainedConfig):
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
         rope_scaling=None,
+        for_llm_compressor=False,
         **kwargs,
     ):
         super().__init__(
@@ -216,6 +217,8 @@ class Llama4TextConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+
+        self.for_llm_compressor = for_llm_compressor
 
 
 class Llama4Config(PretrainedConfig):
@@ -290,6 +293,9 @@ class Llama4Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
+        for_llm_compressor: (`bool`, *optional*, defaults to `False`):
+            Whether this config is for a checkpoint that aims to use LLM compressor for fp8 quantization.
+            If `True`, the model MoE part would swap to use Linear instead of FusedMoE.
 
     ```python
     >>> from transformers import Llama4Model, Llama4Config
