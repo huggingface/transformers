@@ -345,6 +345,7 @@ _import_structure = {
     ],
     "models.deberta_v2": ["DebertaV2Config"],
     "models.decision_transformer": ["DecisionTransformerConfig"],
+    "models.deepseek_v3": ["DeepseekV3Config"],
     "models.deformable_detr": ["DeformableDetrConfig"],
     "models.deit": ["DeiTConfig"],
     "models.deprecated": [],
@@ -747,6 +748,8 @@ _import_structure = {
         "Qwen2VLConfig",
         "Qwen2VLProcessor",
     ],
+    "models.qwen3": ["Qwen3Config"],
+    "models.qwen3_moe": ["Qwen3MoeConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -2029,6 +2032,13 @@ else:
             "DecisionTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.deepseek_v3"].extend(
+        [
+            "DeepseekV3ForCausalLM",
+            "DeepseekV3Model",
+            "DeepseekV3PreTrainedModel",
+        ]
+    )
     _import_structure["models.deformable_detr"].extend(
         [
             "DeformableDetrForObjectDetection",
@@ -3060,6 +3070,7 @@ else:
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
+            "ModernBertForQuestionAnswering",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",
             "ModernBertModel",
@@ -3443,6 +3454,26 @@ else:
             "Qwen2VLForConditionalGeneration",
             "Qwen2VLModel",
             "Qwen2VLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen3"].extend(
+        [
+            "Qwen3ForCausalLM",
+            "Qwen3ForQuestionAnswering",
+            "Qwen3ForSequenceClassification",
+            "Qwen3ForTokenClassification",
+            "Qwen3Model",
+            "Qwen3PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen3_moe"].extend(
+        [
+            "Qwen3MoeForCausalLM",
+            "Qwen3MoeForQuestionAnswering",
+            "Qwen3MoeForSequenceClassification",
+            "Qwen3MoeForTokenClassification",
+            "Qwen3MoeModel",
+            "Qwen3MoePreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -5558,6 +5589,9 @@ if TYPE_CHECKING:
     from .models.decision_transformer import (
         DecisionTransformerConfig,
     )
+    from .models.deepseek_v3 import (
+        DeepseekV3Config,
+    )
     from .models.deformable_detr import (
         DeformableDetrConfig,
     )
@@ -5998,6 +6032,8 @@ if TYPE_CHECKING:
         Qwen2VLConfig,
         Qwen2VLProcessor,
     )
+    from .models.qwen3 import Qwen3Config
+    from .models.qwen3_moe import Qwen3MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
@@ -7193,6 +7229,11 @@ if TYPE_CHECKING:
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
         )
+        from .models.deepseek_v3 import (
+            DeepseekV3ForCausalLM,
+            DeepseekV3Model,
+            DeepseekV3PreTrainedModel,
+        )
         from .models.deformable_detr import (
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
@@ -7991,6 +8032,7 @@ if TYPE_CHECKING:
         )
         from .models.modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForQuestionAnswering,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,
@@ -8298,6 +8340,22 @@ if TYPE_CHECKING:
             Qwen2VLForConditionalGeneration,
             Qwen2VLModel,
             Qwen2VLPreTrainedModel,
+        )
+        from .models.qwen3 import (
+            Qwen3ForCausalLM,
+            Qwen3ForQuestionAnswering,
+            Qwen3ForSequenceClassification,
+            Qwen3ForTokenClassification,
+            Qwen3Model,
+            Qwen3PreTrainedModel,
+        )
+        from .models.qwen3_moe import (
+            Qwen3MoeForCausalLM,
+            Qwen3MoeForQuestionAnswering,
+            Qwen3MoeForSequenceClassification,
+            Qwen3MoeForTokenClassification,
+            Qwen3MoeModel,
+            Qwen3MoePreTrainedModel,
         )
         from .models.rag import (
             RagModel,
