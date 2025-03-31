@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import LlavaOnevisionImageProcessor
 
     if is_torchvision_available():
-        from transformers import LlavaOnevisionImageProcessorFast, LlavaOnevisionVideoProcessor
+        from transformers import LlavaOnevisionImageProcessorFast
 
 
 class LlavaOnevisionImageProcessingTester:
@@ -98,7 +98,6 @@ class LlavaOnevisionImageProcessingTester:
 class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LlavaOnevisionImageProcessor if is_vision_available() else None
     fast_image_processing_class = LlavaOnevisionImageProcessorFast if is_torchvision_available() else None
-    video_processing_class = LlavaOnevisionVideoProcessor if is_vision_available() else None
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaOnevision
     def setUp(self):

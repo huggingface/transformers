@@ -334,7 +334,7 @@ class BaseVideoProcessorFast(PushToHubMixin):
         Returns:
             `torch.Tensor`: The center cropped video.
         """
-        if size.height is None or size.width is None:
+        if size["height"] is None or size["width"] is None:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return F.center_crop(video, (size["height"], size["width"]))
 

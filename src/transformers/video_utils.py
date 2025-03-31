@@ -565,7 +565,7 @@ def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    backend: str = "opencv",
+    backend: str = "pyav",
     sample_indices_fn: Optional[Callable] = None,
     **kwargs,
 ) -> np.array:
@@ -580,8 +580,8 @@ def load_video(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        backend (`str`, *optional*, defaults to `"opencv"`):
-            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+        backend (`str`, *optional*, defaults to `"pyav"`):
+            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
         sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.

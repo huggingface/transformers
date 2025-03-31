@@ -19,6 +19,9 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available, is_vision_available
+from transformers.image_processing_utils import get_size_dict
+from transformers.image_utils import SizeDict
+from transformers.processing_utils import VideosKwargs
 from transformers.testing_utils import (
     require_av,
     require_cv2,
@@ -36,16 +39,21 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers import BaseVideoProcessor
-    from transformers.video_utils import load_video
+    from transformers import BaseVideoProcessorFast
+    from transformers.video_utils import VideoMetadata, load_video
 
 
-def get_random_video(height, width):
+def get_random_video(height, width, return_torch=False):
     random_frame = np.random.randint(0, 256, (height, width, 3), dtype=np.uint8)
-    return np.array(([random_frame] * 8))
+    video = np.array(([random_frame] * 8))
+    if return_torch:
+        # move channel first
+        return torch.from_numpy(video).permute(0, 3, 1, 2)
+    return video
 
 
 @require_vision
+@require_torchvision
 class BaseVideoProcessorTester(unittest.TestCase):
     """
     Tests that the `transforms` can be applied to a 4-dim array directly, i.e. to a whole video.
@@ -137,61 +145,57 @@ class BaseVideoProcessorTester(unittest.TestCase):
         self.assertTrue(np.array_equal(videos_list[0], video))
 
     def test_resize(self):
-        video_processor = BaseVideoProcessor()
-        video = get_random_video(16, 32)
+        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video = get_random_video(16, 32, return_torch=True)
 
         # Size can be an int or a tuple of ints.
-        resized_video = video_processor.resize(video, size=(8, 8))
-        self.assertIsInstance(resized_video, np.ndarray)
-        self.assertEqual(resized_video.shape, (8, 8, 8, 3))
+        size_dict = SizeDict(**get_size_dict((8, 8), param_name="size"))
+        resized_video = video_processor.resize(video, size=size_dict)
+        self.assertIsInstance(resized_video, torch.Tensor)
+        self.assertEqual(resized_video.shape, (8, 3, 8, 8))
 
     def test_normalize(self):
-        video_processor = BaseVideoProcessor()
-        array = np.random.random((4, 16, 32, 3))
+        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        array = torch.randn(4, 3, 16, 32)
         mean = [0.1, 0.5, 0.9]
         std = [0.2, 0.4, 0.6]
 
         # mean and std can be passed as lists or NumPy arrays.
-        expected = (array - np.array(mean)) / np.array(std)
+        expected = (array - torch.tensor(mean)[:, None, None]) / torch.tensor(std)[:, None, None]
         normalized_array = video_processor.normalize(array, mean, std)
-        self.assertTrue(np.array_equal(normalized_array, expected))
-
-        # Normalize will detect automatically if channel first or channel last is used.
-        array = np.random.random((4, 3, 16, 32))
-        expected = (array - np.array(mean)[:, None, None]) / np.array(std)[:, None, None]
-        normalized_array = video_processor.normalize(array, mean, std)
-        self.assertTrue(np.array_equal(normalized_array, expected))
+        torch.testing.assert_allclose(normalized_array, expected)
 
     def test_center_crop(self):
-        video_processor = BaseVideoProcessor()
-        video = get_random_video(16, 32)
+        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video = get_random_video(16, 32, return_torch=True)
 
         # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
         crop_sizes = [8, (8, 64), 20, (32, 64)]
         for size in crop_sizes:
-            cropped_video = video_processor.center_crop(video, size)
-            self.assertIsInstance(cropped_video, np.ndarray)
+            size_dict = get_size_dict(size, default_to_square=True, param_name="crop_size")
+            cropped_video = video_processor.center_crop(video, size_dict)
+            self.assertIsInstance(cropped_video, torch.Tensor)
 
             expected_size = (size, size) if isinstance(size, int) else size
-            self.assertEqual(cropped_video.shape, (8, *expected_size, 3))
+            self.assertEqual(cropped_video.shape, (8, 3, *expected_size))
 
     def test_convert_to_rgb(self):
-        video_processor = BaseVideoProcessor()
-        video = get_random_video(20, 20)
+        video_processor = BaseVideoProcessorFast(model_init_kwargs=VideosKwargs)
+        video = get_random_video(20, 20, return_torch=True)
 
-        rgb_video = video_processor.convert_to_rgb(video[..., :1])
-        self.assertEqual(rgb_video.shape, (8, 20, 20, 3))
+        rgb_video = video_processor.convert_to_rgb(video[:, :1])
+        self.assertEqual(rgb_video.shape, (8, 3, 20, 20))
 
-        rgb_video = video_processor.convert_to_rgb(np.concatenate([video, video[..., :1]], axis=-1))
-        self.assertEqual(rgb_video.shape, (8, 20, 20, 3))
+        rgb_video = video_processor.convert_to_rgb(torch.cat([video, video[:, :1]], dim=1))
+        self.assertEqual(rgb_video.shape, (8, 3, 20, 20))
 
 
 @require_vision
 @require_av
 class LoadVideoTester(unittest.TestCase):
     def test_load_video_url(self):
-        video = load_video(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
+        video, _ = load_video(
+            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
         )
         self.assertEqual(video.shape, (243, 360, 640, 3))  # 243 frames is the whole video, no sampling applied
 
@@ -199,7 +203,7 @@ class LoadVideoTester(unittest.TestCase):
         video_file_path = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
         )
-        video = load_video(video_file_path)
+        video, _ = load_video(video_file_path)
         self.assertEqual(video.shape, (243, 360, 640, 3))  # 243 frames is the whole video, no sampling applied
 
     # FIXME: @raushan, yt-dlp downloading works for for some reason it cannot redirect to out buffer?
@@ -212,7 +216,7 @@ class LoadVideoTester(unittest.TestCase):
     @require_torchvision
     @require_cv2
     def test_load_video_backend_url(self):
-        video = load_video(
+        video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             backend="decord",
         )
@@ -220,12 +224,12 @@ class LoadVideoTester(unittest.TestCase):
 
         # Can't use certain backends with url
         with self.assertRaises(ValueError):
-            video = load_video(
+            video, _ = load_video(
                 "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
                 backend="opencv",
             )
         with self.assertRaises(ValueError):
-            video = load_video(
+            video, _ = load_video(
                 "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
                 backend="torchvision",
             )
@@ -237,42 +241,45 @@ class LoadVideoTester(unittest.TestCase):
         video_file_path = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
         )
-        video = load_video(video_file_path, backend="decord")
+        video, metadata = load_video(video_file_path, backend="decord")
         self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertIsInstance(metadata, VideoMetadata)
 
-        video = load_video(video_file_path, backend="opencv")
+        video, metadata = load_video(video_file_path, backend="opencv")
         self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertIsInstance(metadata, VideoMetadata)
 
-        video = load_video(video_file_path, backend="torchvision")
+        video, metadata = load_video(video_file_path, backend="torchvision")
         self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertIsInstance(metadata, VideoMetadata)
 
     def test_load_video_num_frames(self):
-        video = load_video(
+        video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             num_frames=16,
         )
         self.assertEqual(video.shape, (16, 360, 640, 3))
 
-        video = load_video(
+        video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             num_frames=22,
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
 
     def test_load_video_fps(self):
-        video = load_video(
+        video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4", fps=1
         )
         self.assertEqual(video.shape, (9, 360, 640, 3))
 
-        video = load_video(
+        video, _ = load_video(
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4", fps=2
         )
         self.assertEqual(video.shape, (19, 360, 640, 3))
 
         # `num_frames` is mutually exclusive with `video_fps`
         with self.assertRaises(ValueError):
-            video = load_video(
+            video, _ = load_video(
                 "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
                 fps=1,
                 num_frames=10,
