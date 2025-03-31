@@ -13,42 +13,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Image processor class for Flava."""
-from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
+from functools import lru_cache
+from typing import Any, Dict, Iterable, Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast, 
-    DefaultFastImageProcessorKwargs,
+    BaseImageProcessorFast,
     BatchFeature,
-    get_size_dict
+    DefaultFastImageProcessorKwargs,
+    get_size_dict,
 )
-from ...image_transforms import group_images_by_shape, reorder_images, ChannelDimension
-from ...image_utils import (
-    PILImageResampling,
-    SizeDict,
-    ImageInput,
-    validate_kwargs
-)
+from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, validate_kwargs
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings, 
-    is_torch_available, 
-    is_torchvision_available, 
-    is_torchvision_v2_available
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
 )
 from .image_processing_flava import (
-    FlavaMaskingGenerator,
-    LOGIT_LAPLACE_EPS,
+    FLAVA_CODEBOOK_MEAN,
+    FLAVA_CODEBOOK_STD,
     FLAVA_IMAGE_MEAN,
     FLAVA_IMAGE_STD,
-    FLAVA_CODEBOOK_MEAN,
-    FLAVA_CODEBOOK_STD
-
+    LOGIT_LAPLACE_EPS,
+    FlavaMaskingGenerator,
 )
+
 
 if is_torch_available():
     import torch
@@ -144,7 +139,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
             be overridden by the `codebook_image_std` parameter in `preprocess`.
-    """            
+    """,
 )
 class FlavaImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
@@ -252,7 +247,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
                 The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
                 be overridden by the `codebook_image_std` parameter in `preprocess`.
-        """            
+        """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
@@ -326,7 +321,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
     def map_pixels(self, image: "torch.Tensor") -> "torch.Tensor":
         return (1 - 2 * LOGIT_LAPLACE_EPS) * image + LOGIT_LAPLACE_EPS
-    
+
     def _further_process_kwargs(
         self,
         size: Optional[SizeDict] = None,
@@ -461,7 +456,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
-
         processed_images = self._preprocess_image(
             images=images,
             do_resize=do_resize,
@@ -477,7 +471,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             image_std=image_std,
             return_tensors=return_tensors,
         )
-        data={
+        data = {
             "pixel_values": processed_images,
         }
 
@@ -486,17 +480,16 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
                 images=images,
                 do_resize=codebook_do_resize,
                 size=codebook_size,
-                interpolation=codebook_interpolation, 
+                interpolation=codebook_interpolation,
                 do_center_crop=codebook_do_center_crop,
                 crop_size=codebook_crop_size,
                 do_rescale=codebook_do_rescale,
-                rescale_factor=codebook_rescale_factor, 
+                rescale_factor=codebook_rescale_factor,
                 do_normalize=codebook_do_normalize,
                 do_map_pixels=codebook_do_map_pixels,
                 image_mean=codebook_image_mean,
                 image_std=codebook_image_std,
-                return_tensors=return_tensors
-
+                return_tensors=return_tensors,
             )
             data["codebook_pixel_values"] = codebook_processed_images
 
@@ -512,7 +505,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             masks = [mask_generator() for _ in range(images.size(0))]
             data["bool_masked_pos"] = masks
 
-
         return BatchFeature(data=data, tensor_type=return_tensors)
+
 
 __all__ = ["FlavaImageProcessorFast"]
