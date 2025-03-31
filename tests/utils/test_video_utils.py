@@ -172,7 +172,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
         crop_sizes = [8, (8, 64), 20, (32, 64)]
         for size in crop_sizes:
-            size_dict = get_size_dict(size, default_to_square=True, param_name="crop_size")
+            size_dict = SizeDict(**get_size_dict(size, default_to_square=True, param_name="crop_size"))
             cropped_video = video_processor.center_crop(video, size_dict)
             self.assertIsInstance(cropped_video, torch.Tensor)
 

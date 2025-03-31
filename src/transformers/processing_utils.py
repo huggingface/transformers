@@ -70,7 +70,7 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
-    "AutoVideoProcessor": "BaseVideoProcessor",
+    "AutoVideoProcessor": "BaseVideoProcessorFast",
 }
 
 if sys.version_info >= (3, 11):
