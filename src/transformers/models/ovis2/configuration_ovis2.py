@@ -3,7 +3,9 @@ from ..qwen2.configuration_qwen2 import Qwen2Config
 
 
 class Ovis2VisionConfig(PretrainedConfig):
-    r"""
+    r"""This is the configuration class to store the configuration of a [`Ovis2VisionModel`]. It is used to instantiate a
+    Ovis2VisionModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of Ovis2.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -102,7 +104,7 @@ class Ovis2Config(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    [thisisiron/Ovis2-1B-hf](https://huggingface.co/thisisiron/Ovis2-1B-hf)
+    e.g. [thisisiron/Ovis2-1B-hf](https://huggingface.co/thisisiron/Ovis2-1B-hf)
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `Ovis2VisionConfig`):
@@ -124,7 +126,7 @@ class Ovis2Config(PretrainedConfig):
     >>> # Initializing a Ovis2 style configuration
     >>> configuration = Ovis2Config()
 
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> # Initializing a model from the Ovis2-2B style configuration
     >>> model = Ovis2ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

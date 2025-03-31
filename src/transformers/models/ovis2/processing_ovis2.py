@@ -36,8 +36,7 @@ class Ovis2Processor(ProcessorMixin):
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
         image_seq_length (`int`, *optional*, defaults to 256):
-            The maximum sequence length for image tokens.
-            Shoudl be same as in model's config
+            The number of image tokens to be used for each image in the input.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -60,7 +59,12 @@ class Ovis2Processor(ProcessorMixin):
     ):
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(
         self,

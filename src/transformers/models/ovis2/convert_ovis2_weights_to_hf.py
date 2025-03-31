@@ -9,6 +9,7 @@ from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForVision2Seq,
+    AutoProcessor,
     AutoTokenizer,
 )
 from transformers.models.ovis2.configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
@@ -96,17 +97,15 @@ def create_tokenizer(model_name_or_path, save_dir):
     Returns:
         The configured tokenizer
     """
-    if model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, return_token_type_ids=False)
-        tokenizer.model_max_length = CONTEXT_LENGTH
-        tokenizer.add_special_tokens(
-            {"additional_special_tokens": SPECIAL_TOKENS},
-            replace_additional_special_tokens=False,
-        )
-    else:
-        tokenizer = AutoTokenizer.from_pretrained("./ovisv2_hf/tokenizer_ovisv2", return_token_type_ids=False)
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, return_token_type_ids=False)
+    tokenizer.model_max_length = CONTEXT_LENGTH
+    tokenizer.add_special_tokens(
+        {"additional_special_tokens": SPECIAL_TOKENS},
+        replace_additional_special_tokens=False,
+    )
     tokenizer.chat_template = CHAT_TEMPLATE
-    tokenizer.save_pretrained(save_dir)
+    setattr(tokenizer, "image_token", "<IMG_ATOM>")
+    setattr(tokenizer, "image_token_id", tokenizer.convert_tokens_to_ids(tokenizer.image_token))
     return tokenizer
 
 
@@ -124,9 +123,6 @@ def create_image_processor(save_dir):
         crop_to_patches=True,
         size={"height": 448, "width": 448},
     )
-
-    image_processor.save_pretrained(save_dir)
-    print(f"Image processor saved to {save_dir}")
     return image_processor
 
 
@@ -315,14 +311,15 @@ def main():
         save_dir=args.save_dir,
     )
 
+    os.makedirs(args.save_dir, exist_ok=True)
+
     # Convert and save the model
     model = convert_model(model_name_or_path=args.model_name_or_path)
+    model.save_pretrained(args.save_dir)
 
-    # Save the model and processor
-    os.makedirs(args.save_dir, exist_ok=True)
+    # Save the processor
     processor = Ovis2Processor(tokenizer=tokenizer, image_processor=image_processor, chat_template=CHAT_TEMPLATE)
     processor.save_pretrained(args.save_dir)
-    model.save_pretrained(args.save_dir)
 
     # Push to hub if requested
     if args.push_to_hub:
@@ -337,6 +334,8 @@ def main():
         .eval()
         .to("cuda:0")
     )
+
+    processor = AutoProcessor.from_pretrained(args.save_dir)
 
     messages = [
         {
