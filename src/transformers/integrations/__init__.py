@@ -208,7 +208,6 @@ if TYPE_CHECKING:
         LayerRepository,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
-        use_kernel_attn_from_hub,
         use_kernel_forward_from_hub,
     )
     from .integration_utils import (

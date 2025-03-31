@@ -45,12 +45,6 @@ try:
                 layer_name="TritonLlamaMLP",
             )
         },
-        "LlamaAttention": {
-            "cuda": LayerRepository(
-                repo_id="medmekk/triton-flash-attn",
-                layer_name="attention",
-            )
-        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
