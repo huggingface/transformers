@@ -174,14 +174,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="ZoeDepth does not support training yet")
     def test_training(self):
         pass
