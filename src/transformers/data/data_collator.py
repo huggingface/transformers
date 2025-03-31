@@ -2005,11 +2005,6 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
 
-        warnings.warn(
-            "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
-            "Make sure your attention computation is able to handle it!"
-        )
-
     def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
