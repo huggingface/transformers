@@ -1351,6 +1351,7 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.efficientnet"].append("EfficientNetImageProcessorFast")
     _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
     _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
@@ -1360,6 +1361,7 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
+    _import_structure["models.sam"].append("SamImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
@@ -6620,6 +6622,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.efficientnet import EfficientNetImageProcessorFast
         from .models.gemma3 import Gemma3ImageProcessorFast
         from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
@@ -6629,6 +6632,7 @@ if TYPE_CHECKING:
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
+        from .models.sam import SamImageProcessorFast
         from .models.siglip import SiglipImageProcessorFast
         from .models.siglip2 import Siglip2ImageProcessorFast
         from .models.vit import ViTImageProcessorFast

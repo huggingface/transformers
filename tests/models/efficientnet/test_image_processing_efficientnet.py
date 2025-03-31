@@ -19,13 +19,16 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import EfficientNetImageProcessor
+
+    if is_torchvision_available():
+        from transformers import EfficientNetImageProcessorFast
 
 
 class EfficientNetImageProcessorTester:
@@ -83,7 +86,15 @@ class EfficientNetImageProcessorTester:
 @require_torch
 @require_vision
 class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = EfficientNetImageProcessor if is_vision_available() else None
+
+    image_processor_list = []
+    if is_vision_available():
+        from transformers import EfficientNetImageProcessor
+        image_processor_list.append(EfficientNetImageProcessor)
+
+        if is_torchvision_available():
+            from transformers import EfficientNetImageProcessorFast
+            image_processor_list.append(EfficientNetImageProcessorFast)
 
     def setUp(self):
         super().setUp()
@@ -94,30 +105,31 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_rescale(self):
-        # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
         image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
 
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+            rescaled_image = image_processor.rescale(image, scale=1 / 127.5)
+            expected_image = (image * (1 / 127.5)).astype(np.float32) - 1
+            self.assertTrue(np.allclose(rescaled_image, expected_image))
 
-        rescaled_image = image_processor.rescale(image, scale=1 / 127.5)
-        expected_image = (image * (1 / 127.5)).astype(np.float32) - 1
-        self.assertTrue(np.allclose(rescaled_image, expected_image))
-
-        rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
-        expected_image = (image / 255.0).astype(np.float32)
-        self.assertTrue(np.allclose(rescaled_image, expected_image))
+            rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
+            expected_image = (image / 255.0).astype(np.float32)
+            self.assertTrue(np.allclose(rescaled_image, expected_image))

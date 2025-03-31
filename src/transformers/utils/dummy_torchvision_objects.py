@@ -58,6 +58,13 @@ class DetrImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class EfficientNetImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class Gemma3ImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
@@ -122,6 +129,13 @@ class RTDetrImageProcessorFast(metaclass=DummyObject):
 
 
 class SiglipImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
+class SamImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
