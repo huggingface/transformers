@@ -4419,7 +4419,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
 
-        # import pdb; pdb.set_trace()
         # Finalize model weight initialization
         if from_tf:
             model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
@@ -4429,7 +4428,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
-            # import pdb; pdb.set_trace()
             (
                 model,
                 missing_keys,
@@ -4663,7 +4661,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         # Useful flags
         is_quantized = hf_quantizer is not None
-        # import pdb; pdb.set_trace()
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4821,8 +4818,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Compute expected model keys
         expected_keys = list(model_to_load.state_dict().keys())
-        # print(expected_keys)
-        import pdb; pdb.set_trace()
         if hf_quantizer is not None:
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
