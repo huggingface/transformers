@@ -121,7 +121,7 @@ else:
             ("nougat", ("NougatImageProcessor",)),
             ("oneformer", ("OneFormerImageProcessor",)),
             ("owlv2", ("Owlv2ImageProcessor",)),
-            ("owlvit", ("OwlViTImageProcessor",)),
+            ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor",)),
             ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
