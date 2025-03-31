@@ -625,7 +625,7 @@ class RwkvModel(RwkvPreTrainedModel):
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if attention_mask is None:
+        if attention_mask is not None:
             logger.warning_once("`attention_mask` was passed, but it is unused in this model.")
 
         if self.training == self.layers_are_rescaled:
