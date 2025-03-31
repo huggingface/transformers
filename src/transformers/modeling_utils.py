@@ -784,6 +784,9 @@ def _load_state_dict_into_meta_model(
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
+    # Used to fix the issue mentioned in #37031: when loading a model with tied weights in state_dict + `tie_word_embeddings = False`,
+    # we need to make sure they are not loaded as tied weights!
+    data_ptrs = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -853,11 +856,19 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
                 module, param_type = get_module_from_name(model, param_name)
+
+                # avoid tied weights
+                if param.data_ptr() in data_ptrs:
+                    param = param.clone()
+
                 module.load_state_dict(
                     {param_type: param.to(param_device)},
                     strict=False,
                     assign=True,
                 )
+
+                # Add `data_ptr` of `model.state_dict()[param_name]` to avoid tied weights
+                data_ptrs.add(model.state_dict()[param_name].data_ptr())
             else:
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
@@ -4886,7 +4897,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             map_location = "cpu"
             if low_cpu_mem_usage:
-                if shard_file.endswith(".safetensors") and not is_quantized:
+                if shard_file.endswith(".safetensors"):
                     map_location = "meta"
                 elif (
                     device_map is not None
@@ -5906,7 +5917,7 @@ class AttentionInterface(MutableMapping):
     """
     Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
     with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
-    it needs to declare a new instance of this class inside the `modeling.py`, and declare it on that instance.
+    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -5935,7 +5946,7 @@ class AttentionInterface(MutableMapping):
 
     def __iter__(self):
         # Ensure we use all keys, with the overwritten ones on top
-        return iter(self._global_mapping.update(self._local_mapping))
+        return iter({**self._global_mapping, **self._local_mapping})
 
     def __len__(self):
         return len(self._global_mapping.keys() | self._local_mapping.keys())
@@ -5945,7 +5956,7 @@ class AttentionInterface(MutableMapping):
         cls._global_mapping.update({key: value})
 
     def valid_keys(self) -> List[str]:
-        return list(self._global_mapping.keys() | self._local_mapping.keys())
+        return list(self.keys())
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones

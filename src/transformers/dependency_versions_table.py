@@ -32,7 +32,7 @@ deps = {
     "jaxlib": "jaxlib>=0.4.1,<=0.4.13",
     "jieba": "jieba",
     "jinja2": "jinja2>=3.1.0",
-    "kenlm": "kenlm",
+    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5": "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
     "keras": "keras>2.9,<2.16",
     "keras-nlp": "keras-nlp>=0.3.1,<0.14.0",
     "kernels": "kernels>=0.3.2,<0.4",
