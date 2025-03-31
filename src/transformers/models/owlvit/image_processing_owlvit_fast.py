@@ -15,13 +15,22 @@
 """Fast Image processor class for OwlViT"""
 
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 from ...image_processing_utils import get_size_dict
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...processing_utils import Unpack
 from ...utils import TensorType, add_start_docstrings, is_torch_available, logging
+
+
+if TYPE_CHECKING:
+    from .modeling_owlvit import OwlViTObjectDetectionOutput
 
 
 if is_torch_available():
@@ -102,6 +111,10 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
+class OwlViTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    pass
+
+
 @add_start_docstrings(
     "Constructs a fast OwlViT image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -119,12 +132,12 @@ class OwlViTImageProcessorFast(BaseImageProcessorFast):
     do_normalize = None
     do_convert_rgb = None
     model_input_names = ["pixel_values"]
+    valid_kwargs = OwlViTFastImageProcessorKwargs
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Unpack[OwlViTFastImageProcessorKwargs]) -> None:
         size = kwargs.pop("size", None)
         size = size if size is not None else {"height": 768, "width": 768}
-        size = get_size_dict(size)
-        self.size = size
+        self.size = get_size_dict(size)
         super().__init__(**kwargs)
 
     # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process
@@ -177,7 +190,7 @@ class OwlViTImageProcessorFast(BaseImageProcessorFast):
     # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self,
-        outputs,
+        outputs: "OwlViTObjectDetectionOutput",
         threshold: float = 0.1,
         target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
     ):
