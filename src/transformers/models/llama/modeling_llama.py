@@ -214,8 +214,6 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
-
-@use_kernel_attn_from_hub("LlamaAttention", device="cuda")
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

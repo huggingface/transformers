@@ -2005,6 +2005,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         check_device_map: bool = True,
+        kernel_config: Optional[Dict[str, str]] = None,
     ):
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
@@ -2023,6 +2024,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible.'
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
+            
+            if config._attn_implementation == "use_kernel":
+                from kernels import get_kernel
+
+                if kernel_config is None:
+                    raise ValueError("kernel_config is required when attn_implementation is 'use_kernel'")
+                
+                if "repo_id" not in kernel_config or "kernel_name" not in kernel_config:
+                    raise ValueError("kernel_config must contain a 'repo_id' key pointing to a kernel repository in the hub and a 'kernel_name' key pointing to the kernel implementation function")
+                
+                repo_id = kernel_config.get("repo_id")
+
+                try:
+                    kernel = get_kernel(repo_id)
+                except Exception as e:
+                    raise ValueError(f"Could not find kernel repository '{repo_id}' in the hub: {e}")
+                
+                # Add the kernel implementation to ALL_ATTENTION_FUNCTIONS
+                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_config.get("kernel_name")))
+                config._attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
 
             if (
                 not isinstance(config._attn_implementation, dict)
@@ -3948,6 +3969,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
+        kernel_config = kwargs.pop("kernel_config", None)
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
@@ -4293,7 +4315,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
             config = cls._autoset_attn_implementation(
-                config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
+                config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map, kernel_config=kernel_config
             )
 
         with ContextManagers(model_init_context):
