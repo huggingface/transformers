@@ -103,6 +103,7 @@ from .utils import (
     is_safetensors_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
+    is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
     is_torch_xla_available,
@@ -774,7 +775,8 @@ def _load_state_dict_into_meta_model(
     """
     tensor_device = "cpu"
     if device_map is not None and device_map.get("", None) is not None:
-        tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
+        if device_map[""] not in ("cpu", torch.device("cpu")):
+            tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
     if device_map is not None:
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
@@ -2322,11 +2324,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
         # or the model may be initialized under the context manager `with torch.device("cuda"):`.
-        if check_device_map and device_map is None and torch.empty(0).device.type != "cuda":
+        if check_device_map and device_map is None and torch.empty(0).device.type not in ["cuda", "mlu"]:
             if torch.cuda.is_available():
                 logger.warning_once(
                     "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
+                )
+            elif is_torch_mlu_available():
+                logger.warning_once(
+                    "You are attempting to use Flash Attention 2.0 with a model not initialized on MLU. Make sure to move the model to MLU"
+                    " after initializing it on CPU with `model.to('mlu')`."
                 )
             else:
                 raise ValueError(
@@ -4110,24 +4117,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if tp_plan is not None:
             if not is_torch_greater_or_equal("2.5"):
                 raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
+
+            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+            device_type = torch._C._get_accelerator().type
+
             if not torch.distributed.is_initialized():
                 try:
                     rank = int(os.environ["RANK"])
                     world_size = int(os.environ["WORLD_SIZE"])
-                    torch.distributed.init_process_group(
-                        "nccl", rank=rank, world_size=world_size, init_method="env://"
-                    )
-                    torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+                    if device_type == "cuda":
+                        torch.distributed.init_process_group(
+                            "nccl", rank=rank, world_size=world_size, init_method="env://"
+                        )
+                        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+                    elif device_type == "cpu":
+                        cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
+                        torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
+
                 except Exception as e:
                     raise EnvironmentError(
                         "We tried to initialize torch.distributed for you, but it failed, make"
                         "sure you init torch distributed in your script to use `tp_plan='auto'`"
                     ) from e
 
-            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-            device_type = torch._C._get_accelerator().type
-            tp_device = torch.device(device_type, torch.cuda.current_device())
-            if tp_device.index > 0:
+            # Get device with index assuming equal number of devices per host
+            index = None if device_type == "cpu" else torch.cuda.current_device()
+            tp_device = torch.device(device_type, index)
+
+            if index is not None and index > 0:
                 import sys
 
                 sys.stdout = open(os.devnull, "w")
