@@ -2011,32 +2011,32 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if separator_id is None:
             separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
-        ret = {"input_ids": [], "labels": []}
+        batch = {"input_ids": [], "labels": []}
         if self.return_position_ids:
-            ret.update({"position_ids": []})
+            batch.update({"position_ids": []})
         if self.return_seq_idx:
-            ret.update({"seq_idx": []})
+            batch.update({"seq_idx": []})
         if self.return_flash_attn_kwargs:
             cu_seq_lens = [0]
             max_length = 0
         for seq_idx, sample in enumerate(features):
             input_ids = sample["input_ids"]
-            ret["input_ids"] += input_ids
+            batch["input_ids"] += input_ids
             if is_labels_provided:
-                ret["labels"] += [separator_id] + sample["labels"][1:]
+                batch["labels"] += [separator_id] + sample["labels"][1:]
             else:
-                ret["labels"] += [separator_id] + input_ids[1:]
+                batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
-                ret["position_ids"] += list(range(len(input_ids)))
+                batch["position_ids"] += list(range(len(input_ids)))
             if self.return_seq_idx:
-                ret["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
+                batch["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
             if self.return_flash_attn_kwargs:
                 cu_seq_lens.append(cu_seq_lens[-1] + len(input_ids))
                 max_length = max(max_length, len(input_ids))
 
         if self.return_flash_attn_kwargs:
-            ret["cu_seq_lens_q"] = ret["cu_seq_lens_k"] = cu_seq_lens
-            ret["max_length_q"] = ret["max_length_k"] = [max_length]
+            batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = cu_seq_lens
+            batch["max_length_q"] = batch["max_length_k"] = [max_length]
 
         # FlashAttentionKwargs and seq_idx are expected to be int32s.
         if return_tensors == "pt":
@@ -2052,9 +2052,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         else:
             raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not suported')
 
-        for k, v in ret.items():
+        for k, v in batch.items():
             if k in self._batch_dim_keys:
                 v = [v]
-            ret[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
+            batch[k] = data_cls(v, dtype=dtype_64 if k in self._int_64_keys else dtype_32)
 
-        return ret
+        return batch
