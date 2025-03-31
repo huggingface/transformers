@@ -50,7 +50,7 @@ The examples below demonstrate how to use DistilBERT for text classification wit
 <hfoptions id="usage">
 
 <hfoption id="Pipeline">
-    ```python
+    ```py
     from transformers import pipeline
 
     classifier = pipeline(
@@ -65,7 +65,7 @@ The examples below demonstrate how to use DistilBERT for text classification wit
 </hfoption>
 
 <hfoption id="AutoModel">
-    ```python
+    ```py
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
     import torch.nn.functional as F
 
