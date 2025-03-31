@@ -2054,14 +2054,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             data_cls = np.array
             dtype_64 = np.int64
             dtype_32 = np.int32
-        elif return_tensors == "tf":
-            import tensorflow as tf
-
-            data_cls = tf.convert_to_tensor
-            dtype_64 = tf.int64
-            dtype_32 = tf.int32
         else:
-            raise ValueError(f'return_tensors must be one of ("pt", "np", "tf"), not {return_tensors=}')
+            raise ValueError(f'return_tensors must be one of ("pt", "np"), {return_tensors=} not suported')
 
         for k, v in ret.items():
             if k in self._batch_dim_keys:
