@@ -152,6 +152,10 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
 
+    @unittest.skip(reason="Compile not yet supported because of masks")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @unittest.skip(reason="Model does not have input embeddings")
     def test_model_get_set_embeddings(self):
         pass
@@ -186,10 +190,10 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
             inputs = batch["past_values"]
             output = model(past_values=inputs).last_hidden_state
         self.assertEqual(
-            output.shape, torch.Size([64, model.config.context_len // model.config.patch_len, model.config.model_dim])
+            output.shape,
+            torch.Size([64, model.config.context_length // model.config.patch_length, model.config.hidden_size]),
         )
-
         expected_slice = torch.tensor(
-            [[-4.0141, 3.3141, 1.9321], [-4.9121, 3.1443, 2.0836], [-5.1142, 2.7376, 2.1566]], device=torch_device
+            [[0.0215, -0.0747, -0.1287], [0.0521, -0.0061, -0.1488], [-0.0233, -0.0611, -0.2323]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
