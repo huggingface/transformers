@@ -1992,9 +1992,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self,
         *args,
         return_position_ids=True,
+        separator_id=-100,
         return_flash_attn_kwargs=False,
         return_seq_idx=False,
-        separator_id=-100,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
