@@ -655,9 +655,10 @@ class SamMaskEmbedding(nn.Module):
 
 
 class SamPromptEncoder(nn.Module):
-    def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding):
+    def __init__(self, config: SamPromptEncoderConfig):
         super().__init__()
-        self.shared_embedding = shared_patch_embedding
+        self.shared_embedding = SamPositionalEmbedding(config.vision_config)
+        config = config.prompt_encoder_config
         self.mask_embed = SamMaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
@@ -1198,6 +1199,13 @@ class SamPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, SamVisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
 
 
 SAM_START_DOCSTRING = r"""
@@ -1348,16 +1356,23 @@ class SamVisionModel(SamPreTrainedModel):
 )
 class SamModel(SamPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 
         self.vision_encoder = SamVisionEncoder(config.vision_config)
-        self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+        self.prompt_encoder = SamPromptEncoder(config)
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
+
+    def _tie_weights(self):
+        self.prompt_encoder.shared_embedding.positional_embedding.data = (
+            self.shared_image_embedding.positional_embedding.data
+        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

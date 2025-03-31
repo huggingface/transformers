@@ -3684,10 +3684,6 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip(reason="The model doesn't support fast init from base")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @unittest.skip(
         "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
     )

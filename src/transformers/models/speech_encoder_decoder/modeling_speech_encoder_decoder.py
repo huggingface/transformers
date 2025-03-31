@@ -278,17 +278,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         self.encoder.freeze_feature_encoder()
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for SpeechEncoderDecoderModel. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
-
-    @classmethod
     def from_encoder_decoder_pretrained(
         cls,
         encoder_pretrained_model_name_or_path: Optional[str] = None,

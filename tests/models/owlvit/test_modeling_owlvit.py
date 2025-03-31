@@ -205,14 +205,6 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="OwlViTVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="OwlViTVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/owlvit-base-patch32"
@@ -349,14 +341,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OWLVIT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="OwlViTTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="OwlViTTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -680,10 +664,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Test_forward_signature is tested in individual model tests")
     def test_forward_signature(self):
-        pass
-
-    @unittest.skip(reason="Test_save_load_fast_init_from_base is tested in individual model tests")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(reason="OWL-ViT does not support training yet")

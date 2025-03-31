@@ -1535,7 +1535,3 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
         return
-
-    @unittest.skip
-    def test_save_load_fast_init_from_base(self):
-        pass

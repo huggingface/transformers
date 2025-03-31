@@ -187,6 +187,8 @@ class IJepaPreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
 def eager_attention_forward(

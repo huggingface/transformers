@@ -855,6 +855,9 @@ class DPTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
 
 
 DPT_START_DOCSTRING = r"""

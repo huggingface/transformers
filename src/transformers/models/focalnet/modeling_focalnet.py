@@ -621,7 +621,6 @@ class FocalNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->FocalNet,swin->focalnet
 class FocalNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -645,6 +644,13 @@ class FocalNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, FocalNetEmbeddings):
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+        elif isinstance(module, FocalNetLayer):
+            if self.config.use_layerscale:
+                module.gamma_1.data.fill_(self.config.layerscale_value)
+                module.gamma_2.data.fill_(self.config.layerscale_value)
 
 
 FOCALNET_START_DOCSTRING = r"""

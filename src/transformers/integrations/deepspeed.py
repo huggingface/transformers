@@ -303,7 +303,7 @@ def deepspeed_config():
         return None
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_params_buffers=False):
+def _load_state_dict_into_zero3_model(model_to_load, state_dict):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
@@ -346,10 +346,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_param
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, assign_to_params_buffers=assign_to_params_buffers)
-    # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
-    # it's safe to delete it.
-    del state_dict
+    load(model_to_load, state_dict, assign_to_params_buffers=False)
 
     return error_msgs
 

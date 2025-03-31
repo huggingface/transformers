@@ -241,10 +241,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="This test doesn't work for ESMFold and doesn't test core functionality")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @unittest.skip(reason="ESMFold does not support input chunking.")
     def test_feed_forward_chunking(self):
         pass

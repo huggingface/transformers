@@ -408,13 +408,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         )
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported
-        # for composite models
-        kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
-
-    @classmethod
     def from_vision_text_pretrained(
         cls,
         vision_model_name_or_path: Optional[str] = None,

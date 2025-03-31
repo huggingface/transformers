@@ -401,7 +401,6 @@ class ASTPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
-    # Copied from transformers.models.deit.modeling_deit.DeiTPreTrainedModel._init_weights
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -415,6 +414,10 @@ class ASTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ASTEmbeddings):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
+            module.distillation_token.data.zero_()
 
 
 AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""

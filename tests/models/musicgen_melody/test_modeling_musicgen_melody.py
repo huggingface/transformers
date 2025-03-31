@@ -960,12 +960,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         super().test_greedy_generate_dict_outputs()
         self.model_tester.audio_channels = original_audio_channels
 
-    @unittest.skip(
-        reason="MusicgenMelodyModel is actually not the base of MusicgenMelodyForCausalLM as the latter is a composite model"
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test

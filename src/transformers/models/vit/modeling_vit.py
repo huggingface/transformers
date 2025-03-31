@@ -497,6 +497,9 @@ class ViTPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+
 
 VIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
