@@ -148,6 +148,7 @@ from . import (
     levit,
     lilt,
     llama,
+    baichuan_m1,
     llava,
     llava_next,
     llava_next_video,
