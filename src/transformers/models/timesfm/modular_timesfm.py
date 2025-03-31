@@ -106,12 +106,9 @@ class TimesFmResidualBlock(nn.Module):
         self.hidden_dims = hidden_dims
         self.output_dims = output_dims
 
-        # Hidden Layer
         self.input_layer = nn.Linear(input_dims, hidden_dims)
         self.activation = nn.SiLU()
-        # Output Layer
         self.output_layer = nn.Linear(hidden_dims, output_dims)
-        # Residual Layer
         self.residual_layer = nn.Linear(input_dims, output_dims)
 
     def forward(self, x):
