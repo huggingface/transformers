@@ -4134,7 +4134,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "sure you init torch distributed in your script to use `tp_plan='auto'`"
                     ) from e
 
-            device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
             index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
