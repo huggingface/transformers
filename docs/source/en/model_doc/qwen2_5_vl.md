@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # Qwen2.5-VL
 
-The [Qwen2.5-VL](https://qwenlm.github.io/blog/qwen2_5-vl/) model is a multimodal vision-language model developed by the Qwen team, Alibaba Group, combining an enhanced ViT encoder with the Qwen2.5 LLM. As an update to [Qwen2-VL](https://arxiv.org/abs/2409.12191), it offers improved visual reasoning and video understanding capabilities. The model uses a refined ViT architecture with SwiGLU and RMSNorm, making it more aligned with the LLM’s structure.
+[Qwen2.5-VL](https://huggingface.co/papers/2502.13923) is a multimodal vision-language model, available in 3B, 7B, and 72B parameters, pretrained on 4.1T tokens. The model introduces window attention in the ViT encoder to accelerate training and inference, dynamic FPS sampling on the spatial and temporal dimensions for better video understanding across different sampling rates, and an upgraded MRoPE (multi-resolutional rotary positional encoding) mechanism to better capture and learn temporal dynamics.
 
 Qwen2.5-VL introduces window attention in the ViT, accelerating both training and inference. It also supports dynamic resolution across both spatial and temporal dimensions, making it highly effective for video analysis. The upgraded MRoPE (Multi-Resolutional Rotary Positional Encoding) now includes absolute time alignment on the time axis, enabling it to capture temporal dynamics across varying frame rates, enhancing its video comprehension abilities.
 
