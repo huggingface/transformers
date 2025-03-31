@@ -506,15 +506,14 @@ class ModelTesterMixin:
     def test_can_init_all_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             filename = inspect.getfile(model_class)
             # No easy way to get model addition date -> check copyright year on top of file
             with open(filename) as file:
                 source_code = file.read()
-            addition_year = 0  # if we cannot find it, set it to 0
+            addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
             if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
                 addition_year = int(match_object.group(1))
-            
+
             # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
             # Use `supports_cache_class` as a proxy to judge "important" models in order to prioritize them
             # TODO: relax this as we patch more and more models
