@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 [Qwen2.5-VL](https://huggingface.co/papers/2502.13923) is a multimodal vision-language model, available in 3B, 7B, and 72B parameters, pretrained on 4.1T tokens. The model introduces window attention in the ViT encoder to accelerate training and inference, dynamic FPS sampling on the spatial and temporal dimensions for better video understanding across different sampling rates, and an upgraded MRoPE (multi-resolutional rotary positional encoding) mechanism to better capture and learn temporal dynamics.
 
-Qwen2.5-VL introduces window attention in the ViT, accelerating both training and inference. It also supports dynamic resolution across both spatial and temporal dimensions, making it highly effective for video analysis. The upgraded MRoPE (Multi-Resolutional Rotary Positional Encoding) now includes absolute time alignment on the time axis, enabling it to capture temporal dynamics across varying frame rates, enhancing its video comprehension abilities.
 
 You can find all the original Qwen2.5-VL checkpoints under the [Qwen2.5-VL](https://huggingface.co/collections/Qwen/qwen25-vl-6795ffac22b334a837c0f9a5) collection.
 
