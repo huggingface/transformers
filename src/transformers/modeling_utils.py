@@ -4428,7 +4428,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
-                
+
             (
                 model,
                 missing_keys,
