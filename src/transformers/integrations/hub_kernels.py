@@ -55,35 +55,6 @@ try:
 
     register_kernel_mapping(_KERNEL_MAPPING)
 
-    def use_kernel_attn_from_hub(layer_name: str, *, device: str = "cuda", use_fallback: bool = False):
-        from kernels import get_kernel
-
-        from transformers import AttentionInterface
-
-        def decorator(cls):
-            kernel = _KERNEL_MAPPING.get(layer_name)
-            if kernel is None:
-                if not use_fallback:
-                    raise ValueError(f"No attention implementation for `{layer_name}`")
-                return cls
-
-            device_obj = Device(type=device)
-            if device_obj is None:
-                return cls
-
-            repo = kernel.get(device)
-            if repo is None:
-                if not use_fallback:
-                    raise ValueError(f"No layer mapping for attention `{layer_name}` with device type `{device}`")
-                return cls
-
-            attn_kernel = get_kernel(repo.repo_id)
-            AttentionInterface.register("attn_kernel", getattr(attn_kernel, repo.layer_name))
-            cls.use_kernel = True
-            return cls
-
-        return decorator
-
 except ImportError:
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.

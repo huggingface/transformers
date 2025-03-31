@@ -59,7 +59,7 @@ if is_torch_flex_attn_available():
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
-from ...integrations import use_kernel_attn_from_hub, use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub
 
 
 logger = logging.get_logger(__name__)
@@ -214,10 +214,9 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
+
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    use_kernel: bool = False
 
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
@@ -268,17 +267,14 @@ class LlamaAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
 
-        if self.use_kernel:
-            attention_interface = ALL_ATTENTION_FUNCTIONS["attn_kernel"]
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
         else:
-            if self.config._attn_implementation != "eager":
-                if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                    logger.warning_once(
-                        "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                        'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                    )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
