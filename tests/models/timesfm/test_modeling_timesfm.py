@@ -83,9 +83,6 @@ class TimesFmModelTester:
         self.seq_length = context_length // patch_length
         self.hidden_size = hidden_size
 
-    def get_large_model_config(self):
-        return TimesFmConfig.from_pretrained("google/timesfm-1.0-200m-pytorch")
-
     def get_config(self):
         return TimesFmConfig(
             patch_length=self.patch_length,
