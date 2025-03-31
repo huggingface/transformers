@@ -235,7 +235,7 @@ class DeepseekV3Config(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
 
         if self.rope_scaling is not None:
-            for key in ["factor", "beta_fast", "beta_slow"]:
+            for key in ["beta_fast", "beta_slow", "factor"]:
                 if key in self.rope_scaling:
                     self.rope_scaling[key] = float(self.rope_scaling[key])
 
