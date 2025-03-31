@@ -83,10 +83,9 @@ def video_processor_class_from_name(class_name: str):
             except AttributeError:
                 continue
 
-    for _, extractors in VIDEO_PROCESSOR_MAPPING._extra_content.items():
-        for extractor in extractors:
-            if getattr(extractor, "__name__", None) == class_name:
-                return extractor
+    for _, extractor in VIDEO_PROCESSOR_MAPPING._extra_content.items():
+        if getattr(extractor, "__name__", None) == class_name:
+            return extractor
 
     # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.

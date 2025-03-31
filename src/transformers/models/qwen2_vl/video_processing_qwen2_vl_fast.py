@@ -96,10 +96,11 @@ class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
+    valid_kwargs = Qwen2VLFastVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLFastVideoProcessorInitKwargs]):
-        super().__init__(model_init_kwargs=Qwen2VLFastVideoProcessorInitKwargs, **kwargs)
+        super().__init__(**kwargs)
         self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
     def _preprocess(

@@ -17,8 +17,7 @@ import copy
 import json
 import os
 import warnings
-from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -27,21 +26,15 @@ from .image_processing_utils import (
     BatchFeature,
     get_size_dict,
 )
-from .image_processing_utils_fast import validate_fast_preprocess_arguments
-from .image_transforms import (
-    get_resize_output_image_size,
-    get_size_with_aspect_ratio,
-)
+from .image_processing_utils_fast import BaseImageProcessorFast
 from .image_utils import (
     ChannelDimension,
     SizeDict,
-    get_image_size_for_max_height_width,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     VIDEO_PROCESSOR_NAME,
-    PushToHubMixin,
     TensorType,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
@@ -147,7 +140,7 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
     "Constructs a fast base VideoProcessor.",
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
 )
-class BaseVideoProcessorFast(PushToHubMixin):
+class BaseVideoProcessorFast(BaseImageProcessorFast):
     _auto_class = None
 
     resample = None
@@ -164,9 +157,10 @@ class BaseVideoProcessorFast(PushToHubMixin):
     rescale_factor = 1 / 255
     do_normalize = None
     do_convert_rgb = None
+    valid_kwargs = VideosKwargs
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, model_init_kwargs, **kwargs: Unpack[VideosKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[VideosKwargs]) -> None:
         super().__init__()
 
         self._processor_class = kwargs.pop("processor_class", None)
@@ -190,7 +184,7 @@ class BaseVideoProcessorFast(PushToHubMixin):
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
 
         # Save valid kwargs in a list for further processing
-        self.model_valid_processing_keys = list(model_init_kwargs.__annotations__.keys())
+        self.model_valid_processing_keys = list(self.valid_kwargs.__annotations__.keys())
         for key in self.model_valid_processing_keys:
             if kwargs.get(key) is not None:
                 setattr(self, key, kwargs[key])
@@ -199,144 +193,6 @@ class BaseVideoProcessorFast(PushToHubMixin):
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
-
-    def resize(
-        self,
-        video: "torch.Tensor",
-        size: SizeDict,
-        size_divisor: int = 1,
-        interpolation: "F.InterpolationMode" = None,
-        **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Resize a video to `(size["height"], size["width"])`.
-
-        Args:
-            video (`torch.Tensor`):
-                Video to resize.
-            size (`SizeDict`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output video.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the video e.g. `InterpolationMode.BICUBIC`.
-
-        Returns:
-            `torch.Tensor`: The resized video.
-        """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        if size.shortest_edge and size.longest_edge:
-            # Resize the video so that the shortest edge or the longest edge is of the given size
-            # while maintaining the aspect ratio of the original video.
-            new_size = get_size_with_aspect_ratio(
-                video.size()[-2:],
-                size.shortest_edge,
-                size.longest_edge,
-            )
-        elif size.shortest_edge:
-            new_size = get_resize_output_image_size(
-                video,
-                size=size.shortest_edge,
-                default_to_square=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
-        elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(
-                video.size()[-2:], size.max_height, size.max_width, size_divisor=size_divisor
-            )
-        elif size.height and size.width:
-            new_size = (size.height, size.width)
-        else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
-                f" {size}."
-            )
-        return F.resize(video, new_size, interpolation=interpolation)
-
-    def rescale(
-        self,
-        video: "torch.Tensor",
-        scale: float,
-        **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Rescale a video by a scale factor. video = video * scale.
-
-        Args:
-            video (`torch.Tensor`):
-                Video to rescale.
-            scale (`float`):
-                The scaling factor to rescale pixel values by.
-
-        Returns:
-            `torch.Tensor`: The rescaled video.
-        """
-        return video * scale
-
-    def normalize(
-        self,
-        video: "torch.Tensor",
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Normalize a video. video = (video - mean) / std.
-
-        Args:
-            video (`torch.Tensor`):
-                video to normalize.
-            mean (`torch.Tensor`, `float` or `Iterable[float]`):
-                video mean to use for normalization.
-            std (`torch.Tensor`, `float` or `Iterable[float]`):
-                video standard deviation to use for normalization.
-
-        Returns:
-            `torch.Tensor`: The normalized video.
-        """
-        return F.normalize(video, mean, std)
-
-    def rescale_and_normalize(
-        self,
-        videos: "torch.Tensor",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-    ) -> "torch.Tensor":
-        """
-        Rescale and normalize videos.
-        """
-        if do_rescale and do_normalize:
-            videos = self.normalize(videos.to(dtype=torch.float32), image_mean, image_std)
-        elif do_rescale:
-            videos = videos * rescale_factor
-        elif do_normalize:
-            videos = self.normalize(videos, image_mean, image_std)
-
-        return videos
-
-    def center_crop(
-        self,
-        video: "torch.Tensor",
-        size: Dict[str, int],
-        **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Center crop a video to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
-        any edge, the video is padded with 0's and then center cropped.
-
-        Args:
-            video (`"torch.Tensor"`):
-                Video to center crop.
-            size (`Dict[str, int]`):
-                Size of the output video.
-
-        Returns:
-            `torch.Tensor`: The center cropped video.
-        """
-        if size["height"] is None or size["width"] is None:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        return F.center_crop(video, (size["height"], size["width"]))
 
     def convert_to_rgb(
         self,
@@ -388,111 +244,36 @@ class BaseVideoProcessorFast(PushToHubMixin):
             processed_videos.append(video)
         return processed_videos
 
-    @lru_cache(maxsize=10)
-    def _prepare_process_arguments(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        device: Optional["torch.device"] = None,
-    ) -> tuple:
-        """
-        Prepare the arguments for the process method.
-        """
-        validate_fast_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            resample=resample,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
-
-        if do_rescale and do_normalize:
-            # Fused rescale and normalize
-            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
-            image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
-
-        interpolation = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        return image_mean, image_std, interpolation
-
     @add_start_docstrings(BASE_VIDEO_PROCESSOR_FAST_DOCSTRING)
     def preprocess(
         self,
         videos: VideoInput,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.model_valid_processing_keys)
-
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.model_valid_processing_keys:
+        for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
-        # Extract parameters that are only used for preparing the input videos
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-
         videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
-        # Pop kwargs that need further processing or won't be used in _preprocess
-        default_to_square = kwargs.pop("default_to_square", None)
-        size = kwargs.pop("size")
-        crop_size = kwargs.pop("crop_size")
-        image_mean = kwargs.pop("image_mean")
-        image_std = kwargs.pop("image_std")
-        data_format = kwargs.pop("data_format")
+        kwargs = self._further_process_kwargs(**kwargs)
+        self._validate_preprocess_kwargs(**kwargs)
+
+        # torch resize uses interpolation instead of resample
         resample = kwargs.pop("resample")
-
-        # Make hashable for cache
-        size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square)) if size is not None else None
-        crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size")) if crop_size is not None else None
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        image_mean, image_std, interpolation = self._prepare_process_arguments(
-            size=size,
-            crop_size=crop_size,
-            resample=resample,
-            image_mean=image_mean,
-            image_std=image_std,
-            data_format=data_format if data_format is not None else ChannelDimension.FIRST,
-            device=videos[0].device,
-            do_resize=kwargs.get("do_resize"),
-            do_center_crop=kwargs.get("do_center_crop"),
-            do_rescale=kwargs.get("do_rescale"),
-            rescale_factor=kwargs.get("rescale_factor"),
-            do_normalize=kwargs.get("do_normalize"),
-            return_tensors=kwargs.get("return_tensors"),
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
-        return self._preprocess(
-            videos=videos,
-            size=size,
-            crop_size=crop_size,
-            interpolation=interpolation,
-            image_mean=image_mean,
-            image_std=image_std,
-            **kwargs,
-        )
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("default_to_square")
+        kwargs.pop("data_format")
+
+        return self._preprocess(videos=videos, **kwargs)
 
     def _preprocess(
         self,
@@ -520,7 +301,7 @@ class BaseVideoProcessorFast(PushToHubMixin):
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
-                    video=stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
+                    stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
@@ -912,7 +693,6 @@ class BaseVideoProcessorFast(PushToHubMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output["video_processor_type"] = self.__class__.__name__
-        output.pop("_valid_processor_keys", None)
 
         return output
 

@@ -26,7 +26,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import VideosKwargs
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     is_torch_available,
@@ -55,15 +55,16 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     size = {"height": 384, "width": 384}
-    default_to_square = False
+    default_to_square = True
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    valid_kwargs = InstructBlipVideoVideoProcessorInitKwargs
     model_input_names = ["pixel_values"]
 
-    def __init__(self, **kwargs):
-        super().__init__(model_init_kwargs=InstructBlipVideoVideoProcessorInitKwargs, **kwargs)
+    def __init__(self, **kwargs: Unpack[InstructBlipVideoVideoProcessorInitKwargs]):
+        super().__init__(**kwargs)
 
     def _preprocess(
         self,
@@ -91,7 +92,7 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
-                    video=stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
+                    stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)

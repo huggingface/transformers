@@ -19,7 +19,7 @@ from ...image_utils import (
     OPENAI_CLIP_STD,
     PILImageResampling,
 )
-from ...processing_utils import VideosKwargs
+from ...processing_utils import Unpack, VideosKwargs
 from ...video_processing_utils_fast import (
     BaseVideoProcessorFast,
 )
@@ -40,10 +40,11 @@ class LlavaNextVideoVideoProcessorFast(BaseVideoProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    valid_kwargs = LlavaNextVideoFastVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs):
-        super().__init__(model_init_kwargs=LlavaNextVideoFastVideoProcessorInitKwargs, **kwargs)
+    def __init__(self, **kwargs: Unpack[LlavaNextVideoFastVideoProcessorInitKwargs]):
+        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaNextVideoVideoProcessorFast"]

@@ -12,40 +12,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Video processor class for LLaVa-Onevision."""
+"""Video processor class for Video-LLaVA."""
 
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-from ...processing_utils import Unpack, VideosKwargs
+from ...processing_utils import VideosKwargs
 from ...video_processing_utils_fast import (
     BaseVideoProcessorFast,
 )
 
 
-class LlavaOnevisionFastVideoProcessorInitKwargs(VideosKwargs): ...
+class SmolVLMFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 
-class LlavaOnevisionVideoProcessorFast(BaseVideoProcessorFast):
-    resample = PILImageResampling.BICUBIC
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    size = {"height": 384, "width": 384}
-    rescale_factor = 1 / 255
+class SmolVLMVideoProcessorFast(BaseVideoProcessorFast):
+    resample = PILImageResampling.LANCZOS
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"longest_edge": 4 * 364}
+    max_image_size = {"longest_edge": 364}
     default_to_square = False
-    crop_size = None
     do_resize = True
-    do_center_crop = None
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = LlavaOnevisionFastVideoProcessorInitKwargs
+    do_image_splitting = True
+    do_pad = True
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs: Unpack[LlavaOnevisionFastVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(model_init_kwargs=SmolVLMFastVideoProcessorInitKwargs, **kwargs)
 
 
-__all__ = ["LlavaOnevisionVideoProcessorFast"]
+__all__ = ["SmolVLMVideoProcessorFast"]
