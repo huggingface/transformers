@@ -46,7 +46,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -1416,7 +1415,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
     def forward(

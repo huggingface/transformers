@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -50,7 +51,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
@@ -685,7 +685,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,
@@ -1006,7 +1006,6 @@ class Qwen3MoeForCausalLM(Qwen3MoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(QWEN3_MOE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

@@ -32,7 +32,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
 
@@ -324,7 +323,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

@@ -39,7 +39,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next_video import LlavaNextVideoConfig
 
@@ -576,7 +575,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         image_features = torch.split(image_features, image_num_patches, dim=0)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

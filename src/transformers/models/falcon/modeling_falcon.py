@@ -46,7 +46,6 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_falcon import FalconConfig
 
 
@@ -1179,7 +1178,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(FALCON_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,

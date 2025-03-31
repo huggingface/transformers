@@ -33,7 +33,6 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_onevision import LlavaOnevisionConfig
 
@@ -597,7 +596,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         return video_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(
         self,
