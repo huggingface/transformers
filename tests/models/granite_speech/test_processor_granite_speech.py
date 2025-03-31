@@ -32,9 +32,8 @@ from transformers.utils import is_torchaudio_available
 if is_torchaudio_available():
     from transformers import GraniteSpeechFeatureExtractor, GraniteSpeechProcessor
 
-pytest.skip("Public models not yet available", allow_module_level=True)
 
-
+@pytest.skip("Public models not yet available", allow_module_level=True)
 @require_torch
 @require_torchaudio
 class GraniteSpeechProcessorTest(unittest.TestCase):
