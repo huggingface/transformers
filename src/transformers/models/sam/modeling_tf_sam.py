@@ -30,7 +30,13 @@ from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, keras, shape_list, unpack_inputs
 from ...tf_utils import flatten, functional_layernorm
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -1400,6 +1406,70 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
+SAM_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
+            details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """The vision model from Sam without any head or projection on top.""",
+    SAM_START_DOCSTRING,
+)
+class TFSamVisionModel(TFSamPreTrainedModel):
+    config_class = SamVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: SamVisionConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.vision_encoder = TFSamVisionEncoder(config, name="vision_encoder")
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_encoder", None) is not None:
+            with tf.name_scope(self.vision_encoder.name):
+                self.vision_encoder.build(None)
+
+    def get_input_embeddings(self):
+        return self.vision_encoder.patch_embed
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSamVisionEncoderOutput, config_class=SamVisionConfig)
+    def call(
+        self,
+        pixel_values: TFModelInputType | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+        **kwargs,
+    ) -> TFSamVisionEncoderOutput | Tuple[tf.Tensor]:
+        r"""
+        Returns:
+
+        """
+        return self.vision_encoder(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+
 @add_start_docstrings(
     "Segment Anything Model (SAM) for generating segmentation masks, given an input image and ",
     " optional 2D location and bounding boxes.",
@@ -1653,4 +1723,4 @@ class TFSamModel(TFSamPreTrainedModel):
                 self.mask_decoder.build(None)
 
 
-__all__ = ["TFSamModel", "TFSamPreTrainedModel"]
+__all__ = ["TFSamVisionModel", "TFSamModel", "TFSamPreTrainedModel"]
