@@ -14,15 +14,14 @@
 # limitations under the License.
 
 from transformers import HfArgumentParser
-
-from .add_fast_image_processor import AddFastImageProcessorCommand
-from .add_new_model_like import AddNewModelLikeCommand
-from .chat import ChatCommand
-from .convert import ConvertCommand
-from .download import DownloadCommand
-from .env import EnvironmentCommand
-from .run import RunCommand
-from .serving import ServeCommand
+from transformers.commands.add_fast_image_processor import AddFastImageProcessorCommand
+from transformers.commands.add_new_model_like import AddNewModelLikeCommand
+from transformers.commands.chat import ChatCommand
+from transformers.commands.convert import ConvertCommand
+from transformers.commands.download import DownloadCommand
+from transformers.commands.env import EnvironmentCommand
+from transformers.commands.run import RunCommand
+from transformers.commands.serving import ServeCommand
 
 
 def main():

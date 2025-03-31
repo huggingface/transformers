@@ -1066,7 +1066,7 @@ class MimiTransformerModel(nn.Module):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
@@ -1316,7 +1316,7 @@ class MimiVectorQuantization(nn.Module):
 class MimiResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
 
-    def __init__(self, config: MimiConfig, num_quantizers: int = None):
+    def __init__(self, config: MimiConfig, num_quantizers: Optional[int] = None):
         super().__init__()
         self.codebook_size = config.codebook_size
         self.frame_rate = config.frame_rate

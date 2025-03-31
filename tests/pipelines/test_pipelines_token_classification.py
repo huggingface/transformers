@@ -778,7 +778,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_tf
     def test_tf_only(self):
         model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
-        # We test that if we don't specificy framework='tf', it gets detected automatically
+        # We test that if we don't specify framework='tf', it gets detected automatically
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "tf")
 
