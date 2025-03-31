@@ -637,9 +637,7 @@ class WhisperEncoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
+        if hidden_states.dtype == torch.float16:
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -652,7 +650,7 @@ class WhisperEncoderLayer(nn.Module):
 
 
 class WhisperDecoderLayer(nn.Module):
-    def __init__(self, config: WhisperConfig, layer_idx: int = None):
+    def __init__(self, config: WhisperConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
 

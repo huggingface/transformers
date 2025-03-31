@@ -22,6 +22,7 @@
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -96,12 +97,12 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.embed_scale = embed_scale
+        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale
+        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 class Gemma3MLP(nn.Module):
@@ -564,20 +565,12 @@ GEMMA3_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -623,7 +616,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
+        # Gemma3 downcasts the below to bfloat16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
         self.embed_tokens = Gemma3TextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
@@ -740,7 +733,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings_global,
                     position_embeddings_local,

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -427,7 +428,7 @@ class MoonshineEncoderLayer(LlamaDecoderLayer):
 
 
 class MoonshineDecoderLayer(nn.Module):
-    def __init__(self, config: MoonshineConfig, layer_idx: int = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -832,7 +833,7 @@ class MoonshineDecoder(LlamaModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     encoder_hidden_states,
