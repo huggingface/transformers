@@ -17,15 +17,23 @@
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import (
+    AutoProcessor,
     GraniteSpeechConfig,
     GraniteSpeechForConditionalGeneration,
-    is_torch_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_sdpa,
+    slow,
     torch_device,
+)
+from transformers.utils import (
+    is_datasets_available,
+    is_torch_available,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -40,6 +48,9 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
+
+if is_datasets_available():
+    from datasets import load_dataset
 
 
 class GraniteSpeechForConditionalGenerationModelTester:
@@ -294,3 +305,89 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+
+class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        # TODO - use the actual model path on HF hub after release.
+        self.model_path = "ibm-granite/granite-speech"
+        self.processor = AutoProcessor.from_pretrained(self.model_path)
+        self.prompt = self._get_prompt(self.processor.tokenizer)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def _get_prompt(self, tokenizer):
+        chat = [
+            {
+                "role": "system",
+                "content": "Knowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant",
+            },
+            {
+                "role": "user",
+                "content": "<|audio|>can you transcribe the speech into a written format?",
+            },
+        ]
+        return tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+
+    def _load_datasamples(self, num_samples):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    @slow
+    @pytest.mark.skip("Public models not yet available")
+    def test_small_model_integration_test_single(self):
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path).to(torch_device)
+        input_speech = self._load_datasamples(1)
+
+        # Verify feature sizes; note that the feature mask refers to the size of
+        # features that are masked into the LLM, not the output of the processor,
+        # which is why we inspect the mask instead of the `num_features` tensor.
+        inputs = self.processor(self.prompt, input_speech, return_tensors="pt").to(torch_device)
+
+        num_computed_features = self.processor.audio_processor._get_num_audio_features(
+            [speech_arr.shape[-1] for speech_arr in input_speech],
+        )[0]
+        num_actual_features = torch.sum(inputs["input_features_mask"]).item()
+        assert num_actual_features == num_computed_features
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=32)
+        EXPECTED_DECODED_TEXT = "systemKnowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant\nusercan you transcribe the speech into a written format?\nassistantmister quilter is the apostle of the middle classes and we are glad to welcome his gospel"  # fmt: skip
+
+        self.assertEqual(
+            self.processor.tokenizer.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @pytest.mark.skip("Public models not yet available")
+    def test_small_model_integration_test_batch(self):
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path)
+        input_speech = self._load_datasamples(2)
+        prompts = [self.prompt, self.prompt]
+
+        # Verify feature sizes & padding
+        inputs = self.processor(prompts, input_speech, return_tensors="pt").to(model.device)
+        num_computed_features = self.processor.audio_processor._get_num_audio_features(
+            [speech_arr.shape[-1] for speech_arr in input_speech],
+        )
+        num_actual_features = torch.sum(inputs["input_features_mask"], dim=-1)
+        for e_feats, a_feats in zip(num_computed_features, num_actual_features):
+            assert e_feats == a_feats.item()
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=32)
+
+        EXPECTED_DECODED_TEXT = [
+            "systemKnowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant\nusercan you transcribe the speech into a written format?\nassistantmister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "systemKnowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant\nusercan you transcribe the speech into a written format?\nassistantnor is mr quilter's manner less interesting than his matter"
+        ]  # fmt: skip
+
+        self.assertEqual(
+            self.processor.tokenizer.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
