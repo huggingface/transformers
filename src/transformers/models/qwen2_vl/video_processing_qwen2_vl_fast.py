@@ -115,7 +115,7 @@ class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, TensorType]]=None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
