@@ -54,13 +54,16 @@ if is_torchvision_available():
 
 logger = logging.get_logger(__name__)
 
+
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     Additional keyword arguments for SAM image processor.
     """
+
     mask_size: Optional[Dict[str, int]]
     mask_pad_size: Optional[Dict[str, int]]
     pad_size: Optional[Dict[str, int]]
+
 
 @add_start_docstrings(
     "Constructs a fast SAM image processor.",
@@ -83,6 +86,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     Fast image processor for Segment Anything Model (SAM).
     Uses torch and torchvision for faster image processing operations.
     """
+
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -109,11 +113,11 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int) -> Tuple[int, int]:
         """
         Compute the output size given input size and target long side length.
-        
+
         Args:
             old_shape: Original shape (height, width) of the image
             longest_edge: Target size for the longest edge
-            
+
         Returns:
             New shape (height, width) maintaining aspect ratio
         """
@@ -135,7 +139,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     ) -> torch.Tensor:
         """
         Apply rescaling and normalization to images.
-        
+
         Args:
             image: Input image tensor
             do_rescale: Whether to apply rescaling
@@ -143,7 +147,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             do_normalize: Whether to apply normalization
             image_mean: Mean values for normalization
             image_std: Standard deviation values for normalization
-            
+
         Returns:
             Processed image tensor
         """
@@ -180,26 +184,50 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images for the SAM model.
-        
+
         Args:
-            images: List of images to process
-            segmentation_maps: Optional list of segmentation maps to process
-            do_resize: Whether to resize the input
-            size: Size dictionary for image resizing
-            mask_size: Size dictionary for mask resizing
-            interpolation: Interpolation mode for resizing
-            do_rescale: Whether to rescale the input
-            rescale_factor: Factor to use for rescaling
-            do_normalize: Whether to normalize the input
-            image_mean: Mean values for normalization
-            image_std: Standard deviation values for normalization
-            return_tensors: Output tensor type
-            do_pad: Whether to pad the input
-            pad_size: Padding size for images
-            mask_pad_size: Padding size for masks
-        
+            images (List[torch.Tensor]):
+                List of images to process.
+            do_resize (bool):
+                Whether to resize the input.
+            size (SizeDict):
+                Size dictionary for image resizing.
+            interpolation (Optional[F.InterpolationMode]):
+                Interpolation mode for resizing.
+            do_center_crop (Optional[bool], defaults to None):
+                Whether to center crop the input.
+            crop_size (Optional[SizeDict], defaults to None):
+                Size dictionary for center cropping.
+            do_rescale (Optional[bool], defaults to None):
+                Whether to rescale the input.
+            rescale_factor (Optional[float], defaults to None):
+                Factor to use for rescaling.
+            do_normalize (Optional[bool], defaults to None):
+                Whether to normalize the input.
+            image_mean (Optional[Union[float, List[float]]], defaults to None):
+                Mean values for normalization.
+            image_std (Optional[Union[float, List[float]]], defaults to None):
+                Standard deviation values for normalization.
+            return_tensors (Optional[Union[str, TensorType]], defaults to None):
+                Output tensor type.
+            mask_size (Optional[Dict[str, int]], defaults to None):
+                Size dictionary for mask resizing.
+            mask_pad_size (Optional[Dict[str, int]], defaults to None):
+                Size dictionary for mask padding.
+            do_pad (Optional[bool], defaults to None):
+                Whether to pad the input.
+            pad_size (Optional[Dict[str, int]], defaults to None):
+                Size dictionary for input padding.
+            segmentation_maps (Optional[List[torch.Tensor]], defaults to None):
+                Optional list of segmentation maps to process.
+
         Returns:
-            BatchFeature containing the processed inputs
+            BatchFeature:
+                A BatchFeature object containing the processed inputs with the following fields:
+                - pixel_values (torch.Tensor): Processed image tensors
+                - original_sizes (List[Tuple]): Original image sizes
+                - reshaped_input_sizes (List[Tuple]): Resized input sizes
+                - labels (torch.Tensor, optional): Processed segmentation maps if provided
         """
 
         original_sizes = []
@@ -208,7 +236,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
         for image in images:
             original_sizes.append(image.shape[-2:])
-
 
             if do_resize:
                 target_size = self._get_preprocess_shape(image.shape[-2:], size["longest_edge"])
@@ -225,11 +252,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 resized_image = image
                 reshaped_input_sizes.append(image.shape[-2:])
 
-
             processed_image = self._rescale_and_normalize(
                 resized_image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-
 
             if do_pad:
                 padded_height, padded_width = pad_size["height"], pad_size["width"]
@@ -241,18 +266,15 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
             processed_images.append(processed_image)
 
-
         processed_masks = None
         if segmentation_maps is not None:
             processed_masks = []
-
 
             if len(segmentation_maps) != len(images):
                 raise ValueError(
                     f"Number of segmentation maps ({len(segmentation_maps)}) does not match "
                     f"number of images ({len(images)})"
                 )
-
 
             for i, mask in enumerate(segmentation_maps):
                 if mask.dim() == 2:
@@ -262,23 +284,16 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 img_h, img_w = original_sizes[i]
                 if mask_h != img_h or mask_w != img_w:
                     raise ValueError(
-                        f"Segmentation map size ({mask_h}, {mask_w}) does not match "
-                        f"image size ({img_h}, {img_w})"
+                        f"Segmentation map size ({mask_h}, {mask_w}) does not match " f"image size ({img_h}, {img_w})"
                     )
-
 
                 if do_resize and mask_size is not None:
                     mask_target_size = self._get_preprocess_shape(mask.shape[-2:], mask_size["longest_edge"])
 
                     mask_interpolation = F.InterpolationMode.NEAREST
-                    resized_mask = F.resize(
-                        mask.float(),
-                        mask_target_size,
-                        interpolation=mask_interpolation
-                    )
+                    resized_mask = F.resize(mask.float(), mask_target_size, interpolation=mask_interpolation)
                 else:
                     resized_mask = mask
-
 
                 if do_pad and mask_pad_size is not None:
                     mask_pad_h, mask_pad_w = mask_pad_size["height"], mask_pad_size["width"]
@@ -288,15 +303,12 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                     padding = (0, 0, pad_right, pad_bottom)
                     resized_mask = F.pad(resized_mask, padding, fill=0)
 
-
                 processed_masks.append(resized_mask.long())
-
 
         if return_tensors:
             processed_images = torch.stack(processed_images, dim=0)
             if processed_masks is not None:
                 processed_masks = torch.stack(processed_masks, dim=0)
-
 
         output = {
             "pixel_values": processed_images,
@@ -318,19 +330,18 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     ) -> torch.Tensor:
         """
         Pad an image to `(pad_size["height"], pad_size["width"])` with zeros to the right and bottom.
-        
+
         Args:
             image: Input image tensor
             pad_size: Dictionary with height and width keys specifying the target size
             input_data_format: Format of the input image channels
-            
+
         Returns:
             Padded image tensor
         """
         output_height, output_width = pad_size["height"], pad_size["width"]
 
-
-        if input_data_format == ChannelDimension.FIRST or (hasattr(image, 'shape') and image.shape[0] <= 3):
+        if input_data_format == ChannelDimension.FIRST or (hasattr(image, "shape") and image.shape[0] <= 3):
             input_height, input_width = image.shape[-2], image.shape[-1]
         else:
             input_height, input_width = image.shape[0], image.shape[1]
@@ -354,16 +365,16 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     ) -> List[torch.Tensor]:
         """
         Remove padding and upscale masks to the original image size.
-        
+
         Args:
-            masks: Batch of predicted masks 
+            masks: Batch of predicted masks
             original_sizes: Original sizes of each image
             reshaped_input_sizes: Resized input shapes before padding
             mask_threshold: Threshold for binarizing masks
             binarize: Whether to binarize masks
             pad_size: Padding sizes used (defaults to self.pad_size)
             return_tensors: Return format, only "pt" is supported
-            
+
         Returns:
             List of processed masks matching original image sizes
         """
@@ -374,7 +385,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
-
 
         if isinstance(original_sizes, torch.Tensor):
             original_sizes = original_sizes.tolist()
@@ -390,28 +400,13 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             else:
                 mask_batch = masks[i].unsqueeze(0).unsqueeze(0)
 
-
             interpolated_mask = TF.interpolate(
-                mask_batch.float(),
-                target_image_size,
-                mode="bilinear",
-                align_corners=False
+                mask_batch.float(), target_image_size, mode="bilinear", align_corners=False
             )
 
+            interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
 
-            interpolated_mask = interpolated_mask[
-                ...,
-                :reshaped_input_sizes[i][0],
-                :reshaped_input_sizes[i][1]
-            ]
-
-
-            interpolated_mask = TF.interpolate(
-                interpolated_mask,
-                original_size,
-                mode="bilinear",
-                align_corners=False
-            )
+            interpolated_mask = TF.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
 
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
@@ -443,7 +438,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             crop_n_points_downscale_factor: Factor to reduce points in deeper layers
             device: Device to use for computation
             return_tensors: Output format, only "pt" is supported
-            
+
         Returns:
             Tuple containing crop boxes, points per crop, cropped images, and input labels
         """
@@ -451,18 +446,14 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         if device is None:
             device = torch.device(self.device_str)
 
-
         image_height, image_width = image.shape[-2:]
 
-
         crop_boxes = [[0, 0, image_width, image_height]]
-
 
         points_grid = []
         for i in range(crop_n_layers + 1):
             n_points = int(points_per_crop / (crop_n_points_downscale_factor**i))
             points_grid.append(self._build_point_grid(n_points))
-
 
         layer_idxs = [0]
         short_side = min(image_height, image_width)
@@ -482,7 +473,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 crop_boxes.append(box)
                 layer_idxs.append(i_layer + 1)
 
-
         cropped_images = []
         total_points_per_crop = []
 
@@ -491,17 +481,14 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             cropped_im = image[:, top:bottom, left:right]
             cropped_images.append(cropped_im)
 
-
             cropped_im_size = (bottom - top, right - left)
             points_scale = torch.tensor(cropped_im_size, device=device).flip(0).unsqueeze(0)
-
 
             layer_points = points_grid[layer_idxs[i]]
             if not isinstance(layer_points, torch.Tensor):
                 layer_points = torch.tensor(layer_points, device=device, dtype=torch.float32)
 
             points = layer_points * points_scale
-
 
             scale = target_size * 1.0 / max(image_height, image_width)
             new_height, new_width = image_height * scale, image_width * scale
@@ -513,9 +500,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
             total_points_per_crop.append(points_tensor)
 
-
         crop_boxes_tensor = torch.tensor(crop_boxes, device=device)
-
 
         points_per_crop = torch.stack(total_points_per_crop, dim=0).unsqueeze(0)
 
@@ -523,18 +508,17 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
         print("sushmanth is worst", points_per_crop.shape)
 
-
         return crop_boxes_tensor, points_per_crop, cropped_images, input_labels
 
     def _build_point_grid(self, n_per_side: int) -> torch.Tensor:
         """
         Generates a 2D grid of points evenly spaced in [0,1]x[0,1].
-        
+
         Args:
-            n_per_side: Despite the name, this is actually the total number 
+            n_per_side: Despite the name, this is actually the total number
                        of points desired. We calculate sqrt(n_per_side) to get
                        the actual number of points per side.
-            
+
         Returns:
             Grid of points as a tensor
         """
@@ -562,7 +546,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     ) -> Tuple[List[Dict[str, Any]], torch.Tensor, torch.Tensor]:
         """
         Filters predicted masks based on various criteria.
-        
+
         Args:
             masks: Tensor of predicted masks
             iou_scores: Tensor of IoU scores
@@ -573,7 +557,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             mask_threshold: Threshold for binarizing masks
             stability_score_offset: Offset for stability score calculation
             return_tensors: Output format, only "pt" is supported
-            
+
         Returns:
             Tuple of filtered mask encodings, scores, and boxes
         """
@@ -586,17 +570,14 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         if iou_scores.dim() > 1:
             iou_scores = iou_scores.flatten(0, 1)
 
-
         if masks.dim() > 3:
             masks = masks.flatten(0, 1)
 
         batch_size = masks.shape[0]
         keep_mask = torch.ones(batch_size, dtype=torch.bool, device=masks.device)
 
-
         if pred_iou_thresh > 0.0:
             keep_mask = keep_mask & (iou_scores > pred_iou_thresh)
-
 
         if stability_score_thresh > 0.0:
             stability_scores = self._compute_stability_score(masks, mask_threshold, stability_score_offset)
@@ -605,10 +586,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         scores = iou_scores[keep_mask]
         masks = masks[keep_mask]
 
-
         masks = masks > mask_threshold
         converted_boxes = self._batched_mask_to_box(masks)
-
 
         keep_mask = ~self._is_box_near_crop_edge(
             converted_boxes, cropped_box_image, [0, 0, original_width, original_height]
@@ -618,45 +597,42 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         masks = masks[keep_mask]
         converted_boxes = converted_boxes[keep_mask]
 
-
         masks = self._pad_masks(masks, cropped_box_image, original_height, original_width)
-
 
         rle_masks = self._mask_to_rle(masks)
 
         return rle_masks, scores, converted_boxes
 
     def _compute_stability_score(
-        self,
-        masks: torch.Tensor,
-        mask_threshold: float,
-        stability_score_offset: int
+        self, masks: torch.Tensor, mask_threshold: float, stability_score_offset: int
     ) -> torch.Tensor:
         """
         Compute the stability score for masks.
-        
+
         Args:
             masks: Input masks tensor
             mask_threshold: Threshold for mask binarization
             stability_score_offset: Offset for stability computation
-            
+
         Returns:
             Stability scores tensor
         """
         intersections = (
             (masks > (mask_threshold + stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
         )
-        unions = (masks > (mask_threshold - stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
+        unions = (
+            (masks > (mask_threshold - stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
+        )
         stability_scores = intersections / unions
         return stability_scores
 
     def _batched_mask_to_box(self, masks: torch.Tensor) -> torch.Tensor:
         """
         Convert masks to bounding boxes in XYXY format.
-        
+
         Args:
             masks: Input binary masks tensor
-            
+
         Returns:
             Tensor of bounding boxes in XYXY format
         """
@@ -689,21 +665,17 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         return out
 
     def _is_box_near_crop_edge(
-        self,
-        boxes: torch.Tensor,
-        crop_box: List[int],
-        orig_box: List[int],
-        atol: float = 20.0
+        self, boxes: torch.Tensor, crop_box: List[int], orig_box: List[int], atol: float = 20.0
     ) -> torch.Tensor:
         """
         Filter masks at the edge of a crop, but not at the edge of the original image.
-        
+
         Args:
             boxes: Bounding boxes in XYXY format
             crop_box: Crop box coordinates [left, top, right, bottom]
             orig_box: Original image box coordinates [left, top, right, bottom]
             atol: Tolerance for considering boxes near the edge
-            
+
         Returns:
             Boolean tensor indicating boxes near crop edges
         """
@@ -721,22 +693,16 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
         return torch.any(near_crop_edge, dim=1)
 
-    def _pad_masks(
-        self,
-        masks: torch.Tensor,
-        crop_box: List[int],
-        orig_height: int,
-        orig_width: int
-    ) -> torch.Tensor:
+    def _pad_masks(self, masks: torch.Tensor, crop_box: List[int], orig_height: int, orig_width: int) -> torch.Tensor:
         """
         Pad masks to the original image size.
-        
+
         Args:
             masks: Masks tensor to pad
             crop_box: Crop box coordinates [left, top, right, bottom]
             orig_height: Original image height
             orig_width: Original image width
-            
+
         Returns:
             Padded masks tensor
         """
@@ -751,10 +717,10 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def _mask_to_rle(self, input_mask: torch.Tensor) -> List[Dict[str, Any]]:
         """
         Convert masks to run-length encoding format.
-        
+
         Args:
             input_mask: Binary masks tensor
-            
+
         Returns:
             List of mask encodings in RLE format
         """
@@ -784,10 +750,10 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def _rle_to_mask(self, rle: Dict[str, Any]) -> torch.Tensor:
         """
         Compute a binary mask from an uncompressed RLE.
-        
+
         Args:
             rle: RLE encoding of a mask
-            
+
         Returns:
             Binary mask tensor
         """
@@ -810,18 +776,18 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         all_scores: torch.Tensor,
         all_boxes: torch.Tensor,
         crops_nms_thresh: float,
-        return_tensors: str = "pt"
+        return_tensors: str = "pt",
     ) -> Tuple[List[torch.Tensor], torch.Tensor, List[Dict[str, Any]], torch.Tensor]:
         """
         Post-processes masks using Non-Maximum Suppression.
-        
+
         Args:
             all_masks: List of masks in RLE format
             all_scores: IoU scores tensor
             all_boxes: Bounding boxes tensor
             crops_nms_thresh: NMS threshold
             return_tensors: Output format, only "pt" is supported
-            
+
         Returns:
             Tuple of filtered masks, scores, RLE encodings, and boxes
         """
@@ -842,5 +808,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         masks = [self._rle_to_mask(rle) for rle in rle_masks]
 
         return masks, iou_scores, rle_masks, mask_boxes
+
 
 __all__ = ["SamImageProcessorFast"]

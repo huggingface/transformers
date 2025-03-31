@@ -45,13 +45,14 @@ if is_vision_available():
             Wrapper class for SamImageProcessorFast that inherits from SamImageProcessor
             to satisfy type checking in SamProcessor
             """
+
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
                 self.fast_processor = SamImageProcessorFast(**kwargs)
 
                 # Copy attributes from fast processor to wrapper
                 for attr_name in dir(self.fast_processor):
-                    if not attr_name.startswith('_') and not hasattr(self, attr_name):
+                    if not attr_name.startswith("_") and not hasattr(self, attr_name):
                         setattr(self, attr_name, getattr(self.fast_processor, attr_name))
 
             def __call__(self, *args, **kwargs):
@@ -165,7 +166,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             image_std=fast_processor.image_std,
             do_pad=fast_processor.do_pad,
             pad_size=fast_processor.pad_size,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check that the outputs have the same keys
@@ -209,7 +210,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             image_std=image_processor.image_std,
             do_pad=image_processor.do_pad,
             pad_size=image_processor.pad_size,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check output has expected keys
@@ -247,7 +248,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             segmentation_maps=mask_input,
             mask_size=image_processor.mask_size,
             mask_pad_size=image_processor.mask_pad_size,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check output has expected keys
@@ -276,7 +277,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             masks=dummy_masks,
             original_sizes=original_sizes,
             reshaped_input_sizes=reshaped_input_size,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check shape of output masks
@@ -290,7 +291,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             masks=dummy_masks,
             original_sizes=tensor_original_sizes.tolist(),
             reshaped_input_sizes=tensor_reshaped_input_size.tolist(),
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check shape of output masks
@@ -348,7 +349,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             crop_n_layers=1,  # Just one additional layer for testing
             points_per_crop=32,
             crop_n_points_downscale_factor=1,
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check outputs
@@ -385,7 +386,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
             stability_score_thresh=0.5,  # Lower threshold to ensure some masks pass
             mask_threshold=0.5,
             stability_score_offset=0.1,  # Smaller offset to get meaningful differences
-            return_tensors="pt"
+            return_tensors="pt",
         )
 
         # Check outputs - we expect two masks to remain after filtering by the 0.8 threshold
@@ -406,9 +407,7 @@ class SamImageProcessorFastTest(unittest.TestCase):
 
         # Compute stability scores
         stability_scores = self.image_processor._compute_stability_score(
-            masks=mask,
-            mask_threshold=0.5,
-            stability_score_offset=0.1
+            masks=mask, mask_threshold=0.5, stability_score_offset=0.1
         )
         print(stability_scores)
 
@@ -447,10 +446,6 @@ class SamImageProcessorFastTest(unittest.TestCase):
     def test_post_process_for_mask_generation(self):
         """Test end-to-end mask generation post-processing."""
         # Requires torchvision for batched_nms
-        try:
-            from torchvision.ops.boxes import batched_nms
-        except ImportError:
-            self.skipTest("torchvision not available")
 
         # Create sample masks and convert to RLE
         masks = torch.zeros((5, 10, 10), dtype=torch.bool)
@@ -465,23 +460,27 @@ class SamImageProcessorFastTest(unittest.TestCase):
         rle_masks = [self.image_processor._mask_to_rle(mask.unsqueeze(0))[0] for mask in masks]
 
         # Create bounding boxes with more significant overlap
-        boxes = torch.tensor([
-            [1, 1, 5, 5],      # Mask 0
-            [1, 1, 5, 5],      # Mask 1 - Identical to mask 0
-            [6, 6, 9, 9],      # Mask 2
-            [6, 6, 9, 9],      # Mask 3 - Identical to mask 2
-            [0, 7, 3, 10],     # Mask 4
-        ])
+        boxes = torch.tensor(
+            [
+                [1, 1, 5, 5],  # Mask 0
+                [1, 1, 5, 5],  # Mask 1 - Identical to mask 0
+                [6, 6, 9, 9],  # Mask 2
+                [6, 6, 9, 9],  # Mask 3 - Identical to mask 2
+                [0, 7, 3, 10],  # Mask 4
+            ]
+        )
 
         # Create scores with large differences to ensure correct filtering
         scores = torch.tensor([0.9, 0.5, 0.95, 0.55, 0.7])
 
         # Apply NMS
-        filtered_masks, filtered_scores, filtered_rle, filtered_boxes = self.image_processor.post_process_for_mask_generation(
-            all_masks=rle_masks,
-            all_scores=scores,
-            all_boxes=boxes,
-            crops_nms_thresh=0.3  # Lower threshold to ensure filtering
+        filtered_masks, filtered_scores, filtered_rle, filtered_boxes = (
+            self.image_processor.post_process_for_mask_generation(
+                all_masks=rle_masks,
+                all_scores=scores,
+                all_boxes=boxes,
+                crops_nms_thresh=0.3,  # Lower threshold to ensure filtering
+            )
         )
 
         # Check if we have exactly 3 masks (0, 2, 4)
@@ -610,4 +609,6 @@ class SamProcessorFastTest(ProcessorTesterMixin, unittest.TestCase):
 
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(ValueError):
-            masks = processor.post_process_masks(dummy_masks, torch.tensor(original_sizes), torch.tensor(reshaped_input_size))
+            masks = processor.post_process_masks(
+                dummy_masks, torch.tensor(original_sizes), torch.tensor(reshaped_input_size)
+            )
