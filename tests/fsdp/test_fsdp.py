@@ -410,27 +410,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         return logs
 
-    def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
-        if not use_accelerate:
-            fsdp_args = [
-                "--fsdp",
-                f"{sharding_strategy} auto_wrap",
-                "--fsdp_transformer_layer_cls_to_wrap",
-                "BertLayer",
-            ]
-            cmd = launcher + script + args + fsdp_args
-        else:
-            fsdp_config = f"""
-                --fsdp_sharding_strategy {FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
-            """.split()
-            cmd = launcher + fsdp_config + script + args
-
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
-        execute_subprocess_async(cmd, env=self.get_env())
-        logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
-        return logs
-
     def get_base_args(self, output_dir, num_epochs, logging_steps):
         return f"""
             --model_name_or_path google-bert/bert-base-cased
