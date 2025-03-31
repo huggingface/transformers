@@ -133,11 +133,14 @@ def _parameterized_custom_name_func(func, param_num, param):
     param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
     return f"{func.__name__}_{param_based_name}"
 
+
 if is_accelerate_available():
     from accelerate.accelerator import Accelerator
-    is_fsdp2_available = hasattr(Accelerator, 'is_fsdp2')
+
+    is_fsdp2_available = hasattr(Accelerator, "is_fsdp2")
 else:
     is_fsdp2_available = False
+
 
 @require_accelerate
 @require_torch_accelerator
@@ -367,7 +370,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         for log, log1 in zip(logs, logs_resume):
             if "learning_rate" in log:
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
-
 
     @require_torch_multi_accelerator
     @slow
