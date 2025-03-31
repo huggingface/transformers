@@ -149,10 +149,22 @@ alt="drawing" width="900"/>
 [[autodoc]] SamImageProcessor
 
 
+## SamVisionModel
+
+[[autodoc]] SamVisionModel
+    - forward
+
+
 ## SamModel
 
 [[autodoc]] SamModel
     - forward
+
+
+## TFSamVisionModel
+
+[[autodoc]] TFSamVisionModel
+    - call
 
 
 ## TFSamModel
