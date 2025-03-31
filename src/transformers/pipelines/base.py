@@ -849,7 +849,7 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
     supports_binary_output=True,
 )
 
-SUPPORTED_FEFT_TASKS = {
+SUPPORTED_PEFT_TASKS = {
     "document-question-answering": ["PeftModelForQuestionAnswering"],
     "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
     "question-answering": ["PeftModelForQuestionAnswering"],
@@ -1225,8 +1225,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
             supported_models_names = []
-            if self.task in SUPPORTED_FEFT_TASKS:
-                supported_models_names.extend(SUPPORTED_FEFT_TASKS[self.task])
+            if self.task in SUPPORTED_PEFT_TASKS:
+                supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
 
             for _, model_name in supported_models.items():
                 # Mapping can now contain tuples of models for the same configuration.
