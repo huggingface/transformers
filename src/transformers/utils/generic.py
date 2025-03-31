@@ -276,7 +276,7 @@ def to_py_obj(obj):
         return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {
-        "pt": lambda obj: obj.detach().cpu().tolist(),
+        "pt": lambda obj: obj.tolist(),
         "tf": lambda obj: obj.numpy().tolist(),
         "jax": lambda obj: np.asarray(obj).tolist(),
         "np": lambda obj: obj.tolist(),

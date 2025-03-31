@@ -129,7 +129,7 @@ class AgentImage(AgentType, ImageType):
             return self._raw
 
         if self._tensor is not None:
-            array = self._tensor.cpu().detach().numpy()
+            array = self._tensor.detach().cpu().numpy()
             return Image.fromarray((255 - array * 255).astype(np.uint8))
 
     def to_string(self):
@@ -147,7 +147,7 @@ class AgentImage(AgentType, ImageType):
             return self._path
 
         if self._tensor is not None:
-            array = self._tensor.cpu().detach().numpy()
+            array = self._tensor.detach().cpu().numpy()
 
             # There is likely simpler than load into image into save
             img = Image.fromarray((255 - array * 255).astype(np.uint8))

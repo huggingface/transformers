@@ -612,7 +612,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     if is_beam_token_worse_than_top_num_beams:
                         continue
 
-                    completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx].cpu().tolist())
+                    completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx].tolist())
                     if completes_constraint:
                         if beam_indices is not None:
                             beam_index = beam_indices[batch_beam_idx]
@@ -718,19 +718,19 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             # hypotheses.
 
             topk_state = topk_contraint_states[seq_idx]
-            topk_state.reset(full_hypotheses[seq_idx].cpu().tolist())
+            topk_state.reset(full_hypotheses[seq_idx].tolist())
 
             advance_state = advance_constraint_states[seq_idx]
-            advance_state.reset(pre_seq.cpu().tolist())
+            advance_state.reset(pre_seq.tolist())
 
             if not advance_state.completed:
                 advance_tokens = torch.LongTensor(advance_state.advance()).to(device)
                 for advance_token in advance_tokens:
                     # since adding each `advance_token` leads to a different hypothesis, create new state instance.
                     new_state = advance_state.copy(stateful=True)
-                    new_state.add(advance_token.cpu().tolist())
+                    new_state.add(advance_token.tolist())
 
-                    advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).cpu().tolist()
+                    advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).tolist()
                     if advance_seq not in track_new["new_seqs"]:
                         # prevent duplicates, which are basically bound to happen in this process.
                         track_new["new_seqs"].append(advance_seq)
@@ -763,7 +763,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
                 advance_state = advance_constraint_states[seq_idx]
 
-                advance_seq = advance_seq.cpu().tolist()
+                advance_seq = advance_seq.tolist()
 
                 advance_state.reset(advance_seq)
                 if advance_seq not in track_new["new_seqs"]:
@@ -843,7 +843,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
 
-                completes_constraint = self.check_completes_constraints(final_tokens.cpu().tolist())
+                completes_constraint = self.check_completes_constraints(final_tokens.tolist())
                 if completes_constraint:
                     beam_index = beam_indices[batch_beam_idx] if beam_indices is not None else None
                     generated_len = final_tokens.shape[-1] - decoder_prompt_len

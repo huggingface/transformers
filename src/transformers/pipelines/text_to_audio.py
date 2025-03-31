@@ -18,6 +18,8 @@ from .base import Pipeline
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
@@ -213,7 +215,7 @@ class TextToAudioPipeline(Pipeline):
             waveform = waveform["waveform"]
         elif isinstance(waveform, tuple):
             waveform = waveform[0]
-        output_dict["audio"] = waveform.cpu().float().numpy()
+        output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict

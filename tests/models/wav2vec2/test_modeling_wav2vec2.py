@@ -1044,7 +1044,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         ).loss
 
         # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
-        self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+        self.assertTrue(loss.item() <= loss_more_masked.item())
 
     def test_mask_feature_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(

@@ -64,4 +64,4 @@ class TextToSpeechTool(PipelineTool):
 
     def decode(self, outputs):
         with torch.no_grad():
-            return self.post_processor(outputs).cpu().detach()
+            return self.post_processor(outputs).detach().cpu()

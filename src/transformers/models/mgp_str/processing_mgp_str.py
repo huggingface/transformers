@@ -182,7 +182,7 @@ class MgpstrProcessor(ProcessorMixin):
         for index in range(batch_size):
             pred_eos = preds_str[index].find(eos_str)
             pred = preds_str[index][:pred_eos]
-            pred_index = preds_index[index].cpu().tolist()
+            pred_index = preds_index[index].tolist()
             pred_eos_index = pred_index.index(eos_token) if eos_token in pred_index else -1
             pred_max_prob = preds_max_prob[index][: pred_eos_index + 1]
             confidence_score = pred_max_prob.cumprod(dim=0)[-1] if pred_max_prob.nelement() != 0 else 0.0
