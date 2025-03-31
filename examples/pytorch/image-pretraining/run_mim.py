@@ -132,10 +132,6 @@ class ModelArguments:
         default=None,
         metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
-    fast_image_processor: bool = field(
-        default=False,
-        metadata={"help": "Process images using fast image processors if available."},
-    )
     config_name_or_path: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -363,10 +359,7 @@ def main():
         IMAGE_PROCESSOR_TYPES = {
             conf.model_type: image_processor_class for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
         }
-        if model_args.fast_image_processor:
-            image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type][1]()
-        else:
-            image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type][0]()
+        image_processor = IMAGE_PROCESSOR_TYPES[model_args.model_type][-1]()
 
     # create model
     if model_args.model_name_or_path:
