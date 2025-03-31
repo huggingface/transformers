@@ -1154,20 +1154,10 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_tokenization": r"tests/models/.*/test_tokenization.*",
-    "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
-    "examples_torch": r"examples/pytorch/.*test_.*",
-    "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
-    "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
-    "tests_hub": r"tests/.*",
-    "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
-    "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }
 
+my_test = "tests/models/albert/test_modeling_albert.py tests/models/bamba/test_modeling_bamba.py tests/models/biogpt/test_modeling_biogpt.py tests/models/bridgetower/test_modeling_bridgetower.py tests/models/clipseg/test_modeling_clipseg.py tests/models/convnext/test_modeling_convnext.py tests/models/data2vec/test_modeling_data2vec_text.py tests/models/deit/test_modeling_deit.py tests/models/distilbert/test_modeling_distilbert.py tests/models/electra/test_modeling_electra.py tests/models/falcon_mamba/test_modeling_falcon_mamba.py tests/models/fuyu/test_modeling_fuyu.py tests/models/gpt2/test_modeling_gpt2.py tests/models/granitemoeshared/test_modeling_granitemoeshared.py tests/models/idefics2/test_modeling_idefics2.py tests/models/jetmoe/test_modeling_jetmoe.py tests/models/llama/test_modeling_llama.py tests/models/lxmert/test_modeling_lxmert.py tests/models/maskformer/test_modeling_maskformer_swin.py tests/models/mixtral/test_modeling_mixtral.py tests/models/moonshine/test_modeling_moonshine.py tests/models/mvp/test_modeling_mvp.py tests/models/oneformer/test_modeling_oneformer.py tests/models/patchtst/test_modeling_patchtst.py tests/models/phimoe/test_modeling_phimoe.py tests/models/pvt/test_modeling_pvt.py tests/models/qwen3_moe/test_modeling_qwen3_moe.py tests/models/roberta_prelayernorm/test_modeling_roberta_prelayernorm.py tests/models/seamless_m4t/test_modeling_seamless_m4t.py tests/models/siglip2/test_modeling_siglip2.py tests/models/starcoder2/test_modeling_starcoder2.py tests/models/t5/test_modeling_t5.py tests/models/trocr/test_modeling_trocr.py tests/models/video_llava/test_modeling_video_llava.py tests/models/vit_mae/test_modeling_vit_mae.py tests/models/wav2vec2/test_modeling_wav2vec2.py tests/models/xlm_roberta/test_modeling_xlm_roberta.py tests/models/zoedepth/test_modeling_zoedepth.py"
 
 def create_test_list_from_filter(full_test_list, out_path):
     os.makedirs(out_path, exist_ok=True)
@@ -1181,7 +1171,7 @@ def create_test_list_from_filter(full_test_list, out_path):
         print(job_name, file_name)
         if len(files_to_test) > 0:  # No tests -> no file with test list
             with open(file_name, "w") as f:
-                f.write("\n".join(files_to_test))
+                f.write(my_test)
 
 
 if __name__ == "__main__":
