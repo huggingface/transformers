@@ -726,11 +726,11 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    # write_tokenizer(
-    #     tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
-    #     save_dir=args.output_dir,
-    #     instruct=args.instruct,
-    # )
+    write_tokenizer(
+        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+        save_dir=args.output_dir,
+        instruct=args.instruct,
+    )
 
     write_model(
         model_path=args.output_dir,
