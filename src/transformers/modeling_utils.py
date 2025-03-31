@@ -1387,7 +1387,7 @@ def _find_mismatched_keys(
     state_dict: Optional[Dict],
     checkpoint_files: Optional[List[str]],
     ignore_mismatched_sizes: bool,
-    key_renaming_mapping: Dict[str, str],
+    keys_to_rename_mapping: Dict[str, str],
     is_quantized: bool,
     weights_only: bool,
 ) -> Tuple[List[str], List[Tuple[int, int]]]:
@@ -1422,7 +1422,7 @@ def _find_mismatched_keys(
             )
 
         # Fix the key names
-        new_state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
+        new_state_dict = {keys_to_rename_mapping[k]: v for k, v in state_dict.items() if k in keys_to_rename_mapping}
 
         for key in new_state_dict.keys():
             if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
@@ -4700,12 +4700,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, unexpected_keys, dtype, hf_quantizer)
-        # In this case we also need to move everything back
-        if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-            # We only do it for the parameters, are the buffers are not initialized on the meta device by default
-            for key, param in model.named_parameters():
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
-                _load_parameter_into_model(model, key, value)
 
         # correctly initialize the missing (and potentially mismatched) keys
         model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
@@ -5214,6 +5208,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         from meta device to cpu.
         """
         is_quantized = hf_quantizer is not None
+
+        # In this case we need to move everything back
+        if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
+            # We only do it for the parameters, as the buffers are not initialized on the meta device by default
+            for key, param in self.named_parameters():
+                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                _load_parameter_into_model(self, key, value)
+            return
 
         model_state_dict = self.state_dict()
         for key in missing_keys:
