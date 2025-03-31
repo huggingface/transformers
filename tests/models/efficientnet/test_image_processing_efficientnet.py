@@ -25,10 +25,8 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_vision_available():
-    from transformers import EfficientNetImageProcessor
-
     if is_torchvision_available():
-        from transformers import EfficientNetImageProcessorFast
+        pass
 
 
 class EfficientNetImageProcessorTester:
@@ -86,14 +84,15 @@ class EfficientNetImageProcessorTester:
 @require_torch
 @require_vision
 class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
-
     image_processor_list = []
     if is_vision_available():
         from transformers import EfficientNetImageProcessor
+
         image_processor_list.append(EfficientNetImageProcessor)
 
         if is_torchvision_available():
             from transformers import EfficientNetImageProcessorFast
+
             image_processor_list.append(EfficientNetImageProcessorFast)
 
     def setUp(self):
