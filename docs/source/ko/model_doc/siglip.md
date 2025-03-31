@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SigLIP
+# SigLIP[[SigLiIP]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## 개요
+## 개요[[Overview]]
 
 SigLIP 모델은 Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer의 [Sigmoid Loss for Language Image Pre-Training](https://arxiv.org/abs/2303.15343) 논문에서 제안되었습니다. SigLIP은 [CLIP](clip)에서 사용된 손실 함수를 간단한 쌍별 시그모이드 손실(pairwise sigmoid loss)로 대체할 것을 제안합니다. 이는 ImageNet에서 제로샷 분류 정확도 측면에서 더 나은 성능을 보입니다.
 
@@ -30,7 +30,7 @@ SigLIP 모델은 Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer�
 
 *우리는 언어-이미지 사전 학습(Language-Image Pre-training, SigLIP)을 위한 간단한 쌍별 시그모이드 손실을 제안합니다. 소프트맥스 정규화를 사용하는 표준 대조 학습과 달리, 시그모이드 손실은 이미지-텍스트 쌍에만 작용하며 정규화를 위해 쌍별 유사성의 전역적 관점을 필요로 하지 않습니다. 시그모이드 손실은 배치 크기를 더욱 확장할 수 있게 하는 동시에 작은 배치 크기에서도 더 나은 성능을 보입니다. Locked-image Tuning과 결합하여, 단 4개의 TPUv4 칩만으로 이틀 만에 84.5%의 ImageNet 제로샷 정확도를 달성하는 SigLiT 모델을 학습했습니다. 손실 함수에서 배치 크기를 분리함으로써 예제 대 쌍의 영향과 부정 대 긍정 비율을 연구할 수 있게 되었습니다. 마지막으로, 우리는 배치 크기를 100만 개까지 극단적으로 늘려보았고, 배치 크기 증가의 이점이 빠르게 감소하며 32k의 더 합리적인 배치 크기로도 충분하다는 것을 발견했습니다.*
 
-## 사용 팁
+## 사용 팁[[Usage tips]]
 
 - SigLIP의 사용법은 [CLIP](clip)과 유사합니다. 주요 차이점은 학습 손실 함수로, 배치 내 모든 이미지와 텍스트 간의 쌍별 유사성에 대한 전역적 관점이 필요하지 않습니다. 소프트맥스 대신 로짓에 시그모이드 활성화 함수를 적용해야 합니다.
 - 학습은 지원되지만 `torch.distributed` 유틸리티를 사용하지 않아 배치 크기의 확장성이 제한될 수 있습니다. 그러나 단일 노드 다중 GPU 설정에서는 DDP와 FDSP가 작동합니다.
@@ -45,11 +45,11 @@ alt="drawing" width="600"/>
 이 모델은 [nielsr](https://huggingface.co/nielsr)가 기여했습니다.
 원본 코드는 [여기](https://github.com/google-research/big_vision/tree/main)에서 찾을 수 있습니다.
 
-## 사용 예시
+## 사용 예시[[Usage example]]
 
 SigLIP을 사용하는 방법에는 두 가지 주요 방법이 있습니다: 모든 복잡성을 추상화하는 파이프라인 API를 사용하거나, 직접 `SiglipModel` 클래스를 사용하는 방법입니다.
 
-### 파이프라인 API
+### 파이프라인 API[[Pipeline API]]
 
 파이프라인을 사용하면 몇 줄의 코드로 모델을 사용할 수 있습니다:
 
@@ -73,7 +73,7 @@ SigLIP을 사용하는 방법에는 두 가지 주요 방법이 있습니다: �
 [{'score': 0.1979, 'label': '2 cats'}, {'score': 0.0, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
 ```
 
-### 직접 모델 사용하기
+### 직접 모델 사용하기[[Using the model yourself]]
 
 전처리와 후처리를 직접 수행하려면 다음과 같이 하면 됩니다:
 
@@ -99,12 +99,12 @@ SigLIP을 사용하는 방법에는 두 가지 주요 방법이 있습니다: �
 ...     outputs = model(**inputs)
 
 >>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # 이것이 확률입니다
+>>> probs = torch.sigmoid(logits_per_image) # 시그모이드 활성화 함수를 적용한 확률입니다
 >>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 19.8% that image 0 is '2 cats'
 ```
 
-## 리소스
+## 리소스[[Resources]]
 
 SigLIP을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(🌎로 표시) 리소스 목록입니다.
 
@@ -114,7 +114,7 @@ SigLIP을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티
 여기에 포함될 리소스를 제출하는 데 관심이 있으시면 Pull Request를 열어주시면 검토하겠습니다! 리소스는 이상적으로 기존 리소스를 복제하는 대신 새로운 것을 보여주어야 합니다.
 
 
-## SigLIP과 Flash Attention 2 결합하기
+## SigLIP과 Flash Attention 2 결합하기[[Combining SigLIP with Flash Attention 2]]
 
 먼저 Flash Attention 2의 최신 버전을 설치해야 합니다.
 
@@ -155,13 +155,13 @@ Flash Attention 2를 사용하여 모델을 로드하고 실행하려면 아래 
 ...         outputs = model(**inputs)
 
 >>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # 이것이 확률입니다
+>>> probs = torch.sigmoid(logits_per_image) # 시그모이드 활성화 함수를 적용한 확률입니다
 >>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 19.8% that image 0 is '2 cats'
 ```
 
 
-## Scaled Dot Product Attention(SDPA) 사용하기
+## Scaled Dot Product Attention(SDPA) 사용하기[[Using Scaled Dot Product Attention(SDPA)]]
 
 PyTorch는 `torch.nn.functional`의 일부로 네이티브 스케일드 닷-프로덕트 어텐션(SDPA) 연산자를 포함합니다. 이 함수는 
 입력과 사용 중인 하드웨어에 따라 적용할 수 있는 여러 구현을 포함합니다. 자세한 내용은 
@@ -185,7 +185,7 @@ PyTorch는 `torch.nn.functional`의 일부로 네이티브 스케일드 닷-프�
 최상의 속도 향상을 위해 모델을 반정밀도(예: `torch.float16` 또는 `torch.bfloat16`)로 로드하는 것이 좋습니다.
 
 
-## 예상 속도 향상
+## 예상 속도 향상[[Expected speedups]]
 
 아래는 `google/siglip-so400m-patch14-384` 체크포인트를 `float16` 정밀도로 사용하는 transformers의 네이티브 구현과 Flash Attention 2 / SDPA 버전의 모델을 다양한 배치 크기로 비교한 추론 시간의 예상 속도 향상 다이어그램입니다.
 
