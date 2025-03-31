@@ -4138,7 +4138,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
 
-            if tp_device.index > 0:
+            if index is not None and index > 0:
                 import sys
 
                 sys.stdout = open(os.devnull, "w")
