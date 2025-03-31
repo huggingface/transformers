@@ -135,17 +135,22 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
         data_collator = DataCollatorWithFlattening(return_tensors="pt")
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        self.assertIn("position_ids", batch)
+
         self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertNotIn("cu_seq_lens_k", batch)
-        self.assertNotIn("cu_seq_lens_q", batch)
-        self.assertNotIn("max_length_k", batch)
-        self.assertNotIn("max_length_q", batch)
-        self.assertNotIn("seq_idx", batch)
-        self.assertIn("position_ids", batch)
         self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
 
@@ -157,17 +162,25 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         ]
         data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertIn(expected_key, batch)
+
         self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertNotIn("seq_idx", batch)
-        self.assertIn("position_ids", batch)
-        self.assertIn("cu_seq_lens_k", batch)
-        self.assertIn("cu_seq_lens_q", batch)
-        self.assertIn("max_length_k", batch)
-        self.assertIn("max_length_q", batch)
         self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(batch["cu_seq_lens_k"].shape, torch.Size([4]))
@@ -187,17 +200,25 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         ]
         data_collator = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "seq_idx",
+        ]:
+            self.assertIn(expected_key, batch)
+
         self.assertEqual(batch["input_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertIn("position_ids", batch)
-        self.assertIn("seq_idx", batch)
-        self.assertNotIn("cu_seq_lens_k", batch)
-        self.assertNotIn("cu_seq_lens_q", batch)
-        self.assertNotIn("max_length_k", batch)
-        self.assertNotIn("max_length_q", batch)
         self.assertEqual(batch["position_ids"].shape, torch.Size([1, 16]))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(batch["seq_idx"].shape, batch["input_ids"].shape)
@@ -1880,17 +1901,22 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
         data_collator = DataCollatorWithFlattening(return_tensors="np")
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        self.assertIn("position_ids", batch)
+
         self.assertEqual(batch["input_ids"].shape, (1, 16))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertNotIn("cu_seq_lens_k", batch)
-        self.assertNotIn("cu_seq_lens_q", batch)
-        self.assertNotIn("max_length_k", batch)
-        self.assertNotIn("max_length_q", batch)
-        self.assertNotIn("seq_idx", batch)
-        self.assertIn("position_ids", batch)
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
 
@@ -1903,17 +1929,25 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
         data_collator = DataCollatorWithFlattening(return_tensors="np", return_flash_attn_kwargs=True)
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "seq_idx",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertIn(expected_key, batch)
+
         self.assertEqual(batch["input_ids"].shape, (1, 16))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertNotIn("seq_idx", batch)
-        self.assertIn("position_ids", batch)
-        self.assertIn("cu_seq_lens_k", batch)
-        self.assertIn("cu_seq_lens_q", batch)
-        self.assertIn("max_length_k", batch)
-        self.assertIn("max_length_q", batch)
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(batch["cu_seq_lens_k"].shape, (4,))
@@ -1934,17 +1968,25 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
 
         data_collator = DataCollatorWithFlattening(return_tensors="np", return_seq_idx=True)
         batch = data_collator(features)
+
+        for unexpected_key in [
+            "attention_mask",
+            "cu_seq_lens_k",
+            "cu_seq_lens_q",
+            "max_length_k",
+            "max_length_q",
+        ]:
+            self.assertNotIn(unexpected_key, batch)
+        for expected_key in [
+            "position_ids",
+            "seq_idx",
+        ]:
+            self.assertIn(expected_key, batch)
+
         self.assertEqual(batch["input_ids"].shape, (1, 16))
         self.assertEqual(
             batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
         )
-        self.assertNotIn("attention_mask", batch)
-        self.assertIn("position_ids", batch)
-        self.assertIn("seq_idx", batch)
-        self.assertNotIn("cu_seq_lens_k", batch)
-        self.assertNotIn("cu_seq_lens_q", batch)
-        self.assertNotIn("max_length_k", batch)
-        self.assertNotIn("max_length_q", batch)
         self.assertEqual(batch["position_ids"].shape, (1, 16))
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(batch["seq_idx"].shape, batch["input_ids"].shape)
