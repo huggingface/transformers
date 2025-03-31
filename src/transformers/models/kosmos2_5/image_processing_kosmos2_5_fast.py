@@ -155,12 +155,14 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         patch_height, patch_width = patch_size["height"], patch_size["width"]
         image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
 
+        max_patches = torch.tensor(max_patches)
+
         # maximize scale s.t.
         scale = torch.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
-        num_feasible_rows = torch.amax(torch.amin(torch.floor(scale * image_height / patch_height), max_patches), 1)
-        num_feasible_cols = torch.amax(torch.amin(torch.floor(scale * image_width / patch_width), max_patches), 1)
-        resized_height = torch.amax(num_feasible_rows * patch_height, 1)
-        resized_width = torch.amax(num_feasible_cols * patch_width, 1)
+        num_feasible_rows = torch.maximum(torch.minimum(torch.floor(scale * image_height / patch_height), max_patches), torch.tensor(1))
+        num_feasible_cols = torch.maximum(torch.minimum(torch.floor(scale * image_width / patch_width), max_patches), torch.tensor(1))
+        resized_height = torch.maximum(num_feasible_rows * patch_height, torch.tensor(1))
+        resized_width = torch.maximum(num_feasible_cols * patch_width, torch.tensor(1))
 
         image = torch.nn.functional.interpolate(
             image,
@@ -170,7 +172,15 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             antialias=True,
         )
 
+        # we need `resized_height` and `resized_width` to be int, we also want it to be int as output values
+        # TODO: avoid unnecessary tensor <-> float/int conversion
+        resized_height = int(resized_height)
+        resized_width = int(resized_width)
+
+        image = torch.nn.functional.interpolate(image,size=(resized_height, resized_width),mode="bilinear",align_corners=False,antialias=True,)
+
         # [batch_size, rows, columns, patch_height * patch_width * image_channels]
+        # RuntimeError: shape '[55, 73, 768]' is invalid for input of size 9250560 ????
         patches = torch_extract_patches(image, patch_height, patch_width)
 
         patches_shape = patches.shape
