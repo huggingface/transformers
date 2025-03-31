@@ -16,7 +16,7 @@
 
 import collections
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -31,6 +31,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -406,13 +407,11 @@ class SamTwoWayTransformer(nn.Module):
         target_embedding=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         all_attentions = ()
 
@@ -1121,18 +1120,17 @@ class SamVisionEncoder(nn.Module):
     def get_input_embeddings(self):
         return self.patch_embed
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionEncoderOutput]:
+    ) -> SamVisionEncoderOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1165,14 +1163,6 @@ class SamVisionEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = self.neck(hidden_states)
-
-        if not return_dict:
-            outputs = (hidden_states,)
-            if output_hidden_states:
-                outputs = outputs + (all_hidden_states,)
-            if output_attentions:
-                outputs = outputs + (all_self_attentions,)
-            return outputs
 
         return SamVisionEncoderOutput(
             last_hidden_state=hidden_states,
@@ -1396,7 +1386,6 @@ class SamModel(SamPreTrainedModel):
         pixel_values,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
@@ -1408,15 +1397,11 @@ class SamModel(SamPreTrainedModel):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
         """
         vision_output = self.vision_encoder(
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         image_embeddings = vision_output[0]
         return image_embeddings
@@ -1454,6 +1439,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(SAM_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1468,9 +1454,8 @@ class SamModel(SamPreTrainedModel):
         target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> SamImageSegmentationOutput:
         r"""
         Example:
 
@@ -1500,7 +1485,6 @@ class SamModel(SamPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and image_embeddings is None:
             raise ValueError("Either pixel_values or image_embeddings must be provided.")
@@ -1537,18 +1521,17 @@ class SamModel(SamPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            vision_outputs = self.vision_encoder(
+            vision_outputs: SamVisionEncoderOutput = self.vision_encoder(
                 pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
-            image_embeddings = vision_outputs[0]
+            image_embeddings = vision_outputs.last_hidden_state
 
             if output_hidden_states:
-                vision_hidden_states = vision_outputs[1]
+                vision_hidden_states = vision_outputs.hidden_states
             if output_attentions:
-                vision_attentions = vision_outputs[-1]
+                vision_attentions = vision_outputs.attentions
 
         if input_points is not None and input_labels is None:
             input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
@@ -1579,15 +1562,6 @@ class SamModel(SamPreTrainedModel):
             target_embedding=target_embedding,
             output_attentions=output_attentions,
         )
-
-        if not return_dict:
-            output = (iou_predictions, low_res_masks)
-            if output_hidden_states:
-                output = output + (vision_hidden_states,)
-
-            if output_attentions:
-                output = output + (vision_attentions, mask_decoder_attentions)
-            return output
 
         return SamImageSegmentationOutput(
             iou_scores=iou_predictions,
