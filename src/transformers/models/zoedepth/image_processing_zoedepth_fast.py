@@ -21,7 +21,7 @@ import numpy as np
 from transformers.image_transforms import get_size_with_aspect_ratio, group_images_by_shape, reorder_images
 from transformers.processing_utils import Unpack
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ChannelDimension, PILImageResampling, SizeDict, get_image_size, get_image_size_for_max_height_width, infer_channel_dimension_format
 from ...utils import add_start_docstrings, is_torchvision_available, is_torchvision_v2_available, is_torch_available, TensorType
 
 if is_torch_available():
@@ -51,6 +51,7 @@ def get_resize_output_image_size(
     max_size: Optional[int] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
     multiple: int = None,
+    keep_aspect_ratio: bool = False,
 ) -> tuple:
     """
     Find the target (height, width) dimension of the output image after resizing given the input image and the desired
@@ -82,10 +83,30 @@ def get_resize_output_image_size(
     Returns:
         `tuple`: The target (height, width) dimension of the output image after resizing.
     """
+    if input_data_format is None:
+        # We assume that all images have the same channel dimension format.
+        input_data_format = infer_channel_dimension_format(input_image[0])
     if isinstance(size, (tuple, list)):
         if len(size) == 2:
+            output_height, output_width = size
+        
+            # determine new height and width
+            # QUESTION: Is it ok to default this to ChannelDimension.FIRST?
+            input_height, input_width = get_image_size(input_image, input_data_format)
+            scale_height = output_height / input_height
+            scale_width = output_width / input_width
 
-            return (constrain_to_multiple_of(size[0], multiple=multiple), constrain_to_multiple_of(size[1], multiple=multiple))
+            if keep_aspect_ratio:
+                # scale as little as possible
+                if abs(1 - scale_width) < abs(1 - scale_height):
+                    # fit width
+                    scale_height = scale_width
+                else:
+                    # fit height
+                    scale_width = scale_height
+            new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+            new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
+            return (new_height, new_width)
         elif len(size) == 1:
             # Perform same logic as if size was an int
             size = size[0]
@@ -94,7 +115,6 @@ def get_resize_output_image_size(
 
     if default_to_square:
         return (size, size)
-
     height, width = get_image_size(input_image, input_data_format)
     short, long = (width, height) if width <= height else (height, width)
     requested_new_short = size
@@ -117,7 +137,7 @@ def get_resize_output_image_size(
 
 class ZoeDepthFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     ensure_multiple_of: Optional[int] = None
-
+    keep_aspect_ratio: bool = False
 
 @add_start_docstrings(
     "Constructs a fast ZoeDepth image processor.",
@@ -144,7 +164,11 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = ZoeDepthFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs]):
+        print(f"input_data_format: {kwargs.get('input_data_format')}")
         super().__init__(**kwargs)
+    
+    # def preprocess(self, images: ImageInput, **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs]) -> BatchFeature:
+    #         return super().preprocess(images, **kwargs)
 
     def resize(
         self,
@@ -153,6 +177,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         interpolation: "F.InterpolationMode" = None,
         antialias: bool = True,
         ensure_multiple_of: int = 1,
+        keep_aspect_ratio: bool = False,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -189,7 +214,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
             # // TODO left off here
             new_size = get_image_size_for_max_height_width(image.size()[-2:], output_size=size, multiple=ensure_multiple_of)
         elif size.height and size.width:
-            new_size = get_resize_output_image_size(image, size=(size.height, size.width), multiple=ensure_multiple_of)
+            new_size = get_resize_output_image_size(image, size=(size.height, size.width), multiple=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
@@ -212,6 +237,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
         ensure_multiple_of: int,
+        keep_aspect_ratio,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -219,7 +245,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, ensure_multiple_of=ensure_multiple_of)
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
