@@ -14,24 +14,150 @@ rendered properly in your Markdown viewer.
 
 -->
 
+[![PyTorch](https://img.shields.io/badge/PyTorch-1.12+-blue.svg)](https://pytorch.org/get-started/locally/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.12+-orange.svg)](https://www.tensorflow.org/install)
+[![Flax](https://img.shields.io/badge/Flax-0.6+-yellow.svg)](https://flax.readthedocs.io/en/latest/installation.html)
+[![Safetensors](https://img.shields.io/badge/Safetensors-0.3+-green.svg)](https://huggingface.co/docs/safetensors/installation)
+[![Flash Attention](https://img.shields.io/badge/Flash%20Attention-2.0+-blue.svg)](https://github.com/Dao-AILab/flash-attention)
+[![SDPA](https://img.shields.io/badge/SDPA-2.0+-blue.svg)](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
+
 # LayoutLMv3
 
-## Overview
+LayoutLMv3 is a powerful multimodal transformer model designed specifically for Document AI tasks. What makes it unique is its unified approach to handling both text and images in documents, using a simple yet effective architecture that combines patch embeddings with transformer layers. Unlike its predecessor LayoutLMv2, it uses a more streamlined approach with patch embeddings (similar to ViT) instead of a CNN backbone.
 
-The LayoutLMv3 model was proposed in [LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking](https://arxiv.org/abs/2204.08387) by Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei.
-LayoutLMv3 simplifies [LayoutLMv2](layoutlmv2) by using patch embeddings (as in [ViT](vit)) instead of leveraging a CNN backbone, and pre-trains the model on 3 objectives: masked language modeling (MLM), masked image modeling (MIM)
-and word-patch alignment (WPA).
+The model is pre-trained on three key objectives:
+1. Masked Language Modeling (MLM) for text understanding
+2. Masked Image Modeling (MIM) for visual understanding
+3. Word-Patch Alignment (WPA) for learning cross-modal relationships
 
-The abstract from the paper is the following:
+This unified architecture and training approach makes LayoutLMv3 particularly effective for both text-centric tasks (like form understanding and receipt analysis) and image-centric tasks (like document classification and layout analysis).
 
-*Self-supervised pre-training techniques have achieved remarkable progress in Document AI. Most multimodal pre-trained models use a masked language modeling objective to learn bidirectional representations on the text modality, but they differ in pre-training objectives for the image modality. This discrepancy adds difficulty to multimodal representation learning. In this paper, we propose LayoutLMv3 to pre-train multimodal Transformers for Document AI with unified text and image masking. Additionally, LayoutLMv3 is pre-trained with a word-patch alignment objective to learn cross-modal alignment by predicting whether the corresponding image patch of a text word is masked. The simple unified architecture and training objectives make LayoutLMv3 a general-purpose pre-trained model for both text-centric and image-centric Document AI tasks. Experimental results show that LayoutLMv3 achieves state-of-the-art performance not only in text-centric tasks, including form understanding, receipt understanding, and document visual question answering, but also in image-centric tasks such as document image classification and document layout analysis.*
+[Paper](https://arxiv.org/abs/2204.08387) | [Official Checkpoints](https://huggingface.co/microsoft/layoutlmv3-base)
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/layoutlmv3_architecture.png"
-alt="drawing" width="600"/>
+<Tip>
+Click on the right sidebar for more examples of how to use the model for different tasks!
+</Tip>
 
-<small> LayoutLMv3 architecture. Taken from the <a href="https://arxiv.org/abs/2204.08387">original paper</a>. </small>
+## Quick Start
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [chriskoo](https://huggingface.co/chriskoo), [tokec](https://huggingface.co/tokec), and [lre](https://huggingface.co/lre). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
+Here's a quick example of how to use LayoutLMv3 for document understanding:
+
+```python
+from transformers import LayoutLMv3Processor, LayoutLMv3ForSequenceClassification
+from PIL import Image
+import torch
+
+# Load model and processor
+processor = LayoutLMv3Processor.from_pretrained("microsoft/layoutlmv3-base")
+model = LayoutLMv3ForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
+
+# Load and preprocess your document image
+image = Image.open("document.jpg").convert("RGB")
+encoding = processor(image, return_tensors="pt")
+
+# Get predictions
+outputs = model(**encoding)
+predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+```
+
+## Using the Pipeline
+
+The easiest way to use LayoutLMv3 is through the pipeline API:
+
+```python
+from transformers import pipeline
+
+# For document classification
+classifier = pipeline("document-classification", model="microsoft/layoutlmv3-base")
+result = classifier("document.jpg")
+
+# For token classification (e.g., form understanding)
+token_classifier = pipeline("token-classification", model="microsoft/layoutlmv3-base")
+result = token_classifier("form.jpg")
+
+# For question answering
+qa = pipeline("document-question-answering", model="microsoft/layoutlmv3-base")
+result = qa(question="What is the total amount?", image="receipt.jpg")
+```
+
+## Using AutoModel
+
+You can also use the AutoModel classes for more flexibility:
+
+```python
+from transformers import AutoModelForDocumentQuestionAnswering, AutoProcessor
+
+# Load model and processor
+processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base")
+model = AutoModelForDocumentQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
+
+# Process inputs
+image = Image.open("document.jpg").convert("RGB")
+encoding = processor(image, return_tensors="pt")
+
+# Get predictions
+outputs = model(**encoding)
+```
+
+## Using transformers-cli
+
+For quick inference from the command line:
+
+```bash
+transformers-cli document-classification "document.jpg" --model microsoft/layoutlmv3-base
+```
+
+## Quantization
+
+For large models, you can use quantization to reduce memory usage:
+
+```python
+from transformers import LayoutLMv3Processor, LayoutLMv3ForSequenceClassification
+import torch
+
+# Load model with 8-bit quantization
+model = LayoutLMv3ForSequenceClassification.from_pretrained(
+    "microsoft/layoutlmv3-base",
+    load_in_8bit=True,
+    device_map="auto"
+)
+
+# Or with 4-bit quantization
+model = LayoutLMv3ForSequenceClassification.from_pretrained(
+    "microsoft/layoutlmv3-base",
+    load_in_4bit=True,
+    device_map="auto"
+)
+```
+
+## Attention Visualization
+
+You can visualize the attention patterns using the AttentionMaskVisualizer:
+
+```python
+from transformers import LayoutLMv3Processor, LayoutLMv3Model
+from transformers.utils.visualization import AttentionMaskVisualizer
+from PIL import Image
+
+# Load model and processor
+processor = LayoutLMv3Processor.from_pretrained("microsoft/layoutlmv3-base")
+model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
+
+# Process image
+image = Image.open("document.jpg").convert("RGB")
+encoding = processor(image, return_tensors="pt")
+
+# Get attention weights
+outputs = model(**encoding, output_attentions=True)
+
+# Visualize attention
+visualizer = AttentionMaskVisualizer()
+visualizer.visualize_attention(
+    image,
+    outputs.attentions[-1][0],  # Last layer attention
+    processor.tokenizer
+)
+```
 
 ## Usage tips
 
@@ -74,81 +200,66 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 **Document question answering**
 - [Document question answering task guide](../tasks/document_question_answering)
 
-## LayoutLMv3Config
+## Model Details
+
+### LayoutLMv3Config
 
 [[autodoc]] LayoutLMv3Config
 
-## LayoutLMv3FeatureExtractor
+### LayoutLMv3FeatureExtractor
 
 [[autodoc]] LayoutLMv3FeatureExtractor
     - __call__
 
-## LayoutLMv3ImageProcessor
+### LayoutLMv3ImageProcessor
 
 [[autodoc]] LayoutLMv3ImageProcessor
     - preprocess
 
-## LayoutLMv3Tokenizer
+### LayoutLMv3Tokenizer
 
 [[autodoc]] LayoutLMv3Tokenizer
     - __call__
     - save_vocabulary
 
-## LayoutLMv3TokenizerFast
+### LayoutLMv3TokenizerFast
 
 [[autodoc]] LayoutLMv3TokenizerFast
     - __call__
 
-## LayoutLMv3Processor
+### LayoutLMv3Processor
 
 [[autodoc]] LayoutLMv3Processor
     - __call__
 
-<frameworkcontent>
-<pt>
-
-## LayoutLMv3Model
+### LayoutLMv3Model
 
 [[autodoc]] LayoutLMv3Model
-    - forward
 
-## LayoutLMv3ForSequenceClassification
+### LayoutLMv3ForSequenceClassification
 
 [[autodoc]] LayoutLMv3ForSequenceClassification
-    - forward
 
-## LayoutLMv3ForTokenClassification
+### LayoutLMv3ForTokenClassification
 
 [[autodoc]] LayoutLMv3ForTokenClassification
-    - forward
 
-## LayoutLMv3ForQuestionAnswering
+### LayoutLMv3ForQuestionAnswering
 
 [[autodoc]] LayoutLMv3ForQuestionAnswering
-    - forward
 
-</pt>
-<tf>
-
-## TFLayoutLMv3Model
+### TFLayoutLMv3Model
 
 [[autodoc]] TFLayoutLMv3Model
-    - call
 
-## TFLayoutLMv3ForSequenceClassification
+### TFLayoutLMv3ForSequenceClassification
 
 [[autodoc]] TFLayoutLMv3ForSequenceClassification
-    - call
 
-## TFLayoutLMv3ForTokenClassification
+### TFLayoutLMv3ForTokenClassification
 
 [[autodoc]] TFLayoutLMv3ForTokenClassification
-    - call
 
-## TFLayoutLMv3ForQuestionAnswering
+### TFLayoutLMv3ForQuestionAnswering
 
 [[autodoc]] TFLayoutLMv3ForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>
