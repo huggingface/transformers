@@ -25,45 +25,45 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+## Model 
 
-Mistral was introduced in the [this blogpost](https://mistral.ai/news/announcing-mistral-7b/) by Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lélio Renard Lavaud, Lucile Saulnier, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, William El Sayed.
+Mistral is a decoder-only Transformer model that incorporates several architectural choices to enhance its performance. It utilizes Sliding Window Attention, trained with an 8k context length and a fixed cache size, offering a theoretical attention span of up to 128K tokens. Additionally, Mistral-7B employs Grouped Query Attention (GQA), which helps to speed up inference and reduce the cache size. The model also features a Byte-fallback BPE tokenizer, ensuring that characters are never mapped to out-of-vocabulary tokens, thus improving token handling and overall efficiency.
 
-The introduction of the blog post says:
+Mistral was introduced in [this blogpost](https://mistral.ai/news/announcing-mistral-7b/) 
 
-*Mistral AI team is proud to release Mistral 7B, the most powerful language model for its size to date.*
+> [!TIP]
+> Click on the Mistral models in the right sidebar for more examples of how to apply Mistral to different language tasks.
 
-Mistral-7B is the first large language model (LLM) released by [mistral.ai](https://mistral.ai/).
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
-### Architectural details
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Mistral-7B is a decoder-only Transformer with the following architectural choices:
+```python
+>>> import torch
+>>> from transformers import pipeline
 
-- Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
-- GQA (Grouped Query Attention) - allowing faster inference and lower cache size.
-- Byte-fallback BPE tokenizer - ensures that characters are never mapped to out of vocabulary tokens.
+>>> messages = [
+...     {"role": "user", "content": "What is your favourite condiment?"},
+...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
+... ]
 
-For more details refer to the [release blog post](https://mistral.ai/news/announcing-mistral-7b/).
+chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3")
+chatbot(messages)
 
-### License
+```
 
-`Mistral-7B` is released under the Apache 2.0 license.
-
-## Usage tips
-
-The Mistral team has released 3 checkpoints:
-
-- a base model, [Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1), which has been pre-trained to predict the next token on internet-scale data.
-- an instruction tuned model, [Mistral-7B-Instruct-v0.1](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1), which is the base model optimized for chat purposes using supervised fine-tuning (SFT) and direct preference optimization (DPO).
-- an improved instruction tuned model, [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), which improves upon v1.
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
 The base model can be used as follows:
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.3", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.3")
 
 >>> prompt = "My favourite condiment is"
 
@@ -78,10 +78,11 @@ The base model can be used as follows:
 The instruction tuned model can be used as follows:
 
 ```python
+import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> messages = [
 ...     {"role": "user", "content": "What is your favourite condiment?"},
@@ -95,8 +96,64 @@ The instruction tuned model can be used as follows:
 >>> tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
-
 As can be seen, the instruction-tuned model requires a [chat template](../chat_templating) to be applied to make sure the inputs are prepared in the right format.
+
+<hfoptions id="usage">
+<hfoption id="transformers-cli">
+
+```python
+echo -e "My favorite condiment is" | transformers-cli run --task text-generation --model mistralai/Mistral-7B-v0.3 
+```
+
+## Shrinking down Mistral using quantization
+
+As the Mistral model has 7 billion parameters, that would require about 14GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter),that requires only about 3.5GB of RAM.
+
+Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization.md) for other quantization methods):
+
+```python
+>>> import torch
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+>>> # specify how to quantize the model
+>>> quantization_config = BitsAndBytesConfig(
+...         load_in_4bit=True,
+...         bnb_4bit_quant_type="nf4",
+...         bnb_4bit_compute_dtype="torch.float16",
+... )
+
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+
+>>> prompt = "My favourite condiment is"
+
+>>> messages = [
+...     {"role": "user", "content": "What is your favourite condiment?"},
+...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
+... ]
+
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+
+>>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+>>> tokenizer.batch_decode(generated_ids)[0]
+"The expected output"
+```
+
+Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
+
+```py
+from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+visualizer = AttentionMaskVisualizer("mistralai/Mistral-7B-Instruct-v0.3")
+visualizer("Do you have mayonnaise recipes?")
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mistral-attn-mask.png"/>
+</div>
+
+## Notes
 
 ## Speeding up Mistral by using Flash Attention
 
@@ -143,41 +200,6 @@ The current implementation supports the sliding window attention mechanism and m
 To enable sliding window attention, just make sure to have a `flash-attn` version that is compatible with sliding window attention (`>=2.3.0`). 
 
 The Flash Attention-2 model uses also a more memory efficient cache slicing mechanism - as recommended per the official implementation of Mistral model that use rolling cache mechanism we keep the cache size fixed (`self.config.sliding_window`), support batched generation only for `padding_side="left"` and use the absolute position of the current token to compute the positional embedding.
-
-## Shrinking down Mistral using quantization
-
-As the Mistral model has 7 billion parameters, that would require about 14GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter),that requires only about 3.5GB of RAM.
-
-Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization.md) for other quantization methods):
-
-```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
->>> # specify how to quantize the model
->>> quantization_config = BitsAndBytesConfig(
-...         load_in_4bit=True,
-...         bnb_4bit_quant_type="nf4",
-...         bnb_4bit_compute_dtype="torch.float16",
-... )
-
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2", quantization_config=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2")
-
->>> prompt = "My favourite condiment is"
-
->>> messages = [
-...     {"role": "user", "content": "What is your favourite condiment?"},
-...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
-... ]
-
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
-
->>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
-"The expected output"
-```
 
 This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArthurZ) .
 The original code can be found [here](https://github.com/mistralai/mistral-src).
