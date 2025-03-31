@@ -1232,7 +1232,7 @@ class GenerationMixin:
     ) -> torch.Tensor:
         """
         Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
-        used). This is a convenient method to quicky obtain the scores of the selected tokens at generation time.
+        used). This is a convenient method to quickly obtain the scores of the selected tokens at generation time.
 
         Parameters:
             sequences (`torch.LongTensor`):
@@ -1656,11 +1656,10 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_layer_device_map_for_cache_init(self):
+    def _get_layer_device_map_for_cache_init(self) -> Optional[Dict[int, Union[str, int]]]:
         """
-        Taken from `dispatch_model` from accelerate.
-        This is needed here if we don't want to make changes in accelerate in order to save execution_device
-        For offloaded case, we need to get the execution device, not just the device where it is offloaded
+        Returns the device map for each decoder layer, to allocate the cache on the right device.
+        Inspired from `dispatch_model` in accelerate.
         """
         execution_device_map = None
 
@@ -1674,17 +1673,62 @@ class GenerationMixin:
                 for name, device in self.hf_device_map.items()
             }
 
-        num_hidden_layers = self.config.get_text_config().num_hidden_layers
+        # No `execution_device_map` -> rely on `self.device` to allocate the cache
         if execution_device_map is None:
             return None
-        elif len(execution_device_map) == 1 and "" in execution_device_map:
+
+        # Single device for all layers
+        num_hidden_layers = self.config.get_text_config().num_hidden_layers
+        if len(execution_device_map) == 1 and "" in execution_device_map:
             return dict.fromkeys(range(num_hidden_layers), execution_device_map[""])
+
+        # Multiple devices in `execution_device_map` -> we need to map decoder layers to the correct device.
         layer_device_map = {}
-        for layer in execution_device_map:
-            for idx in range(num_hidden_layers):
-                if f".{idx}." in f"{layer}.":
-                    layer_device_map[idx] = execution_device_map[layer]
+        # Case 1: The model has a `get_decoder` method, we can use it to find the decoder name.
+        if hasattr(self, "get_decoder"):
+            decoder_name = None
+            for name, module in self.named_modules():
+                if module is self.get_decoder():
+                    decoder_name = name
                     break
+            if decoder_name is None:
+                raise RuntimeError(
+                    "`model.get_decoder()` is not returning a named module of the model. This is unexpected, please "
+                    "open an issue on GitHub."
+                )
+
+            decoder_mapped_modules = [
+                module_name for module_name in execution_device_map.keys() if decoder_name in module_name
+            ]
+            # The decoder name may be present in `execution_device_map` in two forms:
+            # a) each layer has a device mapping
+            if len(decoder_mapped_modules) >= num_hidden_layers:
+                for idx in range(num_hidden_layers):
+                    for module_name in decoder_mapped_modules:
+                        if f".{idx}." in f"{module_name}.":
+                            layer_device_map[idx] = execution_device_map[module_name]
+                            break
+
+            # b) the whole module is mapped to a single device. If the decoder name is NOT present in the device map,
+            # then the mapping is done in a parent module
+            else:
+                while True:
+                    if decoder_name in execution_device_map:
+                        layer_device_map = dict.fromkeys(range(num_hidden_layers), execution_device_map[decoder_name])
+                        break
+                    elif "." in decoder_name:
+                        decoder_name = decoder_name.rsplit(".", 1)[0]  # gets the name of the parent module
+                    else:
+                        raise RuntimeError(f"Decoder name {decoder_name} not found in execution device map")
+
+        # Case 2: Legacy code path: assume the decoder layers are named as `(...).X` (X being the layer index)
+        else:
+            for layer in execution_device_map:
+                for idx in range(num_hidden_layers):
+                    if f".{idx}." in f"{layer}.":
+                        layer_device_map[idx] = execution_device_map[layer]
+                        break
+
         for idx in range(num_hidden_layers):
             if idx not in layer_device_map:
                 raise RuntimeError(f"layer {idx} has not been mapped to a device.")
@@ -3887,9 +3931,14 @@ class GenerationMixin:
         beam_scores = self._flatten_beam_dim(beam_scores[:, :num_return_sequences])
         beam_indices = self._flatten_beam_dim(beam_indices[:, :num_return_sequences, :])
 
-        # Crop the static-shaped tensors to the actual size
-        sequences = sequences[:, :cur_len]
-        beam_indices = beam_indices[:, : cur_len - decoder_prompt_len]
+        # Crop the static-shaped tensors to the actual size.
+        # `beam_indices` is initialized with -1s, and is updated with the beam index of the generated token at each
+        # step. We can use it to detect the generated length, which may be != `cur_len`  (e.g. selected beam is from a
+        # previous decoding iteration)
+        max_generated_length = ((beam_indices + 1).bool()).sum(dim=1).max()
+        output_length = decoder_prompt_len + max_generated_length
+        sequences = sequences[:, :output_length]
+        beam_indices = beam_indices[:, :max_generated_length]
 
         if return_dict_in_generate:
             if not output_scores:
