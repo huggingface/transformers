@@ -27,7 +27,13 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -1280,6 +1286,61 @@ SAM_INPUTS_DOCSTRING = r"""
 """
 
 
+SAM_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SamProcessor`]. See [`SamProcessor.__call__`] for
+            details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """The vision model from Sam without any head or projection on top.""",
+    SAM_START_DOCSTRING,
+)
+class SamVisionModel(SamPreTrainedModel):
+    config_class = SamVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: SamVisionConfig):
+        super().__init__(config)
+        self.vision_encoder = SamVisionEncoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_encoder.patch_embed
+
+    @add_start_docstrings_to_model_forward(SAM_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SamVisionEncoderOutput, config_class=SamVisionConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SamVisionEncoderOutput]:
+        r"""
+        Returns:
+
+        """
+        return self.vision_encoder(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
 @add_start_docstrings(
     "Segment Anything Model (SAM) for generating segmentation masks, given an input image and ",
     " optional 2D location and bounding boxes.",
@@ -1522,4 +1583,4 @@ class SamModel(SamPreTrainedModel):
         )
 
 
-__all__ = ["SamModel", "SamPreTrainedModel"]
+__all__ = ["SamVisionModel", "SamModel", "SamPreTrainedModel"]

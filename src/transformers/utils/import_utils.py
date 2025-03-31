@@ -675,31 +675,6 @@ def is_g2p_en_available():
     return _g2p_en_available
 
 
-@lru_cache()
-def is_torch_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    warnings.warn(
-        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
-        "Please use the `is_torch_xla_available` instead.",
-        FutureWarning,
-    )
-
-    if not _torch_available:
-        return False
-    if importlib.util.find_spec("torch_xla") is not None:
-        if check_device:
-            # We need to check if `xla_device` can be found, will raise a RuntimeError if not
-            try:
-                import torch_xla.core.xla_model as xm
-
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-        return True
-    return False
-
-
 @lru_cache
 def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     """

@@ -1037,7 +1037,6 @@ _import_structure = {
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
-        "is_torch_tpu_available",
         "is_torchvision_available",
         "is_torch_xla_available",
         "is_torch_xpu_available",
@@ -3590,6 +3589,7 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+            "SamVisionModel",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -4758,6 +4758,7 @@ else:
         [
             "TFSamModel",
             "TFSamPreTrainedModel",
+            "TFSamVisionModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -6341,7 +6342,6 @@ if TYPE_CHECKING:
         is_torch_musa_available,
         is_torch_neuroncore_available,
         is_torch_npu_available,
-        is_torch_tpu_available,
         is_torch_xla_available,
         is_torch_xpu_available,
         is_torchvision_available,
@@ -8433,6 +8433,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+            SamVisionModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
@@ -9374,6 +9375,7 @@ if TYPE_CHECKING:
         from .models.sam import (
             TFSamModel,
             TFSamPreTrainedModel,
+            TFSamVisionModel,
         )
         from .models.segformer import (
             TFSegformerDecodeHead,
