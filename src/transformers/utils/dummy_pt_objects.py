@@ -8328,10 +8328,11 @@ class Qwen2VLPreTrainedModel(metaclass=DummyObject):
 
 
 class Qwen2VLTextModel(metaclass=DummyObject):
-  _backends = ["torch"]
+    _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
 
 class Qwen3ForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
