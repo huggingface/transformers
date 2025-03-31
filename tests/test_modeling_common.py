@@ -4231,7 +4231,7 @@ class ModelTesterMixin:
         loss = model(**inputs).loss
         loss.backward()
 
-        params = {name: param.grad.clone().detach().cpu() for name, param in model.named_parameters()}
+        params = {name: param.grad.detach().to(device="cpu", copy=True) for name, param in model.named_parameters()}
         model.zero_grad()
         del loss
 
