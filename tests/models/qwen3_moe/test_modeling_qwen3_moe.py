@@ -60,7 +60,7 @@ class Qwen3MoeModelTester:
         use_token_type_ids=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=5,
         max_window_layers=3,
         use_sliding_window=True,
@@ -385,7 +385,6 @@ class Qwen3MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     def test_Qwen3Moe_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -444,9 +443,9 @@ class Qwen3MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="Qwen3Moe uses GQA on all models so the KV cache is a non standard format")
+    # Ignore copy
     def test_past_key_values_format(self):
-        pass
+        super().test_past_key_values_format()
 
     @require_flash_attn
     @require_torch_gpu
@@ -507,7 +506,6 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([7.5938, 2.6094, 4.0312, 4.0938, 2.5156, 2.7812, 2.9688, 1.5547, 1.3984, 2.2344, 3.0156, 3.1562, 1.1953, 3.2500, 1.0938, 8.4375, 9.5625, 9.0625, 7.5625, 7.5625, 7.9062, 7.2188, 7.0312, 6.9375, 8.0625, 1.7266, 0.9141, 3.7969, 5.3438, 3.9844])  # fmt: skip
-        print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
         del model
