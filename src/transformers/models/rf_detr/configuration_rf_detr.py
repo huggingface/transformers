@@ -161,24 +161,27 @@ class RFDetrConfig(PretrainedConfig):
         encoder_ffn_dim=1024,
         encoder_attention_heads=8,
         encoder_layerdrop=0.0,
+        encoder_n_points=4,
         # RFDetrDecoder
-        decoder_layers=6,
-        decoder_ffn_dim=1024,
-        decoder_attention_heads=8,
-        activation_function="relu",
+        decoder_layers=3,
         d_model=256,
-        dropout=0.1,
         attention_dropout=0.0,
+        dropout=0.1,
+        activation_function="relu",
         activation_dropout=0.0,
+        decoder_self_attention_heads=8,
+        decoder_cross_attention_heads=16,
+        decoder_n_points=4,
+        decoder_ffn_dim=2048,
+        # LWDetr
+        layer_norm: bool = True,
+        ##
         auxiliary_loss=False,
         position_embedding_type="sine",
         dilation=False,
-        num_feature_levels=4,
-        encoder_n_points=4,
-        decoder_n_points=4,
-        two_stage=False,
+        two_stage=True,
         two_stage_num_proposals=300,
-        with_box_refine=False,
+        with_box_refine=True,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -191,15 +194,18 @@ class RFDetrConfig(PretrainedConfig):
         disable_custom_kernels=False,
         out_feature_indexes: List[int] = [2, 5, 8, 11],
         scale_factors: List[float] = [1.0],
-        layer_norm: bool = False,
         projector_in_channels: Optional[List[int]] = None,
         projector_num_blocks: int = 3,  # TODO rename
         projector_survival_prob: float = 1.0,
         projector_force_drop_last_n_features: int = 0,
         projector_activation_function: str = "silu",
-        hidden_expansion: float = 0.5,
+        csp_hidden_expansion: float = 0.5,
+        bottleneck_hidden_expansion: float = 0.5,
         batch_norm_eps: float = 1e-5,
+        bbox_reparam: bool = True,
         is_encoder_decoder=True,
+        num_groups=13,
+        light_reference_point_refinement: bool = True,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -232,7 +238,8 @@ class RFDetrConfig(PretrainedConfig):
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_self_attention_heads = decoder_self_attention_heads
+        self.decoder_cross_attention_heads = decoder_cross_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
@@ -247,7 +254,6 @@ class RFDetrConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
         self.dilation = dilation
         # deformable attributes
-        self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
         self.two_stage = two_stage
@@ -275,6 +281,7 @@ class RFDetrConfig(PretrainedConfig):
             "scale_factors must be a consecutive list subset of [2.0, 1.0, 0.5, 0.25]"
         )
 
+        self.num_feature_levels = len(scale_factors)
         self.layer_norm = layer_norm
         self.projector_in_channels = (
             projector_in_channels
@@ -288,9 +295,13 @@ class RFDetrConfig(PretrainedConfig):
         self.projector_survival_prob = projector_survival_prob
         self.projector_force_drop_last_n_features = projector_force_drop_last_n_features
         self.projector_activation_function = projector_activation_function
-        self.hidden_expansion = hidden_expansion
+        self.csp_hidden_expansion = csp_hidden_expansion
+        self.bottleneck_expansion = bottleneck_hidden_expansion
         self.batch_norm_eps = batch_norm_eps
         self.encoder_hidden_dim = backbone_config.hidden_size
+        self.bbox_reparam = bbox_reparam
+        self.num_groups = num_groups
+        self.light_reference_point_refinement = light_reference_point_refinement
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

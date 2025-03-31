@@ -1,6 +1,7 @@
 from typing import Optional, Tuple, Union
 
 import torch
+from torch import nn
 
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ..dinov2_with_registers.configuration_dinov2_with_registers import Dinov2WithRegistersConfig
@@ -24,6 +25,14 @@ class RFDetrDinov2WithRegistersConfig(Dinov2WithRegistersConfig):
 
 
 class RFDetrDinov2WithRegistersEmbeddings(Dinov2WithRegistersEmbeddings):
+    def __init__(self, config: RFDetrDinov2WithRegistersConfig):
+        super(Dinov2WithRegistersEmbeddings).__init__(config)
+        self.register_tokens = (
+            nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+            if config.num_register_tokens > 0
+            else None
+        )
+
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype

@@ -74,7 +74,11 @@ class RFDetrDinov2WithRegistersEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+        self.register_tokens = (
+            nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+            if config.num_register_tokens > 0
+            else None
+        )
         self.patch_embeddings = RFDetrDinov2WithRegistersPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
@@ -723,19 +727,17 @@ class RFDetrDinov2WithRegistersBackbone(RFDetrDinov2WithRegistersPreTrainedModel
                     if self.config.num_windows > 1:
                         # undo windowing
                         num_windows_squared = self.config.num_windows**2
-                        batch_size, height_width, channels = hidden_state.shape
+                        B, HW, C = hidden_state.shape
                         num_h_patches_per_window = num_h_patches // self.config.num_windows
                         num_w_patches_per_window = num_w_patches // self.config.num_windows
-                        hidden_state = hidden_state.reshape(
-                            batch_size // num_windows_squared, num_windows_squared * height_width, channels
-                        )
+                        hidden_state = hidden_state.reshape(B // num_windows_squared, num_windows_squared * HW, C)
                         hidden_state = hidden_state.view(
-                            batch_size // num_windows_squared,
+                            B // num_windows_squared,
                             self.config.num_windows,
                             self.config.num_windows,
                             num_h_patches_per_window,
                             num_w_patches_per_window,
-                            channels,
+                            C,
                         )
                         hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
 
@@ -758,4 +760,4 @@ class RFDetrDinov2WithRegistersBackbone(RFDetrDinov2WithRegistersPreTrainedModel
         )
 
 
-__all__ = ["RFDetrDinov2WithRegistersBackbone", "RFDetrDinov2WithRegistersPreTrainedModel"]
+__all__ = ["RFDetrDinov2WithRegistersBackbone"]
