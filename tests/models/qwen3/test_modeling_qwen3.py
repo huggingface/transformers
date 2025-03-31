@@ -424,6 +424,10 @@ class Qwen3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_save_load_fast_init_from_base(self):
         pass
 
+    # Ignore copy
+    def test_past_key_values_format(self):
+        super().test_past_key_values_format()
+
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
