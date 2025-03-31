@@ -115,35 +115,9 @@ class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: Optional[Union[str, TensorType]]=None,
         **kwargs,
     ):
-        """
-        Preprocess a video or batch of videos.
-
-        Args:
-            videos (`VideoInput`):
-                Video or batch of videos to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`List[Dict]`, *optional*):
-                Optional list of dictionaries containing additional information about vision inputs.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the video.
-            interpolation (`InterpolationMode`):
-                Resampling filter to use if resizing the video.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the video.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Scale factor to use if rescaling the video.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the video.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Mean to use if normalizing the video. Can be a float or a list of floats corresponding to the number of channels in the video.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Standard deviation to use if normalizing the video. Can be a float or a list of floats corresponding to the number of channels in the video.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the video to RGB.
-            return_tensors
-        """
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}

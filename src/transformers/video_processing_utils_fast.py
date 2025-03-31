@@ -291,7 +291,7 @@ class BaseVideoProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: Optional[Union[str, TensorType]]=None,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

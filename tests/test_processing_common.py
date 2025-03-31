@@ -510,7 +510,7 @@ class ProcessorTesterMixin:
         video_input = self.prepare_video_inputs()
 
         inputs = processor(text=input_str, videos=video_input, return_tensors="pt")
-        self.assertLessEqual(inputs[self.videos_input_name][0][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs_video(self):
         if "video_processor" not in self.processor_class.attributes:
@@ -545,7 +545,7 @@ class ProcessorTesterMixin:
         video_input = self.prepare_video_inputs()
 
         inputs = processor(text=input_str, videos=video_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
-        self.assertLessEqual(inputs[self.videos_input_name][0][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_unstructured_kwargs_video(self):
         if "video_processor" not in self.processor_class.attributes:
@@ -567,7 +567,7 @@ class ProcessorTesterMixin:
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.videos_input_name][0][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_unstructured_kwargs_batched_video(self):
@@ -590,7 +590,7 @@ class ProcessorTesterMixin:
             max_length=76,
         )
 
-        self.assertLessEqual(inputs[self.videos_input_name][0][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < 76
@@ -636,7 +636,7 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, videos=video_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        self.assertLessEqual(inputs[self.videos_input_name][0][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_structured_kwargs_nested_from_dict_video(self):
@@ -657,7 +657,7 @@ class ProcessorTesterMixin:
         }
 
         inputs = processor(text=input_str, videos=video_input, **all_kwargs)
-        self.assertLessEqual(inputs[self.videos_input_name][0][0][0].mean(), 0)
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
