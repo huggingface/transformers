@@ -612,15 +612,10 @@ def is_torch_tf32_available():
 
     import torch
 
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    if not torch.cuda.is_available():
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
-    if int(torch.version.cuda.split(".")[0]) < 11:
-        return False
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
-        return False
-
     return True
 
 
