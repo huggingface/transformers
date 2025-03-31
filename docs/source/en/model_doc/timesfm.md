@@ -34,6 +34,44 @@ This model was contributed by [kashif](https://huggingface.co/kashif).
 The original code can be found [here](https://github.com/google-research/timesfm).
 
 
+To use the model:
+
+```python
+import torch
+from transformers import TimesFmModelForPrediction
+
+
+model = TimesFmModelForPrediction.from_pretrained(
+    "google/timesfm-2.0-500m-pytorch",
+    torch_dtype=torch.bfloat16,
+    attn_implementation="sdpa",
+).to("cuda" if torch.cuda.is_available() else "cpu")
+
+
+ # Create dummy inputs
+forecast_input = [
+    np.sin(np.linspace(0, 20, 100)),
+    np.sin(np.linspace(0, 20, 200)),
+    np.sin(np.linspace(0, 20, 400)),
+]
+frequency_input = [0, 1, 2]
+
+# Convert inputs to sequence of tensors
+forecast_input_tensor = [
+    torch.tensor(ts, dtype=torch.bfloat16).to("cuda" if torch.cuda.is_available() else "cpu")
+    for ts in forecast_input
+]
+frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long).to(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
+
+# Get predictions from the pre-trained model
+with torch.no_grad():
+    outputs = model(past_values=forecast_input_tensor, freq=frequency_input_tensor, return_dict=True)
+    point_forecast_conv = outputs.mean_predictions.float().cpu().numpy()
+    quantile_forecast_conv = outputs.full_predictions.float().cpu().numpy()
+```
+
 ## TimesFmConfig
 
 [[autodoc]] TimesFmConfig
