@@ -69,16 +69,37 @@ class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     "Constructs a fast SAM image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the input to a certain size.
+        size (`Dict[str, int]`, *optional*, defaults to `{"longest_edge": 1024}`):
+            Size of the output image after resizing. Resizes the longest edge of the image to match
+            `size["longest_edge"]` while maintaining the aspect ratio.
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            Resampling filter to use when resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the input by a certain factor.
+        rescale_factor (`float`, *optional*, defaults to `1/255`):
+            Rescaling factor to apply to the input.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the input.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+            Mean values to normalize the input by.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+            Standard deviation values to normalize the input by.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the input to RGB format.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the input.
         mask_size (`Dict[str, int]`, *optional*, defaults to `{"longest_edge": 256}`):
             Size of the output segmentation map after resizing. Resizes the longest edge of the image to match
-            `size["longest_edge"]` while maintaining the aspect ratio. Can be overridden by the `mask_size` parameter
-            in the `preprocess` method.
+            `size["longest_edge"]` while maintaining the aspect ratio.
         mask_pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Size of the output segmentation map after padding. Can be overridden by the `mask_pad_size` parameter in
-            the `preprocess` method.
+            Size of the output segmentation map after padding.
         pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
-            Size of the output image after padding. Can be overridden by the `pad_size` parameter in the `preprocess`
-            method.
+            Size of the output image after padding.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional keyword arguments passed along to the parent class.
     """,
 )
 class SamImageProcessorFast(BaseImageProcessorFast):
@@ -430,17 +451,26 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
         Args:
-            image: Input original image tensor
-            target_size: Target size of the resized image
-            crop_n_layers: Number of crop layers to generate
-            overlap_ratio: Degree of overlap between crops
-            points_per_crop: Number of points to sample per crop
-            crop_n_points_downscale_factor: Factor to reduce points in deeper layers
-            device: Device to use for computation
-            return_tensors: Output format, only "pt" is supported
+            image (`torch.Tensor`):
+                Input original image tensor
+            target_size (`int`):
+                Target size of the resized image
+            crop_n_layers (`int`, *optional*, defaults to 0):
+                Number of crop layers to generate
+            overlap_ratio (`float`, *optional*, defaults to 512/1500):
+                Degree of overlap between crops
+            points_per_crop (`int`, *optional*, defaults to 32):
+                Number of points to sample per crop
+            crop_n_points_downscale_factor (`int`, *optional*, defaults to 1):
+                Factor to reduce points in deeper layers
+            device (`torch.device`, *optional*):
+                Device to use for computation
+            return_tensors (`str`, *optional*, defaults to "pt"):
+                Output format, only "pt" is supported
 
         Returns:
-            Tuple containing crop boxes, points per crop, cropped images, and input labels
+            `Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor], torch.Tensor]`:
+                Tuple containing crop boxes, points per crop, cropped images, and input labels
         """
         requires_backends(self, ["torch"])
         if device is None:
@@ -505,8 +535,6 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         points_per_crop = torch.stack(total_points_per_crop, dim=0).unsqueeze(0)
 
         input_labels = torch.ones(points_per_crop.shape[:-1], dtype=torch.int64, device=device)
-
-        print("sushmanth is worst", points_per_crop.shape)
 
         return crop_boxes_tensor, points_per_crop, cropped_images, input_labels
 
