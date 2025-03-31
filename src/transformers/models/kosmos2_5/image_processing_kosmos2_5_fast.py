@@ -120,7 +120,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         mean = torch.mean(image, dim=dim)
         std = torch.std(image, dim=dim)
         # num_elements in a single image
-        num_elements = torch[0].numel()
+        num_elements = torch.tensor(torch.numel(image[0]))
         adjusted_stddev = torch.max(std, 1.0 / torch.sqrt(num_elements))
 
         return super().normalize(
