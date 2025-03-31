@@ -123,13 +123,6 @@ def create_image_processor(save_dir):
     image_processor = Ovis2ImageProcessor(
         crop_to_patches=True,
         size={"height": 448, "width": 448},
-        # do_rescale=True,
-        # rescale_factor=1 / 255,
-        # do_normalize=True,
-        # do_center_crop=True,
-        # image_mean=[0.485, 0.456, 0.406],
-        # image_std=[0.229, 0.224, 0.225],
-        # do_convert_rgb=True,
     )
 
     image_processor.save_pretrained(save_dir)
@@ -148,7 +141,7 @@ def extract_vision_config_from_original(orig_config):
         dict: Cleaned vision configuration dictionary
     """
     visual_tokenizer_config = orig_config.visual_tokenizer_config.to_dict()
-    backbone_config = visual_tokenizer_config.pop("backbone_config")
+    # backbone_config = visual_tokenizer_config.pop("backbone_config")
 
     # Copy required fields from backbone config
     visual_tokenizer_config["hidden_size"] = orig_config.visual_tokenizer_config.backbone_config.hidden_size

@@ -13,9 +13,9 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, logging
+from ...utils import logging
 from ..auto import AutoModelForCausalLM
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 

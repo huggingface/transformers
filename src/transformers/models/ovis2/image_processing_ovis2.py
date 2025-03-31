@@ -103,13 +103,7 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-def compute_patch_covering_area(
-    left: int, 
-    upper: int, 
-    right: int, 
-    lower: int,
-    side: int
-) -> float:
+def compute_patch_covering_area(left: int, upper: int, right: int, lower: int, side: int) -> float:
     w = right - left
     h = lower - upper
     w, h = max(w, h), min(w, h)
@@ -151,8 +145,7 @@ def get_min_tile_covering_grid(
     for tile_grid in candidate_tile_grids:
         tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
         tile_covering_ratio = (
-            sum([compute_patch_covering_area(*region, target_patch_size) for region in tile_regions])
-            / image_area
+            sum([compute_patch_covering_area(*region, target_patch_size) for region in tile_regions]) / image_area
         )
 
         evaluated_grids.append((tile_grid, tile_covering_ratio))
@@ -209,6 +202,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        use_covering_area_grid (`bool`, *optional*, defaults to `True`): <fill_docstring>
     """
 
     model_input_names = ["pixel_values"]
@@ -469,7 +463,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         use_covering_area_grid: bool = True,
         patch_size: Union[Tuple, int, dict] = None,
         data_format: ChannelDimension = None,
-        covering_threshold: float = 0.9,    
+        covering_threshold: float = 0.9,
     ):
         """
         Crop the image to patches and return a list of cropped images.

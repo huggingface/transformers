@@ -6,27 +6,34 @@ class Ovis2VisionConfig(PretrainedConfig):
     r"""
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 2816):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05): <fill_docstring>
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        projection_dropout (`float`, *optional*, defaults to 0.0): <fill_docstring>
+        qkv_bias (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        use_bias (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        vocab_size (`<fill_type>`, *optional*, defaults to 16384): <fill_docstring>
+        hidden_stride (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        vision_feature_select_strategy (`<fill_type>`, *optional*, defaults to `"full"`): <fill_docstring>
+        num_visual_indicator_tokens (`<fill_type>`, *optional*, defaults to 5): <fill_docstring>
+        tokenize_function (`<fill_type>`, *optional*, defaults to `"softmax"`): <fill_docstring>
 
     Example:
 

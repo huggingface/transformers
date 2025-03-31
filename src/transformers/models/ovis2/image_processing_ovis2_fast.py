@@ -14,25 +14,23 @@
 # limitations under the License.
 
 
-
 from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    DefaultFastImageProcessorKwargs,
     BaseImageProcessorFast,
-    reorder_images,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
+    ImageInput,
     PILImageResampling,
     SizeDict,
-    PILImageResampling,
-    ImageInput,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -42,11 +40,8 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+from .image_processing_ovis2 import get_min_tile_covering_grid, get_optimal_tiled_canvas
 
-from .image_processing_ovis2 import (
-    get_optimal_tiled_canvas, 
-    get_min_tile_covering_grid
-)
 
 if is_torch_available():
     import torch
@@ -149,10 +144,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         else:
             # find the closest aspect ratio to the target
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (original_height, original_width), 
-                (patch_size_height, patch_size_width), 
-                min_patches, 
-                max_patches
+                (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
             )
 
         # calculate the target width and height
@@ -180,11 +172,9 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
             processed_images.append(patch_image)
 
         if len(processed_images) != 1:
-            thumbnail_img = self.resize(
-                images, patch_size, interpolation=interpolation
-            )
+            thumbnail_img = self.resize(images, patch_size, interpolation=interpolation)
             processed_images.insert(0, thumbnail_img)
-        
+
         processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
         grid = [[num_rows, num_columns] for _ in range(num_image)]
 
@@ -254,8 +244,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(
-            data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors
-        )
+        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+
 
 __all__ = ["Ovis2ImageProcessorFast"]

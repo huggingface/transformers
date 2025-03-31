@@ -14,6 +14,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
 from ..auto import AutoModelForCausalLM
+from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
 logger = logging.get_logger(__name__)
