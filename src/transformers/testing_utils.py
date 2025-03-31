@@ -138,7 +138,6 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
@@ -1070,14 +1069,6 @@ def require_torch_bf16_gpu(test_case):
     return unittest.skipUnless(
         is_torch_bf16_gpu_available(),
         "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
-    )(test_case)
-
-
-def require_torch_bf16_cpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using CPU."""
-    return unittest.skipUnless(
-        is_torch_bf16_cpu_available(),
-        "test requires torch>=1.10, using CPU",
     )(test_case)
 
 

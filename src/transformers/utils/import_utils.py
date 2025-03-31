@@ -221,6 +221,10 @@ _torch_version = "N/A"
 _torch_available = False
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
     _torch_available, _torch_version = _is_package_available("torch", return_version=True)
+    if _torch_available:
+        _torch_available = version.parse(_torch_version) >= version.parse("2.1.0")
+        if not _torch_available:
+            logger.warning(f"Disabling PyTorch because PyTorch >= 2.1 is required but found {_torch_version}")
 else:
     logger.info("Disabling PyTorch because USE_TF is set")
     _torch_available = False
@@ -307,15 +311,6 @@ if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
         else:
             _flax_available = _jax_available = False
             _jax_version = _flax_version = "N/A"
-
-
-_torch_fx_available = False
-if _torch_available:
-    torch_version = version.parse(_torch_version)
-    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
-        TORCH_FX_REQUIRED_VERSION.major,
-        TORCH_FX_REQUIRED_VERSION.minor,
-    )
 
 
 _torch_xla_available = False
@@ -521,19 +516,8 @@ def is_torch_bf16_gpu_available():
     return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 
 
-def is_torch_bf16_cpu_available():
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    try:
-        # multiple levels of AttributeError depending on the pytorch version so do them all in one check
-        _ = torch.cpu.amp.autocast
-    except AttributeError:
-        return False
-
-    return True
+def is_torch_bf16_cpu_available() -> bool:
+    return is_torch_available()
 
 
 def is_torch_bf16_available():
@@ -609,20 +593,15 @@ def is_torch_tf32_available():
 
     import torch
 
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    if not torch.cuda.is_available():
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
-    if int(torch.version.cuda.split(".")[0]) < 11:
-        return False
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
-        return False
-
     return True
 
 
 def is_torch_fx_available():
-    return _torch_fx_available
+    return is_torch_available()
 
 
 def is_peft_available():
@@ -827,21 +806,11 @@ def is_habana_gaudi1():
 
 
 def is_torchdynamo_available():
-    if not is_torch_available():
-        return False
-
-    return True
+    return is_torch_available()
 
 
 def is_torch_compile_available():
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    # We don't do any version check here to support nighlies marked as 1.14. Ultimately needs to check version against
-    # 2.0 but let's do it later.
-    return hasattr(torch, "compile")
+    return is_torch_available()
 
 
 def is_torchdynamo_compiling():
