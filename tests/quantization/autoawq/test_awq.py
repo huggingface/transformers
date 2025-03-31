@@ -41,7 +41,6 @@ if is_accelerate_available():
 
 @require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
-    @require_torch_gpu
     def test_wrong_backend(self):
         """
         Simple test that checks if a user passes a wrong backend an error is raised
@@ -59,13 +58,15 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        # Only cuda device can run this function
+        # Only cuda and xpu devices can run this function
         support_llm_awq = False
         if torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if major >= 8:
                 support_llm_awq = True
+        elif torch.xpu.is_available():
+            support_llm_awq = True
 
         if support_llm_awq:
             # LLMAWQ should work on an A100
