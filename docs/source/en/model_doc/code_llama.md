@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # CodeLlama
 
-[Code Llama](https://huggingface.co/papers/2308.12950) is a specialized family of large language models based on [Llama 2](./llama2) for coding tasks.  It comes in different flavors - general code, Python-specific, and instruction-following variant - all available in 7B, 13B, 34B, and 70B parameters. Code Llama models can generate, explain, and even fill in missing parts of your code (called "infilling"). It can also handle very long contexts with stable generation up to 100k tokens even though it was trained on sequences of 16K tokens.
+[Code Llama](https://huggingface.co/papers/2308.12950) is a specialized family of large language models based on [Llama 2](./llama2) for coding tasks.  It comes in different flavors - general code, Python-specific, and instruction-following variant - all available in 7B, 13B, 34B, and 70B parameters. Code Llama models can generate, explain, and even fill in missing parts of your code (called "infilling"). It can also handle very long contexts with stable generation up to 100k tokens, even though it was trained on sequences of 16K tokens.
 
 You can find all the original Code Llama checkpoints under the [Code Llama](https://huggingface.co/collections/meta-llama/code-llama-family-661da32d0a9d678b6f55b933) collection.
 
@@ -44,14 +44,14 @@ pipe = pipeline(
     "text-generation",
     model="meta-llama/CodeLlama-7b-hf",
     torch_dtype=torch.float16,
-    device_map="auto"
+    device_map=0
 )
 
 # basic code generation
 result = pipe("# Function to calculate the factorial of a number\ndef factorial(n):", max_new_tokens=256)
 print(result[0]['generated_text'])
 
-# Code infilling example
+# infilling
 infill_result = pipe("def remove_non_ascii(s: str) -> str:\n    \"\"\" <FILL_ME>\n    return result", max_new_tokens=200)
 print(infill_result[0]['generated_text'])
 ```
@@ -61,10 +61,9 @@ print(infill_result[0]['generated_text'])
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, CodeLlamaTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Load tokenizer and model
-tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/CodeLlama-7b-hf",
     torch_dtype=torch.float16,
@@ -72,9 +71,9 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="sdpa"
 )
 
-# Generate code with a prompt
+# basic code generation
 prompt = "# Function to calculate the factorial of a number\ndef factorial(n):"
-input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
+input_ids = tokenizer(prompt, return_tensors="pt").to("cuda")
 
 output = model.generate(
     **input_ids, 
@@ -83,7 +82,7 @@ output = model.generate(
 )
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
-# Infilling example
+# infilling
 infill_prompt = "def remove_non_ascii(s: str) -> str:\n    \"\"\" <FILL_ME>\n    return result"
 input_ids = tokenizer(infill_prompt, return_tensors="pt").to(model.device)
 
@@ -109,8 +108,9 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 ```py
 # pip install bitsandbytes
 import torch
-from transformers import AutoModelForCausalLM, CodeLlamaTokenizer
+from transformers import AutoModelForCausalLM, CodeLlamaTokenizer, BitsAndBytesConfig
 
+bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16,...)
 tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-34b-hf")
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/CodeLlama-34b-hf",
@@ -123,7 +123,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 prompt = "# Write a Python function to check if a string is a palindrome\ndef is_palindrome(s):"
-input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
+input_ids = tokenizer(prompt, return_tensors="pt").to("cuda")
 
 output = model.generate(**input_ids, max_new_tokens=200, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -156,17 +156,11 @@ visualizer("""def binary_search(arr, target):
 
 ## Notes
 
-- Infilling is only available in the 7B and 13B base models—not in the Python, Instruct, 34B, or 70B models
-- Code Llama family models were trained using `bfloat16`, but the original inference uses `float16`. Here's what you should know about different precisions:
-
-  * `float32`: PyTorch convention loads models in `float32` by default, regardless of the storage `dtype`. To use the original storage dtype, specify `torch_dtype="auto"`.
-  * `bfloat16`: Code Llama was trained with this precision, so we recommend using it for further training or fine-tuning.
-  * `float16`: Recommended for inference as it's usually faster than `bfloat16`, and evaluation metrics show no discernible degradation with respect to `bfloat16`. 
-
+- Infilling is only available in the 7B and 13B base models, and not in the Python, Instruct, 34B, or 70B models.
+- Use the `<FILL_ME>` token where you want your input to be filled. The tokenizer splits this token to create a formatted input string that follows the [original training pattern](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402). This is more robust than preparing the pattern yourself.
+- Use `bfloat16` for further training or fine-tuning and `float16` for inference.
 - The BOS character is not used for infilling when encoding the prefix or suffix, but only at the beginning of each prompt.
-- Code Llama shares its architecture with the Llama2 family. For a full API reference, see the [Llama2 documentation](https://www.llama.com/llama2/).
-- The LLaMA tokenizer is a BPE model based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string.
-
+- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, “Banana”), the tokenizer doesn’t prepend the prefix space to the string.
 
 ## CodeLlamaTokenizer
 
