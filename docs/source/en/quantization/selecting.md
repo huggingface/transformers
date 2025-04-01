@@ -22,6 +22,16 @@ For a comprehensive overview of all supported methods and their features, refer 
 
 ## Inference
 
+Consider the quantization methods below for inference.
+
+| quantization method | use case |
+|---|---|
+| bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA GPUs |
+| compressed-tensors | loading specific quantized formats (FP8, Sparse) |
+| GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
+| HQQ | fast on the fly quantization without calibration |
+| torchao | flexibility and fast inference with torch.compile |
+
 **TLDR (Inference):**
 
 *   For ease of use and QLoRA fine-tuning on NVIDIA GPUs: **bitsandbytes**
