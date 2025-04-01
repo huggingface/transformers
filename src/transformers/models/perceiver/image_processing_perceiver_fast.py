@@ -17,20 +17,14 @@
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images, ChannelDimension
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN, 
-    IMAGENET_DEFAULT_STD, 
-    PILImageResampling, 
-    SizeDict, 
-    get_image_size
-)
+from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict, get_image_size
 from ...utils import (
     TensorType,
-    add_start_docstrings, 
-    is_torch_available, 
-    is_torchvision_available, 
-    is_torchvision_v2_available
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
 )
 
 
