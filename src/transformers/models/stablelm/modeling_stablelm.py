@@ -667,7 +667,7 @@ class StableLmPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.)
+            module.weight.data.fill_(1.0)
             module.bias.data.zero_()
 
 
