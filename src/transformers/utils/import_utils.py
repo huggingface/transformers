@@ -564,7 +564,7 @@ def is_torch_fp16_available_on_device(device):
     import torch
 
     try:
-        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        x = torch.zeros(2, 2, dtype=torch.float16, device=device)
         _ = x @ x
 
         # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many

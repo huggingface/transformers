@@ -208,7 +208,6 @@ class ViTMAEEmbeddings(nn.Module):
         )
         self.patch_size = config.patch_size
         self.config = config
-        self.initialize_weights()
 
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
@@ -660,6 +659,11 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ViTMAEEmbeddings):
+            module.initialize_weights()
+        elif isinstance(module, ViTMAEDecoder):
+            module.mask_token.data.zero_()
+            module.decoder_pos_embed.data.zero_()
 
 
 VIT_MAE_START_DOCSTRING = r"""
