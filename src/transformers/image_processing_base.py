@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import json
 import os
 import warnings
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
 import requests
@@ -98,7 +97,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls: Type[ImageProcessorType],
+        cls: type[ImageProcessorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -274,7 +273,7 @@ class ImageProcessingMixin(PushToHubMixin):
     @classmethod
     def get_image_processor_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         image processor of type [`~image_processor_utils.ImageProcessingMixin`] using `from_dict`.
@@ -351,13 +350,13 @@ class ImageProcessingMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                 )
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -366,12 +365,12 @@ class ImageProcessingMixin(PushToHubMixin):
 
         try:
             # Load image_processor dict
-            with open(resolved_image_processor_file, "r", encoding="utf-8") as reader:
+            with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
 
         except json.JSONDecodeError:
-            raise EnvironmentError(
+            raise OSError(
                 f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
             )
 
@@ -393,7 +392,7 @@ class ImageProcessingMixin(PushToHubMixin):
         return image_processor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Instantiates a type of [`~image_processing_utils.ImageProcessingMixin`] from a Python dictionary of parameters.
 
@@ -437,7 +436,7 @@ class ImageProcessingMixin(PushToHubMixin):
         else:
             return image_processor
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -463,7 +462,7 @@ class ImageProcessingMixin(PushToHubMixin):
             A image processor of type [`~image_processing_utils.ImageProcessingMixin`]: The image_processor object
             instantiated from that JSON file.
         """
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         image_processor_dict = json.loads(text)
         return cls(**image_processor_dict)
@@ -529,7 +528,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
+    def fetch_images(self, image_url_or_urls: Union[str, list[str]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 

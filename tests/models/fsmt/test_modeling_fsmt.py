@@ -548,6 +548,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6, padding_idx=self.padding_idx).to(
             torch_device
         )
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         emb = emb1(input_ids)
         desired_weights = torch.tensor(
             [
@@ -562,10 +563,16 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_odd_embed_dim(self):
         # odd embedding_dim  is allowed
-        SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(torch_device)
+        test = SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(
+            torch_device
+        )
+        test.make_weight(*test.weight.shape, test.padding_idx)
 
         # odd num_embeddings is allowed
-        SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(torch_device)
+        test = SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(
+            torch_device
+        )
+        test.make_weight(*test.weight.shape, test.padding_idx)
 
     @unittest.skip(reason="different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
@@ -579,6 +586,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=self.padding_idx).to(
             torch_device
         )
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         weights = emb1.weights.data[:3, :5]
         # XXX: only the 1st and 3rd lines match - this is testing against
         # verbatim copy of SinusoidalPositionalEmbedding from fairseq

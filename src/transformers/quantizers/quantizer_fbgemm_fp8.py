@@ -104,8 +104,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             )
         elif torch_dtype == torch.float16:
             raise ValueError(
-                "You cannot use FP8 with torch_dtype=torch.float16."
-                "We recommend you passing torch_dtype=torch.bfloat16"
+                "You cannot use FP8 with torch_dtype=torch.float16.We recommend you passing torch_dtype=torch.bfloat16"
             )
         return torch_dtype
 

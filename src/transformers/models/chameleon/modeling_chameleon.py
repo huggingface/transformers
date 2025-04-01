@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -39,8 +39,6 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
@@ -53,10 +51,6 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
-
-
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
 logger = logging.get_logger(__name__)
@@ -385,7 +379,7 @@ class ChameleonFlashAttention2(ChameleonAttention):
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     # Ignore copy
     def forward(
@@ -1289,13 +1283,10 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_tokens.numel():
+            if not is_torchdynamo_compiling() and input_ids[special_image_mask].numel() != image_tokens.numel():
                 n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum()
                 n_image_features = image_tokens.shape[0] * image_tokens.shape[1]
                 raise ValueError(
@@ -1303,6 +1294,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 )
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
