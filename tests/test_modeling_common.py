@@ -520,14 +520,13 @@ class ModelTesterMixin:
             if addition_year < 2025 and not model_class._supports_cache_class:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
-            # Monkey patch the method to add a seed
-            original_init_weights = model_class._init_weights
-
-            def seeded_init_weights(self, module):
+            # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
+            # `_init_weights` so that it can add the seed for composite models as well)
+            original_initialize_weights = PreTrainedModel._initialize_weights
+            def seeded_initialize_weights(self, module):
                 set_seed(0)
-                original_init_weights(self, module)
-
-            model_class._init_weights = seeded_init_weights
+                original_initialize_weights(self, module)
+            PreTrainedModel._initialize_weights = seeded_initialize_weights
 
             # First, initialize the model from config -> this ensure everything is correctly initialized, even if
             # _init_weights() does not take all weights into account correctly
@@ -535,6 +534,9 @@ class ModelTesterMixin:
             # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
             # by _init_weights()
             model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
+
+            # Back to original method to avoid issues if running several other tests
+            PreTrainedModel._initialize_weights = original_initialize_weights
 
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = []
@@ -555,6 +557,7 @@ class ModelTesterMixin:
                 len(different_weights) == 0,
                 f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
             )
+
 
     @slow
     @require_accelerate
