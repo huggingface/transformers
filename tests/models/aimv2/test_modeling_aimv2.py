@@ -312,6 +312,7 @@ class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = AIMv2TextModelTester(self)
