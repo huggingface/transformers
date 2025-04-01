@@ -1939,16 +1939,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
-            unique_names =  {re.sub(r"\d+", "*", name) for name, _ in self.named_children() if len(name) > 0}
-            for k, v in self._tp_plan.items():
+            for _, v in self._tp_plan.items():
                 if v not in SUPPORTED_TP_STYLES:
                     raise ValueError(
                         f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
                     )
-                if k not in unique_names:
-                    raise ValueError(
-                        f"Unsupported tensor parallel mapping: {k} is not part of the model"
-                    )
+
 
     def dequantize(self):
         """

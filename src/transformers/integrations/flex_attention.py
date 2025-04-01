@@ -144,6 +144,17 @@ def compile_friendly_flex_attention(
     )
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 def flex_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -174,13 +185,20 @@ def flex_attention_forward(
             score = score + head_mask[batch_idx][head_idx][0][0]
         return score
 
+    enable_gqa = True
+    num_local_query_heads = query.shape[1]
+    if not((num_local_query_heads & (num_local_query_heads)) == 0):
+        key = repeat_kv(key, num_local_query_heads)
+        value = repeat_kv(value, num_local_query_heads)
+        enable_gqa = False
+
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
         value,
         score_mod=score_mod,
         block_mask=block_mask,
-        enable_gqa=True,
+        enable_gqa=enable_gqa,
         scale=scaling,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
