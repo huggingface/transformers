@@ -133,7 +133,7 @@ Other methods offer PEFT compatibility, though bitsandbytes is the most establis
 
 See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details. 
 
-## Advanced & Research-Oriented Methods
+## Research
 
 Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), etc., often push the boundaries of compression (e.g., < 2-bit) or explore novel techniques.
 
