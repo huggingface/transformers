@@ -143,6 +143,6 @@ Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), e
     *   You have significant compute resources available for potentially complex quantization procedures.
 We recommend consulting each methods documentation and associated papers carefully before choosing one for use in production.
 
----
 
-Always benchmark the performance (accuracy and speed) of the quantized model on your specific task and hardware to ensure it meets your requirements. Refer to the individual documentation pages linked above for detailed usage instructions.
+> [!TIP]
+> Always benchmark the performance (accuracy and speed) of the quantized model on your specific task and hardware to ensure it meets your requirements. Refer to the individual documentation pages linked above for detailed usage instructions.
