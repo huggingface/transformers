@@ -539,6 +539,7 @@ def shard_and_distribute_module(
             param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
         )
     else:
+        print("No plan for:", parameter_name)
         param = param[...].to(param_casting_dtype)
         if is_contiguous:
             param = param.contiguous()

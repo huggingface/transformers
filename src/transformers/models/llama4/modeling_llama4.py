@@ -392,8 +392,8 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = config.no_rope_layer[layer_idx]
-        if layer_idx in self.config.moe_layers:  # the 128E model interleaves dense / sparse
+        self.use_chunked_attention = layer_idx in config.no_rope_layers
+        if layer_idx in config.moe_layers:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
         else:
             self.feed_forward = Llama4TextMLP(config, intermediate_size=config.intermediate_size_mlp)
@@ -1564,6 +1564,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _tp_plan = {}
     base_model_prefix = ""
     config_class = Llama4Config
+    _supports_flex_attn = True
 
     def __init__(self, config: Llama4Config):
         super().__init__(config)

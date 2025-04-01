@@ -5872,7 +5872,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
     parameter_count = defaultdict(lambda: 0)
     allocation_factor = 1
     if _torch_distributed_available or len(set(accelerator_device_map.values())) >= 2:
-        allocation_factor = 2
+        allocation_factor = 4
 
     for param_name, device in accelerator_device_map.items():
         param = model.get_parameter_or_buffer(param_name)
