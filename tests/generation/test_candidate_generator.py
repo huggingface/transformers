@@ -254,14 +254,11 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         self.model_kwargs = {
             "attention_mask": torch.ones_like(self.input_ids).to(torch_device),
         }
-
-    def setUpGenerator(self, assistant_prune_LM_head):
         atm_translator = AssistantVocabTranslatorCache.get_translator(
             target_tokenizer=self.target_tokenizer,
             assistant_tokenizer=self.assistant_tokenizer,
             assistant_model=self.assistant_model,
             target_vocab_size=self.target_config.vocab_size,
-            assistant_prune_LM_head=assistant_prune_LM_head,
         )
         self.generator = UniversalSpeculativeDecodingGenerator(
             input_ids=self.input_ids,
@@ -275,57 +272,49 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
     def test_basic_generation(self):
         """Test basic speculative decoding works"""
-        for assistant_prune_LM_head in [False, True]:
-            self.setUpGenerator(assistant_prune_LM_head=assistant_prune_LM_head)
-            input_text = "The quick brown fox"
-            input_ids = self.target_tokenizer.encode(input_text, return_tensors="pt")
-            self.generator.input_ids = input_ids
-            candidates, scores = self.generator.get_candidates(input_ids)
+        input_text = "The quick brown fox"
+        input_ids = self.target_tokenizer.encode(input_text, return_tensors="pt")
+        self.generator.input_ids = input_ids
+        candidates, scores = self.generator.get_candidates(input_ids)
 
-            self.assertIsNotNone(candidates)
-            self.assertIsNotNone(scores)
-            self.assertTrue(torch.is_tensor(candidates))
-            self.assertTrue(torch.is_tensor(scores))
+        self.assertIsNotNone(candidates)
+        self.assertIsNotNone(scores)
+        self.assertTrue(torch.is_tensor(candidates))
+        self.assertTrue(torch.is_tensor(scores))
 
     def test_mismatched_vocabularies(self):
         """Test handling of mismatched vocabularies between models"""
         # Create input with tokens present in main but not assistant vocab
         # Find a token that is not in the assistant tokenizer but in
         # the main tokenizer.
-        for assistant_prune_LM_head in [False, True]:
-            self.setUpGenerator(assistant_prune_LM_head=assistant_prune_LM_head)
-            missing_token = next(
-                token
-                for token in self.target_tokenizer.get_vocab()
-                if token not in self.assistant_tokenizer.get_vocab()
-                and token not in self.target_tokenizer.all_special_tokens
-                and "reserved_" not in token
-            )
-            input_ids = torch.tensor([[self.target_tokenizer.convert_tokens_to_ids(missing_token)]])
-            self.generator.input_ids = input_ids
-            candidates, _ = self.generator.get_candidates(input_ids)
-            self.assertIsNotNone(candidates)
+        missing_token = next(
+            token
+            for token in self.target_tokenizer.get_vocab()
+            if token not in self.assistant_tokenizer.get_vocab()
+            and token not in self.target_tokenizer.all_special_tokens
+            and "reserved_" not in token
+        )
+        input_ids = torch.tensor([[self.target_tokenizer.convert_tokens_to_ids(missing_token)]])
+        self.generator.input_ids = input_ids
+        candidates, _ = self.generator.get_candidates(input_ids)
+        self.assertIsNotNone(candidates)
 
     def test_speculation_depth(self):
         """Test different speculation depths"""
-        for assistant_prune_LM_head in [False, True]:
-            self.setUpGenerator(assistant_prune_LM_head=assistant_prune_LM_head)
-            input_ids = self.target_tokenizer.encode("Test text", return_tensors="pt")
-            self.generator.input_ids = input_ids
+        input_ids = self.target_tokenizer.encode("Test text", return_tensors="pt")
+        self.generator.input_ids = input_ids
 
-            for depth in [1, 8, 17]:
-                self.generator.num_assistant_tokens = depth
-                candidates, _ = self.generator.get_candidates(input_ids)
-                self.assertLessEqual(candidates.shape[1] - input_ids.shape[1], depth)
+        for depth in [1, 8, 17]:
+            self.generator.num_assistant_tokens = depth
+            candidates, _ = self.generator.get_candidates(input_ids)
+            self.assertLessEqual(candidates.shape[1] - input_ids.shape[1], depth)
 
     def test_device_consistency(self):
         """Test handling of inputs on different devices"""
-        for assistant_prune_LM_head in [False, True]:
-            self.setUpGenerator(assistant_prune_LM_head=assistant_prune_LM_head)
-            input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
-            self.generator.input_ids = input_ids
-            candidates, _ = self.generator.get_candidates(input_ids)
-            self.assertEqual(candidates.device, input_ids.device)
+        input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
+        self.generator.input_ids = input_ids
+        candidates, _ = self.generator.get_candidates(input_ids)
+        self.assertEqual(candidates.device, input_ids.device)
 
     def test_usd_vs_vanilla_sampling(cls):
         """Test that USD matches vanilla sampling with temperature set to nearly 0"""
@@ -338,17 +327,13 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         pipe_vanilla_output = pipe_vanilla(prompt, max_new_tokens=5, do_sample=False)
         vanilla_text = pipe_vanilla_output[0]["generated_text"]
 
-        for assistant_prune_LM_head in [False, True]:
-            pipe_usd = pipeline(
-                "text-generation",
-                model=cls.target_name,
-                assistant_model=cls.assistant_name,
-                assistant_prune_LM_head=assistant_prune_LM_head,
-            )
-            pipe_usd_output = pipe_usd(
-                prompt, max_new_tokens=5, do_sample=True, temperature=1e-9
-            )  # Nearly 0 temperature
-            usd_text = pipe_usd_output[0]["generated_text"]
+        pipe_usd = pipeline(
+            "text-generation",
+            model=cls.target_name,
+            assistant_model=cls.assistant_name,
+        )
+        pipe_usd_output = pipe_usd(prompt, max_new_tokens=5, do_sample=True, temperature=1e-9)  # Nearly 0 temperature
+        usd_text = pipe_usd_output[0]["generated_text"]
 
-            # Assert that the outputs match
-            cls.assertEqual(usd_text, vanilla_text)
+        # Assert that the outputs match
+        cls.assertEqual(usd_text, vanilla_text)
