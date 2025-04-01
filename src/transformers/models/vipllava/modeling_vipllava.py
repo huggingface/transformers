@@ -128,7 +128,6 @@ VIPLLAVA_START_DOCSTRING = r"""
     "The bare VipLlava Model outputting raw hidden-states without any specific head on top.",
     VIPLLAVA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->VipLlava,llava->vipllava
 class VipLlavaPreTrainedModel(PreTrainedModel):
     config_class = VipLlavaConfig
     base_model_prefix = "model"
@@ -142,9 +141,6 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        # important: this ported version of VipLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/vipllava should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -158,6 +154,9 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
