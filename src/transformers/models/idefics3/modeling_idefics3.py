@@ -534,9 +534,18 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        std = self.config.text_config.initializer_range
-        text_model_module = self.text_model if hasattr(self, "text_model") else self.model.text_model
-        if module in text_model_module.modules():
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+        text_model_module = None
+        if hasattr(self, "text_model"):
+            text_model_module = self.text_model
+        elif hasattr(self, "model"):
+            text_model_module = self.model.text_model
+
+        if text_model_module is not None and module in text_model_module.modules():
             text_model_module._init_weights(module)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)

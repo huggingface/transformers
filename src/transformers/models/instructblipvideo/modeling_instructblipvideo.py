@@ -312,6 +312,52 @@ class InstructBlipVideoEncoderLayer(nn.Module):
         return outputs
 
 
+class InstructBlipVideoPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = InstructBlipVideoConfig
+    base_model_prefix = "blip"
+    supports_gradient_checkpointing = True
+
+    _no_split_modules = [
+        "InstructBlipVideoQFormerEmbeddings",
+        "InstructBlipVideoAttention",
+        "InstructBlipVideoQFormerMultiHeadAttention",
+        "InstructBlipVideoQFormerSelfOutput",
+    ]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if hasattr(self, "vision_model") and module in self.vision_model.modules():
+            factor = self.config.vision_config.initializer_range
+        elif hasattr(self, "qformer") and module in self.qformer.modules():
+            factor = self.config.qformer_config.initializer_range
+        else:
+            factor = self.config.initializer_range
+
+        if hasattr(self, "language_model") and module in self.language_model.modules():
+            self.language_model._init_weights(module)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, InstructBlipVideoVisionEmbeddings):
+            if hasattr(self.config, "vision_config") and not isinstance(self.config, InstructBlipVideoVisionConfig):
+                factor = self.config.vision_config.initializer_range
+            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        elif isinstance(module, InstructBlipVideoForConditionalGeneration):
+            module.query_tokens.data.zero_()
+
+
 class InstructBlipVideoEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
