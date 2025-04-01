@@ -17,6 +17,7 @@
 import warnings
 from collections import OrderedDict
 
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from .auto_factory import (
     _BaseAutoBackboneClass,
@@ -218,6 +219,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonModel"),
         ("phi", "PhiModel"),
         ("phi3", "Phi3Model"),
+        ("phi4_multimodal", "Phi4MultimodalModel"),
         ("phimoe", "PhimoeModel"),
         ("pixtral", "PixtralVisionModel"),
         ("plbart", "PLBartModel"),
@@ -362,6 +364,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mamba2", "Mamba2ForCausalLM"),
         ("mega", "MegaForMaskedLM"),
         ("megatron-bert", "MegatronBertForPreTraining"),
+        ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("mobilebert", "MobileBertForPreTraining"),
         ("mpnet", "MPNetForMaskedLM"),
@@ -521,7 +524,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("fuyu", "FuyuForCausalLM"),
         ("gemma", "GemmaForCausalLM"),
         ("gemma2", "Gemma2ForCausalLM"),
-        ("gemma3", "Gemma3ForCausalLM"),
+        ("gemma3", "Gemma3ForConditionalGeneration"),
         ("gemma3_text", "Gemma3ForCausalLM"),
         ("git", "GitForCausalLM"),
         ("glm", "GlmForCausalLM"),
@@ -566,6 +569,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("persimmon", "PersimmonForCausalLM"),
         ("phi", "PhiForCausalLM"),
         ("phi3", "Phi3ForCausalLM"),
+        ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
         ("phimoe", "PhimoeForCausalLM"),
         ("plbart", "PLBartForCausalLM"),
         ("prophetnet", "ProphetNetForCausalLM"),
@@ -727,6 +731,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetForImageClassification"),
         ("resnet", "ResNetForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
+        ("shieldgemma2", "ShieldGemma2ForImageClassification"),
         ("siglip", "SiglipForImageClassification"),
         ("siglip2", "Siglip2ForImageClassification"),
         ("swiftformer", "SwiftFormerForImageClassification"),
@@ -804,6 +809,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
+        ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
@@ -842,12 +848,14 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("llava", "LlavaForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
+        ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("pixtral", "LlavaForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
         ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
+        ("shieldgemma2", "Gemma3ForConditionalGeneration"),
         ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
@@ -939,6 +947,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
         ("depth_pro", "DepthProForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),
         ("glpn", "GLPNForDepthEstimation"),
+        ("prompt_depth_anything", "PromptDepthAnythingForDepthEstimation"),
         ("zoedepth", "ZoeDepthForDepthEstimation"),
     ]
 )
@@ -1133,6 +1142,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mistral", "MistralForQuestionAnswering"),
         ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
+        ("modernbert", "ModernBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
         ("mpt", "MptForQuestionAnswering"),
         ("mra", "MraForQuestionAnswering"),
@@ -1659,6 +1669,30 @@ _AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="languag
 
 class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
+
+    @classmethod
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+        """
+        Additional autoclass-specific config post-loading manipulation. In this specific autoclass, if the config has
+        a nested text decoder section, uses that section instead.
+
+        Under the hood, multimodal models mapped by AutoModelForCausalLM assume the text decoder receives its own
+        config, rather than the config for the whole model. This is used e.g. to load the text-only part of a VLM.
+        """
+        possible_text_config_names = ("decoder", "generator", "text_config")
+        text_config_names = []
+        for text_config_name in possible_text_config_names:
+            if hasattr(config, text_config_name):
+                text_config_names += [text_config_name]
+
+        text_config = config.get_text_config(decoder=True)
+        if text_config_names and type(text_config) in cls._model_mapping.keys():
+            warnings.warn(
+                "Loading a multimodal model with `AutoModelForCausalLM` is deprecated and will be removed in v5. "
+                "`AutoModelForCausalLM` will be used to load only the text-to-text generation module.",
+                FutureWarning,
+            )
+        return config
 
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")

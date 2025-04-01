@@ -475,7 +475,6 @@ src/transformers/models/deberta/modeling_tf_deberta.py
 src/transformers/models/deberta_v2/modeling_tf_deberta_v2.py
 src/transformers/models/decision_transformer/modeling_decision_transformer.py
 src/transformers/models/deformable_detr/convert_deformable_detr_to_pytorch.py
-src/transformers/models/deformable_detr/load_custom.py
 src/transformers/models/deit/convert_deit_timm_to_pytorch.py
 src/transformers/models/deprecated/bort/convert_bort_original_gluonnlp_checkpoint_to_pytorch.py
 src/transformers/models/deprecated/mctct/configuration_mctct.py

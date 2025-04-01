@@ -36,12 +36,12 @@ def main():
                 --master_addr={hosts[0]}  \
                 --master_port={port} \
                 ./run_glue.py \
-                {"".join([f" --{parameter} {value}" for parameter,value in args.__dict__.items()])}"""
+                {"".join([f" --{parameter} {value}" for parameter, value in args.__dict__.items()])}"""
     else:
         cmd = f"""python -m torch.distributed.launch \
             --nproc_per_node={num_gpus}  \
             ./run_glue.py \
-            {"".join([f" --{parameter} {value}" for parameter,value in args.__dict__.items()])}"""
+            {"".join([f" --{parameter} {value}" for parameter, value in args.__dict__.items()])}"""
     try:
         subprocess.run(cmd, shell=True)
     except Exception as e:

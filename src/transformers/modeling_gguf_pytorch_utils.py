@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #
@@ -15,7 +14,7 @@
 # limitations under the License.
 
 import re
-from typing import Dict, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -115,7 +114,7 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
+        self, weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
@@ -369,6 +368,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     architecture = read_field(reader, "general.architecture")[0]
     model_name = read_field(reader, "general.name")
 
+    updated_architecture = None
     # in llama.cpp mistral models use the same architecture as llama. We need
     # to add this patch to ensure things work correctly on our side.
     if "llama" in architecture and "mistral" in model_name:
@@ -377,6 +377,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # It needs to be developed for supporting legacy t5.
     elif "t5" in architecture or "t5encoder" in architecture:
         parsed_parameters["config"]["is_gated_act"] = True
+        if "t5encoder" in architecture:
+            parsed_parameters["config"]["architectures"] = ["T5EncoderModel"]
         updated_architecture = "t5"
     else:
         updated_architecture = architecture
@@ -395,7 +397,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
-    if architecture not in GGUF_SUPPORTED_ARCHITECTURES:
+    if architecture not in GGUF_SUPPORTED_ARCHITECTURES and updated_architecture not in GGUF_SUPPORTED_ARCHITECTURES:
         raise ValueError(f"GGUF model with architecture {architecture} is not supported yet.")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
