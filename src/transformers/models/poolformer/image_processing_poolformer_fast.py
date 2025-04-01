@@ -17,27 +17,27 @@
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, 
-    BaseImageProcessorFast, 
-    DefaultFastImageProcessorKwargs, 
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BatchFeature
+    BaseImageProcessorFast,
+    BatchFeature,
+    DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import (
-    ChannelDimension, 
-    group_images_by_shape, 
-    reorder_images, 
-    get_resize_output_image_size, 
+    ChannelDimension,
+    get_resize_output_image_size,
     get_size_with_aspect_ratio,
+    group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN, 
-    IMAGENET_DEFAULT_STD, 
-    PILImageResampling, 
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ImageInput,
+    PILImageResampling,
     SizeDict,
-    get_image_size_for_max_height_width,
     get_image_size,
+    get_image_size_for_max_height_width,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -47,6 +47,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+
 
 if is_torch_available():
     import torch
@@ -148,9 +149,9 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError("Invalid size for resize: {}".format(size))
 
             new_size = get_resize_output_image_size(
-                image, 
-                size=scale_size, 
-                default_to_square=False, 
+                image,
+                size=scale_size,
+                default_to_square=False,
                 input_data_format=ChannelDimension.FIRST,
             )
         else:
@@ -242,7 +243,9 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, crop_pct=crop_pct, interpolation=interpolation)
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, crop_pct=crop_pct, interpolation=interpolation
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -263,5 +266,6 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
 
 __all__ = ["PoolFormerImageProcessorFast"]
