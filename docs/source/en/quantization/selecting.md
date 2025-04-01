@@ -119,9 +119,9 @@ See the [HQQ documentation](./hqq) for more details.
 
 See the [compressed-tensors documentation](./compressed_tensors) for more details.
 
-## Fine-Tuning
+## Fine-tuning
 
-Quantization can also be used during fine-tuning to save memory, most commonly with PEFT's QLoRA.
+Consider the quantization method below during fine-tuning to save memory.
 
 ### bitsandbytes (4-bit NF4 for QLoRA)
 
