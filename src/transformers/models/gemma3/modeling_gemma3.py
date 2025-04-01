@@ -36,15 +36,10 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    auto_class_docstring,
     auto_docstring,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
@@ -470,7 +465,7 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
-@auto_class_docstring
+@auto_docstring
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
     base_model_prefix = "language_model"
@@ -509,7 +504,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@auto_class_docstring
+@auto_docstring
 class Gemma3TextModel(Gemma3PreTrainedModel):
     config_class = Gemma3TextConfig
 
@@ -561,6 +556,10 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        r"""
+        Args:
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -826,6 +825,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -841,10 +841,9 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         Returns:
 
         Example:
-        Example
 
 
-            ```python
+        ```python
         >>> from transformers import AutoTokenizer, Gemma3ForCausalLM
 
         >>> model = Gemma3ForCausalLM.from_pretrained("google/gemma-2-9b")
@@ -1015,7 +1014,7 @@ GEMMA3_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`Gemma3Processor`] uses
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([`Gemma3Processor`] uses
             [`SiglipImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1090,10 +1089,7 @@ GEMMA3_START_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    """The GEMMA3 model which consists of a vision backbone and a language model.""",
-    GEMMA3_START_DOCSTRING,
-)
+@auto_docstring
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
@@ -1211,9 +1207,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1233,6 +1227,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         **lm_kwargs,
     ) -> Union[Tuple, Gemma3CausalLMOutputWithPast]:
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
