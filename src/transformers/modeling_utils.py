@@ -5893,7 +5893,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict):
             # Allow up to 95% of max device memory
             byte_count = min(byte_count, int(0.95 * device_memory))
         # Allocate memory
-        _ = torch.empty(byte_count // 2, dtype=torch.float16, device=device, requires_grad=False)
+        _ = torch.empty(byte_count // allocation_factor, dtype=torch.float16, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):

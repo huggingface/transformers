@@ -169,6 +169,7 @@ class Llama4TextConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_experts_per_tok=1,
         num_local_experts=16,
+        moe_layers=None,
         interleave_moe_layer_step=1,
         use_qk_norm=True,
         output_router_logits=False,
@@ -177,6 +178,7 @@ class Llama4TextConfig(PretrainedConfig):
         rope_scaling=None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
+        attention_chunk_size=8192,
         **kwargs,
     ):
         super().__init__(
@@ -212,12 +214,19 @@ class Llama4TextConfig(PretrainedConfig):
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
-        self.interleave_moe_layer_step = interleave_moe_layer_step
+
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
         default_no_rope_layers = list(range(num_hidden_layers, no_rope_layer_interval))
         self.no_rope_layers = no_rope_layers if no_rope_layers is not None else default_no_rope_layers
+
+        self.interleave_moe_layer_step = interleave_moe_layer_step
+        self.no_moe_layers = (
+            moe_layers if moe_layers is not None else list(range(num_hidden_layers, interleave_moe_layer_step))
+        )
+
+        self.attention_chunk_size = attention_chunk_size
 
 
 class Llama4Config(PretrainedConfig):

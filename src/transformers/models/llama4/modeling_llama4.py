@@ -47,14 +47,15 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torchdynamo_compiling,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
-logger = logging.get_logger(__name__)
+if is_torch_flex_attn_available():
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -114,7 +115,7 @@ class Llama4TextMLP(nn.Module):
 
 
 class Llama4TextL2Norm(torch.nn.Module):
-    def __init__(self, dim: int=None, eps: float = 1e-6):
+    def __init__(self, dim: int = None, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
 
@@ -343,11 +344,12 @@ class Llama4TextAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(*input_shape, -1, self.head_dim)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        query_states, key_states = apply_rotary_emb(
-            query_states, key_states, position_embeddings.to(query_states.device)
-        )
+        if self.use_rope:  # the 16E model skips rope for long context on certain layers
+            query_states, key_states = apply_rotary_emb(
+                query_states, key_states, position_embeddings.to(query_states.device)
+            )
 
-        if self.config.use_qk_norm:
+        if self.config.use_qk_norm:  # the 128E model does not use qk_norm
             query_states = self.qk_norm(query_states)
             key_states = self.qk_norm(key_states)
 
@@ -389,10 +391,9 @@ class Llama4TextDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
-
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.is_moe_layer = (layer_idx + 1) % config.interleave_moe_layer_step == 0
-        if self.is_moe_layer:
+        self.use_chunked_attention = config.no_rope_layer[layer_idx]
+        if layer_idx in self.config.moe_layers:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
         else:
             self.feed_forward = Llama4TextMLP(config, intermediate_size=config.intermediate_size_mlp)
@@ -406,6 +407,7 @@ class Llama4TextDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        chunk_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -415,31 +417,13 @@ class Llama4TextDecoderLayer(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
-                should not be returned during inference.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
+
+        # use local attention mask for ROPE layers
+        if self.use_chunked_attention and chunk_attention_mask is not None:
+            attention_mask = chunk_attention_mask
 
         # Self Attention
         attention_states, self_attn_weights = self.self_attn(
@@ -678,7 +662,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
+        causal_mask, chunk_causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
@@ -700,6 +684,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     decoder_layer.__call__,
                     hidden_states,
                     causal_mask,
+                    chunk_causal_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -711,6 +696,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
+                    chunk_causal_mask=chunk_causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -749,9 +735,13 @@ class Llama4TextModel(Llama4PreTrainedModel):
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
+                return attention_mask, attention_mask  # flash does not support chunked attn
             return None
-
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+                chunked_attention_mask = make_flex_block_causal_mask(attention_mask, self.config.attention_chunk_size)
+            return attention_mask, chunked_attention_mask
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
@@ -789,7 +779,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-
+        chunked_mask = self.create_chunked_attention_mask(
+            sequence_length, self.config.attention_chunk_size, device=device
+        )
+        chunked_attention_mask = causal_mask & chunked_attention_mask[None, None, :, :]
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
@@ -801,8 +794,33 @@ class Llama4TextModel(Llama4PreTrainedModel):
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            chunked_mask = AttentionMaskConverter._unmask_unattended(chunked_mask, min_dtype)
 
-        return causal_mask
+        return causal_mask, chunked_attention_mask
+
+    def create_chunked_attention_mask(
+        self, seq_len: int, attention_chunk_size: int, device: torch.device
+    ) -> torch.Tensor:
+        """
+        Generate the following:
+
+        'What'      :  0 ■ ⬚ ⬚ ⬚ ⬚ ⬚    |
+        '▁is'       :  1 ■ ■ ⬚ ⬚ ⬚ ⬚    |
+        '▁ch'       :  2 ■ ■ ■ ⬚ ⬚ ⬚    |
+        'unked'     :  3 ⬚ ⬚ ⬚ ■ ⬚ ⬚    |
+        '▁attention':  4 ⬚ ⬚ ⬚ ■ ■ ⬚    |
+        '?'         :  5 ⬚ ⬚ ⬚ ■ ■ ■    |
+
+        If the chunk size is 3.
+        This can just be appplied over the already created attention mask
+        """
+        block_pos = torch.abs(
+            (torch.arange(seq_len).unsqueeze(0) // attention_chunk_size)
+            - (torch.arange(seq_len).unsqueeze(1) // attention_chunk_size)
+        )
+        token_pos = torch.arange(seq_len).unsqueeze(0) - torch.arange(seq_len).unsqueeze(1)
+        mask = (block_pos == 0) & (token_pos <= 0)
+        return mask.to(device)
 
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
@@ -1606,7 +1624,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         hidden_state = image_outputs.last_hidden_state
         return hidden_state
 
-
     @replace_return_docstrings(output_type=Llama4CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1706,7 +1723,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            final_mask = special_image_mask.to(inputs_embeds.device) 
+            final_mask = special_image_mask.to(inputs_embeds.device)
             inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
             final_mask_1d = final_mask[..., 0].reshape(-1)
@@ -1722,7 +1739,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             inputs_embeds.masked_scatter_(expanded_mask, projected_vision_flat)
 
             inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
-
 
         outputs = self.language_model(
             attention_mask=attention_mask,

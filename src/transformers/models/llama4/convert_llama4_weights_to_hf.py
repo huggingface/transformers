@@ -179,7 +179,7 @@ def safe_load(filename):
 
 # Unpack mlp projections - possibly to be removed when they are fused
 def preprocess_keys(state_dict):
-    new_state_dict = dict()
+    new_state_dict = {}
     for key, value in state_dict.items():
         if "mlp.fc1_weight" in key:
             prefix = key.split("mlp.fc1_weight")[0]
@@ -229,7 +229,7 @@ def write_model(
             "high_freq_factor": 4.0,
             "original_max_position_embeddings": 8192,
         }
-        config_kwargs.update(dict(rope_scaling=rope_scaling))
+        config_kwargs.update({"rope_scaling": rope_scaling})
 
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
@@ -398,11 +398,15 @@ def write_model(
                     else:
                         gate_proj = state_dict.pop(gate_key)
                         gate_proj = [
-                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024) for k in range(8)
+                            gate_proj.reshape(num_experts, -1, 8, 1024)[:, :, k, :].reshape(num_experts, -1, 1024)
+                            for k in range(8)
                         ]
                         gate_proj = torch.cat(gate_proj, dim=-1)
 
-                        up_proj = [k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024) for k in current_parameter]
+                        up_proj = [
+                            k.reshape(num_experts, -1, 8, 1024).reshape(num_experts, -1, 1024)
+                            for k in current_parameter
+                        ]
                         up_proj = torch.cat(up_proj, dim=-1)
 
                         gate_up_proj = torch.cat((gate_proj, up_proj), dim=-1)
