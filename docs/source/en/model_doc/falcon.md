@@ -133,9 +133,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Notes
 
-- Falcon models come in different sizes (7B, 40B, 180B parameters) and variants (base and instruct).
-- The "instruct" versions have been fine-tuned on instruction data and are better for conversational or instruction-following tasks.
-- For most applications, using FlashAttention or SDPA optimization is recommended for the best performance.
 - If you're upgrading from an older custom code checkpoint, remember to convert it to the official Transformers format using the conversion script located in the
 [Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon). 
 
